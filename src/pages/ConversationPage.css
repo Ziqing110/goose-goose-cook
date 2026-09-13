@@ -1,0 +1,23 @@
+.convo-card { gap: 16px; display: flex; flex-direction: column; }
+
+.transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.chat-row { display: flex; flex-direction: column; gap: 3px; max-width: 74%; }
+.chat-agent { align-items: flex-start; }
+.chat-cook { align-items: flex-end; align-self: flex-end; }
+.chat-who { font-size: 0.66rem; color: var(--ink-faint); letter-spacing: 0.03em; }
+.chat-bubble {
+  margin: 0;
+  padding: 10px 13px;
+  border-radius: 12px;
+  background: var(--surface-sunken);
+  font-size: 0.9rem;
+}
+.chat-cook .chat-bubble { background: var(--accent-soft); color: var(--accent-soft-ink); }

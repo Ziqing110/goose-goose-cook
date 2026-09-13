@@ -1,0 +1,25 @@
+.app-shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 20px 20px 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 100dvh;
+}
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 28px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-mark { color: var(--accent); display: inline-flex; }
+.brand-name { font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; }
+
+.stage-root { flex: 1; }

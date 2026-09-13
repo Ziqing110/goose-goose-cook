@@ -1,0 +1,2 @@
+.existing-kitchens-card { display: flex; flex-direction: column; gap: 10px; }
+.existing-kitchens-list { display: flex; flex-wrap: wrap; gap: 8px; }

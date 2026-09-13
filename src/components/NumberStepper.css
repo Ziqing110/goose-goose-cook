@@ -1,0 +1,36 @@
+.number-stepper {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  overflow: hidden;
+  width: fit-content;
+}
+
+.stepper-btn {
+  border: none;
+  background: var(--surface-sunken);
+  color: var(--ink);
+  width: 34px;
+  font-size: 1rem;
+  line-height: 1;
+}
+.stepper-btn:hover { background: var(--line); }
+
+.stepper-input {
+  width: 56px;
+  border: none;
+  border-left: 1px solid var(--line-strong);
+  border-right: 1px solid var(--line-strong);
+  text-align: center;
+  padding: 8px 4px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.9rem;
+  -moz-appearance: textfield;
+}
+.stepper-input::-webkit-outer-spin-button,
+.stepper-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

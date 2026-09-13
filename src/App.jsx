@@ -1,0 +1,98 @@
+import { Navigate, Route, Routes } from "react-router-dom";
+import AppShell from "./components/AppShell.jsx";
+import HomePage from "./pages/HomePage.jsx";
+import SessionLayout from "./pages/SessionLayout.jsx";
+import SessionKitchenSetupPage from "./pages/SessionKitchenSetupPage.jsx";
+import ConversationPage from "./pages/ConversationPage.jsx";
+import RecipeGraphPage from "./pages/RecipeGraphPage.jsx";
+import { useAppState } from "./state/AppStateContext.jsx";
+
+// Route guards: Home is always reachable (it's the entry point, not a
+// wizard step). Everything under /session requires an in-progress
+// session, and the two inner guards encode ordering within it —
+// mirroring the old flat completion-flag guards, just scoped to the
+// session object instead of global state.
+//
+// Kitchen setup only happens on Home now (you can't start a session
+// without picking/adding a kitchen there), so `!kitchenProfileId` here
+// is purely the edge case of the active profile being deleted mid-
+// session. If no profiles exist at all in that case, there's nothing
+// to pick — bounce all the way back to Home instead of a dead-end page.
+function nextRequiredPath(state) {
+  if (!state.session) return "/";
+  if (!state.session.kitchenProfileId) {
+    return state.kitchenProfiles.length === 0 ? "/" : "/session/kitchen-setup";
+  }
+  return null;
+}
+
+function RequireSession({ children }) {
+  const { state } = useAppState();
+  if (!state.session) return <Navigate to="/" replace />;
+  return children;
+}
+
+function RequireKitchenProfile({ children }) {
+  const { state } = useAppState();
+  const redirect = nextRequiredPath(state);
+  if (redirect) return <Navigate to={redirect} replace />;
+  return children;
+}
+
+function RequireConversationComplete({ children }) {
+  const { state } = useAppState();
+  const redirect = nextRequiredPath(state);
+  if (redirect) return <Navigate to={redirect} replace />;
+  if (!state.session.conversation.complete) return <Navigate to="/session/conversation" replace />;
+  return children;
+}
+
+// Landing on /session directly (e.g. "Resume cooking") sends the user
+// to wherever they actually left off.
+function SessionIndexRedirect() {
+  const { state } = useAppState();
+  const redirect = nextRequiredPath(state);
+  if (redirect) return <Navigate to={redirect} replace />;
+  if (!state.session.conversation.complete) return <Navigate to="/session/conversation" replace />;
+  return <Navigate to="/session/recipe-graph" replace />;
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route element={<AppShell />}>
+        <Route path="/" element={<HomePage />} />
+
+        <Route
+          path="/session"
+          element={
+            <RequireSession>
+              <SessionLayout />
+            </RequireSession>
+          }
+        >
+          <Route index element={<SessionIndexRedirect />} />
+          <Route path="kitchen-setup" element={<SessionKitchenSetupPage />} />
+          <Route
+            path="conversation"
+            element={
+              <RequireKitchenProfile>
+                <ConversationPage />
+              </RequireKitchenProfile>
+            }
+          />
+          <Route
+            path="recipe-graph"
+            element={
+              <RequireConversationComplete>
+                <RecipeGraphPage />
+              </RequireConversationComplete>
+            }
+          />
+        </Route>
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
+  );
+}

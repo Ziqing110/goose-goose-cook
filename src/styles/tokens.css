@@ -1,0 +1,332 @@
+/* ---------------------------------------------------------------
+   Kitchen Path — design tokens
+   Matches reference_html mockups: warm cream ground, charcoal as
+   the primary/active color (not red — red is reserved for the
+   critical path / error state only), scallion green for done/
+   approve, lavender for AI-authored content, per-cook identity
+   colors, and phase colors for prep/cook/plate. One sans family
+   (Figtree) for display and body — no serif — plus IBM Plex Mono
+   for the "graph data" register (durations, ids, equipment,
+   timestamps).
+----------------------------------------------------------------*/
+:root {
+  --bg: #fbf6ec;
+  --surface: #ffffff;
+  --surface-sunken: #f4efe2;
+  --ink: #201e1d;
+  --ink-soft: #5c554c;
+  --ink-faint: #8d8477;
+  --line: #e6dcca;
+  --line-strong: #d6c9ac;
+
+  /* primary/active/brand color — charcoal, not red (see rationale above) */
+  --accent: #201e1d;
+  --accent-ink: #fbf6ec;
+  --accent-soft: #e9e6e0;
+  --accent-soft-ink: #201e1d;
+
+  /* critical path / error — reserved, never used for brand or emphasis */
+  --crit: #c0503c;
+  --crit-ink: #fff7f0;
+  --crit-soft: #f4dcd0;
+  --crit-soft-ink: #7a2811;
+
+  --success: #4e5c38;
+  --success-soft: #e4e9d8;
+  --success-soft-ink: #35401f;
+
+  --warning: #a6741f;
+  --warning-soft: #f2e3c4;
+  --warning-soft-ink: #6e4d13;
+
+  /* AI-authored content: proposal tags, agent avatar, diff panels */
+  --ai: #7a6aa8;
+  --ai-ink: #ffffff;
+  --ai-soft: #efe9f8;
+  --ai-soft-ink: #564a80;
+
+  /* per-cook identity colors */
+  --cook-mia: #3f77b5;
+  --cook-mia-soft: #dce9f5;
+  --cook-leo: #d67f48;
+  --cook-leo-soft: #f7e5d8;
+  --cook-sage: #6b9080;
+  --cook-sage-soft: #dfe9e4;
+
+  /* recipe-graph phase colors */
+  --phase-prep: #8d8477;
+  --phase-cook: #c67139;
+  --phase-plate: #7a8a5e;
+
+  --shadow-sm: 0 1px 2px rgba(32, 30, 29, 0.08);
+  --shadow-md: 0 6px 20px rgba(32, 30, 29, 0.12);
+
+  --radius-card: 22px;
+  --radius-pill: 999px;
+  --radius-input: 999px;
+  --radius-textarea: 16px;
+
+  --btn-height-sm: 44px;
+  --btn-height: 56px;
+  --btn-height-lg: 64px;
+  --btn-height-hero: 76px;
+
+  --font-display: "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1a1713;
+    --surface: #242019;
+    --surface-sunken: #1f1c16;
+    --ink: #f1ece1;
+    --ink-soft: #b6ac9a;
+    --ink-faint: #857c6c;
+    --line: #3a3428;
+    --line-strong: #4c4433;
+
+    --accent: #f1ece1;
+    --accent-ink: #201e1d;
+    --accent-soft: #35322b;
+    --accent-soft-ink: #f1ece1;
+
+    --crit: #e2662f;
+    --crit-ink: #241205;
+    --crit-soft: #402318;
+    --crit-soft-ink: #f4c2a4;
+
+    --success: #8fae6f;
+    --success-soft: #2c3320;
+    --success-soft-ink: #c3d9a3;
+
+    --warning: #d3a34e;
+    --warning-soft: #3a2f18;
+    --warning-soft-ink: #edc987;
+
+    --ai: #a897d6;
+    --ai-ink: #1c1730;
+    --ai-soft: #322a4a;
+    --ai-soft-ink: #cabfe8;
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #1a1713;
+  --surface: #242019;
+  --surface-sunken: #1f1c16;
+  --ink: #f1ece1;
+  --ink-soft: #b6ac9a;
+  --ink-faint: #857c6c;
+  --line: #3a3428;
+  --line-strong: #4c4433;
+
+  --accent: #f1ece1;
+  --accent-ink: #201e1d;
+  --accent-soft: #35322b;
+  --accent-soft-ink: #f1ece1;
+
+  --crit: #e2662f;
+  --crit-ink: #241205;
+  --crit-soft: #402318;
+  --crit-soft-ink: #f4c2a4;
+
+  --success: #8fae6f;
+  --success-soft: #2c3320;
+  --success-soft-ink: #c3d9a3;
+
+  --warning: #d3a34e;
+  --warning-soft: #3a2f18;
+  --warning-soft-ink: #edc987;
+
+  --ai: #a897d6;
+  --ai-ink: #1c1730;
+  --ai-soft: #322a4a;
+  --ai-soft-ink: #cabfe8;
+
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-wrap: balance;
+  margin: 0;
+}
+
+code, .mono { font-family: var(--font-mono); }
+
+button { font: inherit; cursor: pointer; }
+
+/* ---------------- shared primitives ---------------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  padding: 24px;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: var(--radius-pill);
+  min-height: var(--btn-height);
+  padding: 10px 22px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: border-color 0.15s ease, background 0.15s ease, filter 0.15s ease;
+}
+.btn:hover { border-color: var(--ink-faint); }
+.btn:focus-visible, a:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn-primary:hover { filter: brightness(1.15); border-color: var(--accent); }
+.btn-primary:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-success { background: var(--success); border-color: var(--success); color: var(--accent-ink); }
+.btn-success:hover { filter: brightness(1.1); }
+.btn-ghost { background: transparent; border-color: transparent; color: var(--ink-soft); min-height: var(--btn-height-sm); }
+.btn-ghost:hover { color: var(--ink); border-color: var(--line); }
+.btn-danger { color: var(--crit); }
+.btn-lg { min-height: var(--btn-height-lg); padding: 12px 28px; font-size: 1rem; }
+.btn-hero { min-height: var(--btn-height-hero); padding: 14px 32px; font-size: 1.05rem; }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 0.8rem; font-weight: 600; color: var(--ink-soft); }
+.field input[type="text"],
+.field input[type="number"],
+.field select {
+  font: inherit;
+  padding: 10px 16px;
+  border-radius: var(--radius-input);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+.field textarea {
+  font: inherit;
+  padding: 10px 14px;
+  border-radius: var(--radius-textarea);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-sunken);
+  color: var(--ink);
+  resize: vertical;
+  min-height: 64px;
+}
+
+.tag {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.tag-difficulty-low { background: var(--success-soft); color: var(--success-soft-ink); border-color: transparent; }
+.tag-difficulty-medium { background: var(--warning-soft); color: var(--warning-soft-ink); border-color: transparent; }
+.tag-difficulty-high { background: var(--crit-soft); color: var(--crit-soft-ink); border-color: transparent; }
+
+.progress-track { height: 6px; border-radius: 999px; background: var(--surface-sunken); overflow: hidden; }
+.progress-fill { height: 100%; background: var(--accent); transition: width 0.3s ease; }
+
+.hint { font-size: 0.85rem; color: var(--ink-faint); margin: 0; }
+.mini-title {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* ---------------- shared page layout ---------------- */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: rise 0.3s ease both;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page { animation: none !important; }
+}
+
+.page-head { display: flex; flex-direction: column; gap: 4px; }
+.page-head h1 { font-size: 2rem; }
+.page-sub { color: var(--ink-soft); max-width: 62ch; margin: 0; }
+
+/* ---------------- header/footer bands ----------------
+   Reusable chrome for page content: a bordered header row
+   (icon/title/subtitle left, status/primary action right)
+   and a bordered footer row (contextual info left, action
+   buttons right), matching the reference mockups' repeating
+   band structure. Pages opt in by wrapping content between
+   them instead of using a plain .page-head. */
+
+.band-header, .band-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  min-height: 92px;
+  padding: 16px 4px;
+  background: var(--surface);
+}
+.band-header { border-bottom: 1px solid var(--line); }
+.band-footer { border-top: 1px solid var(--line); }
+
+.band-header-left, .band-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.band-header-right, .band-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+}
+
+.band-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 0 0 2px;
+}

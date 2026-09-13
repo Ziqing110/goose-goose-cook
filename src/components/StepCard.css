@@ -1,0 +1,50 @@
+.step-card-wrap { position: relative; }
+.step-card-wrap.is-open { z-index: 6; }
+
+.step-card {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-card);
+  padding: 14px 16px;
+  font: inherit;
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.step-card:hover { border-color: var(--ink-faint); }
+.step-card.is-selected {
+  border: 2px solid var(--ink);
+  box-shadow: var(--shadow-md);
+  position: relative;
+}
+
+.step-card-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.step-card-head { justify-content: space-between; }
+
+.step-card-title { display: flex; align-items: baseline; gap: 9px; font-weight: 700; font-size: 1.05rem; }
+.step-card-num { color: var(--ink-faint); font-weight: 500; font-size: 0.8rem; }
+.step-card-duration { color: var(--ink-soft); font-size: 0.85rem; white-space: nowrap; }
+
+.step-card-tags { gap: 8px; }
+.step-card-edited { background: var(--accent-soft); color: var(--accent-soft-ink); border-color: transparent; }
+
+.step-card-deps {
+  font-size: 0.8rem;
+  color: var(--ink-faint);
+  gap: 6px;
+}
+
+.step-card-popover {
+  position: relative;
+  margin-top: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  padding: 18px;
+  box-shadow: var(--shadow-md);
+}

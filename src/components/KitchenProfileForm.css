@@ -1,0 +1,15 @@
+.kitchen-profile-form { display: flex; flex-direction: column; gap: 18px; }
+
+.setup-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 16px;
+}
+
+.setup-toggles {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.setup-toggles .toggle-row:not(:last-child) { border-bottom: 1px solid var(--line); }

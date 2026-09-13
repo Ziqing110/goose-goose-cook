@@ -1,0 +1,36 @@
+.btn-mic {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  border-radius: 999px;
+  padding: 10px 20px;
+  font-weight: 600;
+}
+.mic-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; display: inline-block; }
+
+.voice-panel {
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface-sunken);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 480px;
+}
+
+.option-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.option-btn { background: var(--surface); }
+
+.free-text-row { display: flex; gap: 8px; }
+.free-text-row input {
+  flex: 1;
+  font: inherit;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.popup-cancel { align-self: flex-start; padding-left: 2px; }

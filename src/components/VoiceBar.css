@@ -1,0 +1,111 @@
+.voice-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  height: 104px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 28px;
+  background: var(--ink);
+  color: var(--bg);
+  box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18);
+}
+
+.voice-avatar {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--bg);
+}
+
+.voice-transcript {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.voice-transcript-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(251, 246, 236, 0.55);
+}
+.voice-transcript-text {
+  font-size: 1rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-meter {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+}
+.meter-bar {
+  width: 3px;
+  height: 8px;
+  border-radius: 2px;
+  background: rgba(251, 246, 236, 0.3);
+}
+.meter-bar.is-live {
+  background: var(--cook-sage);
+  animation: meter-pulse 1.1s ease-in-out infinite;
+}
+.meter-bar.is-live:nth-child(2) { animation-delay: 0.15s; }
+.meter-bar.is-live:nth-child(3) { animation-delay: 0.3s; }
+.meter-bar.is-live:nth-child(4) { animation-delay: 0.45s; }
+
+@keyframes meter-pulse {
+  0%, 100% { height: 8px; }
+  50% { height: 22px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .meter-bar.is-live { animation: none; height: 14px; }
+}
+
+.voice-status-pill {
+  flex: none;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 18px;
+  border-radius: var(--radius-pill);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.voice-status-pill.is-listening { background: var(--cook-sage-soft); color: var(--cook-sage); }
+.voice-status-pill.is-muted { background: rgba(251, 246, 236, 0.12); color: rgba(251, 246, 236, 0.7); }
+
+.voice-mute-btn {
+  flex: none;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(251, 246, 236, 0.3);
+  background: transparent;
+  color: var(--bg);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.voice-mute-btn:hover { background: rgba(251, 246, 236, 0.1); }
+
+@media (max-width: 720px) {
+  .voice-bar { padding: 0 16px; gap: 12px; }
+  .voice-meter { display: none; }
+}

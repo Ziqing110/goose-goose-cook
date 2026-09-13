@@ -1,0 +1,19 @@
+.kitchen-profile-modal-form { display: flex; flex-direction: column; gap: 18px; }
+
+.kitchen-profile-modal-notice {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--warning-soft);
+  color: var(--warning-soft-ink);
+  font-size: 0.85rem;
+}
+.kitchen-profile-modal-error { background: var(--crit-soft); color: var(--crit-soft-ink); }
+
+.kitchen-profile-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.kitchen-profile-modal-actions-right { display: flex; gap: 10px; }
