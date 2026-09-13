@@ -5,7 +5,7 @@ import NumberStepper from "./NumberStepper.jsx";
 import ToggleSwitch from "./ToggleSwitch.jsx";
 import "./KitchenProfileForm.css";
 
-export default function KitchenProfileForm({ value, onChange }) {
+export default function KitchenProfileForm({ value, onChange, nameError }) {
   const set = (patch) => onChange({ ...value, ...patch });
 
   return (
@@ -18,7 +18,15 @@ export default function KitchenProfileForm({ value, onChange }) {
           placeholder="e.g. Home kitchen"
           value={value.name}
           onChange={(e) => set({ name: e.target.value })}
+          className={nameError ? "field-error" : ""}
+          aria-invalid={nameError || undefined}
+          aria-describedby={nameError ? "kp-name-error" : undefined}
         />
+        {nameError && (
+          <p id="kp-name-error" className="field-error-text">
+            Give this kitchen a name before continuing.
+          </p>
+        )}
       </div>
 
       <div className="setup-grid">

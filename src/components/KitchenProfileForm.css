@@ -1,5 +1,8 @@
 .kitchen-profile-form { display: flex; flex-direction: column; gap: 18px; }
 
+.field-error { border-color: var(--crit) !important; }
+.field-error-text { margin: 0; font-size: 0.8rem; color: var(--crit); }
+
 .setup-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));

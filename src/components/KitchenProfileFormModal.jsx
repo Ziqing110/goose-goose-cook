@@ -6,11 +6,20 @@ import KitchenProfileForm, { emptyKitchenProfileDraft } from "./KitchenProfileFo
 // or an existing profile object for "edit" (adds a Delete action).
 export default function KitchenProfileFormModal({ profile, notice, error, onSave, onDelete, onClose }) {
   const [draft, setDraft] = useState(profile ? { ...profile } : emptyKitchenProfileDraft());
+  const [nameError, setNameError] = useState(false);
   const isEdit = Boolean(profile);
+
+  const handleChange = (next) => {
+    setDraft(next);
+    if (nameError && next.name.trim()) setNameError(false);
+  };
 
   const submit = (e) => {
     e.preventDefault();
-    if (!draft.name.trim()) return;
+    if (!draft.name.trim()) {
+      setNameError(true);
+      return;
+    }
     onSave({ ...draft, name: draft.name.trim() });
   };
 
@@ -22,7 +31,7 @@ export default function KitchenProfileFormModal({ profile, notice, error, onSave
         {notice && <p className="kitchen-profile-modal-notice">{notice}</p>}
         {error && <p className="kitchen-profile-modal-notice kitchen-profile-modal-error">{error}</p>}
 
-        <KitchenProfileForm value={draft} onChange={setDraft} />
+        <KitchenProfileForm value={draft} onChange={handleChange} nameError={nameError} />
 
         <div className="kitchen-profile-modal-actions">
           {isEdit ? (
