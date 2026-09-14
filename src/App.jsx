@@ -5,7 +5,11 @@ import SessionLayout from "./pages/SessionLayout.jsx";
 import SessionKitchenSetupPage from "./pages/SessionKitchenSetupPage.jsx";
 import ConversationPage from "./pages/ConversationPage.jsx";
 import RecipeGraphPage from "./pages/RecipeGraphPage.jsx";
+import VoiceBindingPage from "./pages/VoiceBindingPage.jsx";
+import SchedulePage from "./pages/SchedulePage.jsx";
 import { useAppState } from "./state/AppStateContext.jsx";
+import { isFullyApproved } from "./utils/graphLayout.js";
+import { areCooksBound } from "./utils/cooks.js";
 
 // Route guards: Home is always reachable (it's the entry point, not a
 // wizard step). Everything under /session requires an in-progress
@@ -51,6 +55,25 @@ function RequireConversationComplete({ children }) {
   return children;
 }
 
+function RequireRecipeApproved({ children }) {
+  const { state } = useAppState();
+  const redirect = nextRequiredPath(state);
+  if (redirect) return <Navigate to={redirect} replace />;
+  if (!state.session.conversation.complete) return <Navigate to="/session/conversation" replace />;
+  if (!isFullyApproved(state.session.recipes, state.session.sharedSteps)) return <Navigate to="/session/recipe-graph" replace />;
+  return children;
+}
+
+function RequireCooksBound({ children }) {
+  const { state } = useAppState();
+  const redirect = nextRequiredPath(state);
+  if (redirect) return <Navigate to={redirect} replace />;
+  if (!state.session.conversation.complete) return <Navigate to="/session/conversation" replace />;
+  if (!isFullyApproved(state.session.recipes, state.session.sharedSteps)) return <Navigate to="/session/recipe-graph" replace />;
+  if (!areCooksBound(state.session.cooks)) return <Navigate to="/session/voice-binding" replace />;
+  return children;
+}
+
 // Landing on /session directly (e.g. "Resume cooking") sends the user
 // to wherever they actually left off.
 function SessionIndexRedirect() {
@@ -58,7 +81,9 @@ function SessionIndexRedirect() {
   const redirect = nextRequiredPath(state);
   if (redirect) return <Navigate to={redirect} replace />;
   if (!state.session.conversation.complete) return <Navigate to="/session/conversation" replace />;
-  return <Navigate to="/session/recipe-graph" replace />;
+  if (!isFullyApproved(state.session.recipes, state.session.sharedSteps)) return <Navigate to="/session/recipe-graph" replace />;
+  if (!areCooksBound(state.session.cooks)) return <Navigate to="/session/voice-binding" replace />;
+  return <Navigate to="/session/schedule" replace />;
 }
 
 export default function App() {
@@ -91,6 +116,22 @@ export default function App() {
               <RequireConversationComplete>
                 <RecipeGraphPage />
               </RequireConversationComplete>
+            }
+          />
+          <Route
+            path="voice-binding"
+            element={
+              <RequireRecipeApproved>
+                <VoiceBindingPage />
+              </RequireRecipeApproved>
+            }
+          />
+          <Route
+            path="schedule"
+            element={
+              <RequireCooksBound>
+                <SchedulePage />
+              </RequireCooksBound>
             }
           />
         </Route>

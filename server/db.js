@@ -51,6 +51,8 @@ db.exec(`
     ended_at TEXT,
     conversation_json TEXT NOT NULL,
     selected_node_id TEXT,
+    cooks_json TEXT NOT NULL DEFAULT '[]',
+    mode TEXT,
     updated_at TEXT NOT NULL
   );
 
@@ -84,6 +86,18 @@ db.exec(`
     updated_at TEXT NOT NULL
   );
 `);
+
+// No migration system exists in this repo — CREATE TABLE IF NOT EXISTS
+// is a no-op against an already-existing sessions table, so new columns
+// need an explicit, guarded ALTER TABLE to reach a dev DB created before
+// this change.
+const sessionColumns = db.prepare("PRAGMA table_info(sessions)").all().map((c) => c.name);
+if (!sessionColumns.includes("cooks_json")) {
+  db.exec("ALTER TABLE sessions ADD COLUMN cooks_json TEXT NOT NULL DEFAULT '[]'");
+}
+if (!sessionColumns.includes("mode")) {
+  db.exec("ALTER TABLE sessions ADD COLUMN mode TEXT");
+}
 
 // ---------------------------------------------------------------------
 // Seed data — hand-authored demo dishes and their materials catalog.

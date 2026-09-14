@@ -27,6 +27,8 @@ function makeSession(id, kitchenProfileId) {
     selectedNodeId: null,
     recipes: [],
     sharedSteps: [],
+    cooks: [],
+    mode: null,
   };
 }
 
@@ -229,6 +231,8 @@ export function AppStateProvider({ children }) {
           kitchenProfileId: session.kitchenProfileId,
           conversation: session.conversation,
           selectedNodeId: session.selectedNodeId,
+          cooks: session.cooks,
+          mode: session.mode,
         })
         .catch((err) => console.error("Failed to sync session:", err));
 

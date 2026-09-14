@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { nextNodeId, slugifyMaterialId, MATERIAL_CATEGORY_LABELS, MATERIAL_CATEGORY_ORDER } from "../data/dishes.js";
 import { listRecipeTemplates, listMaterials } from "../api/recipeTemplates.js";
@@ -531,6 +532,7 @@ export default function RecipeGraphPage() {
 }
 
 function ApprovedPanel({ draft, approved, onRevise }) {
+  const navigate = useNavigate();
   const diff = diffGraphs(draft, approved);
   const hasChanges = diff.added.length || diff.removed.length || diff.edited.length;
 
@@ -549,7 +551,7 @@ function ApprovedPanel({ draft, approved, onRevise }) {
         <button className="btn btn-ghost" onClick={onRevise}>
           &larr; Revise
         </button>
-        <button className="btn btn-primary" disabled title="Coming soon">
+        <button className="btn btn-primary" onClick={() => navigate("/session/voice-binding")}>
           Continue to schedule &rarr;
         </button>
       </div>

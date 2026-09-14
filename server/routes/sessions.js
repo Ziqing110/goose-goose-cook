@@ -35,6 +35,8 @@ function sessionRowToApi(row, recipeRows, sharedStepRows) {
     endedAt: row.ended_at,
     conversation: JSON.parse(row.conversation_json),
     selectedNodeId: row.selected_node_id,
+    cooks: JSON.parse(row.cooks_json),
+    mode: row.mode,
     recipes: recipeRows.map(recipeRowToApi),
     sharedSteps: sharedStepRows.map(sharedStepRowToApi),
   };
@@ -44,12 +46,13 @@ const getSessionStmt = db.prepare("SELECT * FROM sessions WHERE id = ?");
 const getRecipesForSessionStmt = db.prepare("SELECT * FROM recipe_instances WHERE session_id = ? ORDER BY position ASC");
 const getSharedStepsForSessionStmt = db.prepare("SELECT * FROM shared_steps WHERE session_id = ? ORDER BY id ASC");
 const insertSessionStmt = db.prepare(`
-  INSERT INTO sessions (id, kitchen_profile_id, status, started_at, ended_at, conversation_json, selected_node_id, updated_at)
-  VALUES (@id, @kitchen_profile_id, @status, @started_at, @ended_at, @conversation_json, @selected_node_id, @updated_at)
+  INSERT INTO sessions (id, kitchen_profile_id, status, started_at, ended_at, conversation_json, selected_node_id, cooks_json, mode, updated_at)
+  VALUES (@id, @kitchen_profile_id, @status, @started_at, @ended_at, @conversation_json, @selected_node_id, @cooks_json, @mode, @updated_at)
 `);
 const updateSessionStmt = db.prepare(`
   UPDATE sessions SET kitchen_profile_id=@kitchen_profile_id, status=@status, ended_at=@ended_at,
-    conversation_json=@conversation_json, selected_node_id=@selected_node_id, updated_at=@updated_at
+    conversation_json=@conversation_json, selected_node_id=@selected_node_id, cooks_json=@cooks_json,
+    mode=@mode, updated_at=@updated_at
   WHERE id=@id
 `);
 
@@ -65,6 +68,8 @@ sessionsRouter.post("/", (req, res) => {
     ended_at: null,
     conversation_json: JSON.stringify(emptyConversation()),
     selected_node_id: null,
+    cooks_json: JSON.stringify([]),
+    mode: null,
     updated_at: now,
   };
   insertSessionStmt.run(row);
@@ -89,7 +94,7 @@ sessionsRouter.patch("/:id", (req, res) => {
   const existing = getSessionStmt.get(req.params.id);
   if (!existing) return res.status(404).json({ error: "session not found" });
 
-  const { kitchenProfileId, status, endedAt, conversation, selectedNodeId } = req.body;
+  const { kitchenProfileId, status, endedAt, conversation, selectedNodeId, cooks, mode } = req.body;
   const row = {
     id: existing.id,
     kitchen_profile_id: kitchenProfileId !== undefined ? kitchenProfileId : existing.kitchen_profile_id,
@@ -97,6 +102,8 @@ sessionsRouter.patch("/:id", (req, res) => {
     ended_at: endedAt !== undefined ? endedAt : existing.ended_at,
     conversation_json: conversation !== undefined ? JSON.stringify(conversation) : existing.conversation_json,
     selected_node_id: selectedNodeId !== undefined ? selectedNodeId : existing.selected_node_id,
+    cooks_json: cooks !== undefined ? JSON.stringify(cooks) : existing.cooks_json,
+    mode: mode !== undefined ? mode : existing.mode,
     updated_at: new Date().toISOString(),
   };
   updateSessionStmt.run(row);

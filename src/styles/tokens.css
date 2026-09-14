@@ -254,6 +254,11 @@ button { font: inherit; cursor: pointer; }
   color: var(--ink-soft);
   white-space: nowrap;
 }
+
+/* per-cook identity color utilities — see --cook-* tokens above */
+.cook-color-mia { background: var(--cook-mia-soft); color: var(--cook-mia); }
+.cook-color-leo { background: var(--cook-leo-soft); color: var(--cook-leo); }
+.cook-color-sage { background: var(--cook-sage-soft); color: var(--cook-sage); }
 .tag-difficulty-low { background: var(--success-soft); color: var(--success-soft-ink); border-color: transparent; }
 .tag-difficulty-medium { background: var(--warning-soft); color: var(--warning-soft-ink); border-color: transparent; }
 .tag-difficulty-high { background: var(--crit-soft); color: var(--crit-soft-ink); border-color: transparent; }

@@ -184,6 +184,10 @@ export function namespaceTemplateNodes(nodes, recipeId) {
  * discriminator. This is display-only: each recipe/shared step keeps
  * its own independent draft/working/approved underneath, untouched.
  */
+export function isFullyApproved(recipes, sharedSteps = []) {
+  return recipes.length > 0 && recipes.every((r) => r.approved) && sharedSteps.every((s) => s.approved);
+}
+
 export function mergeRecipesForDisplay(recipes, sharedSteps = []) {
   const tag = (nodes, recipeId) => nodes.map((n) => ({ ...n, _recipeId: recipeId }));
   const tagShared = (node) => ({ ...node, _recipeId: null, _shared: true });
@@ -200,7 +204,7 @@ export function mergeRecipesForDisplay(recipes, sharedSteps = []) {
     nodes: [...recipes.flatMap((r) => tag(r.draft.nodes, r.id)), ...sharedSteps.map((s) => tagShared(s.draft))],
   };
 
-  const allApproved = recipes.length > 0 && recipes.every((r) => r.approved) && sharedSteps.every((s) => s.approved);
+  const allApproved = isFullyApproved(recipes, sharedSteps);
   const approved = allApproved
     ? { nodes: [...recipes.flatMap((r) => tag(r.approved.nodes, r.id)), ...sharedSteps.map((s) => tagShared(s.approved))] }
     : null;
