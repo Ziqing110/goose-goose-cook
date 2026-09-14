@@ -1,6 +1,3 @@
-.step-card-wrap { position: relative; }
-.step-card-wrap.is-open { z-index: 6; }
-
 .step-card {
   width: 100%;
   text-align: left;
@@ -22,6 +19,19 @@
   box-shadow: var(--shadow-md);
   position: relative;
 }
+.step-card.is-affected { border-color: var(--crit); background: var(--crit-soft); }
+.step-card.is-impossible {
+  border-color: var(--line);
+  background: var(--surface-sunken);
+  color: var(--ink-faint);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.step-card.is-impossible:hover { border-color: var(--line); }
+.step-card.is-impossible .step-card-title,
+.step-card.is-impossible .step-card-duration,
+.step-card.is-impossible .step-card-deps { color: var(--ink-faint); }
+.step-card.is-impossible .tag { opacity: 0.6; }
 
 .step-card-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .step-card-head { justify-content: space-between; }
@@ -39,12 +49,10 @@
   gap: 6px;
 }
 
-.step-card-popover {
-  position: relative;
-  margin-top: 8px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
-  padding: 18px;
-  box-shadow: var(--shadow-md);
+.step-card-missing {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--crit-soft-ink);
+  gap: 6px;
 }
+.step-card-impossible-text { color: var(--ink-faint); }

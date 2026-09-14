@@ -1,14 +1,16 @@
 // Persistent bottom voice bar — shell-level chrome shown on every
-// screen, matching the reference mockups. This is a presentational
-// placeholder (idle/muted status only, no live transcript feed yet);
-// same swap-for-real-AssemblyAI seam as VoiceInput.jsx.
-import { useState } from "react";
+// screen, matching the reference mockups. Mute state is shared app
+// state (state.voice.muted): muting here switches the conversation
+// page's answer bar into typing mode, and typing there mutes this.
+import { useAppState } from "../state/AppStateContext.jsx";
 import "./VoiceBar.css";
 
 export default function VoiceBar() {
-  const [muted, setMuted] = useState(false);
-
+  const { state, dispatch } = useAppState();
+  const muted = state.voice.muted;
   const status = muted ? "Muted" : "Listening";
+
+  const toggleMuted = () => dispatch({ type: "voice/setMuted", payload: { muted: !muted } });
 
   return (
     <div className="voice-bar" role="status" aria-label="Voice agent status">
@@ -41,7 +43,7 @@ export default function VoiceBar() {
 
       <span className={`voice-status-pill ${muted ? "is-muted" : "is-listening"}`}>{status}</span>
 
-      <button type="button" className="voice-mute-btn" onClick={() => setMuted((m) => !m)}>
+      <button type="button" className="voice-mute-btn" onClick={toggleMuted}>
         {muted ? "Unmute" : "Mute"}
       </button>
     </div>

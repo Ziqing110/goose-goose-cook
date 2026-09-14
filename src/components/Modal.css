@@ -1,6 +1,11 @@
 .modal-scrim {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* Stop above the voice bar — it stays visible and clickable, and the
+     modal never covers it. */
+  bottom: var(--voice-bar-height);
   z-index: 50;
   background: rgba(32, 30, 29, 0.45);
   display: flex;

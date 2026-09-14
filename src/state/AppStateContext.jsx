@@ -50,6 +50,7 @@ const initialState = {
   kitchensError: null,
   session: null,
   sessionHistory: [],
+  voice: { muted: false }, // shared mic state — VoiceBar and the conversation answer bar both read/write this
 };
 
 function loadInitialState() {
@@ -127,6 +128,9 @@ function reducer(state, action) {
     case "session/graph/update":
       if (!state.session) return state;
       return { ...state, session: { ...state.session, graph: { ...state.session.graph, ...action.payload } } };
+
+    case "voice/setMuted":
+      return { ...state, voice: { ...state.voice, muted: action.payload.muted } };
 
     default:
       return state;

@@ -4,7 +4,7 @@
   right: 0;
   bottom: 0;
   z-index: 40;
-  height: 104px;
+  height: var(--voice-bar-height);
   display: flex;
   align-items: center;
   gap: 18px;

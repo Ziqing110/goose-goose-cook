@@ -101,14 +101,7 @@ export default function ConversationPage() {
             </div>
           </>
         ) : (
-          <>
-            <div className="band-footer-left">
-              <span className="hint">Answer by voice or type it in.</span>
-            </div>
-            <div className="band-footer-right">
-              <VoiceInput question={currentQuestion} onAnswer={handleAnswer} />
-            </div>
-          </>
+          <VoiceInput question={currentQuestion} onAnswer={handleAnswer} />
         )}
       </div>
     </section>

@@ -1,62 +1,77 @@
-// Voice-input control: a mic button that opens a small reply panel.
-// This is the one seam meant to be swapped for real AssemblyAI
-// realtime STT later — everything downstream only cares that
-// onAnswer(value, label) eventually fires.
-import { useState } from "react";
+// Persistent answer bar for the conversation page. Typing and voice
+// share one mic-mute state (state.voice.muted, see VoiceBar):
+//  - muted   -> this bar is a live, editable text input.
+//  - unmuted -> this bar is a disabled "listening" display (the seam
+//               for a real live voice-transcript feed later); clicking
+//               it mutes the mic and switches to typing.
+// Demo-answer options render as template chips that fill the input
+// (not submit) so they're a quick starting point, not a shortcut that
+// skips the input entirely.
+import { useEffect, useRef, useState } from "react";
+import { useAppState } from "../state/AppStateContext.jsx";
 import "./VoiceInput.css";
 
 export default function VoiceInput({ question, onAnswer }) {
-  const [open, setOpen] = useState(false);
+  const { state, dispatch } = useAppState();
+  const muted = state.voice.muted;
   const [text, setText] = useState("");
+  const inputRef = useRef(null);
 
-  const submit = (value, label) => {
-    onAnswer(value, label);
-    setOpen(false);
-    setText("");
+  // Clear the draft when moving on to a new question.
+  useEffect(() => setText(""), [question.id]);
+
+  const startTyping = () => {
+    if (!muted) dispatch({ type: "voice/setMuted", payload: { muted: true } });
   };
 
-  const handleFreeText = (e) => {
+  const applyTemplate = (label) => {
+    startTyping();
+    setText(label);
+    // Clicking a chip focuses the chip button, not the input — without
+    // this, Enter re-clicks the chip instead of submitting the answer.
+    inputRef.current?.focus();
+  };
+
+  const submit = (e) => {
     e.preventDefault();
     const val = text.trim();
     if (!val) return;
-    submit(val, val);
+    // If the text is exactly one of the demo templates (used as-is),
+    // submit its real value/label pair; otherwise treat it as free text.
+    const match = question.options.find((o) => o.label === val);
+    if (match) onAnswer(match.value, match.label);
+    else onAnswer(val, val);
+    setText("");
   };
 
-  if (!open) {
-    return (
-      <button type="button" className="btn btn-mic" onClick={() => setOpen(true)}>
-        <span className="mic-dot" aria-hidden="true" />
-        Hold to answer
-      </button>
-    );
-  }
-
   return (
-    <div className="voice-panel" role="dialog" aria-label="Voice reply">
+    <div className="answer-bar">
       {question.options.length > 0 && (
-        <div className="option-grid">
+        <div className="answer-templates">
           {question.options.map((o) => (
-            <button key={o.value} type="button" className="btn option-btn" onClick={() => submit(o.value, o.label)}>
+            <button key={o.value} type="button" className="btn template-chip" onClick={() => applyTemplate(o.label)}>
               {o.label}
             </button>
           ))}
         </div>
       )}
-      <form className="free-text-row" onSubmit={handleFreeText}>
+
+      <form className="answer-input-row" onSubmit={submit}>
         <input
+          ref={inputRef}
           type="text"
-          autoFocus
-          value={text}
-          placeholder={question.freeTextPlaceholder}
+          value={muted ? text : ""}
+          readOnly={!muted}
+          onFocus={startTyping}
+          onClick={startTyping}
           onChange={(e) => setText(e.target.value)}
+          placeholder={muted ? question.freeTextPlaceholder : "Listening — click to type your answer instead"}
+          className={`answer-input ${!muted ? "is-listening" : ""}`}
         />
-        <button type="submit" className="btn">
-          Say it
+        <button type="submit" className="btn btn-primary" disabled={!muted || !text.trim()}>
+          Send
         </button>
       </form>
-      <button type="button" className="btn btn-ghost popup-cancel" onClick={() => setOpen(false)}>
-        Cancel
-      </button>
     </div>
   );
 }

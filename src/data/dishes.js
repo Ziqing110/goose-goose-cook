@@ -81,6 +81,7 @@ export function generateRecipeGraph(answers = {}) {
       estimated_duration_sec: 180,
       difficulty: "low",
       required_equipment: ["cutting_board"],
+      required_materials: ["tofu"],
       depends_on: [],
       status: "pending",
       phase: "prep",
@@ -92,6 +93,7 @@ export function generateRecipeGraph(answers = {}) {
       estimated_duration_sec: 150,
       difficulty: "low",
       required_equipment: ["cutting_board"],
+      required_materials: ["garlic", "ginger", "scallion"],
       depends_on: [],
       status: "pending",
       phase: "prep",
@@ -103,6 +105,7 @@ export function generateRecipeGraph(answers = {}) {
       estimated_duration_sec: 120,
       difficulty: "medium",
       required_equipment: [],
+      required_materials: ["stock", "soy_sauce", "cornstarch"],
       depends_on: [],
       status: "pending",
       phase: "prep",
@@ -114,6 +117,7 @@ export function generateRecipeGraph(answers = {}) {
       estimated_duration_sec: 120,
       difficulty: "low",
       required_equipment: ["stove_burner", "pot"],
+      required_materials: [],
       depends_on: ["tofu_cut"],
       status: "pending",
       phase: "cook",
@@ -127,6 +131,7 @@ export function generateRecipeGraph(answers = {}) {
       estimated_duration_sec: isMeatFree ? 90 : 240,
       difficulty: "medium",
       required_equipment: ["stove_burner", "wok"],
+      required_materials: ["doubanjiang", "fermented_black_beans"],
       depends_on: isMeatFree ? ["aromatics_mince"] : ["aromatics_mince", "pork_prep"],
       status: "pending",
       phase: "cook",
@@ -138,6 +143,7 @@ export function generateRecipeGraph(answers = {}) {
       estimated_duration_sec: 240,
       difficulty: "high",
       required_equipment: ["stove_burner", "wok"],
+      required_materials: [],
       depends_on: ["tofu_blanch", "aromatics_saute", "sauce_mix"],
       status: "pending",
       phase: "cook",
@@ -149,6 +155,7 @@ export function generateRecipeGraph(answers = {}) {
       estimated_duration_sec: 60,
       difficulty: "medium",
       required_equipment: ["stove_burner", "wok"],
+      required_materials: ["chili_oil"],
       depends_on: ["simmer_combine"],
       status: "pending",
       phase: "cook",
@@ -160,6 +167,7 @@ export function generateRecipeGraph(answers = {}) {
       estimated_duration_sec: 60,
       difficulty: "low",
       required_equipment: [],
+      required_materials: ["rice"],
       depends_on: ["thicken_garnish"],
       status: "pending",
       phase: "plate",
@@ -174,6 +182,7 @@ export function generateRecipeGraph(answers = {}) {
       estimated_duration_sec: 90,
       difficulty: "low",
       required_equipment: ["cutting_board"],
+      required_materials: ["ground_pork"],
       depends_on: [],
       status: "pending",
       phase: "prep",
@@ -187,8 +196,56 @@ export function generateRecipeGraph(answers = {}) {
     servings,
     created_at: new Date().toISOString(),
     nodes,
+    // Materials a user adds while editing a step (not in MATERIAL_INFO
+    // below) live here, keyed by id — same shape as MATERIAL_INFO's
+    // values. Merge the two to get the full known-materials set.
+    custom_materials: {},
   };
 }
+
+/** Turns a free-typed material name into a stable id, reusing an existing
+ * one if it already matches (case/whitespace-insensitively). */
+export function slugifyMaterialId(label) {
+  const slug = label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return slug || `material_${Date.now()}`;
+}
+
+// Dummy portions for now — this is the seam for real recipe-scaling
+// logic (servings-aware quantities) later. `category` drives the
+// grouping in the materials checklist; kept coarse on purpose.
+export const MATERIAL_INFO = {
+  tofu: { label: "Tofu", category: "protein", amount: 400, unit: "g" },
+  garlic: { label: "Garlic", category: "vegetable", amount: 3, unit: "cloves" },
+  ginger: { label: "Ginger", category: "vegetable", amount: 1, unit: "thumb" },
+  scallion: { label: "Scallion", category: "vegetable", amount: 2, unit: "stalks" },
+  ground_pork: { label: "Ground pork", category: "protein", amount: 150, unit: "g" },
+  stock: { label: "Stock", category: "pantry", amount: 200, unit: "ml" },
+  soy_sauce: { label: "Soy sauce", category: "pantry", amount: 1, unit: "tbsp" },
+  cornstarch: { label: "Cornstarch", category: "pantry", amount: 1, unit: "tsp" },
+  doubanjiang: { label: "Doubanjiang", category: "pantry", amount: 1.5, unit: "tbsp" },
+  fermented_black_beans: { label: "Fermented black beans", category: "pantry", amount: 1, unit: "tbsp" },
+  chili_oil: { label: "Chili oil", category: "pantry", amount: 1, unit: "tsp" },
+  rice: { label: "Rice", category: "grain", amount: 2, unit: "cups" },
+};
+
+// "protein" covers both meat and plant/other protein (tofu, eggs, etc.)
+// — keeping meat as its own bucket next to tofu was over-splitting for
+// what's really "the dish's protein component."
+export const MATERIAL_CATEGORY_LABELS = {
+  protein: "Protein",
+  seafood: "Seafood",
+  vegetable: "Vegetables",
+  grain: "Grains",
+  pantry: "Pantry & sauces",
+  other: "Other",
+};
+
+// Display order for category groups (unlisted categories fall back to "other").
+export const MATERIAL_CATEGORY_ORDER = ["protein", "seafood", "vegetable", "grain", "pantry", "other"];
 
 export const EQUIPMENT_OPTIONS = ["cutting_board", "stove_burner", "wok", "pot", "oven"];
 export const DIFFICULTY_OPTIONS = ["low", "medium", "high"];
