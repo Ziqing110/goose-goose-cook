@@ -1,20 +1,18 @@
 import { useEffect, useState } from "react";
 import { useAppState } from "../state/AppStateContext.jsx";
-import {
-  generateRecipeGraph,
-  nextNodeId,
-  slugifyMaterialId,
-  MATERIAL_INFO,
-  MATERIAL_CATEGORY_LABELS,
-  MATERIAL_CATEGORY_ORDER,
-} from "../data/dishes.js";
+import { nextNodeId, slugifyMaterialId, MATERIAL_CATEGORY_LABELS, MATERIAL_CATEGORY_ORDER } from "../data/dishes.js";
+import { listRecipeTemplates, listMaterials } from "../api/recipeTemplates.js";
 import {
   diffGraphs,
   cloneGraph,
   groupByPhase,
   computeStepAvailability,
   computeDownstreamClosure,
+  computeMaterialTotals,
   layoutLevels,
+  namespaceTemplateNodes,
+  mergeRecipesForDisplay,
+  extractSharedSteps,
 } from "../utils/graphLayout.js";
 import StepCard from "../components/StepCard.jsx";
 import GraphCanvas from "../components/GraphCanvas.jsx";
@@ -28,48 +26,144 @@ const PHASE_COLUMNS = [
   { key: "plate", label: "Plate" },
 ];
 
+// Demo wiring: every distinct dish in the templates table (grouped by
+// dish_idea_raw) gets instantiated into the session together — today
+// that's Mapo Tofu + Chicken Noodle Soup — so the multi-recipe-per-
+// session data model actually gets exercised instead of sitting unused.
+// Within each dish, the requested diet's variant is picked (falling
+// back to whatever variant that dish has). This is the documented seam
+// for a real LLM tool call later — same role generateRecipeGraph() used
+// to play, just choosing among DB-sourced templates instead of
+// hand-authoring the graph(s) inline, and eventually picking dishes
+// from what the user actually asked for instead of "all of them."
+function matchTemplates(templates, answers) {
+  const isMeatFree = answers.diet === "vegetarian" || answers.diet === "vegan";
+  const wantDiet = isMeatFree ? "vegetarian" : "none";
+  const byDish = new Map();
+  templates.forEach((t) => {
+    if (!byDish.has(t.dish_idea_raw)) byDish.set(t.dish_idea_raw, []);
+    byDish.get(t.dish_idea_raw).push(t);
+  });
+  return [...byDish.values()].map((variants) => variants.find((t) => t.diet === wantDiet) || variants[0]);
+}
+
+// Namespaces one template's nodes under a fresh recipe instance id.
+// Sharing detection (extractSharedSteps) runs afterward, once, across
+// the whole batch of dishes being instantiated together — namespacing
+// itself doesn't know or care whether a node will end up shared.
+function buildNamespacedGraph(template, answers, recipeId) {
+  return {
+    recipeId,
+    templateId: template.id,
+    title: template.title,
+    dish_idea_raw: template.dish_idea_raw,
+    servings: Number(answers.servings) || template.servings_default,
+    created_at: new Date().toISOString(),
+    nodes: namespaceTemplateNodes(template.nodes, recipeId),
+  };
+}
+
+function toRecipeInstance({ recipeId, templateId, nodes, ...rest }) {
+  const graph = { recipe_id: `recipe_${recipeId}`, ...rest, nodes };
+  return { id: recipeId, templateId, draft: graph, working: cloneGraph(graph), approved: null, custom_materials: {} };
+}
+
+function toSharedStepInstance(node) {
+  return { id: node.id, draft: node, working: cloneGraph(node), approved: null };
+}
+
+// The merged view tags every node with the recipe instance it came
+// from (or _shared for a session-owned shared step) for rendering;
+// strip those back off before persisting a node.
+function stripRecipeTag(node) {
+  const { _recipeId, _shared, ...clean } = node;
+  return clean;
+}
+
 export default function RecipeGraphPage() {
-  const { state, dispatch } = useAppState();
-  const { draft, working, approved, selectedNodeId } = state.session.graph;
+  const { state, dispatch, addRecipeToSession, addSharedStepToSession, deleteSharedStepFromSession } = useAppState();
+  const { conversation, selectedNodeId, recipes, sharedSteps = [] } = state.session;
   const kitchenProfile = state.kitchenProfiles.find((p) => p.id === state.session.kitchenProfileId) || null;
   const [unavailableMaterials, setUnavailableMaterials] = useState(new Set());
+  const [templates, setTemplates] = useState(null);
+  const [baseMaterials, setBaseMaterials] = useState(null);
 
+  // Reference data (recipe templates + the materials catalog) now comes
+  // from the database instead of being hardcoded in src/data/dishes.js.
   useEffect(() => {
-    if (!draft) {
-      const generated = generateRecipeGraph(state.session.conversation.answers);
-      dispatch({ type: "session/graph/init", payload: generated });
-    }
+    listRecipeTemplates()
+      .then(setTemplates)
+      .catch(() => setTemplates([]));
+    listMaterials()
+      .then((rows) => {
+        const catalog = {};
+        rows.forEach((m) => {
+          catalog[m.id] = { label: m.label, category: m.category, amount: m.amount, unit: m.unit };
+        });
+        setBaseMaterials(catalog);
+      })
+      .catch(() => setBaseMaterials({}));
+  }, []);
+
+  // Once templates have loaded, instantiate one recipe per distinct dish
+  // for this session if it doesn't have any recipes yet. Shareable steps
+  // (e.g. mincing garlic for both dishes) are detected once across the
+  // whole batch and split out into session-owned shared steps before
+  // any of it is persisted.
+  useEffect(() => {
+    if (!templates || recipes.length > 0) return;
+    const graphs = matchTemplates(templates, conversation.answers).map((template) =>
+      buildNamespacedGraph(template, conversation.answers, crypto.randomUUID())
+    );
+    const { recipes: splitGraphs, sharedSteps: extracted } = extractSharedSteps(graphs);
+    splitGraphs.forEach((g) => addRecipeToSession(toRecipeInstance(g)));
+    extracted.forEach((node) => addSharedStepToSession(toSharedStepInstance(node)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft]);
+  }, [templates, recipes.length]);
+
+  const { working, draft, approved } = mergeRecipesForDisplay(recipes, sharedSteps);
 
   const { impossible: impossibleSteps, affected: affectedSteps } = computeStepAvailability(
-    working?.nodes || [],
+    working.nodes || [],
     unavailableMaterials
   );
 
   // If the step whose editor is open just became impossible (e.g. its
   // last material got unchecked), its card is now disabled and can no
-  // longer be clicked to close — so close the popover automatically.
+  // longer be clicked to close — so close the drawer automatically.
   const selectedIsImpossible = Boolean(selectedNodeId && impossibleSteps.has(selectedNodeId));
   useEffect(() => {
     if (selectedIsImpossible) {
-      dispatch({ type: "session/graph/update", payload: { selectedNodeId: null } });
+      dispatch({ type: "session/update", payload: { selectedNodeId: null } });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedIsImpossible]);
 
-  if (!working) return null; // session/graph/init effect above fires on the next render
+  if (!baseMaterials || recipes.length === 0) {
+    return (
+      <section className="page recipe-graph-page">
+        <p className="hint">Loading your recipe&hellip;</p>
+      </section>
+    );
+  }
 
   const draftById = Object.fromEntries(draft.nodes.map((n) => [n.id, n]));
   const isEdited = (node) => draftById[node.id] && JSON.stringify(draftById[node.id]) !== JSON.stringify(node);
   const editedCount = working.nodes.filter(isEdited).length;
   const totalMinutes = Math.round(working.nodes.reduce((sum, n) => sum + n.estimated_duration_sec, 0) / 60);
+  const isMultiDish = recipes.length > 1;
 
-  // Materials the user adds while editing a step live on the graph
-  // (working.custom_materials), merged with the built-in dish defaults —
-  // this is the full set of "known" materials for this recipe.
-  const materialsInfo = { ...MATERIAL_INFO, ...(working.custom_materials || {}) };
+  // Materials a user adds while editing a step live on the owning
+  // recipe instance (recipe.custom_materials), merged with the DB
+  // catalog — this is the full set of "known" materials for this session.
+  const materialsInfo = { ...baseMaterials, ...working.custom_materials };
   const materialLabel = (m) => materialsInfo[m]?.label || m;
+
+  // The catalog's amount/unit is a flat default that doesn't know how
+  // many steps (or dishes) actually draw on it — a shared step's own
+  // material_usage states the true combined need, so the checklist
+  // shows that total instead wherever a step has stated one.
+  const materialTotals = computeMaterialTotals(working.nodes, materialsInfo);
 
   // A material's priority is how many steps its availability ultimately
   // affects — the step(s) it's directly used in, plus everything
@@ -104,7 +198,7 @@ export default function RecipeGraphPage() {
     materialsByCategory[cat].sort((a, b) => {
       const byPriority = materialPriority(b) - materialPriority(a);
       if (byPriority !== 0) return byPriority;
-      return (materialsInfo[b]?.amount || 0) - (materialsInfo[a]?.amount || 0);
+      return (materialTotals[b]?.amount || 0) - (materialTotals[a]?.amount || 0);
     });
   });
 
@@ -130,70 +224,147 @@ export default function RecipeGraphPage() {
     });
   };
 
+  const findRecipeForNode = (nodeId) => recipes.find((r) => r.working.nodes.some((n) => n.id === nodeId));
+  const findSharedStep = (nodeId) => sharedSteps.find((s) => s.working.id === nodeId);
+
+  const updateRecipeWorking = (recipeId, mutateFn) => {
+    const recipe = recipes.find((r) => r.id === recipeId);
+    if (!recipe) return;
+    const nextWorking = cloneGraph(recipe.working);
+    mutateFn(nextWorking);
+    dispatch({ type: "session/recipes/updateOne", payload: { recipeId, patch: { working: nextWorking } } });
+  };
+
+  const updateSharedStepWorking = (sharedStepId, mutateFn) => {
+    const step = sharedSteps.find((s) => s.id === sharedStepId);
+    if (!step) return;
+    const nextWorking = cloneGraph(step.working);
+    mutateFn(nextWorking);
+    dispatch({ type: "session/sharedSteps/updateOne", payload: { sharedStepId, patch: { working: nextWorking } } });
+  };
+
+  const selectNode = (nodeId) => dispatch({ type: "session/update", payload: { selectedNodeId: nodeId } });
+
+  const updateNode = (nodeId, patchFn) => {
+    const shared = findSharedStep(nodeId);
+    if (shared) return updateSharedStepWorking(shared.id, patchFn);
+    const recipe = findRecipeForNode(nodeId);
+    if (!recipe) return;
+    updateRecipeWorking(recipe.id, (w) => {
+      const node = w.nodes.find((n) => n.id === nodeId);
+      if (node) patchFn(node);
+    });
+  };
+
+  // TODO: New steps are added to the session's first/primary recipe —
+  // there's no per-dish UI yet to pick a target when a session holds
+  // more than one. Harmless today (recipes[0] is always Mapo Tofu, so
+  // it's a silent-but-consistent misattribution), but revisit once
+  // dishes can be added/removed mid-session (e.g. via LLM querying) —
+  // that's when "always recipes[0]" stops being safe to ignore.
+  const addNode = () => {
+    const recipe = recipes[0];
+    if (!recipe) return;
+    const id = nextNodeId("step");
+    updateRecipeWorking(recipe.id, (w) => {
+      w.nodes.push({
+        id,
+        label: "New step",
+        description: "",
+        estimated_duration_sec: 60,
+        difficulty: "low",
+        required_equipment: [],
+        required_materials: [],
+        depends_on: [],
+        status: "pending",
+        phase: "prep",
+      });
+    });
+    selectNode(id);
+  };
+
+  // Deleting a shared step needs to scrub depends_on across every recipe
+  // instance (and every other shared step) since it can be a dependency
+  // across dish boundaries — deleteSharedStepFromSession owns that full
+  // scrub, both locally and server-side. Deleting a plain per-recipe
+  // node only ever needs to scrub within that one recipe, since nothing
+  // outside it can depend on it.
+  const deleteNode = (nodeId) => {
+    if (!window.confirm("Remove this step? Any step depending on it will lose that dependency.")) return;
+    const shared = findSharedStep(nodeId);
+    if (shared) {
+      deleteSharedStepFromSession(shared.id);
+    } else {
+      const recipe = findRecipeForNode(nodeId);
+      if (!recipe) return;
+      updateRecipeWorking(recipe.id, (w) => {
+        w.nodes = w.nodes.filter((n) => n.id !== nodeId).map((n) => ({ ...n, depends_on: n.depends_on.filter((d) => d !== nodeId) }));
+      });
+    }
+    if (selectedNodeId === nodeId) selectNode(null);
+  };
+
+  // Commits a step's staged edits (from the drawer) in one go and closes it.
+  const saveNode = (nodeId, draftNode) => {
+    const shared = findSharedStep(nodeId);
+    if (shared) {
+      dispatch({ type: "session/sharedSteps/updateOne", payload: { sharedStepId: shared.id, patch: { working: stripRecipeTag(draftNode) } } });
+      selectNode(null);
+      return;
+    }
+    const recipe = findRecipeForNode(nodeId);
+    if (!recipe) return;
+    updateRecipeWorking(recipe.id, (w) => {
+      const index = w.nodes.findIndex((n) => n.id === nodeId);
+      if (index !== -1) w.nodes[index] = stripRecipeTag(draftNode);
+    });
+    selectNode(null);
+  };
+
   // Registers a material that doesn't exist yet on the recipe (so it's
   // available to every step, not just the one being edited) and returns
-  // its id. Doesn't touch any step's required_materials — the editor
-  // adds it to its own in-progress draft, applied on Save like every
-  // other field.
+  // its id. Lives on the session's first/primary recipe for now.
+  // TODO: same recipes[0] misattribution as addNode above — a material
+  // added while editing a Chicken Noodle Soup step is silently attached
+  // to Mapo Tofu's custom_materials instead. Invisible today because
+  // mergeRecipesForDisplay unions custom_materials across all recipes
+  // for display, but would surface if that owning recipe were ever
+  // removed from the session. Revisit alongside addNode's TODO.
   const registerMaterial = (draft) => {
     const label = draft.label.trim();
     if (!label) return null;
     const id = slugifyMaterialId(label);
     if (!materialsInfo[id]) {
-      const next = cloneGraph(working);
-      next.custom_materials = { ...(next.custom_materials || {}) };
-      next.custom_materials[id] = {
-        label,
-        category: draft.category || "other",
-        amount: Number(draft.amount) || 1,
-        unit: draft.unit.trim() || "unit",
+      const recipe = recipes[0];
+      if (!recipe) return null;
+      const nextCustom = {
+        ...(recipe.custom_materials || {}),
+        [id]: { label, category: draft.category || "other", amount: Number(draft.amount) || 1, unit: draft.unit.trim() || "unit" },
       };
-      dispatch({ type: "session/graph/update", payload: { working: next } });
+      dispatch({ type: "session/recipes/updateOne", payload: { recipeId: recipe.id, patch: { custom_materials: nextCustom } } });
     }
     return id;
   };
 
-  // Commits a step's staged edits (from the drawer) in one go and closes it.
-  const saveNode = (nodeId, draftNode) => {
-    const next = cloneGraph(working);
-    const index = next.nodes.findIndex((n) => n.id === nodeId);
-    if (index === -1) return;
-    next.nodes[index] = draftNode;
-    dispatch({ type: "session/graph/update", payload: { working: next, selectedNodeId: null } });
-  };
-
-
-  const addNode = () => {
-    const next = cloneGraph(working);
-    const id = nextNodeId("step");
-    next.nodes.push({
-      id,
-      label: "New step",
-      description: "",
-      estimated_duration_sec: 60,
-      difficulty: "low",
-      required_equipment: [],
-      required_materials: [],
-      depends_on: [],
-      status: "pending",
-      phase: "prep",
+  // Approve/revise apply to every recipe instance (and every shared
+  // step) in the session at once — there's no per-dish approval control yet.
+  const approve = () => {
+    recipes.forEach((recipe) => {
+      dispatch({ type: "session/recipes/updateOne", payload: { recipeId: recipe.id, patch: { approved: cloneGraph(recipe.working) } } });
     });
-    dispatch({ type: "session/graph/update", payload: { working: next, selectedNodeId: id } });
+    sharedSteps.forEach((step) => {
+      dispatch({ type: "session/sharedSteps/updateOne", payload: { sharedStepId: step.id, patch: { approved: cloneGraph(step.working) } } });
+    });
+    selectNode(null);
   };
-
-  const deleteNode = (nodeId) => {
-    if (!window.confirm("Remove this step? Any step depending on it will lose that dependency.")) return;
-    const next = cloneGraph(working);
-    next.nodes = next.nodes.filter((n) => n.id !== nodeId).map((n) => ({ ...n, depends_on: n.depends_on.filter((d) => d !== nodeId) }));
-    dispatch({
-      type: "session/graph/update",
-      payload: { working: next, selectedNodeId: selectedNodeId === nodeId ? null : selectedNodeId },
+  const revise = () => {
+    recipes.forEach((recipe) => {
+      dispatch({ type: "session/recipes/updateOne", payload: { recipeId: recipe.id, patch: { approved: null } } });
+    });
+    sharedSteps.forEach((step) => {
+      dispatch({ type: "session/sharedSteps/updateOne", payload: { sharedStepId: step.id, patch: { approved: null } } });
     });
   };
-
-  const selectNode = (nodeId) => dispatch({ type: "session/graph/update", payload: { selectedNodeId: nodeId } });
-  const approve = () => dispatch({ type: "session/graph/update", payload: { approved: cloneGraph(working), selectedNodeId: null } });
-  const revise = () => dispatch({ type: "session/graph/update", payload: { approved: null } });
 
   const phaseGroups = groupByPhase(working.nodes);
   // Step numbers should reflect cook order (dependency depth), not raw
@@ -201,6 +372,19 @@ export default function RecipeGraphPage() {
   // (always appended to the end of the array) gets numbered last even
   // though nothing actually depends on it or comes after it.
   const stepOrder = layoutLevels(working.nodes).flat();
+  const dishLabelFor = (node) => (node._shared ? "Shared" : recipes.find((r) => r.id === node._recipeId)?.working.title || null);
+
+  // A merged shared step's own material_usage only holds the combined
+  // total (shown in the Required materials panel); usage_breakdown keeps
+  // each contributing dish's own amount so the per-dish split is still
+  // visible on the step itself, even though it's now done as one step.
+  const usageBreakdownFor = (node) => {
+    if (!node.usage_breakdown?.length) return null;
+    return node.usage_breakdown.map(
+      (entry) =>
+        `${Object.values(entry.material_usage).map((u) => `${u.amount} ${u.unit}`).join(", ")} — ${entry.title}`
+    );
+  };
 
   return (
     <section className="page recipe-graph-page">
@@ -238,16 +422,16 @@ export default function RecipeGraphPage() {
                 <span className="materials-group-label mono">{MATERIAL_CATEGORY_LABELS[cat] || cat}</span>
                 <div className="checkbox-grid">
                   {materialsByCategory[cat].map((m) => {
-                    const info = materialsInfo[m];
+                    const total = materialTotals[m];
                     return (
                       <label className={`checkbox-pill ${unavailableMaterials.has(m) ? "is-unavailable" : ""}`} key={m}>
                         <input type="checkbox" checked={!unavailableMaterials.has(m)} onChange={() => toggleMaterial(m)} />
                         <span>
                           {materialLabel(m)}
-                          {info && (
+                          {total && (
                             <span className="mono materials-portion">
                               {" "}
-                              &middot; {info.amount} {info.unit}
+                              &middot; {total.amount} {total.unit}
                             </span>
                           )}
                         </span>
@@ -284,6 +468,8 @@ export default function RecipeGraphPage() {
                     impossibleReason={formatImpossibleReason(impossibleSteps.get(node.id))}
                     isAffected={affectedSteps.has(node.id)}
                     affectedReason={formatAffectedReason(affectedSteps.get(node.id))}
+                    dishLabel={isMultiDish ? dishLabelFor(node) : null}
+                    usageBreakdown={usageBreakdownFor(node)}
                   />
                 ))}
                 {!approved && (

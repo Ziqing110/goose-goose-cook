@@ -15,6 +15,8 @@ export default function StepCard({
   impossibleReason = null,
   isAffected = false,
   affectedReason = null,
+  dishLabel = null,
+  usageBreakdown = null,
 }) {
   const dependencyLabels = node.depends_on
     .map((id) => allNodes.find((n) => n.id === id)?.label)
@@ -37,12 +39,23 @@ export default function StepCard({
       </div>
 
       <div className="step-card-row step-card-tags">
+        {dishLabel && <span className="tag step-card-dish">{dishLabel}</span>}
         {node.required_equipment.length > 0 && (
           <span className="tag mono">{node.required_equipment.join(" · ")}</span>
         )}
         <span className={`tag tag-difficulty-${node.difficulty}`}>{node.difficulty}</span>
         {isEdited && <span className="tag step-card-edited">edited by you</span>}
       </div>
+
+      {usageBreakdown && (
+        <div className="step-card-row step-card-usage-breakdown">
+          {usageBreakdown.map((line, i) => (
+            <span className="tag step-card-usage-tag" key={i}>
+              {line}
+            </span>
+          ))}
+        </div>
+      )}
 
       {dependencyLabels.length > 0 && (
         <div className="step-card-row step-card-deps">

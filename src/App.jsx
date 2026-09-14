@@ -28,6 +28,10 @@ function nextRequiredPath(state) {
 
 function RequireSession({ children }) {
   const { state } = useAppState();
+  // Sessions are fetched from the server on load (no longer synchronously
+  // available from localStorage) — don't bounce to Home on a hard refresh
+  // just because the fetch hasn't resolved yet.
+  if (state.sessionStatus === "idle" || state.sessionStatus === "loading") return null;
   if (!state.session) return <Navigate to="/" replace />;
   return children;
 }

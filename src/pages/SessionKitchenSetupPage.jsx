@@ -11,7 +11,7 @@ export default function SessionKitchenSetupPage() {
   const navigate = useNavigate();
 
   const useExisting = (id) => {
-    dispatch({ type: "session/attachKitchenProfile", payload: { kitchenProfileId: id } });
+    dispatch({ type: "session/update", payload: { kitchenProfileId: id } });
     navigate("/session/conversation");
   };
 

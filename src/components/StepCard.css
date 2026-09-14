@@ -42,6 +42,10 @@
 
 .step-card-tags { gap: 8px; }
 .step-card-edited { background: var(--accent-soft); color: var(--accent-soft-ink); border-color: transparent; }
+.step-card-dish { background: var(--ai-soft); color: var(--ai-soft-ink); border-color: transparent; }
+
+.step-card-usage-breakdown { gap: 6px; }
+.step-card-usage-tag { background: var(--surface-sunken); color: var(--ink-soft); border-color: transparent; font-size: 0.78rem; }
 
 .step-card-deps {
   font-size: 0.8rem;

@@ -16,20 +16,29 @@ function formatDate(iso) {
 }
 
 export default function HomePage() {
-  const { state, dispatch, addKitchenProfile, editKitchenProfile, removeKitchenProfile, refetchKitchens } = useAppState();
+  const {
+    state,
+    addKitchenProfile,
+    editKitchenProfile,
+    removeKitchenProfile,
+    refetchKitchens,
+    startSession,
+    discardSession,
+  } = useAppState();
   const navigate = useNavigate();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [modalProfile, setModalProfile] = useState(undefined); // undefined = closed, null = "add", object = "edit"
   const [startAfterAdd, setStartAfterAdd] = useState(false); // true when the modal was opened from "start cooking"
   const [modalError, setModalError] = useState(null);
 
+  const sessionLoading = state.sessionStatus === "idle" || state.sessionStatus === "loading";
   const hasSession = Boolean(state.session);
   const profiles = state.kitchenProfiles;
   const kitchensLoading = state.kitchensStatus === "idle" || state.kitchensStatus === "loading";
   const kitchensLoadError = state.kitchensStatus === "error" ? state.kitchensError : null;
 
-  const startSession = (kitchenProfileId) => {
-    dispatch({ type: "session/start", payload: { id: crypto.randomUUID(), kitchenProfileId } });
+  const handleStartSession = (kitchenProfileId) => {
+    startSession(kitchenProfileId);
     setPickerOpen(false);
     navigate("/session");
   };
@@ -38,7 +47,7 @@ export default function HomePage() {
   // happens here on Home now, not as an inline session step.
   const handleStartClick = () => {
     if (profiles.length === 0) return openAddProfileModal(true);
-    if (profiles.length === 1) return startSession(profiles[0].id);
+    if (profiles.length === 1) return handleStartSession(profiles[0].id);
     setPickerOpen(true);
   };
 
@@ -48,9 +57,9 @@ export default function HomePage() {
     setModalProfile(null);
   };
 
-  const discardSession = () => {
+  const handleDiscardSession = () => {
     if (!window.confirm("Discard the current cooking session? This can't be undone.")) return;
-    dispatch({ type: "session/discard" });
+    discardSession();
   };
 
   const saveProfile = async (draft) => {
@@ -63,7 +72,7 @@ export default function HomePage() {
       } else {
         const created = await addKitchenProfile(draft);
         setModalProfile(undefined);
-        if (startAfterAdd) startSession(created.id);
+        if (startAfterAdd) handleStartSession(created.id);
       }
       setStartAfterAdd(false);
     } catch (err) {
@@ -93,12 +102,14 @@ export default function HomePage() {
       </div>
 
       <div className="card hero-card">
-        {hasSession ? (
+        {sessionLoading ? (
+          <p className="hint">Loading your session&hellip;</p>
+        ) : hasSession ? (
           <div className="hero-actions">
             <button type="button" className="btn btn-primary btn-hero" onClick={() => navigate("/session")}>
               Resume cooking &rarr;
             </button>
-            <button type="button" className="btn btn-ghost" onClick={discardSession}>
+            <button type="button" className="btn btn-ghost" onClick={handleDiscardSession}>
               Discard and start new
             </button>
           </div>
@@ -116,7 +127,7 @@ export default function HomePage() {
             <span className="mini-title">Which kitchen?</span>
             <div className="kitchen-picker-list">
               {profiles.map((p) => (
-                <button type="button" key={p.id} className="btn" onClick={() => startSession(p.id)}>
+                <button type="button" key={p.id} className="btn" onClick={() => handleStartSession(p.id)}>
                   {p.name}
                 </button>
               ))}

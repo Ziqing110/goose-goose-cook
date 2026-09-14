@@ -1,20 +1,8 @@
-// Thin fetch wrapper around the kitchens API (server/routes/kitchens.js).
-// Proxied through Vite's dev server (see vite.config.js) so relative
-// /api paths work without CORS setup.
-const BASE = "/api/kitchens";
+// Thin client around the kitchens API (server/routes/kitchens.js).
+import { apiRequest } from "./client.js";
 
-async function request(path, options) {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed (${res.status})`);
-  }
-  if (res.status === 204) return null;
-  return res.json();
-}
+const BASE = "/api/kitchens";
+const request = (path, options) => apiRequest(BASE, path, options);
 
 export function listKitchens() {
   return request("", { method: "GET" });
