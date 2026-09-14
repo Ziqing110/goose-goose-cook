@@ -51,6 +51,17 @@
   justify-content: center;
 }
 
+.phase-add-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1.5px dashed var(--line-strong);
+  border-radius: var(--radius-card);
+  background: var(--surface-sunken);
+}
+.phase-add-dish-btn { justify-content: center; min-height: var(--btn-height-sm); }
+
 .approve-row { margin-top: 4px; display: flex; }
 .approve-row-split { justify-content: space-between; }
 

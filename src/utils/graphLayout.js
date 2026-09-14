@@ -206,7 +206,11 @@ export function mergeRecipesForDisplay(recipes, sharedSteps = []) {
 
   const allApproved = isFullyApproved(recipes, sharedSteps);
   const approved = allApproved
-    ? { nodes: [...recipes.flatMap((r) => tag(r.approved.nodes, r.id)), ...sharedSteps.map((s) => tagShared(s.approved))] }
+    ? {
+        title: working.title,
+        servings: working.servings,
+        nodes: [...recipes.flatMap((r) => tag(r.approved.nodes, r.id)), ...sharedSteps.map((s) => tagShared(s.approved))],
+      }
     : null;
 
   return { working, draft, approved };

@@ -86,6 +86,7 @@ export default function RecipeGraphPage() {
   const { conversation, selectedNodeId, recipes, sharedSteps = [] } = state.session;
   const kitchenProfile = state.kitchenProfiles.find((p) => p.id === state.session.kitchenProfileId) || null;
   const [unavailableMaterials, setUnavailableMaterials] = useState(new Set());
+  const [addPickerPhase, setAddPickerPhase] = useState(null); // which column's "which dish?" picker is open
   const [templates, setTemplates] = useState(null);
   const [baseMaterials, setBaseMaterials] = useState(null);
 
@@ -257,14 +258,12 @@ export default function RecipeGraphPage() {
     });
   };
 
-  // TODO: New steps are added to the session's first/primary recipe —
-  // there's no per-dish UI yet to pick a target when a session holds
-  // more than one. Harmless today (recipes[0] is always Mapo Tofu, so
-  // it's a silent-but-consistent misattribution), but revisit once
-  // dishes can be added/removed mid-session (e.g. via LLM querying) —
-  // that's when "always recipes[0]" stops being safe to ignore.
-  const addNode = () => {
-    const recipe = recipes[0];
+  // A new step belongs to exactly one dish, so with more than one dish
+  // in the session the target has to be chosen explicitly — see the
+  // per-column dish picker below. The phase comes from whichever column
+  // the step was added in.
+  const addNode = (recipeId, phase) => {
+    const recipe = recipes.find((r) => r.id === recipeId);
     if (!recipe) return;
     const id = nextNodeId("step");
     updateRecipeWorking(recipe.id, (w) => {
@@ -278,10 +277,18 @@ export default function RecipeGraphPage() {
         required_materials: [],
         depends_on: [],
         status: "pending",
-        phase: "prep",
+        phase,
       });
     });
+    setAddPickerPhase(null);
     selectNode(id);
+  };
+
+  // One dish: nothing to choose, add straight away. Two or more: open
+  // the picker for that column instead.
+  const handleAddClick = (phase) => {
+    if (recipes.length === 1) return addNode(recipes[0].id, phase);
+    setAddPickerPhase(phase);
   };
 
   // Deleting a shared step needs to scrub depends_on across every recipe
@@ -324,19 +331,16 @@ export default function RecipeGraphPage() {
 
   // Registers a material that doesn't exist yet on the recipe (so it's
   // available to every step, not just the one being edited) and returns
-  // its id. Lives on the session's first/primary recipe for now.
-  // TODO: same recipes[0] misattribution as addNode above — a material
-  // added while editing a Chicken Noodle Soup step is silently attached
-  // to Mapo Tofu's custom_materials instead. Invisible today because
-  // mergeRecipesForDisplay unions custom_materials across all recipes
-  // for display, but would surface if that owning recipe were ever
-  // removed from the session. Revisit alongside addNode's TODO.
+  // its id. It's stored on the dish whose step is currently open in the
+  // editor, so it travels with that dish rather than always landing on
+  // the first one. A shared step belongs to no single dish, so a
+  // material added from one falls back to the first recipe.
   const registerMaterial = (draft) => {
     const label = draft.label.trim();
     if (!label) return null;
     const id = slugifyMaterialId(label);
     if (!materialsInfo[id]) {
-      const recipe = recipes[0];
+      const recipe = (selectedNodeId && findRecipeForNode(selectedNodeId)) || recipes[0];
       if (!recipe) return null;
       const nextCustom = {
         ...(recipe.custom_materials || {}),
@@ -473,11 +477,29 @@ export default function RecipeGraphPage() {
                     usageBreakdown={usageBreakdownFor(node)}
                   />
                 ))}
-                {!approved && (
-                  <button type="button" className="btn phase-add-btn" onClick={addNode}>
-                    + Add step
-                  </button>
-                )}
+                {!approved &&
+                  (addPickerPhase === col.key ? (
+                    <div className="phase-add-picker">
+                      <span className="mini-title">Add to which dish?</span>
+                      {recipes.map((recipe) => (
+                        <button
+                          type="button"
+                          className="btn phase-add-dish-btn"
+                          key={recipe.id}
+                          onClick={() => addNode(recipe.id, col.key)}
+                        >
+                          {recipe.working.title}
+                        </button>
+                      ))}
+                      <button type="button" className="btn btn-ghost" onClick={() => setAddPickerPhase(null)}>
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button type="button" className="btn phase-add-btn" onClick={() => handleAddClick(col.key)}>
+                      + Add step
+                    </button>
+                  ))}
               </div>
             </div>
           ))}

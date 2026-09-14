@@ -1,11 +1,21 @@
-// Pure resource-constrained scheduler — no DOM/React, same spirit as
-// graphLayout.js. Greedy list scheduler: at each step, picks whichever
-// ready step's dependencies finished earliest, assigns it to whichever
-// eligible cook is free soonest and whichever slot of each required
-// equipment type is free soonest. Not an optimal solver — no cook
-// specialization, no lookahead, no backtracking. Every step needs one
-// cook's full attention for its whole duration (no unattended/
-// background steps, e.g. a hands-off rice cooker — a known gap).
+// Resource-constrained scheduler. No DOM/React, same spirit as
+// graphLayout.js.
+//
+// Two stages, deliberately separated:
+//
+//  1. WHEN each step runs — branch-and-bound over activity orderings,
+//     minimising the finish time. Cooks are modelled as a pooled
+//     resource of capacity N (they're interchangeable), alongside each
+//     equipment type at its kitchen capacity. With ~20 fixed steps the
+//     search proves optimality rather than guessing, falling back to
+//     the best found so far if it hits its node budget.
+//  2. WHO does each step — the schedule above fixes the start times,
+//     and any assignment that never double-books a cook is equally
+//     fast, so that freedom is spent evening out each cook's workload
+//     (the greedy this replaced piled ~3x the work on one cook).
+//
+// Every step needs one cook's full attention for its whole duration —
+// no unattended/background steps (e.g. a hands-off rice cooker).
 import { EQUIPMENT_OPTIONS } from "../data/dishes.js";
 
 export const EQUIPMENT_LABELS = {
@@ -16,9 +26,16 @@ export const EQUIPMENT_LABELS = {
   oven: "oven",
 };
 
+const COOK_RESOURCE = "__cook__";
+// The search finds strong schedules quickly and then spends its time
+// *proving* nothing better exists. Since the result is reported against
+// a lower bound anyway, the budget is set for a responsive page rather
+// than for exhaustive proof on large recipes.
+const SEARCH_NODE_BUDGET = 150000;
+
 // Equipment with 0 configured capacity (including hasWok/hasOven false)
 // is treated as capacity 1 — a "make it work" fallback instead of
-// deadlocking the scheduler.
+// declaring the recipe unschedulable.
 export function equipmentCapacity(kitchenProfile) {
   const kp = kitchenProfile || {};
   return {
@@ -30,122 +47,358 @@ export function equipmentCapacity(kitchenProfile) {
   };
 }
 
-export function scheduleSteps(nodes, cooks, kitchenProfile) {
-  if (cooks.length === 0) return { steps: [], makespanSec: 0, criticalStepIds: new Set() };
-
-  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
-  const nodeIndex = new Map(nodes.map((n, i) => [n.id, i]));
-  const capacity = equipmentCapacity(kitchenProfile);
-
-  const finish = new Map();
-  const stepResult = new Map();
-  const scheduled = new Set();
-  const cookFreeAt = new Map(cooks.map((c) => [c.id, 0]));
-  const cookLastStep = new Map(cooks.map((c) => [c.id, null]));
-
-  const slots = {};
+function resourceCapacities(cooks, kitchenProfile) {
+  const caps = { [COOK_RESOURCE]: cooks.length };
+  const equipment = equipmentCapacity(kitchenProfile);
   EQUIPMENT_OPTIONS.forEach((type) => {
-    slots[type] = Array.from({ length: capacity[type] ?? 1 }, () => ({ freeAt: 0, lastStepId: null }));
+    caps[type] = equipment[type] ?? 1;
+  });
+  return caps;
+}
+
+const demandOf = (node) => [COOK_RESOURCE, ...new Set(node.required_equipment || [])];
+
+/** Topological order, ignoring references to nodes outside this set.
+ *  Anything left over sits in a dependency cycle and can't be ordered. */
+function topoSort(nodes, byId) {
+  const preds = new Map(nodes.map((n) => [n.id, (n.depends_on || []).filter((d) => byId[d])]));
+  const remaining = new Set(nodes.map((n) => n.id));
+  const order = [];
+  let progress = true;
+  while (progress) {
+    progress = false;
+    for (const n of nodes) {
+      if (!remaining.has(n.id)) continue;
+      if (preds.get(n.id).every((d) => !remaining.has(d))) {
+        order.push(n.id);
+        remaining.delete(n.id);
+        progress = true;
+      }
+    }
+  }
+  return { order, unordered: [...remaining] };
+}
+
+/** Longest path from each node to a sink, including its own duration —
+ *  the minimum time still needed once that node can start. */
+function computeTails(nodes, byId) {
+  const dependents = new Map(nodes.map((n) => [n.id, []]));
+  nodes.forEach((n) => {
+    (n.depends_on || []).filter((d) => byId[d]).forEach((d) => dependents.get(d).push(n.id));
+  });
+  const tails = new Map();
+  const visit = (id) => {
+    if (tails.has(id)) return tails.get(id);
+    const own = byId[id].estimated_duration_sec;
+    const children = dependents.get(id) || [];
+    const tail = own + (children.length ? Math.max(...children.map(visit)) : 0);
+    tails.set(id, tail);
+    return tail;
+  };
+  nodes.forEach((n) => visit(n.id));
+  return tails;
+}
+
+/** Earliest time >= `earliest` where every resource this node needs has
+ *  a free unit for its whole duration. Candidate times are `earliest`
+ *  plus the finish time of anything already placed — a schedule only
+ *  ever becomes feasible when something else releases. */
+function earliestFeasibleStart(node, earliest, placed, caps) {
+  const duration = node.estimated_duration_sec;
+  const needs = demandOf(node);
+  const candidates = [earliest];
+  placed.forEach((p) => {
+    if (p.endSec > earliest) candidates.push(p.endSec);
+  });
+  candidates.sort((a, b) => a - b);
+
+  for (const t of candidates) {
+    const feasible = needs.every((r) => {
+      const cap = caps[r] ?? 1;
+      let inUse = 0;
+      for (const p of placed) {
+        if (!p.needs.includes(r)) continue;
+        if (p.startSec < t + duration && t < p.endSec) inUse++;
+        if (inUse + 1 > cap) return false;
+      }
+      return true;
+    });
+    if (feasible) return t;
+  }
+  return candidates[candidates.length - 1];
+}
+
+/** Serial schedule generation: place activities in the given order, each
+ *  at its earliest feasible time. Produces an "active" schedule, and for
+ *  a regular objective like makespan an optimal schedule is always among
+ *  these — which is what makes searching over orderings exhaustive. */
+function buildSchedule(order, byId, caps) {
+  const placed = [];
+  const finishById = new Map();
+  order.forEach((id) => {
+    const node = byId[id];
+    const depReady = (node.depends_on || [])
+      .filter((d) => byId[d])
+      .reduce((max, d) => Math.max(max, finishById.get(d) ?? 0), 0);
+    const startSec = earliestFeasibleStart(node, depReady, placed, caps);
+    const endSec = startSec + node.estimated_duration_sec;
+    placed.push({ id, startSec, endSec, needs: demandOf(node), dependsReadySec: depReady });
+    finishById.set(id, endSec);
+  });
+  return placed;
+}
+
+const makespanOf = (placed) => placed.reduce((max, p) => Math.max(max, p.endSec), 0);
+
+/**
+ * Branch and bound over precedence-feasible orderings. Each node of the
+ * search picks which eligible activity goes next; the bound is the best
+ * finish still reachable (what's already placed, plus every remaining
+ * activity's own earliest start plus its longest path to the end).
+ * Returns the best ordering found and whether the search was exhaustive.
+ */
+function searchBestOrder(nodes, byId, caps, seedOrder) {
+  const tails = computeTails(nodes, byId);
+  const total = nodes.length;
+  const preds = new Map(nodes.map((n) => [n.id, (n.depends_on || []).filter((d) => byId[d])]));
+  // Global floors: nothing can finish sooner than the longest dependency
+  // chain, than the total work split across the cooks, or than the work
+  // queued on any single piece of equipment. Reaching the floor proves
+  // optimality outright; otherwise it's how close the answer is known to be.
+  const criticalPath = Math.max(0, ...nodes.map((n) => tails.get(n.id)));
+  const totalWork = nodes.reduce((sum, n) => sum + n.estimated_duration_sec, 0);
+  let floor = Math.max(criticalPath, Math.ceil(totalWork / Math.max(1, caps[COOK_RESOURCE])));
+  EQUIPMENT_OPTIONS.forEach((type) => {
+    const work = nodes
+      .filter((n) => (n.required_equipment || []).includes(type))
+      .reduce((sum, n) => sum + n.estimated_duration_sec, 0);
+    floor = Math.max(floor, Math.ceil(work / Math.max(1, caps[type] ?? 1)));
   });
 
-  while (scheduled.size < nodes.length) {
-    const ready = nodes.filter(
-      (n) => !scheduled.has(n.id) && (n.depends_on || []).every((d) => scheduled.has(d) || !byId[d])
-    );
-    if (ready.length === 0) break; // cycle guard — shouldn't happen for a valid DAG
+  const seedPlaced = buildSchedule(seedOrder, byId, caps);
+  let bestOrder = seedOrder;
+  let bestMakespan = makespanOf(seedPlaced);
+  let explored = 0;
+  let exhausted = true;
 
-    const candidates = ready.map((n) => {
-      let dependsReadySec = 0;
-      let depRef = null;
-      (n.depends_on || []).filter((d) => byId[d]).forEach((d) => {
-        const f = finish.get(d) ?? 0;
-        if (f > dependsReadySec) {
-          dependsReadySec = f;
-          depRef = d;
-        }
-      });
-      return { node: n, dependsReadySec, depRef };
-    });
-    candidates.sort(
-      (a, b) => a.dependsReadySec - b.dependsReadySec || nodeIndex.get(a.node.id) - nodeIndex.get(b.node.id)
-    );
-    const { node, dependsReadySec, depRef } = candidates[0];
-
-    let bestCookId = cooks[0].id;
-    let bestCookFree = cookFreeAt.get(cooks[0].id);
-    cooks.forEach((c) => {
-      const t = cookFreeAt.get(c.id);
-      if (t < bestCookFree) {
-        bestCookFree = t;
-        bestCookId = c.id;
+  const dfs = (order, placed, finishById, scheduled) => {
+    if (bestMakespan <= floor) return; // can't do better than the floor
+    if (explored++ > SEARCH_NODE_BUDGET) {
+      exhausted = false;
+      return;
+    }
+    if (order.length === total) {
+      const ms = makespanOf(placed);
+      if (ms < bestMakespan) {
+        bestMakespan = ms;
+        bestOrder = [...order];
       }
-    });
+      return;
+    }
 
-    const equipmentTypes = [...new Set(node.required_equipment || [])];
-    const chosenSlots = equipmentTypes.map((type) => {
-      const arr = slots[type];
-      let bestIdx = 0;
-      arr.forEach((s, i) => {
-        if (s.freeAt < arr[bestIdx].freeAt) bestIdx = i;
-      });
-      return { type, index: bestIdx, freeAt: arr[bestIdx].freeAt, lastStepId: arr[bestIdx].lastStepId };
-    });
+    const eligible = nodes.filter((n) => !scheduled.has(n.id) && preds.get(n.id).every((d) => scheduled.has(d)));
 
-    // Precedence on an exact tie: dependency > equipment > cook —
-    // dependency is the most truthful cause when it applies; among
-    // resource ties, equipment is more narratively useful ("waiting for
-    // the cutting board") than a generic cook-busy cause.
-    const candidateList = [
-      { type: "dependency", time: dependsReadySec, refStepId: depRef },
-      ...chosenSlots.map((s) => ({ type: "equipment", time: s.freeAt, refStepId: s.lastStepId, equipmentType: s.type })),
-      { type: "cook", time: bestCookFree, refStepId: cookLastStep.get(bestCookId) },
-    ];
-    const startSec = Math.max(...candidateList.map((c) => c.time));
-    const startCause = candidateList.find((c) => c.time === startSec);
-    const endSec = startSec + node.estimated_duration_sec;
+    // Bound: the finish already committed, and for everything left, the
+    // soonest it could start plus everything that must follow it.
+    const committed = makespanOf(placed);
+    let bound = committed;
+    for (const n of nodes) {
+      if (scheduled.has(n.id)) continue;
+      const est = preds.get(n.id).reduce((max, d) => Math.max(max, finishById.get(d) ?? 0), 0);
+      bound = Math.max(bound, est + tails.get(n.id));
+    }
+    if (bound >= bestMakespan) return;
 
-    finish.set(node.id, endSec);
-    cookFreeAt.set(bestCookId, endSec);
-    cookLastStep.set(bestCookId, node.id);
-    chosenSlots.forEach((s) => {
-      slots[s.type][s.index] = { freeAt: endSec, lastStepId: node.id };
-    });
+    // Most critical first — finds strong incumbents early, which makes
+    // the bound prune far more of the tree.
+    const ordered = [...eligible].sort(
+      (a, b) => tails.get(b.id) - tails.get(a.id) || b.estimated_duration_sec - a.estimated_duration_sec
+    );
 
-    stepResult.set(node.id, {
-      id: node.id,
-      cookId: bestCookId,
-      startSec,
-      endSec,
-      dependsReadySec,
-      requiredEquipment: equipmentTypes,
-      startCause,
+    for (const n of ordered) {
+      const depReady = preds.get(n.id).reduce((max, d) => Math.max(max, finishById.get(d) ?? 0), 0);
+      const startSec = earliestFeasibleStart(n, depReady, placed, caps);
+      const endSec = startSec + n.estimated_duration_sec;
+      // The finish only ever grows, so if placing this already matches
+      // the incumbent, nothing below this branch can beat it.
+      if (endSec >= bestMakespan) continue;
+      placed.push({ id: n.id, startSec, endSec, needs: demandOf(n), dependsReadySec: depReady });
+      finishById.set(n.id, endSec);
+      scheduled.add(n.id);
+      order.push(n.id);
+
+      dfs(order, placed, finishById, scheduled);
+
+      order.pop();
+      scheduled.delete(n.id);
+      finishById.delete(n.id);
+      placed.pop();
+      if (!exhausted && explored > SEARCH_NODE_BUDGET) break;
+    }
+  };
+
+  dfs([], [], new Map(), new Set());
+  return { order: bestOrder, optimal: exhausted || bestMakespan <= floor, lowerBoundSec: floor };
+}
+
+/**
+ * Hand the fixed timeline to specific cooks. Any assignment that never
+ * double-books a cook finishes at the same time, so the choice is spent
+ * on balance: each step goes to the least-loaded cook who is free,
+ * preferring whoever did its prerequisite when loads are level. A local
+ * improvement pass then moves steps between cooks while that flattens
+ * the busiest cook further.
+ */
+function assignCooks(placed, cooks, byId) {
+  const ordered = [...placed].sort((a, b) => a.startSec - b.startSec || a.endSec - b.endSec);
+  const assignment = new Map();
+  const busy = new Map(cooks.map((c) => [c.id, 0]));
+  const intervals = new Map(cooks.map((c) => [c.id, []]));
+
+  const freeFor = (cookId, task, skipTaskId = null) =>
+    intervals.get(cookId).every((iv) => iv.id === skipTaskId || iv.endSec <= task.startSec || task.endSec <= iv.startSec);
+
+  ordered.forEach((task) => {
+    const depOwners = new Set(
+      (byId[task.id].depends_on || []).map((d) => assignment.get(d)).filter(Boolean)
+    );
+    const candidates = cooks.filter((c) => freeFor(c.id, task));
+    const pool = candidates.length ? candidates : cooks;
+    pool.sort((a, b) => {
+      const byBusy = busy.get(a.id) - busy.get(b.id);
+      if (byBusy !== 0) return byBusy;
+      const aCont = depOwners.has(a.id) ? 0 : 1;
+      const bCont = depOwners.has(b.id) ? 0 : 1;
+      return aCont - bCont;
     });
-    scheduled.add(node.id);
+    const chosen = pool[0];
+    assignment.set(task.id, chosen.id);
+    busy.set(chosen.id, busy.get(chosen.id) + (task.endSec - task.startSec));
+    intervals.get(chosen.id).push({ id: task.id, startSec: task.startSec, endSec: task.endSec });
+  });
+
+  // Local improvement: move a step off the busiest cook whenever some
+  // other cook is free for it and ends up no busier than the one we
+  // took it from.
+  const spread = () => Math.max(...busy.values()) - Math.min(...busy.values());
+  for (let pass = 0; pass < 8; pass++) {
+    let improved = false;
+    for (const task of ordered) {
+      const from = assignment.get(task.id);
+      const duration = task.endSec - task.startSec;
+      for (const c of cooks) {
+        if (c.id === from) continue;
+        if (!freeFor(c.id, task)) continue;
+        const before = spread();
+        busy.set(from, busy.get(from) - duration);
+        busy.set(c.id, busy.get(c.id) + duration);
+        if (spread() < before) {
+          intervals.set(from, intervals.get(from).filter((iv) => iv.id !== task.id));
+          intervals.get(c.id).push({ id: task.id, startSec: task.startSec, endSec: task.endSec });
+          assignment.set(task.id, c.id);
+          improved = true;
+          break;
+        }
+        busy.set(from, busy.get(from) + duration);
+        busy.set(c.id, busy.get(c.id) - duration);
+      }
+    }
+    if (!improved) break;
   }
 
-  const steps = nodes.map((n) => stepResult.get(n.id)).filter(Boolean);
+  return assignment;
+}
+
+/** Why a step couldn't start any earlier: its dependencies, a busy cook,
+ *  or a piece of equipment someone else was still holding. Used for the
+ *  "waiting for the cutting board" labels and the critical-path trace. */
+function deriveStartCause(task, placed, byId, assignment, caps) {
+  const node = byId[task.id];
+  if (task.startSec === task.dependsReadySec) {
+    const preds = (node.depends_on || []).filter((d) => byId[d]);
+    let refStepId = null;
+    let latest = -1;
+    preds.forEach((d) => {
+      const p = placed.find((x) => x.id === d);
+      if (p && p.endSec > latest) {
+        latest = p.endSec;
+        refStepId = d;
+      }
+    });
+    return { type: "dependency", time: task.dependsReadySec, refStepId };
+  }
+
+  // Something was saturated right up to the moment it started; whichever
+  // resource released at exactly that time is the one it waited on.
+  const justBefore = task.startSec - 1;
+  const releasedAtStart = placed.filter((p) => p.id !== task.id && p.endSec === task.startSec);
+  const needs = demandOf(node);
+  for (const r of needs) {
+    if (r === COOK_RESOURCE) continue;
+    const cap = caps[r] ?? 1;
+    const holding = placed.filter(
+      (p) => p.id !== task.id && p.needs.includes(r) && p.startSec <= justBefore && p.endSec > justBefore
+    );
+    if (holding.length >= cap) {
+      const ref = releasedAtStart.find((p) => p.needs.includes(r)) || holding[0];
+      return { type: "equipment", time: task.startSec, refStepId: ref?.id ?? null, equipmentType: r };
+    }
+  }
+  const cookRef = releasedAtStart.find((p) => assignment.get(p.id) === assignment.get(task.id));
+  return { type: "cook", time: task.startSec, refStepId: cookRef?.id ?? null };
+}
+
+export function scheduleSteps(nodes, cooks, kitchenProfile) {
+  if (cooks.length === 0 || nodes.length === 0) {
+    return { steps: [], makespanSec: 0, criticalStepIds: new Set(), unscheduledIds: nodes.map((n) => n.id), optimal: true, lowerBoundSec: 0 };
+  }
+
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const caps = resourceCapacities(cooks, kitchenProfile);
+  const { order: topo, unordered } = topoSort(nodes, byId);
+  const schedulable = topo.map((id) => byId[id]);
+
+  if (schedulable.length === 0) {
+    return { steps: [], makespanSec: 0, criticalStepIds: new Set(), unscheduledIds: unordered, optimal: true, lowerBoundSec: 0 };
+  }
+
+  const { order, optimal, lowerBoundSec } = searchBestOrder(schedulable, byId, caps, topo);
+  const placed = buildSchedule(order, byId, caps);
+  const assignment = assignCooks(placed, cooks, byId);
+
+  const stepById = new Map();
+  placed.forEach((p) => {
+    stepById.set(p.id, {
+      id: p.id,
+      cookId: assignment.get(p.id),
+      startSec: p.startSec,
+      endSec: p.endSec,
+      dependsReadySec: p.dependsReadySec,
+      requiredEquipment: [...new Set(byId[p.id].required_equipment || [])],
+      startCause: deriveStartCause(p, placed, byId, assignment, caps),
+    });
+  });
+
+  const steps = nodes.map((n) => stepById.get(n.id)).filter(Boolean);
   const makespanSec = steps.length ? Math.max(...steps.map((s) => s.endSec)) : 0;
 
-  // Backward trace from the (first, by node order) step achieving the
-  // makespan, following startCause.refStepId — each link's timestamp is
-  // exactly the finish time of the referenced step by construction, so
-  // this walks the real chain of constraints (dependency AND resource)
-  // that produced the finish time, not a naive dependency-only guess.
+  // Walk back from whatever finishes last, following each step's reason
+  // for not starting sooner — so the chain covers equipment and cook
+  // contention, not just the dependency graph.
   const endStep = steps.find((s) => s.endSec === makespanSec);
   const criticalStepIds = new Set();
   let cursor = endStep;
-  while (cursor) {
+  while (cursor && !criticalStepIds.has(cursor.id)) {
     criticalStepIds.add(cursor.id);
-    cursor = cursor.startCause.refStepId ? stepResult.get(cursor.startCause.refStepId) : null;
+    cursor = cursor.startCause.refStepId ? stepById.get(cursor.startCause.refStepId) : null;
   }
 
-  return { steps, makespanSec, criticalStepIds };
+  return { steps, makespanSec, criticalStepIds, unscheduledIds: unordered, optimal, lowerBoundSec };
 }
 
 // Solo comparison reuses scheduleSteps with one synthetic cook, same
-// kitchen — with a single cook, equipment can never contend (nobody
-// else is running in parallel), so this reduces to the "no parallelism"
-// baseline: sum of durations along the ready-order the single cook works.
+// kitchen — with a single cook nothing can overlap, so this is the
+// "no parallelism" baseline.
 export function computeSchedule(nodes, cooks, kitchenProfile) {
   const multi = scheduleSteps(nodes, cooks, kitchenProfile);
   const solo = scheduleSteps(nodes, [{ id: "solo", name: "Solo cook" }], kitchenProfile);
@@ -153,7 +406,101 @@ export function computeSchedule(nodes, cooks, kitchenProfile) {
     steps: multi.steps,
     makespanSec: multi.makespanSec,
     criticalStepIds: multi.criticalStepIds,
+    unscheduledIds: multi.unscheduledIds,
+    optimal: multi.optimal,
+    lowerBoundSec: multi.lowerBoundSec,
     soloMakespanSec: solo.makespanSec,
     savedSec: Math.max(0, solo.makespanSec - multi.makespanSec),
+  };
+}
+
+// A step can start immediately when it has no dependencies inside this
+// node set (a reference to a node that isn't here can't gate anything).
+function isReadyAtStart(node, byId) {
+  return (node.depends_on || []).every((d) => !byId[d]);
+}
+
+/**
+ * Competition mode doesn't hand out a full plan — cooks claim tasks by
+ * voice as they go. All it needs is a fair opening: one bundle of
+ * immediately-startable work per cook, balanced so nobody is still on
+ * their first task while someone else is three tasks in (e.g. one cook
+ * takes a single 9-minute task while the other takes a 5 and a 4).
+ *
+ * Bundles never split a scarce tool across cooks — if the kitchen has
+ * one cutting board, only one cook's opening bundle may need it, since
+ * two "simultaneous" openers queueing for the same board aren't a fair
+ * start. Balance is best-effort: the closest split the ready set allows,
+ * with the leftover skew reported rather than papered over.
+ *
+ * Everything not handed out — the rest of the ready work plus every
+ * step still gated by dependencies — stays in an unclaimed pool.
+ */
+export function computeOpeningAssignment(nodes, cooks, kitchenProfile) {
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const capacity = equipmentCapacity(kitchenProfile);
+  const ready = nodes.filter((n) => isReadyAtStart(n, byId));
+  const lockedIds = nodes.filter((n) => !isReadyAtStart(n, byId)).map((n) => n.id);
+  const emptyBundles = cooks.map((c) => ({ cookId: c.id, stepIds: [], totalSec: 0 }));
+
+  // Not enough startable work to give everyone their own opening —
+  // rather than inventing an assignment, throw it open and let the
+  // cooks race for it.
+  if (ready.length < cooks.length) {
+    return { bundles: emptyBundles, poolIds: ready.map((n) => n.id), lockedIds, contested: true, skewSec: 0 };
+  }
+
+  const sorted = [...ready].sort(
+    (a, b) => b.estimated_duration_sec - a.estimated_duration_sec || a.id.localeCompare(b.id)
+  );
+  const bundles = emptyBundles.map((b) => ({ ...b, stepIds: [] }));
+  const used = new Set();
+  const toolHolders = {}; // equipment type -> Set of bundle indexes already using it
+
+  const canTake = (bundleIdx, node) =>
+    (node.required_equipment || []).every((t) => {
+      const holders = toolHolders[t];
+      if (!holders || holders.has(bundleIdx)) return true;
+      return holders.size < (capacity[t] ?? 1);
+    });
+
+  const take = (bundleIdx, node) => {
+    bundles[bundleIdx].stepIds.push(node.id);
+    bundles[bundleIdx].totalSec += node.estimated_duration_sec;
+    used.add(node.id);
+    (node.required_equipment || []).forEach((t) => {
+      if (!toolHolders[t]) toolHolders[t] = new Set();
+      toolHolders[t].add(bundleIdx);
+    });
+  };
+
+  // The longest single ready task sets the bar every other cook tries
+  // to match with one or more smaller tasks.
+  take(0, sorted[0]);
+  const targetSec = bundles[0].totalSec;
+
+  for (let i = 1; i < bundles.length; i++) {
+    for (;;) {
+      if (bundles[i].totalSec >= targetSec) break;
+      const available = sorted.filter((n) => !used.has(n.id) && canTake(i, n));
+      if (available.length === 0) break;
+      const fits = available.filter((n) => bundles[i].totalSec + n.estimated_duration_sec <= targetSec);
+      if (fits.length > 0) {
+        take(i, fits[0]); // sorted desc, so this is the largest that still fits
+      } else if (bundles[i].stepIds.length === 0) {
+        take(i, available[available.length - 1]); // nothing fits, but nobody starts empty
+      } else {
+        break;
+      }
+    }
+  }
+
+  const totals = bundles.map((b) => b.totalSec);
+  return {
+    bundles,
+    poolIds: sorted.filter((n) => !used.has(n.id)).map((n) => n.id),
+    lockedIds,
+    contested: false,
+    skewSec: Math.max(...totals) - Math.min(...totals),
   };
 }
