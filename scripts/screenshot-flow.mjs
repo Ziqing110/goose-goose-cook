@@ -50,12 +50,12 @@ if (await page.getByRole("button", { name: /Add your first kitchen|\+ Add kitche
   await page.waitForTimeout(600);
 }
 
-if (await page.getByRole("button", { name: /Discard and start new/ }).first().isVisible().catch(() => false)) {
-  await click(/Discard and start new/);
+if (await page.getByRole("button", { name: /Abandon run|Discard and start new/ }).first().isVisible().catch(() => false)) {
+  await click(/Abandon run|Discard and start new/);
   await page.waitForTimeout(500);
 }
 
-await click(/Start cooking/);
+await click(/Start the run/);
 await page.waitForTimeout(600);
 // With more than one kitchen saved, Home asks which one first.
 const pick = page.getByRole("button", { name: "Screenshot Kitchen" }).first();
@@ -257,7 +257,7 @@ await click(/Back to Home/);
 await page.waitForTimeout(1200);
 await shot("home-with-history");
 
-const historyRow = page.locator(".entity-row-link").first();
+const historyRow = page.locator(".hp-row-open").first();
 if (await historyRow.isVisible().catch(() => false)) {
   await historyRow.click();
   await page.waitForTimeout(1500);
