@@ -86,6 +86,16 @@ export const MATERIAL_CATEGORY_LABELS = {
 export const MATERIAL_CATEGORY_ORDER = ["protein", "seafood", "vegetable", "grain", "pantry", "other"];
 
 export const EQUIPMENT_OPTIONS = ["cutting_board", "stove_burner", "wok", "pot", "oven"];
+// Display names for equipment ids — the ids are stable keys used in
+// recipe data, not something a cook should ever read on screen.
+export const EQUIPMENT_LABELS = {
+  cutting_board: "Cutting board",
+  stove_burner: "Stove burner",
+  wok: "Wok",
+  pot: "Pot",
+  oven: "Oven",
+};
+export const equipmentLabel = (id) => EQUIPMENT_LABELS[id] || id.replace(/_/g, " ");
 export const DIFFICULTY_OPTIONS = ["low", "medium", "high"];
 export const PHASE_OPTIONS = [
   { value: "prep", label: "Prep" },

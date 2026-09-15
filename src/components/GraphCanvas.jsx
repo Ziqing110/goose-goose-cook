@@ -3,6 +3,7 @@
 // SVG overlay measured off the actual card positions after layout.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { layoutLevels, formatDuration } from "../utils/graphLayout.js";
+import { equipmentLabel } from "../data/dishes.js";
 import "./GraphCanvas.css";
 
 export default function GraphCanvas({ nodes, selectedNodeId, onSelect }) {
@@ -77,7 +78,7 @@ export default function GraphCanvas({ nodes, selectedNodeId, onSelect }) {
                   <span className="tag mono">{formatDuration(n.estimated_duration_sec)}</span>
                   <span className={`tag tag-difficulty-${n.difficulty}`}>{n.difficulty}</span>
                 </span>
-                {n.required_equipment.length > 0 && <span className="node-equip mono">{n.required_equipment.join(" · ")}</span>}
+                {n.required_equipment.length > 0 && <span className="node-equip">{n.required_equipment.map(equipmentLabel).join(" · ")}</span>}
               </button>
             ))}
           </div>

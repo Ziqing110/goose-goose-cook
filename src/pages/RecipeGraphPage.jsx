@@ -371,12 +371,16 @@ export default function RecipeGraphPage() {
     });
   };
 
-  const phaseGroups = groupByPhase(working.nodes);
   // Step numbers should reflect cook order (dependency depth), not raw
   // array position — otherwise a freshly-added, dependency-free step
   // (always appended to the end of the array) gets numbered last even
-  // though nothing actually depends on it or comes after it.
+  // though nothing actually depends on it or comes after it. The cards
+  // in each phase column are sorted the same way, so the numbers read
+  // top-to-bottom instead of jumping around (9, 10, 12, 14, 11, 13…).
   const stepOrder = layoutLevels(working.nodes).flat();
+  const stepIndex = new Map(stepOrder.map((n, i) => [n.id, i]));
+  const phaseGroups = groupByPhase(working.nodes);
+  Object.values(phaseGroups).forEach((group) => group.sort((a, b) => stepIndex.get(a.id) - stepIndex.get(b.id)));
   const dishLabelFor = (node) => (node._shared ? "Shared" : recipes.find((r) => r.id === node._recipeId)?.working.title || null);
 
   // A merged shared step's own material_usage only holds the combined
@@ -464,7 +468,7 @@ export default function RecipeGraphPage() {
                   <StepCard
                     key={node.id}
                     node={node}
-                    index={stepOrder.indexOf(node)}
+                    index={stepIndex.get(node.id)}
                     allNodes={working.nodes}
                     isEdited={isEdited(node)}
                     isSelected={!approved && selectedNodeId === node.id}

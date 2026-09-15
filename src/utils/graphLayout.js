@@ -194,8 +194,10 @@ export function mergeRecipesForDisplay(recipes, sharedSteps = []) {
 
   const working = {
     title: recipes.map((r) => r.working.title).join(" + "),
-    servings:
-      recipes.length === 1 ? recipes[0].working.servings : recipes.reduce((sum, r) => sum + (r.working.servings || 0), 0),
+    // Servings = how many people are eating, which is the same across
+    // every dish in the meal — never the sum (two dishes for 4 people
+    // is still 4 servings). If dishes ever disagree, show the largest.
+    servings: Math.max(0, ...recipes.map((r) => r.working.servings || 0)),
     nodes: [...recipes.flatMap((r) => tag(r.working.nodes, r.id)), ...sharedSteps.map((s) => tagShared(s.working))],
     custom_materials: Object.assign({}, ...recipes.map((r) => r.custom_materials || {})),
   };

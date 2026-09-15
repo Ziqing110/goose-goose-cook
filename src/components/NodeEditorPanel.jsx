@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { EQUIPMENT_OPTIONS, DIFFICULTY_OPTIONS, PHASE_OPTIONS, MATERIAL_CATEGORY_ORDER, MATERIAL_CATEGORY_LABELS } from "../data/dishes.js";
+import { EQUIPMENT_OPTIONS, DIFFICULTY_OPTIONS, PHASE_OPTIONS, MATERIAL_CATEGORY_ORDER, MATERIAL_CATEGORY_LABELS, equipmentLabel } from "../data/dishes.js";
 import "./NodeEditorPanel.css";
 
 // Edits are staged locally and only committed to the graph when Save
@@ -36,9 +36,7 @@ export default function NodeEditorPanel({ node, allNodes, onSave, onDelete, mate
 
   return (
     <div className="editor-panel">
-      <span className="mini-title">
-        Editing &mdash; <span className="mono">{node.id}</span>
-      </span>
+      <span className="mini-title">Edit step</span>
 
       <div className="field">
         <label htmlFor="f-label">Label</label>
@@ -97,7 +95,7 @@ export default function NodeEditorPanel({ node, allNodes, onSave, onDelete, mate
                 checked={draft.required_equipment.includes(eq)}
                 onChange={(e) => patch((n) => (n.required_equipment = toggleSet(n.required_equipment, eq, e.target.checked)))}
               />
-              <span className="mono">{eq}</span>
+              <span>{equipmentLabel(eq)}</span>
             </label>
           ))}
         </div>

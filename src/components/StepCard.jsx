@@ -2,6 +2,7 @@
 // itself opens in a side drawer (RecipeGraphPage), not inline here,
 // so a long edit form doesn't push the rest of the page down.
 import { formatDuration } from "../utils/graphLayout.js";
+import { equipmentLabel } from "../data/dishes.js";
 import "./StepCard.css";
 
 export default function StepCard({
@@ -41,7 +42,7 @@ export default function StepCard({
       <div className="step-card-row step-card-tags">
         {dishLabel && <span className="tag step-card-dish">{dishLabel}</span>}
         {node.required_equipment.length > 0 && (
-          <span className="tag mono">{node.required_equipment.join(" · ")}</span>
+          <span className="tag">{node.required_equipment.map(equipmentLabel).join(" · ")}</span>
         )}
         <span className={`tag tag-difficulty-${node.difficulty}`}>{node.difficulty}</span>
         {isEdited && <span className="tag step-card-edited">edited by you</span>}
@@ -59,7 +60,8 @@ export default function StepCard({
 
       {dependencyLabels.length > 0 && (
         <div className="step-card-row step-card-deps">
-          <span aria-hidden="true">&#8627;</span> after {dependencyLabels.join(", ")}
+          <span aria-hidden="true">&#8627;</span>
+          <span>after {dependencyLabels.join(", ")}</span>
         </div>
       )}
 

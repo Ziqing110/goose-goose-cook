@@ -8,3 +8,11 @@
 }
 .session-progress .progress-track { flex: 1; }
 .session-exit-btn { flex: none; }
+
+@media (max-width: 600px) {
+  .session-progress { flex-wrap: wrap; gap: 10px 14px; }
+  .session-progress > .hint { flex: 1; }
+  .session-progress .progress-track { order: 3; flex-basis: 100%; }
+  /* Compact exit so "Step N of 3 · label" and the button share one line on phones. */
+  .session-exit-btn { min-height: 36px; padding: 4px 12px; font-size: 0.85rem; }
+}

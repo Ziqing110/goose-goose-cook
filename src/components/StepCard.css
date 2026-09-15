@@ -34,9 +34,11 @@
 .step-card.is-impossible .tag { opacity: 0.6; }
 
 .step-card-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.step-card-head { justify-content: space-between; }
+/* Head never wraps: a long title wraps within itself and the duration
+   stays pinned top-right instead of dropping under the title. */
+.step-card-head { justify-content: space-between; flex-wrap: nowrap; align-items: flex-start; }
 
-.step-card-title { display: flex; align-items: baseline; gap: 9px; font-weight: 700; font-size: 1.05rem; }
+.step-card-title { display: flex; align-items: baseline; gap: 9px; font-weight: 700; font-size: 1.05rem; min-width: 0; flex: 1; }
 .step-card-num { color: var(--ink-faint); font-weight: 500; font-size: 0.8rem; }
 .step-card-duration { color: var(--ink-soft); font-size: 0.85rem; white-space: nowrap; }
 
@@ -51,7 +53,10 @@
   font-size: 0.8rem;
   color: var(--ink-faint);
   gap: 6px;
+  flex-wrap: nowrap; /* the arrow stays on the first line; only the text wraps */
+  align-items: flex-start;
 }
+.step-card-deps > span:first-child { flex: none; }
 
 .step-card-missing {
   font-size: 0.8rem;
