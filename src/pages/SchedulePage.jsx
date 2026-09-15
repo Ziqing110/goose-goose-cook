@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
+import { createRun } from "../utils/liveCook.js";
 import { mergeRecipesForDisplay, formatDuration } from "../utils/graphLayout.js";
 import { computeSchedule, computeOpeningAssignment, EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
 import { cookColorKey } from "../utils/cooks.js";
@@ -34,8 +36,9 @@ function pickTickStepMinutes(pxPerMin) {
 }
 
 export default function SchedulePage() {
-  const { state, dispatch } = useAppState();
-  const { recipes, sharedSteps, cooks, mode } = state.session;
+  const { state, dispatch, saveRunNow } = useAppState();
+  const navigate = useNavigate();
+  const { recipes, sharedSteps, cooks, mode, run } = state.session;
   const kitchenProfile = state.kitchenProfiles.find((p) => p.id === state.session.kitchenProfileId) || null;
   const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
   const [selectedStepId, setSelectedStepId] = useState(null);
@@ -62,7 +65,23 @@ export default function SchedulePage() {
   const ticks = [];
   for (let m = 0; m * 60 <= schedule.makespanSec; m += tickStep) ticks.push(m);
 
-  const setMode = (nextMode) => dispatch({ type: "session/update", payload: { mode: nextMode } });
+  // Mode is snapshotted into the run, so changing it mid-cook would
+  // desync what's already happened — the cards lock once a run exists.
+  const setMode = (nextMode) => {
+    if (run) return;
+    dispatch({ type: "session/update", payload: { mode: nextMode } });
+  };
+
+  const canStart = Boolean(mode) && schedule.unscheduledIds.length === 0;
+  const startCooking = () => {
+    // schedule/opening are already memoized above — no extra solver run.
+    saveRunNow(createRun({ nodes, mode, schedule, opening, now: new Date() }));
+    navigate("/session/live-cook");
+  };
+  const startOver = () => {
+    if (!window.confirm("Discard this cook's progress and go back to the plan?")) return;
+    saveRunNow(null);
+  };
 
   // Any gap between a cook's previous block and their next one is idle
   // time — labeled from the next step's startCause (what actually
@@ -297,6 +316,7 @@ export default function SchedulePage() {
           <button
             type="button"
             className={`mode-card ${mode === "cooperation" ? "is-selected" : ""}`}
+            disabled={Boolean(run)}
             onClick={() => setMode("cooperation")}
           >
             <div className="mode-card-head">
@@ -308,24 +328,44 @@ export default function SchedulePage() {
           <button
             type="button"
             className={`mode-card ${mode === "competition" ? "is-selected" : ""}`}
+            disabled={Boolean(run) || cooks.length < 2}
             onClick={() => setMode("competition")}
           >
             <div className="mode-card-head">
               <span className="mini-title">Competition</span>
               {mode === "competition" && <span className="tag tag-difficulty-low">Selected</span>}
             </div>
-            <p className="hint">No assignments past the opening. Claim tasks by voice. Score on difficulty and performance.</p>
+            <p className="hint">
+              {cooks.length < 2
+                ? "Needs two cooks — a one-person contest has nobody to race."
+                : "No assignments past the opening. Claim tasks by voice. Score on difficulty and performance."}
+            </p>
           </button>
         </div>
       </div>
 
       <div className="band-footer">
         <div className="band-footer-left">
-          <span className="hint">{mode ? `Mode: ${mode}` : "Pick a mode to continue"}</span>
+          <span className="hint">
+            {run
+              ? "A cook is already in progress — mode is locked until it's finished."
+              : mode
+              ? `Mode: ${mode}`
+              : "Pick a mode to continue"}
+          </span>
         </div>
         <div className="band-footer-right">
-          <button className="btn btn-primary btn-lg" disabled title="Coming soon">
-            Start cooking &rarr;
+          {run && (
+            <button className="btn btn-ghost" onClick={startOver}>
+              Start over
+            </button>
+          )}
+          <button
+            className="btn btn-primary btn-lg"
+            disabled={!run && !canStart}
+            onClick={run ? () => navigate("/session/live-cook") : startCooking}
+          >
+            {run ? "Resume cooking" : "Start cooking"} &rarr;
           </button>
         </div>
       </div>

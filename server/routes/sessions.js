@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import { db } from "../db.js";
 
 export const sessionsRouter = Router();
@@ -37,6 +37,7 @@ function sessionRowToApi(row, recipeRows, sharedStepRows) {
     selectedNodeId: row.selected_node_id,
     cooks: JSON.parse(row.cooks_json),
     mode: row.mode,
+    run: row.run_json ? JSON.parse(row.run_json) : null,
     recipes: recipeRows.map(recipeRowToApi),
     sharedSteps: sharedStepRows.map(sharedStepRowToApi),
   };
@@ -46,13 +47,13 @@ const getSessionStmt = db.prepare("SELECT * FROM sessions WHERE id = ?");
 const getRecipesForSessionStmt = db.prepare("SELECT * FROM recipe_instances WHERE session_id = ? ORDER BY position ASC");
 const getSharedStepsForSessionStmt = db.prepare("SELECT * FROM shared_steps WHERE session_id = ? ORDER BY id ASC");
 const insertSessionStmt = db.prepare(`
-  INSERT INTO sessions (id, kitchen_profile_id, status, started_at, ended_at, conversation_json, selected_node_id, cooks_json, mode, updated_at)
-  VALUES (@id, @kitchen_profile_id, @status, @started_at, @ended_at, @conversation_json, @selected_node_id, @cooks_json, @mode, @updated_at)
+  INSERT INTO sessions (id, kitchen_profile_id, status, started_at, ended_at, conversation_json, selected_node_id, cooks_json, mode, run_json, updated_at)
+  VALUES (@id, @kitchen_profile_id, @status, @started_at, @ended_at, @conversation_json, @selected_node_id, @cooks_json, @mode, @run_json, @updated_at)
 `);
 const updateSessionStmt = db.prepare(`
   UPDATE sessions SET kitchen_profile_id=@kitchen_profile_id, status=@status, ended_at=@ended_at,
     conversation_json=@conversation_json, selected_node_id=@selected_node_id, cooks_json=@cooks_json,
-    mode=@mode, updated_at=@updated_at
+    mode=@mode, run_json=@run_json, updated_at=@updated_at
   WHERE id=@id
 `);
 
@@ -70,6 +71,7 @@ sessionsRouter.post("/", (req, res) => {
     selected_node_id: null,
     cooks_json: JSON.stringify([]),
     mode: null,
+    run_json: null,
     updated_at: now,
   };
   insertSessionStmt.run(row);
@@ -94,7 +96,7 @@ sessionsRouter.patch("/:id", (req, res) => {
   const existing = getSessionStmt.get(req.params.id);
   if (!existing) return res.status(404).json({ error: "session not found" });
 
-  const { kitchenProfileId, status, endedAt, conversation, selectedNodeId, cooks, mode } = req.body;
+  const { kitchenProfileId, status, endedAt, conversation, selectedNodeId, cooks, mode, run } = req.body;
   const row = {
     id: existing.id,
     kitchen_profile_id: kitchenProfileId !== undefined ? kitchenProfileId : existing.kitchen_profile_id,
@@ -104,6 +106,7 @@ sessionsRouter.patch("/:id", (req, res) => {
     selected_node_id: selectedNodeId !== undefined ? selectedNodeId : existing.selected_node_id,
     cooks_json: cooks !== undefined ? JSON.stringify(cooks) : existing.cooks_json,
     mode: mode !== undefined ? mode : existing.mode,
+    run_json: run !== undefined ? (run ? JSON.stringify(run) : null) : existing.run_json,
     updated_at: new Date().toISOString(),
   };
   updateSessionStmt.run(row);
@@ -210,7 +213,7 @@ sessionsRouter.patch("/:id/shared-steps/:stepId", (req, res) => {
 });
 
 // Deleting a shared step can leave dangling depends_on references in any
-// recipe instance or other shared step that pointed at it — unlike a
+// recipe instance or other shared step that pointed at it â€” unlike a
 // plain per-recipe node delete (scoped to one recipe's own array), a
 // shared step can be a dependency across recipe boundaries, so the
 // scrub has to run over every recipe instance + every other shared step

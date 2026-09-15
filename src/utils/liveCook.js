@@ -1,0 +1,502 @@
+// Live-cook run mechanics. Pure — no DOM, no React — same spirit as
+// graphLayout.js and scheduleLayout.js, so the whole state machine is
+// testable without mounting anything.
+//
+// A "run" is the record of an actual cook: what each step's status is,
+// who owns it, when it started and ended, plus an append-only event log.
+// Everything that can be recomputed (scores, ready pools, elapsed time,
+// progress) is derived on read and never stored.
+import { scheduleSteps } from "./scheduleLayout.js";
+
+const TRANSCRIPT_LIMIT = 40;
+const UNDO_WINDOW_MS = 60_000;
+// Mid-run the remaining set is small and the answer is needed between
+// taps, so a re-plan trades proof for responsiveness.
+const LIVE_REPLAN_NODE_BUDGET = 20_000;
+
+export const DIFFICULTY_POINTS = { low: 10, medium: 20, high: 35 };
+
+/**
+ * SCORING SEAM — the single place points are decided.
+ *
+ * Today: flat points per difficulty tier, nothing else. The brief's
+ * "difficulty x quality x composure" is deliberately not implemented —
+ * quality and composure are undefined there and unobservable with the
+ * data this app has, so scoring them would be theatre.
+ *
+ * To add a factor later (speed against estimate, a quality rating, a
+ * composure measure), push another entry into `breakdown` HERE and
+ * nowhere else: every caller reads `.points` and renders `.breakdown`
+ * generically, so no UI or aggregation code has to change.
+ *
+ * `ctx` deliberately carries more than today's rule needs so the
+ * signature doesn't have to change when a factor is added.
+ */
+export function scoreStep(node, ctx = {}) {
+  if (!node || ctx.record?.status !== "done") return { points: 0, breakdown: [] };
+  const breakdown = [
+    {
+      key: "difficulty",
+      label: `${node.difficulty} step`,
+      points: DIFFICULTY_POINTS[node.difficulty] ?? DIFFICULTY_POINTS.low,
+    },
+  ];
+  return { points: breakdown.reduce((sum, b) => sum + b.points, 0), breakdown };
+}
+
+const emptyRecord = () => ({
+  status: "pending",
+  cookId: null,
+  startedAt: null,
+  endedAt: null,
+  source: null,
+  skipReason: null,
+});
+
+export function makeStepRecords(nodes) {
+  return Object.fromEntries(nodes.map((n) => [n.id, emptyRecord()]));
+}
+
+function pushEvent(run, event) {
+  return {
+    ...run,
+    events: [...run.events, { id: crypto.randomUUID(), ...event }],
+  };
+}
+
+function patchStep(run, stepId, patch) {
+  return { ...run, steps: { ...run.steps, [stepId]: { ...run.steps[stepId], ...patch } } };
+}
+
+export function appendTranscript(run, entry) {
+  const next = [...run.transcript, { id: crypto.randomUUID(), ...entry }];
+  return { ...run, transcript: next.slice(-TRANSCRIPT_LIMIT) };
+}
+
+function planFromSchedule(schedule) {
+  if (!schedule?.steps?.length) return null;
+  const order = {};
+  [...schedule.steps]
+    .sort((a, b) => a.startSec - b.startSec)
+    .forEach((s) => {
+      if (!order[s.cookId]) order[s.cookId] = [];
+      order[s.cookId].push(s.id);
+    });
+  return {
+    computedAt: new Date().toISOString(),
+    makespanSec: schedule.makespanSec,
+    order,
+    startSecById: Object.fromEntries(schedule.steps.map((s) => [s.id, s.startSec])),
+  };
+}
+
+export function createRun({ nodes, mode, schedule, opening, now = new Date() }) {
+  const isCompetition = mode === "competition";
+  return {
+    startedAt: now.toISOString(),
+    endedAt: null,
+    // Snapshot: the run never re-reads session.mode, so changing it
+    // mid-cook can't desync what's already happened.
+    mode,
+    steps: makeStepRecords(nodes),
+    events: [{ id: crypto.randomUUID(), at: now.toISOString(), type: "run_start", cookId: null, stepId: null }],
+    plan: isCompetition ? null : planFromSchedule(schedule),
+    openingSuggestions:
+      isCompetition && opening && !opening.contested
+        ? Object.fromEntries(opening.bundles.map((b) => [b.cookId, b.stepIds]))
+        : null,
+    transcript: [
+      {
+        id: crypto.randomUUID(),
+        at: now.toISOString(),
+        speaker: "agent",
+        text: isCompetition
+          ? "Pool's open. Claim what you want — say \"take\" and the task name, or tap it."
+          : "Let's cook. Say \"done\" when you finish a step, or tap the button.",
+      },
+    ],
+  };
+}
+
+/** Defensive: the graph could have changed under a stored run. Returns
+ *  the same object when nothing differs so useMemo identity holds. */
+export function reconcileRun(run, nodes) {
+  if (!run) return run;
+  const ids = new Set(nodes.map((n) => n.id));
+  const missing = nodes.filter((n) => !run.steps[n.id]);
+  const stale = Object.keys(run.steps).filter((id) => !ids.has(id));
+  if (missing.length === 0 && stale.length === 0) return run;
+  const steps = {};
+  nodes.forEach((n) => {
+    steps[n.id] = run.steps[n.id] || emptyRecord();
+  });
+  return { ...run, steps };
+}
+
+// ---------------------------------------------------------------------
+// Derivations
+// ---------------------------------------------------------------------
+
+/** A skipped dependency counts as satisfied — otherwise one skip
+ *  deadlocks its whole downstream chain in the middle of a cook. */
+export function isReady(stepId, nodes, run) {
+  const node = nodes.find((n) => n.id === stepId);
+  if (!node) return false;
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  return (node.depends_on || [])
+    .filter((d) => byId[d])
+    .every((d) => ["done", "skipped"].includes(run.steps[d]?.status));
+}
+
+export function readyStepIds(nodes, run) {
+  return nodes.filter((n) => run.steps[n.id]?.status === "pending" && isReady(n.id, nodes, run)).map((n) => n.id);
+}
+
+export function blockedStepIds(nodes, run) {
+  return nodes.filter((n) => run.steps[n.id]?.status === "pending" && !isReady(n.id, nodes, run)).map((n) => n.id);
+}
+
+export function activeStepFor(cookId, run) {
+  const hit = Object.entries(run.steps).find(([, r]) => r.status === "active" && r.cookId === cookId);
+  return hit ? hit[0] : null;
+}
+
+export function stepVariance(node, record, now = Date.now()) {
+  const estSec = node?.estimated_duration_sec ?? 0;
+  if (!record?.startedAt) return { estSec, actualSec: 0, deltaSec: 0, over: false, running: false };
+  const end = record.endedAt ? Date.parse(record.endedAt) : now;
+  const actualSec = Math.max(0, Math.round((end - Date.parse(record.startedAt)) / 1000));
+  const deltaSec = actualSec - estSec;
+  return { estSec, actualSec, deltaSec, over: deltaSec > 0, running: !record.endedAt };
+}
+
+export function isRunComplete(run, nodes) {
+  return nodes.every((n) => ["done", "skipped"].includes(run.steps[n.id]?.status));
+}
+
+export function runProgress(run, nodes, now = Date.now()) {
+  const records = nodes.map((n) => run.steps[n.id] || emptyRecord());
+  const count = (status) => records.filter((r) => r.status === status).length;
+  const done = count("done");
+  const skipped = count("skipped");
+  const total = nodes.length;
+  const elapsedSec = Math.max(
+    0,
+    Math.round(((run.endedAt ? Date.parse(run.endedAt) : now) - Date.parse(run.startedAt)) / 1000)
+  );
+  const remainingEstSec = nodes
+    .filter((n) => !["done", "skipped"].includes(run.steps[n.id]?.status))
+    .reduce((sum, n) => sum + n.estimated_duration_sec, 0);
+
+  // Drift against the plan: how late the most recently finished step
+  // landed compared with when the plan expected it to finish.
+  let driftSec = 0;
+  if (run.plan) {
+    const finished = nodes
+      .filter((n) => run.steps[n.id]?.status === "done" && run.steps[n.id]?.endedAt)
+      .sort((a, b) => Date.parse(run.steps[a.id].endedAt) - Date.parse(run.steps[b.id].endedAt));
+    const last = finished[finished.length - 1];
+    if (last && run.plan.startSecById[last.id] != null) {
+      const plannedEnd = run.plan.startSecById[last.id] + last.estimated_duration_sec;
+      const actualEnd = Math.round((Date.parse(run.steps[last.id].endedAt) - Date.parse(run.startedAt)) / 1000);
+      driftSec = actualEnd - plannedEnd;
+    }
+  }
+
+  return {
+    total,
+    done,
+    skipped,
+    active: count("active"),
+    pending: count("pending"),
+    pct: total ? Math.round(((done + skipped) / total) * 100) : 0,
+    elapsedSec,
+    estimatedTotalSec: run.plan?.makespanSec ?? null,
+    remainingEstSec,
+    driftSec,
+  };
+}
+
+export function scoreboard(run, nodes, cooks) {
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  return cooks
+    .map((cook) => {
+      const mine = Object.entries(run.steps).filter(([, r]) => r.cookId === cook.id);
+      const doneEntries = mine.filter(([, r]) => r.status === "done");
+      const points = doneEntries.reduce(
+        (sum, [id, record]) => sum + scoreStep(byId[id], { record, run, nodes, cooks }).points,
+        0
+      );
+      const lastDoneAt = doneEntries
+        .map(([, r]) => (r.endedAt ? Date.parse(r.endedAt) : 0))
+        .reduce((max, t) => Math.max(max, t), 0);
+      return {
+        cookId: cook.id,
+        name: cook.name,
+        points,
+        doneCount: doneEntries.length,
+        skippedCount: mine.filter(([, r]) => r.status === "skipped").length,
+        activeStepId: activeStepFor(cook.id, run),
+        lastDoneAt,
+      };
+    })
+    .sort((a, b) => b.points - a.points || b.doneCount - a.doneCount || a.lastDoneAt - b.lastDoneAt);
+}
+
+export function runOutcome(run, nodes, cooks) {
+  const board = scoreboard(run, nodes, cooks);
+  const top = board[0]?.points ?? 0;
+  const progress = runProgress(run, nodes, run.endedAt ? Date.parse(run.endedAt) : Date.now());
+  return {
+    totalSec: progress.elapsedSec,
+    estimatedSec: run.plan?.makespanSec ?? null,
+    scoreboard: board,
+    // A shared win is the honest result — don't invent an end-of-run
+    // tiebreak. (A *claim* must resolve to one owner; a final score needn't.)
+    winnerCookIds: board.filter((b) => b.points === top && top > 0).map((b) => b.cookId),
+    doneCount: progress.done,
+    skippedCount: progress.skipped,
+    perStep: nodes.map((n) => {
+      const record = run.steps[n.id] || emptyRecord();
+      const variance = stepVariance(n, record, run.endedAt ? Date.parse(run.endedAt) : Date.now());
+      return {
+        id: n.id,
+        label: n.label,
+        cookId: record.cookId,
+        status: record.status,
+        ...variance,
+        points: scoreStep(n, { record, run, nodes, cooks }).points,
+      };
+    }),
+  };
+}
+
+// ---------------------------------------------------------------------
+// Cooperation: what should each cook do next
+// ---------------------------------------------------------------------
+
+export function resolveAssignments({ nodes, run, cooks, now = Date.now() }) {
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const ready = new Set(readyStepIds(nodes, run));
+  const claimedFills = new Set();
+  const byCook = {};
+
+  cooks.forEach((cook) => {
+    // Holding something? That's the answer — and it's also what stops a
+    // busy cook ever being offered more work.
+    const active = activeStepFor(cook.id, run);
+    if (active) {
+      byCook[cook.id] = { stepId: active, reason: "active", waitingOnStepId: null, waitingOnCookId: null, etaSec: null };
+      return;
+    }
+
+    const queue = (run.plan?.order?.[cook.id] || []).filter((id) => run.steps[id]?.status === "pending");
+    const head = queue.find((id) => ready.has(id));
+    if (head) {
+      byCook[cook.id] = { stepId: head, reason: "assigned", waitingOnStepId: null, waitingOnCookId: null, etaSec: null };
+      claimedFills.add(head);
+      return;
+    }
+
+    if (queue.length === 0) {
+      const anythingLeft = nodes.some((n) => ["pending", "active"].includes(run.steps[n.id]?.status));
+      if (!anythingLeft) {
+        byCook[cook.id] = { stepId: null, reason: "finished", waitingOnStepId: null, waitingOnCookId: null, etaSec: null };
+        return;
+      }
+    }
+
+    // Their own next step is blocked. Offer someone else's ready work
+    // rather than idling — but as an explicit offer, never silently:
+    // silent reassignment on a shared screen is how two people end up
+    // doing the same task.
+    const fill = [...ready]
+      .filter((id) => !claimedFills.has(id))
+      .sort((a, b) => (run.plan?.startSecById?.[a] ?? 0) - (run.plan?.startSecById?.[b] ?? 0))[0];
+    if (fill) {
+      claimedFills.add(fill);
+      byCook[cook.id] = { stepId: fill, reason: "idle_fill", waitingOnStepId: null, waitingOnCookId: null, etaSec: null };
+      return;
+    }
+
+    // Genuinely nothing to do — name the blocker honestly.
+    const target = queue[0];
+    let waitingOnStepId = null;
+    if (target) {
+      const unmet = (byId[target]?.depends_on || [])
+        .filter((d) => byId[d] && !["done", "skipped"].includes(run.steps[d]?.status));
+      waitingOnStepId = unmet[0] ?? null;
+    }
+    const holder = waitingOnStepId ? run.steps[waitingOnStepId]?.cookId : null;
+    let etaSec = null;
+    if (waitingOnStepId && run.steps[waitingOnStepId]?.status === "active") {
+      const v = stepVariance(byId[waitingOnStepId], run.steps[waitingOnStepId], now);
+      etaSec = Math.max(0, v.estSec - v.actualSec);
+    }
+    byCook[cook.id] = { stepId: null, reason: "waiting", waitingOnStepId, waitingOnCookId: holder, etaSec };
+  });
+
+  return { byCook, unassignedReady: [...ready].filter((id) => !claimedFills.has(id)) };
+}
+
+/**
+ * Recompute the plan for everything still pending. Runs after every
+ * completion (and every skip/drop) — real times diverge from estimates,
+ * so the remaining plan genuinely changes shape as the cook progresses.
+ * Active steps are pinned: you don't re-plan something already underway.
+ */
+export function replan({ nodes, run, cooks, kitchenProfile }) {
+  const remaining = nodes.filter((n) => run.steps[n.id]?.status === "pending");
+  if (remaining.length === 0) {
+    return pushEvent({ ...run, plan: run.plan ? { ...run.plan, order: {}, startSecById: {} } : null }, {
+      at: new Date().toISOString(),
+      type: "replan",
+      cookId: null,
+      stepId: null,
+      meta: { remaining: 0 },
+    });
+  }
+  // scheduleSteps, not computeSchedule — the solo baseline is dead
+  // weight mid-run and doubles the work.
+  const schedule = scheduleSteps(remaining, cooks, kitchenProfile, { nodeBudget: LIVE_REPLAN_NODE_BUDGET });
+  const plan = planFromSchedule(schedule);
+  return pushEvent({ ...run, plan }, {
+    at: new Date().toISOString(),
+    type: "replan",
+    cookId: null,
+    stepId: null,
+    meta: { remaining: remaining.length, makespanSec: schedule.makespanSec },
+  });
+}
+
+// ---------------------------------------------------------------------
+// Competition: claiming
+// ---------------------------------------------------------------------
+
+/**
+ * A cook holding an unfinished step cannot claim another one. That check
+ * lives here rather than in the UI so the voice path, the claim buttons
+ * and any future caller all hit the same wall — there is deliberately no
+ * "drop this and take that" shortcut anywhere.
+ */
+export function arbitrateClaim({ run, nodes, cooks, stepId, cookId, at }) {
+  const record = run.steps[stepId];
+  if (!record) return { ok: false, code: "unknown_step" };
+  if (["done", "skipped"].includes(record.status)) return { ok: false, code: "already_done" };
+
+  const holding = activeStepFor(cookId, run);
+  if (holding && holding !== stepId) return { ok: false, code: "busy", holdingStepId: holding };
+
+  if (record.status === "active") {
+    if (record.cookId === cookId) return { ok: false, code: "noop" };
+    const mine = Date.parse(at);
+    const theirs = Date.parse(record.startedAt);
+    if (mine > theirs) return { ok: false, code: "already_claimed", holderCookId: record.cookId };
+    if (mine === theirs) {
+      // Dead heat: the cook who's behind takes it. Deterministic (the run
+      // replays from a persisted log), self-balancing, and explainable in
+      // one sentence to the people at the counter.
+      const board = scoreboard(run, nodes, cooks);
+      const rank = (id) => {
+        const i = board.findIndex((b) => b.cookId === id);
+        return [board[i]?.points ?? 0, cooks.findIndex((c) => c.id === id)];
+      };
+      const [myPoints, myIndex] = rank(cookId);
+      const [theirPoints, theirIndex] = rank(record.cookId);
+      const iWin = myPoints < theirPoints || (myPoints === theirPoints && myIndex < theirIndex);
+      if (!iWin) return { ok: false, code: "already_claimed", holderCookId: record.cookId, tie: true };
+    }
+    // Won it — the previous holder loses the step.
+    return { ok: true, stealFrom: record.cookId };
+  }
+
+  if (!isReady(stepId, nodes, run)) {
+    const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+    const blockedBy = (byId[stepId]?.depends_on || []).filter(
+      (d) => byId[d] && !["done", "skipped"].includes(run.steps[d]?.status)
+    );
+    return { ok: false, code: "not_ready", blockedBy };
+  }
+  return { ok: true };
+}
+
+export function claimSuggestions({ nodes, run, cookId, limit = 3 }) {
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const opening = new Set(run.openingSuggestions?.[cookId] || []);
+  return readyStepIds(nodes, run)
+    .sort((a, b) => {
+      const aOpen = opening.has(a) ? 0 : 1;
+      const bOpen = opening.has(b) ? 0 : 1;
+      if (aOpen !== bOpen) return aOpen - bOpen;
+      const pts = (id) => DIFFICULTY_POINTS[byId[id]?.difficulty] ?? 0;
+      return pts(b) - pts(a) || byId[a].estimated_duration_sec - byId[b].estimated_duration_sec;
+    })
+    .slice(0, limit);
+}
+
+// ---------------------------------------------------------------------
+// Transitions — all pure, all return a new run
+// ---------------------------------------------------------------------
+
+export function applyStart({ run, stepId, cookId, at, source = "tap" }) {
+  const next = patchStep(run, stepId, { status: "active", cookId, startedAt: at, endedAt: null, source });
+  return pushEvent(next, { at, type: "start", cookId, stepId, source });
+}
+
+export function applyDone({ run, stepId, cookId, at, source = "tap" }) {
+  const next = patchStep(run, stepId, { status: "done", cookId, endedAt: at });
+  return pushEvent(next, { at, type: "done", cookId, stepId, source });
+}
+
+export function applySkip({ run, stepId, cookId, at, source = "tap", reason = "manual" }) {
+  const next = patchStep(run, stepId, { status: "skipped", cookId, endedAt: at, skipReason: reason });
+  return pushEvent(next, { at, type: "skip", cookId, stepId, source, meta: { reason } });
+}
+
+/** Put an active step back in the pool — no points, no penalty. */
+export function applyDrop({ run, stepId, cookId, at, source = "tap" }) {
+  const next = patchStep(run, stepId, { status: "pending", cookId: null, startedAt: null, endedAt: null, source: null });
+  return pushEvent(next, { at, type: "drop", cookId, stepId, source });
+}
+
+/** Inverts this cook's last action, within a minute, and only while
+ *  nothing downstream has started on the back of it. */
+export function applyUndo({ run, nodes, cookId, at }) {
+  const undoable = ["start", "done", "skip"];
+  const last = [...run.events].reverse().find((e) => e.cookId === cookId && undoable.includes(e.type));
+  if (!last) return { run, rejected: "nothing" };
+  if (Date.parse(at) - Date.parse(last.at) > UNDO_WINDOW_MS) return { run, rejected: "too_late" };
+
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const downstreamStarted = nodes.some(
+    (n) => (n.depends_on || []).includes(last.stepId) && run.steps[n.id]?.status !== "pending"
+  );
+  if (downstreamStarted) return { run, rejected: "downstream_started", blockedBy: last.stepId };
+
+  let next;
+  if (last.type === "done") {
+    next = patchStep(run, last.stepId, { status: "active", endedAt: null });
+  } else if (last.type === "skip") {
+    next = patchStep(run, last.stepId, { status: "pending", cookId: null, endedAt: null, skipReason: null });
+  } else {
+    next = patchStep(run, last.stepId, { status: "pending", cookId: null, startedAt: null, source: null });
+  }
+  return {
+    run: pushEvent(next, { at, type: "undo", cookId, stepId: last.stepId, meta: { undid: last.type } }),
+    undid: last,
+    label: byId[last.stepId]?.label,
+  };
+}
+
+/** Freeze the run. Anything still pending is swept to skipped so the
+ *  summary accounts for every step. */
+export function endRun({ run, nodes, at }) {
+  let next = { ...run, steps: { ...run.steps } };
+  nodes.forEach((n) => {
+    if (next.steps[n.id]?.status === "pending") {
+      next.steps[n.id] = { ...next.steps[n.id], status: "skipped", endedAt: at, skipReason: "run_ended" };
+    }
+  });
+  next.endedAt = at;
+  return pushEvent(next, { at, type: "run_end", cookId: null, stepId: null });
+}

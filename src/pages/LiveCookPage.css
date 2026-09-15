@@ -1,0 +1,129 @@
+/* Read from ~1.5m with wet hands: nothing below 16px, 64px targets for
+   anything hit mid-task, no hover-only affordances. */
+/* The global voice bar is fixed, so the page has to reserve room for it
+   or the last card ends up underneath. */
+.live-cook-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: calc(var(--voice-bar-height) + 24px);
+}
+
+.live-clock { font-size: 1rem; padding: 6px 14px; }
+.live-drift { background: var(--crit-soft); color: var(--crit-soft-ink); border-color: transparent; }
+
+.focus-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+
+.focus-card { display: flex; flex-direction: column; gap: 12px; border-width: 2px; }
+.cook-border-mia { border-color: var(--cook-mia); }
+.cook-border-leo { border-color: var(--cook-leo); }
+.cook-border-sage { border-color: var(--cook-sage); }
+
+.focus-head { display: flex; align-items: center; gap: 10px; }
+.focus-cook-name { font-weight: 700; font-size: 1.05rem; }
+.focus-points { margin-left: auto; font-size: 0.9rem; }
+
+.focus-step-title { margin: 0; font-size: 1.6rem; line-height: 1.25; }
+.focus-step-desc { margin: 0; font-size: 1rem; color: var(--ink-soft); }
+
+.focus-meta { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.focus-timer { font-size: 2.5rem; font-weight: 700; line-height: 1; }
+.focus-timer.is-over { color: var(--crit); }
+
+.focus-tags { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Pinned to the bottom so both cooks' primary buttons sit on the same
+   line no matter how much text is above them. */
+.focus-actions { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+.focus-primary { width: 100%; font-size: 1.05rem; }
+.focus-secondary { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.focus-waiting-text { padding: 4px 0; }
+
+.live-progress { height: 8px; }
+
+/* --- competition --- */
+.leaderboard { display: flex; flex-direction: column; gap: 14px; background: var(--surface-sunken); border-width: 2px; }
+.leader-row { display: flex; align-items: center; gap: 14px; background: none; min-height: 64px; }
+.leader-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.leader-name { font-weight: 700; font-size: 1.1rem; }
+.leader-bar { height: 12px; border-radius: 999px; background: var(--surface); overflow: hidden; }
+.leader-fill { height: 100%; background: currentColor; transition: width 0.4s ease; }
+.leader-points { font-size: 2.6rem; font-weight: 700; line-height: 1.15; min-width: 3ch; text-align: right; flex: none; }
+@media (prefers-reduced-motion: reduce) { .leader-fill { transition: none; } }
+
+.pool-board { display: flex; flex-direction: column; gap: 12px; background: var(--surface-sunken); border-width: 2px; }
+.pool-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+
+.pool-tile {
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: 10px 14px;
+  border-radius: var(--radius-card);
+  border: 2px solid var(--line-strong);
+  background: var(--surface);
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+}
+.pool-tile.is-claimable { cursor: pointer; }
+.pool-tile.is-claimable:hover { border-color: var(--ink); }
+.pool-tile.is-taken { border-color: transparent; }
+.pool-tile.is-blocked { border-style: dashed; opacity: 0.6; }
+.pool-label { font-weight: 700; font-size: 1rem; }
+.pool-meta { font-size: 0.78rem; opacity: 0.85; }
+.pool-action { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* --- voice console --- */
+.voice-console { display: flex; flex-direction: column; gap: 12px; }
+.voice-console-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.speaker-select { display: flex; gap: 8px; }
+.speaker-pill { min-height: 44px; border-color: transparent; font-weight: 600; }
+.speaker-pill.is-active { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+.live-transcript { max-height: 190px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.live-line { display: flex; gap: 10px; align-items: baseline; }
+.live-who { font-size: 0.7rem; color: var(--ink-faint); flex: none; min-width: 5ch; }
+.live-bubble { margin: 0; font-size: 1rem; }
+.live-line.is-agent .live-bubble { color: var(--ai-soft-ink); font-weight: 600; }
+
+.pending-options { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.voice-input-row { display: flex; gap: 10px; }
+.voice-command-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 1rem;
+  padding: 12px 16px;
+  border-radius: var(--radius-input);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+/* Deliberately not sticky: on a tall competition page it ended up
+   floating over the middle of the task pool. */
+.live-footer { background: var(--bg); }
+
+/* --- summary --- */
+.run-summary { display: flex; flex-direction: column; gap: 14px; }
+.summary-headline { margin: 0; font-size: 1.8rem; }
+.summary-winner { margin: 0; font-size: 1.2rem; font-weight: 700; color: var(--success); }
+.summary-scores { display: flex; gap: 14px; flex-wrap: wrap; }
+.summary-score {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-radius: var(--radius-card);
+}
+.summary-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.summary-steps li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.summary-steps li:last-child { border-bottom: none; }
+.summary-steps li.is-skipped .summary-step-label { text-decoration: line-through; color: var(--ink-faint); }
+.summary-step-label { font-weight: 600; }

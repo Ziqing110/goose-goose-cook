@@ -1,4 +1,4 @@
-/* Lane geometry is shared between the fixed label column and the
+﻿/* Lane geometry is shared between the fixed label column and the
    scrolling track so the two stay row-aligned. */
 :root {
   --lane-height: 60px;
@@ -43,18 +43,6 @@
 }
 .schedule-lane-label:last-child { border-bottom: none; }
 .schedule-lane-name { font-weight: 700; }
-
-.cook-avatar-sm {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 0.85rem;
-  flex: none;
-}
 
 .schedule-scroll { flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; padding-bottom: 6px; }
 .schedule-inner { position: relative; }
@@ -152,7 +140,8 @@ button.schedule-block:focus-visible { outline: 2px solid var(--accent); outline-
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.mode-card:hover { border-color: var(--ink-faint); }
+.mode-card:hover:not(:disabled) { border-color: var(--ink-faint); }
+.mode-card:disabled { opacity: 0.55; cursor: not-allowed; }
 .mode-card.is-selected { border: 2px solid var(--success); background: var(--success-soft); box-shadow: var(--shadow-sm); }
 
 .mode-card-head { display: flex; align-items: center; justify-content: space-between; }

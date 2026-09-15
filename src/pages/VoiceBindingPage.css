@@ -1,4 +1,4 @@
-.cooks-card { display: flex; flex-direction: column; gap: 16px; }
+﻿.cooks-card { display: flex; flex-direction: column; gap: 16px; }
 
 .cooks-grid {
   display: grid;
@@ -39,17 +39,6 @@
 }
 .cook-slot-remove:hover { color: var(--ink); border-color: var(--ink-faint); }
 
-.cook-avatar {
-  position: relative;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 1.1rem;
-}
 .cook-avatar-badge {
   position: absolute;
   bottom: -2px;

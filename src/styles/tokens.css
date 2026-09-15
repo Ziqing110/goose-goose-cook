@@ -264,6 +264,22 @@ button { font: inherit; cursor: pointer; }
 .cook-color-mia { background: var(--cook-mia-soft); color: var(--cook-mia); }
 .cook-color-leo { background: var(--cook-leo-soft); color: var(--cook-leo); }
 .cook-color-sage { background: var(--cook-sage-soft); color: var(--cook-sage); }
+
+/* The initial-in-a-circle used wherever a cook is identified. Always
+   paired with a .cook-color-* class, hence living beside them. */
+.cook-avatar {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+  flex: none;
+}
+.cook-avatar-sm { width: 34px; height: 34px; font-size: 0.85rem; }
 .tag-difficulty-low { background: var(--success-soft); color: var(--success-soft-ink); border-color: transparent; }
 .tag-difficulty-medium { background: var(--warning-soft); color: var(--warning-soft-ink); border-color: transparent; }
 .tag-difficulty-high { background: var(--crit-soft); color: var(--crit-soft-ink); border-color: transparent; }

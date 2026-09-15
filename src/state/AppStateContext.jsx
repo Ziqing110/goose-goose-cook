@@ -29,6 +29,7 @@ function makeSession(id, kitchenProfileId) {
     sharedSteps: [],
     cooks: [],
     mode: null,
+    run: null, // set when cooking actually starts — see LiveCookPage
   };
 }
 
@@ -238,6 +239,7 @@ export function AppStateProvider({ children }) {
           selectedNodeId: session.selectedNodeId,
           cooks: session.cooks,
           mode: session.mode,
+          run: session.run,
         })
         .catch((err) => console.error("Failed to sync session:", err));
 
@@ -357,9 +359,21 @@ export function AppStateProvider({ children }) {
     }
   };
 
+  // Live-cook writes skip the 600ms debounce. A run action records
+  // something that already happened in the physical world (the pot went
+  // on), so losing it to a refresh costs more than a redundant PATCH —
+  // the debounced effect will still fire its own, with the same data.
+  const saveRunNow = (run) => {
+    if (!state.session) return;
+    const sessionId = state.session.id;
+    dispatch({ type: "session/update", payload: { run } });
+    sessionsApi.updateSession(sessionId, { run }).catch((err) => console.error("Failed to persist run:", err));
+  };
+
   const value = {
     state,
     dispatch,
+    saveRunNow,
     addKitchenProfile,
     editKitchenProfile,
     removeKitchenProfile,

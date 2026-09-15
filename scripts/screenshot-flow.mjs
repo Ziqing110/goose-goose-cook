@@ -21,6 +21,9 @@ const shot = async (name) => {
   console.log("saved", file);
 };
 
+// Several actions are confirm()-gated; Playwright dismisses dialogs by
+// default, which would silently cancel them.
+page.on("dialog", (d) => d.accept());
 page.on("console", (m) => {
   if (m.type() === "error") console.log("  [browser error]", m.text());
 });
@@ -48,7 +51,6 @@ if (await page.getByRole("button", { name: /Add your first kitchen|\+ Add kitche
 }
 
 if (await page.getByRole("button", { name: /Discard and start new/ }).first().isVisible().catch(() => false)) {
-  page.once("dialog", (d) => d.accept());
   await click(/Discard and start new/);
   await page.waitForTimeout(500);
 }
@@ -152,6 +154,76 @@ await shot("schedule-competition");
 await click(/Cooperation/);
 await page.waitForTimeout(600);
 await shot("schedule-cooperation");
+
+// --- live cooking, cooperation ---
+await click(/Start cooking/);
+await page.waitForTimeout(1500);
+await shot("live-coop-start");
+
+// Start and finish a step from the buttons.
+const startBtn = page.getByRole("button", { name: /^(Start|Take it)$/ }).first();
+if (await startBtn.isVisible().catch(() => false)) {
+  await startBtn.click();
+  await page.waitForTimeout(1200);
+  await shot("live-coop-running");
+  await page.getByRole("button", { name: "Done" }).first().click();
+  await page.waitForTimeout(1500); // replan runs here
+  await shot("live-coop-after-done");
+}
+
+// Drive one step by voice instead of tapping.
+const cmd = page.locator(".voice-command-input");
+if (await cmd.isVisible().catch(() => false)) {
+  await cmd.fill("start");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.waitForTimeout(700);
+  await cmd.fill("done");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.waitForTimeout(1200);
+  await shot("live-coop-voice");
+
+  await cmd.fill("what's next");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.waitForTimeout(600);
+  await shot("live-coop-status");
+}
+
+// Survive a reload mid-run.
+await page.reload({ waitUntil: "networkidle" });
+await page.waitForTimeout(1500);
+await shot("live-coop-after-reload");
+
+// --- live cooking, competition ---
+await page.goto(`${BASE}/session/schedule`, { waitUntil: "networkidle" });
+await page.waitForTimeout(800);
+await click(/Start over/);
+await page.waitForTimeout(800);
+await click(/Competition/);
+await page.waitForTimeout(400);
+await click(/Start cooking/);
+await page.waitForTimeout(1500);
+await shot("live-comp-start");
+
+const claim = page.locator(".pool-tile.is-claimable").first();
+if (await claim.isVisible().catch(() => false)) {
+  await claim.click();
+  await page.waitForTimeout(800);
+  await shot("live-comp-claimed");
+  // Same cook tries to grab a second task while still holding one.
+  const second = page.locator(".pool-tile.is-claimable").first();
+  if (await second.isVisible().catch(() => false)) {
+    await second.click();
+    await page.waitForTimeout(700);
+    await shot("live-comp-busy-refusal");
+  }
+  await page.getByRole("button", { name: "Done" }).first().click();
+  await page.waitForTimeout(1200);
+  await shot("live-comp-scored");
+}
+
+await click(/Finish early|Finish cooking/);
+await page.waitForTimeout(1200);
+await shot("live-summary");
 
 await browser.close();
 console.log(`\n${shots.length} screenshots in ${OUT}/`);

@@ -53,6 +53,7 @@ db.exec(`
     selected_node_id TEXT,
     cooks_json TEXT NOT NULL DEFAULT '[]',
     mode TEXT,
+    run_json TEXT,
     updated_at TEXT NOT NULL
   );
 
@@ -97,6 +98,9 @@ if (!sessionColumns.includes("cooks_json")) {
 }
 if (!sessionColumns.includes("mode")) {
   db.exec("ALTER TABLE sessions ADD COLUMN mode TEXT");
+}
+if (!sessionColumns.includes("run_json")) {
+  db.exec("ALTER TABLE sessions ADD COLUMN run_json TEXT");
 }
 
 // ---------------------------------------------------------------------
