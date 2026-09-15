@@ -250,7 +250,13 @@ export default function HomePage() {
   };
 
   const deleteProfile = async () => {
-    if (!window.confirm(`Delete "${modalProfile.name}"?`)) return;
+    // Past runs only hold the kitchen's id, so deleting it leaves them
+    // without a kitchen name in the run log. Small, but say so rather
+    // than let the rows quietly change under them. (A run in progress is
+    // a harder block — the server refuses that outright.)
+    const pastRuns = state.sessionHistory.filter((s) => s.kitchenProfileId === modalProfile.id).length;
+    const note = pastRuns > 0 ? ` ${pastRuns} past ${pastRuns === 1 ? "run" : "runs"} will lose its kitchen name.` : "";
+    if (!window.confirm(`Delete "${modalProfile.name}"?${note}`)) return;
     try {
       await removeKitchenProfile(modalProfile.id);
       setModalProfile(undefined);
