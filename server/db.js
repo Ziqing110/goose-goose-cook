@@ -400,6 +400,14 @@ function chickenNoodleSoupNodes() {
   ];
 }
 
+// A kitchen to cook in. The app can't start a session without one, and
+// nothing creates one automatically, so a fresh clone would otherwise
+// dead-end on the Home screen. Seeded so `npm run dev:full` is a working
+// demo with no database file checked in and no setup steps.
+const KITCHEN_SEED = [
+  { id: "demo-kitchen", name: "Demo Kitchen", burners: 2, hasWok: 1, hasOven: 1, cuttingBoards: 1, pots: 2 },
+];
+
 // Fixed ids (not randomUUID()) so INSERT OR IGNORE below is stable across
 // restarts — a new dish is just a new entry in this array.
 const TEMPLATE_SEED = [
@@ -438,9 +446,22 @@ const insertTemplateStmt = db.prepare(`
 const insertMaterialStmt = db.prepare(`
   INSERT OR IGNORE INTO materials (id, label, category, amount, unit) VALUES (@id, @label, @category, @amount, @unit)
 `);
+const insertKitchenStmt = db.prepare(`
+  INSERT OR IGNORE INTO kitchens (id, name, burners, hasWok, hasOven, cuttingBoards, pots, createdAt, updatedAt)
+  VALUES (@id, @name, @burners, @hasWok, @hasOven, @cuttingBoards, @pots, @createdAt, @updatedAt)
+`);
 
+// Everything demo-shaped lives here rather than in a committed database
+// file, so a clone is `npm install && npm run dev:full` and nothing else.
+// INSERT OR IGNORE on fixed ids means this is safe to re-run and never
+// overwrites anything someone has since edited.
+//
+// This is placeholder content standing in for real generation — when the
+// LLM recipe API lands, TEMPLATE_SEED stops being the source of dishes
+// and this shrinks back to just the kitchen and the materials catalog.
 function seedIfEmpty() {
   const now = new Date().toISOString();
+  KITCHEN_SEED.forEach((k) => insertKitchenStmt.run({ ...k, createdAt: now, updatedAt: now }));
   TEMPLATE_SEED.forEach(({ nodes, ...t }) =>
     insertTemplateStmt.run({ ...t, nodes_json: JSON.stringify(nodes), created_at: now })
   );

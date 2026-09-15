@@ -25,12 +25,17 @@ never needs CORS config). `dev:full` runs both together via
 `concurrently`; use `npm run dev` (frontend only) or `npm run server`
 (backend only) if you want them in separate terminals.
 
-The SQLite file lives at `server/data.sqlite`, created automatically
-on first run and seeded with the demo dish templates + materials
-catalog (`server/db.js`). Note: it's listed in `.gitignore` but is
-still tracked from an earlier commit, so it shows up as modified
-whenever you run the app — `git rm --cached server/data.sqlite` would
-make the ignore rule actually take effect.
+The SQLite file lives at `server/data.sqlite` and is **not** in the
+repo — it's created and seeded automatically on first run, so a clone
+is `npm install && npm run dev:full` with no setup steps. The seed
+(`seedIfEmpty` in `server/db.js`) gives you a demo kitchen, the two
+demo dishes and the materials catalog, which is everything the app
+needs to be clicked through end to end. It's safe to delete the file
+at any point to get back to a clean demo.
+
+The seed is placeholder content standing in for real generation. When
+the recipe API lands, `TEMPLATE_SEED` stops being the source of dishes
+and the seed shrinks back to the kitchen and the materials catalog.
 
 ## What's real vs. stubbed
 
