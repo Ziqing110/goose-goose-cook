@@ -2,6 +2,12 @@
 // screen, matching the reference mockups. Mute state is shared app
 // state (state.voice.muted): muting here switches the conversation
 // page's answer bar into typing mode, and typing there mutes this.
+//
+// TODO(design discussion): the bar deliberately looks different on v4
+// routes (dark card via .voice-bar-inner + design-v4.css) than elsewhere
+// for now. It's shared chrome and should look the same site-wide; settle
+// on one design, apply it globally and drop the route-scoped overrides
+// (see utils/designV4.js).
 import { useAppState } from "../state/AppStateContext.jsx";
 import "./VoiceBar.css";
 

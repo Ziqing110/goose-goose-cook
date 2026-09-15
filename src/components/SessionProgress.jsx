@@ -2,6 +2,11 @@
 // explicit exit that returns to Home without discarding the session
 // (it stays resumable). Rendered once by SessionLayout, not per page.
 // On v4 design-system routes the bar is replaced by the stage path.
+//
+// TODO(design discussion): the two variants are deliberate and temporary.
+// This is shared chrome and should render one way across every session
+// page; pick the bar or the stage path and drop the useDesignV4 branch
+// (see utils/designV4.js).
 import { useLocation, useNavigate } from "react-router-dom";
 import { useDesignV4 } from "../utils/designV4.js";
 import Icon from "./Icon.jsx";
