@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Modal from "./Modal.jsx";
 import KitchenProfileForm, { emptyKitchenProfileDraft } from "./KitchenProfileForm.jsx";
+import "./KitchenProfileFormModal.css";
 
 // Add/edit a kitchen profile from Home. `profile` is null for "add",
 // or an existing profile object for "edit" (adds a Delete action).
@@ -24,9 +25,9 @@ export default function KitchenProfileFormModal({ profile, notice, error, onSave
   };
 
   return (
-    <Modal label={isEdit ? "Edit kitchen" : "Add kitchen"} onClose={onClose}>
+    <Modal label={isEdit ? "Edit kitchen" : "Add a kitchen"} onClose={onClose} panelClassName="kp-modal">
       <form onSubmit={submit} className="kitchen-profile-modal-form">
-        <span className="mini-title">{isEdit ? "Edit kitchen" : "Add a kitchen"}</span>
+        <span className="kitchen-profile-modal-title">{isEdit ? "Edit kitchen" : "Add a kitchen"}</span>
 
         {notice && <p className="kitchen-profile-modal-notice">{notice}</p>}
         {error && <p className="kitchen-profile-modal-notice kitchen-profile-modal-error">{error}</p>}
@@ -35,8 +36,8 @@ export default function KitchenProfileFormModal({ profile, notice, error, onSave
 
         <div className="kitchen-profile-modal-actions">
           {isEdit ? (
-            <button type="button" className="btn btn-danger" onClick={onDelete}>
-              Delete
+            <button type="button" className="btn btn-ghost btn-danger" onClick={onDelete}>
+              Delete kitchen
             </button>
           ) : (
             <span />
@@ -46,7 +47,7 @@ export default function KitchenProfileFormModal({ profile, notice, error, onSave
               Cancel
             </button>
             <button type="submit" className="btn btn-primary">
-              {isEdit ? "Save changes" : "Add kitchen"}
+              Save kitchen
             </button>
           </div>
         </div>

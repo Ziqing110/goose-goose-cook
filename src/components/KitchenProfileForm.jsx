@@ -15,7 +15,7 @@ export default function KitchenProfileForm({ value, onChange, nameError }) {
         <input
           id="kp-name"
           type="text"
-          placeholder="e.g. Home kitchen"
+          placeholder="e.g. Flat 3 galley"
           value={value.name}
           onChange={(e) => set({ name: e.target.value })}
           className={nameError ? "field-error" : ""}
@@ -30,21 +30,22 @@ export default function KitchenProfileForm({ value, onChange, nameError }) {
       </div>
 
       <div className="setup-grid">
-        <NumberStepper id="kp-burners" label="Stove burners" value={value.burners} min={1} max={8} onChange={(v) => set({ burners: v })} />
+        <NumberStepper id="kp-burners" label="Stove burners" icon="burner" value={value.burners} min={1} max={8} onChange={(v) => set({ burners: v })} />
         <NumberStepper
           id="kp-cuttingBoards"
           label="Cutting boards"
+          icon="cutting-board"
           value={value.cuttingBoards}
           min={1}
           max={6}
           onChange={(v) => set({ cuttingBoards: v })}
         />
-        <NumberStepper id="kp-pots" label="Pots" value={value.pots} min={0} max={6} onChange={(v) => set({ pots: v })} />
+        <NumberStepper id="kp-pots" label="Pots" icon="pot" value={value.pots} min={0} max={6} onChange={(v) => set({ pots: v })} />
       </div>
 
       <div className="setup-toggles">
-        <ToggleSwitch id="kp-hasWok" label="Wok / wok ring" checked={value.hasWok} onChange={(v) => set({ hasWok: v })} />
-        <ToggleSwitch id="kp-hasOven" label="Oven" checked={value.hasOven} onChange={(v) => set({ hasOven: v })} />
+        <ToggleSwitch id="kp-hasWok" label="Wok" icon="wok" checked={value.hasWok} onChange={(v) => set({ hasWok: v })} />
+        <ToggleSwitch id="kp-hasOven" label="Oven" icon="oven" checked={value.hasOven} onChange={(v) => set({ hasOven: v })} />
       </div>
     </div>
   );

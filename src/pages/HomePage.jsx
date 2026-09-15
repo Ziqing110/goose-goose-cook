@@ -1,23 +1,129 @@
-import { useState } from "react";
+// Home v4 — "Tonight's run". A planning surface in the Kitchen Path
+// Agent Design System (design/claude-design-home-*.md): the hero is
+// the run card (states A–F below), then the kitchens loadout and the
+// run log. Everything shown is derived from data the backend already
+// returns — see src/utils/runStats.js for the derivations.
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
+import KpIcon from "../components/KpIcon.jsx";
+import welcomeBand from "../assets/home-welcome-band.png";
+import {
+  formatClock,
+  formatShortDate,
+  relativeTime,
+  runFlames,
+  runLogRecord,
+  runPhaseCounts,
+  runPlayers,
+  runServings,
+  runStages,
+  runTitle,
+  runTotalSeconds,
+  summarizeRun,
+} from "../utils/runStats.js";
 import "./HomePage.css";
 
-function equipmentSummary(p) {
-  const bits = [`${p.burners} burners`, `${p.cuttingBoards} boards`, `${p.pots} pots`];
-  if (p.hasWok) bits.push("wok");
-  if (p.hasOven) bits.push("oven");
-  return bits.join(" · ");
+const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight"];
+
+function kitchenTagline(profile) {
+  if (!profile) return "Two burners, one wok, one main line.";
+  const burners = `${NUMBER_WORDS[profile.burners] || profile.burners} ${profile.burners === 1 ? "burner" : "burners"}`;
+  return `${burners.charAt(0).toUpperCase()}${burners.slice(1)}${profile.hasWok ? ", one wok" : ""}, one main line.`;
 }
 
-function formatDate(iso) {
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+/* ---------------- small presentational pieces ---------------- */
+
+function Chip({ className = "", children, ...rest }) {
+  return (
+    <span className={`hp-chip ${className}`} {...rest}>
+      {children}
+    </span>
+  );
 }
+
+function StatTile({ value, label, icon, delay }) {
+  return (
+    <div className="hp-stat">
+      <span className="hp-stat-value-row">
+        {icon && <KpIcon glyph={icon} size={20} />}
+        <span className="hp-stat-value mono hp-roll" style={{ animationDelay: `${delay}ms` }}>
+          {value}
+        </span>
+      </span>
+      <span className="hp-stat-label">{label}</span>
+    </div>
+  );
+}
+
+function PhaseBar({ counts }) {
+  const total = counts.prep + counts.cook + counts.plate;
+  if (total === 0) return null;
+  const pct = (n) => `${(n / total) * 100}%`;
+  return (
+    <div className="hp-phase">
+      <div className="hp-phase-bar" role="img" aria-label={`${counts.prep} prep, ${counts.cook} cook, ${counts.plate} plate steps`}>
+        <span className="hp-phase-prep" style={{ width: pct(counts.prep) }} />
+        <span className="hp-phase-cook" style={{ width: pct(counts.cook) }} />
+        <span className="hp-phase-plate" style={{ width: pct(counts.plate) }} />
+      </div>
+      <span className="hp-phase-legend mono">
+        {counts.prep} prep · {counts.cook} cook · {counts.plate} plate
+      </span>
+    </div>
+  );
+}
+
+function StagePath({ stages }) {
+  return (
+    <ol className="hp-stages" aria-label="Run progress">
+      {stages.map((stage, i) => (
+        <li key={stage.id} className={`hp-stage is-${stage.state}`}>
+          {i > 0 && <span className="hp-stage-link" aria-hidden="true" />}
+          <span className="hp-stage-node" aria-hidden="true">
+            {stage.state === "done" && <KpIcon glyph="checkmark-burst" size={16} />}
+            {stage.state === "future" && <span className="hp-stage-dot" />}
+          </span>
+          <span className="hp-stage-label">
+            <span>{stage.label}</span>
+            {stage.count && <span className="mono hp-stage-count">{stage.count}</span>}
+          </span>
+          <span className="sr-only">
+            {stage.state === "done" ? " — done" : stage.state === "current" ? " — in progress" : " — not started"}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function LoadoutChips({ profile, delayBase = 0 }) {
+  const items = [
+    { glyph: "burner", value: profile.burners },
+    { glyph: "cutting-board", value: profile.cuttingBoards },
+    { glyph: "pot", value: profile.pots },
+    profile.hasWok && { glyph: "wok", value: "Wok" },
+    profile.hasOven && { glyph: "oven", value: "Oven" },
+  ].filter(Boolean);
+  return (
+    <span className="hp-loadout">
+      {items.map((it, i) => (
+        <Chip key={it.glyph} className="hp-chip-equipment hp-pop" style={{ animationDelay: `${delayBase + i * 40}ms` }}>
+          <KpIcon glyph={it.glyph} size={16} />
+          {typeof it.value === "number" ? <span className="mono">{it.value}</span> : it.value}
+        </Chip>
+      ))}
+    </span>
+  );
+}
+
+/* ---------------- page ---------------- */
 
 export default function HomePage() {
   const {
     state,
+    dispatch,
     addKitchenProfile,
     editKitchenProfile,
     removeKitchenProfile,
@@ -28,27 +134,70 @@ export default function HomePage() {
   const navigate = useNavigate();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [modalProfile, setModalProfile] = useState(undefined); // undefined = closed, null = "add", object = "edit"
-  const [startAfterAdd, setStartAfterAdd] = useState(false); // true when the modal was opened from "start cooking"
+  const [startAfterAdd, setStartAfterAdd] = useState(false); // true when the modal was opened from "Start the run"
   const [modalError, setModalError] = useState(null);
 
-  const sessionLoading = state.sessionStatus === "idle" || state.sessionStatus === "loading";
-  const hasSession = Boolean(state.session);
+  const session = state.session;
   const profiles = state.kitchenProfiles;
+  const sessionLoading = state.sessionStatus === "idle" || state.sessionStatus === "loading";
   const kitchensLoading = state.kitchensStatus === "idle" || state.kitchensStatus === "loading";
   const kitchensLoadError = state.kitchensStatus === "error" ? state.kitchensError : null;
+
+  const activeKitchen = session ? profiles.find((p) => p.id === session.kitchenProfileId) || null : null;
+  const taglineKitchen = activeKitchen || (profiles.length === 1 ? profiles[0] : null);
+
+  // Which hero state we're in, so the VoiceBar copy can follow it.
+  const heroState = sessionLoading
+    ? "loading"
+    : session
+      ? "resumable"
+      : kitchensLoading
+        ? "loading"
+        : kitchensLoadError
+          ? "error"
+          : pickerOpen
+            ? "picker"
+            : profiles.length === 0
+              ? "noKitchen"
+              : "ready";
+
+  const runLog = useMemo(() => {
+    const rows = state.sessionHistory.map((item) => summarizeRun(item, profiles));
+    return { rows, ...runLogRecord(rows) };
+  }, [state.sessionHistory, profiles]);
+
+  // VoiceBar as the announcer: one line + one AI line per hero state.
+  useEffect(() => {
+    let hint = null;
+    if (heroState === "resumable") {
+      const conv = runStages(session).find((s) => s.id === "conversation");
+      hint = {
+        line: "Ready when you are — say “resume the run”.",
+        sub:
+          conv.state === "current"
+            ? `You're ${conv.count} into the conversation; I'll pick it up from there.`
+            : conv.state === "done"
+              ? "The main line is set; I'll take you straight to it."
+              : "Pick a kitchen and I'll pick it up from there.",
+      };
+    } else if (heroState === "ready" || heroState === "picker") {
+      hint = {
+        line: "Say “start the run” and I'll set the main line.",
+        sub: profiles.length === 1 ? profiles[0].name : null,
+      };
+    } else if (heroState === "noKitchen") {
+      hint = { line: "Tell me about your kitchen and I'll build it.", sub: null };
+    }
+    dispatch({ type: "voice/setHint", payload: { hint } });
+    return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
+  }, [heroState, session, profiles, dispatch]);
+
+  /* ---- actions ---- */
 
   const handleStartSession = (kitchenProfileId) => {
     startSession(kitchenProfileId);
     setPickerOpen(false);
     navigate("/session");
-  };
-
-  // No kitchen profile exists -> nothing to cook with. Kitchen setup only
-  // happens here on Home now, not as an inline session step.
-  const handleStartClick = () => {
-    if (profiles.length === 0) return openAddProfileModal(true);
-    if (profiles.length === 1) return handleStartSession(profiles[0].id);
-    setPickerOpen(true);
   };
 
   const openAddProfileModal = (thenStart) => {
@@ -57,8 +206,16 @@ export default function HomePage() {
     setModalProfile(null);
   };
 
-  const handleDiscardSession = () => {
-    if (!window.confirm("Discard the current cooking session? This can't be undone.")) return;
+  // No kitchen profile exists -> nothing to cook with. Kitchen setup only
+  // happens here on Home, not as an inline session step.
+  const handleStartClick = () => {
+    if (profiles.length === 0) return openAddProfileModal(true);
+    if (profiles.length === 1) return handleStartSession(profiles[0].id);
+    setPickerOpen(true);
+  };
+
+  const handleAbandon = () => {
+    if (!window.confirm("Abandon this run? It moves to your run log and can't be resumed.")) return;
     discardSession();
   };
 
@@ -90,126 +247,269 @@ export default function HomePage() {
     }
   };
 
-  return (
-    <section className="page home-page">
-      <div className="band-header">
-        <div className="band-header-left">
-          <div>
-            <p className="band-eyebrow">Kitchen Path Agent</p>
-            <h1>What are we cooking?</h1>
-          </div>
-        </div>
-      </div>
+  /* ---- hero ---- */
 
-      <div className="card hero-card">
-        {sessionLoading ? (
-          <p className="hint">Loading your session&hellip;</p>
-        ) : hasSession ? (
-          <div className="hero-actions">
-            <button type="button" className="btn btn-primary btn-hero" onClick={() => navigate("/session")}>
-              Resume cooking &rarr;
-            </button>
-            <button type="button" className="btn btn-ghost" onClick={handleDiscardSession}>
-              Discard and start new
-            </button>
+  const renderHero = () => {
+    switch (heroState) {
+      case "loading":
+        return (
+          <div className="hp-hero-state hp-hero-loading" aria-live="polite" aria-label="Loading">
+            <span className="mono hp-dots">…</span>
           </div>
-        ) : kitchensLoading ? (
-          <p className="hint">Loading your kitchens&hellip;</p>
-        ) : kitchensLoadError ? (
-          <div className="hero-actions">
-            <p className="hint">Couldn't reach the kitchen server: {kitchensLoadError}</p>
-            <button type="button" className="btn" onClick={refetchKitchens}>
+        );
+
+      case "error":
+        return (
+          <div className="hp-hero-state">
+            <div className="hp-error-block">Couldn&rsquo;t reach the kitchen server: {kitchensLoadError}</div>
+            <button type="button" className="hp-btn hp-btn-secondary" onClick={refetchKitchens}>
               Retry
             </button>
           </div>
-        ) : pickerOpen ? (
-          <div className="kitchen-picker">
-            <span className="mini-title">Which kitchen?</span>
-            <div className="kitchen-picker-list">
+        );
+
+      case "picker":
+        return (
+          <div className="hp-hero-state">
+            <span className="hp-section-title">Which kitchen?</span>
+            <div className="hp-btn-row">
               {profiles.map((p) => (
-                <button type="button" key={p.id} className="btn" onClick={() => handleStartSession(p.id)}>
+                <button type="button" key={p.id} className="hp-btn hp-btn-secondary" onClick={() => handleStartSession(p.id)}>
                   {p.name}
                 </button>
               ))}
-              <button type="button" className="btn btn-ghost" onClick={() => openAddProfileModal(true)}>
-                + Add a new kitchen
+            </div>
+            <div className="hp-btn-row">
+              <button type="button" className="hp-btn hp-btn-ghost hp-btn-ghost-accent" onClick={() => openAddProfileModal(true)}>
+                Add a new kitchen
+              </button>
+              <button type="button" className="hp-btn hp-btn-ghost" onClick={() => setPickerOpen(false)}>
+                Cancel
               </button>
             </div>
-            <button type="button" className="btn btn-ghost" onClick={() => setPickerOpen(false)}>
-              Cancel
+          </div>
+        );
+
+      case "noKitchen":
+        return (
+          <div className="hp-hero-state hp-hero-centered">
+            <KpIcon glyph="burner" size={32} className="hp-empty-glyph" />
+            <span className="hp-meta">A run needs a kitchen first.</span>
+            <button type="button" className="hp-btn hp-btn-primary hp-btn-lg" onClick={() => openAddProfileModal(true)}>
+              Add your first kitchen
             </button>
           </div>
-        ) : profiles.length === 0 ? (
-          <div className="hero-actions">
-            <p className="hint">Add a kitchen before you can start cooking.</p>
-            <button type="button" className="btn btn-primary btn-hero" onClick={() => openAddProfileModal(true)}>
-              + Add your first kitchen
+        );
+
+      case "ready":
+        return (
+          <div className="hp-hero-state">
+            {profiles.length === 1 && <span className="hp-meta">Cooking in {profiles[0].name}</span>}
+            <button type="button" className="hp-btn hp-btn-primary hp-btn-lg" onClick={handleStartClick}>
+              Start the run
             </button>
           </div>
-        ) : (
-          <div className="hero-actions">
-            <button type="button" className="btn btn-primary btn-hero" onClick={handleStartClick}>
-              Start cooking &rarr;
-            </button>
+        );
+
+      case "resumable":
+      default:
+        return renderRunCard();
+    }
+  };
+
+  const renderRunCard = () => {
+    const flames = runFlames(session);
+    const players = runPlayers(session);
+    const hasSteps = (session.recipes || []).length > 0 || (session.sharedSteps || []).length > 0;
+    const totalSec = runTotalSeconds(session);
+    const steps = session.recipes.reduce((n, r) => n + (r.working?.nodes?.length || 0), 0) + (session.sharedSteps || []).length;
+    const servings = runServings(session);
+    const stages = runStages(session);
+
+    return (
+      <div className="hp-run">
+        <div className="hp-run-body">
+          <div className="hp-run-title-row">
+            <span className="hp-section-title">{runTitle(session)}</span>
+            {flames > 0 && (
+              <Chip className="hp-chip-difficulty hp-pop" style={{ animationDelay: "200ms" }} aria-label={`Difficulty ${flames} of 3`}>
+                {Array.from({ length: flames }, (_, i) => (
+                  <KpIcon key={i} glyph="flame" size={16} />
+                ))}
+              </Chip>
+            )}
+            {players && (
+              <Chip className="hp-chip-players hp-pop" style={{ animationDelay: "260ms" }}>
+                <span className="hp-avatars" aria-hidden="true">
+                  {Array.from({ length: Math.min(players, 3) }, (_, i) => (
+                    <span key={i} className={`hp-avatar hp-avatar-${i % 3}`} />
+                  ))}
+                </span>
+                <span>
+                  <span className="mono">{players}</span> {players === 1 ? "player" : "players"}
+                </span>
+              </Chip>
+            )}
           </div>
-        )}
+
+          <span className="hp-meta">
+            {activeKitchen ? activeKitchen.name : "No kitchen"} · started {relativeTime(session.startedAt)}
+          </span>
+
+          {hasSteps && (
+            <>
+              <div className="hp-stats">
+                <StatTile value={formatClock(totalSec)} label="total time" icon="timer" delay={320} />
+                <StatTile value={steps} label="steps" delay={380} />
+                {servings != null && <StatTile value={servings} label="servings" delay={440} />}
+              </div>
+              <PhaseBar counts={runPhaseCounts(session)} />
+            </>
+          )}
+
+          <StagePath stages={stages} />
+        </div>
+
+        <div className="hp-run-actions">
+          <button type="button" className="hp-btn hp-btn-primary hp-btn-lg" onClick={() => navigate("/session")}>
+            Resume the run
+          </button>
+          <button type="button" className="hp-btn hp-btn-ghost hp-btn-abandon" onClick={handleAbandon}>
+            Abandon run
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  /* ---- render ---- */
+
+  return (
+    <section className="home-v4">
+      <header className="hp-title-row hp-reveal">
+        <div className="hp-title-text">
+          <h1>Tonight&rsquo;s run</h1>
+          <span className="hp-sub">{kitchenTagline(taglineKitchen)}</span>
+        </div>
+        <img src={welcomeBand} alt="" aria-hidden="true" className="hp-band" />
+      </header>
+
+      <div className="hp-hero hp-reveal" style={{ animationDelay: "80ms" }}>
+        {renderHero()}
       </div>
 
-      <div className="card list-card">
-        <div className="list-card-head">
-          <span className="mini-title">Your kitchens</span>
-          <button type="button" className="btn" onClick={() => openAddProfileModal(false)}>
-            + Add kitchen
+      <section className="hp-card hp-reveal" style={{ animationDelay: "160ms" }} aria-labelledby="hp-kitchens-title">
+        <div className="hp-card-head">
+          <span id="hp-kitchens-title" className="hp-section-title">
+            Your kitchens
+          </span>
+          <button type="button" className="hp-btn hp-btn-secondary" onClick={() => openAddProfileModal(false)}>
+            Add kitchen
           </button>
         </div>
         {kitchensLoading ? (
-          <p className="hint">Loading&hellip;</p>
+          <div className="hp-row hp-row-empty">
+            <span className="mono hp-dots">…</span>
+          </div>
         ) : kitchensLoadError ? (
-          <p className="hint">Couldn't load kitchens.</p>
+          <div className="hp-row hp-row-empty">
+            <span className="hp-meta">Couldn&rsquo;t load kitchens.</span>
+          </div>
         ) : profiles.length === 0 ? (
-          <p className="hint">No kitchens yet — add one to get started.</p>
+          <div className="hp-row hp-row-empty">
+            <span className="hp-meta">No kitchens yet — add one to start a run.</span>
+          </div>
         ) : (
-          <ul className="entity-list">
-            {profiles.map((p) => (
-              <li className="entity-row" key={p.id}>
-                <div className="entity-row-main">
-                  <span className="entity-row-title">{p.name}</span>
-                  <span className="tag mono">{equipmentSummary(p)}</span>
-                </div>
-                <button type="button" className="btn btn-ghost" onClick={() => setModalProfile(p)}>
-                  Edit
-                </button>
-              </li>
-            ))}
+          <ul className="hp-list">
+            {profiles.map((p, i) => {
+              const inPlay = session?.kitchenProfileId === p.id;
+              return (
+                <li className="hp-row hp-row-kitchen" key={p.id}>
+                  <KpIcon glyph="burner" size={24} className="hp-row-lead" />
+                  <span className="hp-row-main">
+                    <span className="hp-row-title-line">
+                      <span className="hp-row-title">{p.name}</span>
+                      {inPlay && <Chip className="hp-chip-status hp-chip-inplay">In play</Chip>}
+                    </span>
+                    <LoadoutChips profile={p} delayBase={200 + i * 60} />
+                  </span>
+                  <button type="button" className="hp-btn hp-btn-ghost hp-btn-ghost-accent" onClick={() => setModalProfile(p)}>
+                    Edit
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
-      </div>
+      </section>
 
-      <div className="card list-card">
-        <div className="list-card-head">
-          <span className="mini-title">Recent sessions</span>
+      <section className="hp-card hp-reveal" style={{ animationDelay: "240ms" }} aria-labelledby="hp-runs-title">
+        <div className="hp-card-head">
+          <span id="hp-runs-title" className="hp-section-title">
+            Recent runs
+          </span>
+          {runLog.rows.length > 0 && <span className="mono hp-record">{runLog.line}</span>}
         </div>
-        {state.sessionHistory.length === 0 ? (
-          <p className="hint">Nothing here yet — your first session will show up after you finish or leave one.</p>
+        {runLog.rows.length === 0 ? (
+          <div className="hp-row hp-row-empty hp-row-empty-stack">
+            <KpIcon glyph="trophy" size={32} className="hp-empty-glyph" />
+            <span className="hp-meta">Your first run shows up here.</span>
+          </div>
         ) : (
-          <ul className="entity-list">
-            {state.sessionHistory.map((s) => (
-              <li className="entity-row" key={s.id}>
-                <div className="entity-row-main">
-                  <span className="entity-row-title">{s.dish || "Untitled cook"}</span>
-                  <span className="hint">{formatDate(s.endedAt)}</span>
-                </div>
-                <span className={`tag ${s.status === "completed" ? "tag-difficulty-low" : ""}`}>{s.status}</span>
-              </li>
-            ))}
-          </ul>
+          <ol className="hp-list">
+            {runLog.rows.map((r, i) => {
+              const isBest = r.status === "completed" && runLog.bestSec != null && r.durationSec === runLog.bestSec;
+              const metaBits = [
+                r.kitchenName,
+                r.servings != null ? (
+                  <>
+                    <span className="mono">{r.servings}</span> servings
+                  </>
+                ) : null,
+                r.endedAt ? <span className="mono">{formatShortDate(r.endedAt)}</span> : null,
+              ].filter(Boolean);
+              return (
+                <li className="hp-row hp-row-run hp-reveal" style={{ animationDelay: `${300 + i * 60}ms` }} key={r.id}>
+                  <span className="mono hp-rank">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="hp-row-main">
+                    <span className="hp-row-title-line">
+                      <span className="hp-row-title">{r.title}</span>
+                      {isBest && <KpIcon glyph="trophy" size={20} className="hp-trophy" aria-label="Fastest run" />}
+                    </span>
+                    <span className="hp-meta">
+                      {metaBits.map((bit, j) => (
+                        <span key={j}>
+                          {j > 0 && " · "}
+                          {bit}
+                        </span>
+                      ))}
+                    </span>
+                  </span>
+                  {r.durationSec != null && (
+                    <span className={`mono hp-duration ${r.status === "completed" ? "" : "is-muted"}`}>{formatClock(r.durationSec)}</span>
+                  )}
+                  {r.status === "completed" ? (
+                    <Chip className="hp-chip-status hp-chip-done hp-pop" style={{ animationDelay: `${360 + i * 60}ms` }}>
+                      <KpIcon glyph="checkmark-burst" size={16} />
+                      <span className="hp-chip-text">Done</span>
+                    </Chip>
+                  ) : (
+                    <Chip className="hp-chip-status hp-chip-waiting">
+                      <span className="hp-dot" />
+                      <span className="hp-chip-text">Abandoned</span>
+                    </Chip>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
         )}
-      </div>
+      </section>
 
       {modalProfile !== undefined && (
         <KitchenProfileFormModal
           profile={modalProfile}
-          notice={startAfterAdd ? "A kitchen is required before you can start a cooking session." : null}
+          notice={startAfterAdd ? "A run needs a kitchen first." : null}
           error={modalError}
           onSave={saveProfile}
           onDelete={deleteProfile}

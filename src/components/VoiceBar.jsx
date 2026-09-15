@@ -7,7 +7,7 @@ import "./VoiceBar.css";
 
 export default function VoiceBar() {
   const { state, dispatch } = useAppState();
-  const muted = state.voice.muted;
+  const { muted, hint } = state.voice;
   const status = muted ? "Muted" : "Listening";
 
   const toggleMuted = () => dispatch({ type: "voice/setMuted", payload: { muted: !muted } });
@@ -30,8 +30,9 @@ export default function VoiceBar() {
           {muted ? "MIC MUTED" : "STANDING BY"}
         </span>
         <span className="voice-transcript-text">
-          {muted ? "Voice check-ins are paused." : "Say the word when you're ready for the next step."}
+          {muted ? "Voice check-ins are paused." : hint?.line || "Say the word when you're ready for the next step."}
         </span>
+        {!muted && hint?.sub && <span className="voice-transcript-sub">{hint.sub}</span>}
       </div>
 
       <div className="voice-meter" aria-hidden="true">

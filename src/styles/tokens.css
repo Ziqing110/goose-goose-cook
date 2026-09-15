@@ -188,6 +188,11 @@ button { font: inherit; cursor: pointer; }
   padding: 24px;
   box-shadow: var(--shadow-sm);
 }
+/* Phones: 24px of padding on each side eats a fifth of the width, so
+   pill rows (materials checklist) collapse to one pill per line. */
+@media (max-width: 480px) {
+  .card { padding: 16px; }
+}
 
 .btn {
   border: 1px solid var(--line-strong);
@@ -338,4 +343,83 @@ button { font: inherit; cursor: pointer; }
   text-transform: uppercase;
   color: var(--ink-soft);
   margin: 0 0 2px;
+}
+
+/* ---------------------------------------------------------------
+   Kitchen Path Agent Design System v1.0 tokens (kp-*)
+   Used by the Home v4 page (design/claude-design-home-*.md). Kept
+   namespaced so the older Figtree/cream pages keep their own look
+   until they're migrated. Light-only in the system; the dark block
+   just keeps Home readable under the app's dark theme.
+----------------------------------------------------------------*/
+:root {
+  --kp-bg: #ffffff;
+  --kp-bg-secondary: #f7f6f3;
+  --kp-bg-tertiary: #f2f1ee;
+  --kp-divider: #e8e6e1;
+  --kp-text: #1a1a1a;
+  --kp-text-secondary: #6e6e6b;
+  --kp-text-tertiary: #a3a29e;
+
+  --kp-accent: #d4552a;
+  --kp-accent-hover: #c64e26;
+  --kp-accent-tint: #fbeee8;
+
+  --kp-status-done: #2e7d32;
+  --kp-status-waiting: #c9c7c1;
+  --kp-status-live: #34c759;
+
+  --kp-error-bg: #fdecec;
+  --kp-error-text: #8b1a1a;
+  --kp-warning-bg: #fff4e5;
+  --kp-warning-text: #7a4a00;
+
+  --kp-phase-prep: #8a8985;
+  --kp-phase-cook: #d4552a;
+  --kp-phase-plate: #5f9a2a;
+
+  --kp-cook-a: #2f7dd1;
+  --kp-cook-b: #e58a1f;
+
+  --kp-voice-bg: #111111;
+  --kp-voice-ai: #bdb6f0;
+
+  --kp-shadow-modal: 0 24px 64px rgba(26, 26, 26, 0.18);
+
+  --kp-font: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --kp-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --kp-bg: #161616;
+    --kp-bg-secondary: #1f1f1e;
+    --kp-bg-tertiary: #2a2a28;
+    --kp-divider: #333331;
+    --kp-text: #f2f1ee;
+    --kp-text-secondary: #a3a29e;
+    --kp-text-tertiary: #6e6e6b;
+    --kp-accent-tint: #3a2119;
+    --kp-status-waiting: #4a4946;
+    --kp-error-bg: #3a1a1a;
+    --kp-error-text: #f5b5b5;
+    --kp-warning-bg: #3a2a10;
+    --kp-warning-text: #f2cf8a;
+  }
+}
+
+:root[data-theme="dark"] {
+  --kp-bg: #161616;
+  --kp-bg-secondary: #1f1f1e;
+  --kp-bg-tertiary: #2a2a28;
+  --kp-divider: #333331;
+  --kp-text: #f2f1ee;
+  --kp-text-secondary: #a3a29e;
+  --kp-text-tertiary: #6e6e6b;
+  --kp-accent-tint: #3a2119;
+  --kp-status-waiting: #4a4946;
+  --kp-error-bg: #3a1a1a;
+  --kp-error-text: #f5b5b5;
+  --kp-warning-bg: #3a2a10;
+  --kp-warning-text: #f2cf8a;
 }

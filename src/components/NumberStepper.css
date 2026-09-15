@@ -1,3 +1,5 @@
+.stepper-label { display: inline-flex; align-items: center; gap: 6px; }
+
 .number-stepper {
   display: inline-flex;
   align-items: stretch;

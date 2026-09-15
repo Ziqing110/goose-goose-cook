@@ -12,6 +12,10 @@
   background: var(--ink);
   color: var(--bg);
   box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18);
+  /* Everything translucent in the bar mixes from this, so it inverts
+     correctly with the theme (in dark mode the bar is light-on-dark
+     flipped: cream bar, dark text). */
+  --vb-fg: var(--bg);
 }
 
 .voice-avatar {
@@ -22,8 +26,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--bg);
+  background: color-mix(in srgb, var(--vb-fg) 10%, transparent);
+  color: var(--vb-fg);
 }
 
 .voice-transcript {
@@ -37,11 +41,19 @@
   font-size: 0.68rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(251, 246, 236, 0.55);
+  color: color-mix(in srgb, var(--vb-fg) 55%, transparent);
 }
 .voice-transcript-text {
   font-size: 1rem;
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-transcript-sub {
+  font-size: 0.85rem;
+  color: var(--ai);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -58,7 +70,7 @@
   width: 3px;
   height: 8px;
   border-radius: 2px;
-  background: rgba(251, 246, 236, 0.3);
+  background: color-mix(in srgb, var(--vb-fg) 30%, transparent);
 }
 .meter-bar.is-live {
   background: var(--cook-sage);
@@ -87,23 +99,23 @@
   font-weight: 600;
 }
 .voice-status-pill.is-listening { background: var(--cook-sage-soft); color: var(--cook-sage); }
-.voice-status-pill.is-muted { background: rgba(251, 246, 236, 0.12); color: rgba(251, 246, 236, 0.7); }
+.voice-status-pill.is-muted { background: color-mix(in srgb, var(--vb-fg) 12%, transparent); color: color-mix(in srgb, var(--vb-fg) 70%, transparent); }
 
 .voice-mute-btn {
   flex: none;
   height: 44px;
   padding: 0 20px;
   border-radius: var(--radius-pill);
-  border: 1px solid rgba(251, 246, 236, 0.3);
+  border: 1px solid color-mix(in srgb, var(--vb-fg) 30%, transparent);
   background: transparent;
-  color: var(--bg);
+  color: var(--vb-fg);
   font: inherit;
   font-weight: 600;
   font-size: 0.85rem;
   cursor: pointer;
   transition: background 0.15s ease;
 }
-.voice-mute-btn:hover { background: rgba(251, 246, 236, 0.1); }
+.voice-mute-btn:hover { background: color-mix(in srgb, var(--vb-fg) 10%, transparent); }
 
 @media (max-width: 720px) {
   .voice-bar { padding: 0 16px; gap: 12px; }

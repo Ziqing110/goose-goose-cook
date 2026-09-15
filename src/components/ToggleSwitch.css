@@ -8,6 +8,8 @@
   cursor: pointer;
 }
 
+.toggle-label { display: inline-flex; align-items: center; gap: 8px; }
+
 .toggle {
   position: relative;
   width: 40px;

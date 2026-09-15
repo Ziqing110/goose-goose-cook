@@ -54,7 +54,10 @@ const initialState = {
   sessionStatus: "idle", // "idle" | "loading" | "loaded" | "error"
   sessionError: null,
   sessionHistory: [],
-  voice: { muted: false }, // shared mic state — VoiceBar and the conversation answer bar both read/write this
+  // Shared mic state — VoiceBar and the conversation answer bar both
+  // read/write `muted`. `hint` is the page-provided announcer copy
+  // ({ line, sub } or null) the VoiceBar shows instead of its default.
+  voice: { muted: false, hint: null },
 };
 
 function reducer(state, action) {
@@ -175,6 +178,8 @@ function reducer(state, action) {
 
     case "voice/setMuted":
       return { ...state, voice: { ...state.voice, muted: action.payload.muted } };
+    case "voice/setHint":
+      return { ...state, voice: { ...state.voice, hint: action.payload.hint } };
 
     default:
       return state;
