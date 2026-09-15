@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
-import { createRun } from "../utils/liveCook.js";
+import { createRun, runProgress } from "../utils/liveCook.js";
 import { mergeRecipesForDisplay, formatDuration } from "../utils/graphLayout.js";
 import { computeSchedule, computeOpeningAssignment, EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
 import { cookColorKey } from "../utils/cooks.js";
@@ -78,8 +78,14 @@ export default function SchedulePage() {
     saveRunNow(createRun({ nodes, mode, schedule, opening, now: new Date() }));
     navigate("/session/live-cook");
   };
-  const startOver = () => {
-    if (!window.confirm("Discard this cook's progress and go back to the plan?")) return;
+  // Throwing away a run in progress is the most destructive thing on
+  // this page and it used to ask with one vague line. Name the cost:
+  // what's already been cooked is what's actually being lost.
+  const discardRun = () => {
+    const progress = runProgress(run, nodes, Date.now());
+    const done = `${progress.done} completed step${progress.done === 1 ? "" : "s"}`;
+    const elapsed = formatDuration(progress.elapsedSec);
+    if (!window.confirm(`Throw away this cook? You lose ${done} and ${elapsed} on the clock, and it can't be undone.`)) return;
     saveRunNow(null);
   };
 
@@ -356,8 +362,8 @@ export default function SchedulePage() {
         </div>
         <div className="band-footer-right">
           {run && (
-            <button className="btn btn-ghost" onClick={startOver}>
-              Start over
+            <button className="btn btn-ghost btn-danger" onClick={discardRun}>
+              Throw away this cook
             </button>
           )}
           <button

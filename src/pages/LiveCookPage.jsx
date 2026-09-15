@@ -291,6 +291,13 @@ export default function LiveCookPage() {
           {!isCompetition && progress.driftSec > 30 && (
             <span className="tag mono live-drift">{clock(progress.driftSec)} behind plan</span>
           )}
+          {/* The plan was previously only reachable by browser-Back,
+              which nobody finds. Leaving doesn't end the run. */}
+          {!finished && (
+            <button type="button" className="btn btn-ghost" onClick={() => navigate("/session/schedule")}>
+              See the plan
+            </button>
+          )}
         </div>
       </div>
 
