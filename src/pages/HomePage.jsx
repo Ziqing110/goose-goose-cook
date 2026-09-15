@@ -128,6 +128,7 @@ export default function HomePage() {
     editKitchenProfile,
     removeKitchenProfile,
     refetchKitchens,
+    refetchSessions,
     startSession,
     discardSession,
     removeRunFromHistory,
@@ -143,6 +144,7 @@ export default function HomePage() {
   const sessionLoading = state.sessionStatus === "idle" || state.sessionStatus === "loading";
   const kitchensLoading = state.kitchensStatus === "idle" || state.kitchensStatus === "loading";
   const kitchensLoadError = state.kitchensStatus === "error" ? state.kitchensError : null;
+  const sessionLoadError = state.sessionStatus === "error" ? state.sessionError : null;
 
   const activeKitchen = session ? profiles.find((p) => p.id === session.kitchenProfileId) || null : null;
   const taglineKitchen = activeKitchen || (profiles.length === 1 ? profiles[0] : null);
@@ -150,7 +152,9 @@ export default function HomePage() {
   // Which hero state we're in, so the VoiceBar copy can follow it.
   const heroState = sessionLoading
     ? "loading"
-    : session
+    : sessionLoadError
+      ? "sessionError"
+      : session
       ? "resumable"
       : kitchensLoading
         ? "loading"
@@ -186,6 +190,8 @@ export default function HomePage() {
         line: "Say “start the run” and I'll set the main line.",
         sub: profiles.length === 1 ? profiles[0].name : null,
       };
+    } else if (heroState === "sessionError") {
+      hint = { line: "I can't read the run log right now.", sub: "The kitchen server didn't answer — try again." };
     } else if (heroState === "noKitchen") {
       hint = { line: "Tell me about your kitchen and I'll build it.", sub: null };
     }
@@ -269,6 +275,23 @@ export default function HomePage() {
           <div className="hp-hero-state">
             <div className="hp-error-block">Couldn&rsquo;t reach the kitchen server: {kitchensLoadError}</div>
             <button type="button" className="hp-btn hp-btn-secondary" onClick={refetchKitchens}>
+              Retry
+            </button>
+          </div>
+        );
+
+      // Deliberately offers no way to start a run: a failed fetch says
+      // nothing about whether a run is already in progress, and starting
+      // one closes out any other active session server-side. Retrying is
+      // the only safe move.
+      case "sessionError":
+        return (
+          <div className="hp-hero-state">
+            <div className="hp-error-block">
+              Couldn&rsquo;t load your runs: {sessionLoadError}. If a cook is already in progress it&rsquo;s still
+              safe — this is just the reading of it.
+            </div>
+            <button type="button" className="hp-btn hp-btn-secondary" onClick={refetchSessions}>
               Retry
             </button>
           </div>

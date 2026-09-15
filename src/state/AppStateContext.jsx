@@ -8,7 +8,7 @@
 // stays synchronous/optimistic throughout: dispatches update local state
 // immediately, and a debounced effect below quietly persists the
 // session (+ its recipes) to the server in the background.
-import { createContext, useContext, useEffect, useRef, useState, useReducer } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, useReducer } from "react";
 import * as kitchensApi from "../api/kitchens.js";
 import * as sessionsApi from "../api/sessions.js";
 
@@ -213,11 +213,11 @@ export function AppStateProvider({ children }) {
 
   // Sessions live in the backend too — resume an in-progress one (if
   // any) and load history for Home's "recent sessions" list.
-  useEffect(() => {
+  const loadSessions = useCallback(() => {
     dispatch({ type: "session/loading" });
     // The active session is needed in full; history only feeds a list,
     // so it uses the compact projection (no photos or transcripts).
-    Promise.all([sessionsApi.listSessions(["active"]), sessionsApi.listSessionSummaries(["completed", "abandoned"])])
+    return Promise.all([sessionsApi.listSessions(["active"]), sessionsApi.listSessionSummaries(["completed", "abandoned"])])
       .then(([activeSessions, history]) => {
         const active = activeSessions[0] || null;
         if (active) {
@@ -228,8 +228,11 @@ export function AppStateProvider({ children }) {
         dispatch({ type: "sessionHistory/hydrate", payload: { history } });
       })
       .catch((err) => dispatch({ type: "session/error", payload: { error: err.message } }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    loadSessions();
+  }, [loadSessions]);
 
   // Debounced background sync: whenever the session changes, quietly
   // PATCH its top-level fields and any already-created recipe instance
@@ -418,6 +421,7 @@ export function AppStateProvider({ children }) {
     editKitchenProfile,
     removeKitchenProfile,
     refetchKitchens,
+    refetchSessions: loadSessions,
     startSession,
     discardSession,
     addRecipeToSession,
