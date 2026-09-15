@@ -102,3 +102,6 @@
   border-style: dashed;
   min-height: 140px;
 }
+
+.cook-name-input.is-invalid { border-color: var(--crit); }
+.cook-name-error { font-size: 12px; color: var(--crit); text-align: center; }

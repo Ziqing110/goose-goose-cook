@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
-import { cookColorKey, areCooksBound, voicePhraseFor } from "../utils/cooks.js";
+import {
+  cookColorKey,
+  areCooksBound,
+  voicePhraseFor,
+  duplicateCookNames,
+  MAX_COOK_NAME_LENGTH,
+} from "../utils/cooks.js";
 import "./VoiceBindingPage.css";
 
 // No real audio anywhere in this app — voice binding is simulated the
@@ -45,6 +51,20 @@ export default function VoiceBindingPage() {
     setCooks(cooks.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   };
 
+  // The phrase each cook reads has their name in it ("I'm Mia, and..."),
+  // so a rename makes the recorded sample say the wrong thing — the
+  // binding has to be taken again rather than silently carried over.
+  const renameCook = (id, name) => {
+    setCooks(
+      cooks.map((c) => {
+        if (c.id !== id) return c;
+        const changed = c.name.trim() !== name.trim();
+        return { ...c, name, bound: changed ? false : c.bound };
+      })
+    );
+    if (recordingCookId === id) stopRecording();
+  };
+
   const addCook = () => {
     if (cooks.length >= MAX_COOKS) return;
     setCooks([...cooks, { id: crypto.randomUUID(), name: "", bound: false }]);
@@ -82,6 +102,8 @@ export default function VoiceBindingPage() {
 
   const bound = areCooksBound(cooks);
   const boundCount = cooks.filter((c) => c.name.trim() && c.bound).length;
+  const duplicates = duplicateCookNames(cooks);
+  const isDuplicate = (cook) => duplicates.has(cook.name.trim().toLowerCase());
 
   return (
     <section className="page voice-binding-page">
@@ -123,11 +145,16 @@ export default function VoiceBindingPage() {
                 </div>
                 <input
                   type="text"
-                  className="cook-name-input"
+                  className={`cook-name-input ${isDuplicate(cook) ? "is-invalid" : ""}`}
                   placeholder={`Cook ${index + 1} — name`}
                   value={cook.name}
-                  onChange={(e) => updateCook(cook.id, { name: e.target.value })}
+                  maxLength={MAX_COOK_NAME_LENGTH}
+                  aria-invalid={isDuplicate(cook)}
+                  onChange={(e) => renameCook(cook.id, e.target.value)}
                 />
+                {isDuplicate(cook) && (
+                  <span className="cook-name-error">Two cooks can&rsquo;t share a name — I&rsquo;d never know who&rsquo;s talking.</span>
+                )}
                 {(isRecording || (hasName && !cook.bound)) && (
                   <div className={`cook-phrase ${isRecording ? "is-active" : ""}`}>
                     <span className="mini-title">Read this aloud</span>
@@ -170,7 +197,9 @@ export default function VoiceBindingPage() {
 
       <div className="band-footer">
         <div className="band-footer-left">
-          <span className="hint">Voices stay on this device.</span>
+          <span className="hint">
+            {duplicates.size > 0 ? "Give each cook a different name to carry on." : "Voices stay on this device."}
+          </span>
         </div>
         <div className="band-footer-right">
           <button
