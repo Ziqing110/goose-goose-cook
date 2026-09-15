@@ -280,6 +280,12 @@ button { font: inherit; cursor: pointer; }
   flex: none;
 }
 .cook-avatar-sm { width: 34px; height: 34px; font-size: 0.85rem; }
+
+/* Cook colour as text only, for places where a filled chip would read as
+   a progress bar rather than a number. */
+.ink-mia { color: var(--cook-mia); }
+.ink-leo { color: var(--cook-leo); }
+.ink-sage { color: var(--cook-sage); }
 .tag-difficulty-low { background: var(--success-soft); color: var(--success-soft-ink); border-color: transparent; }
 .tag-difficulty-medium { background: var(--warning-soft); color: var(--warning-soft-ink); border-color: transparent; }
 .tag-difficulty-high { background: var(--crit-soft); color: var(--crit-soft-ink); border-color: transparent; }

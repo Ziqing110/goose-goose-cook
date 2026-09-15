@@ -470,6 +470,14 @@ export default function HomePage() {
               ].filter(Boolean);
               return (
                 <li className="hp-row hp-row-run hp-reveal" style={{ animationDelay: `${300 + i * 60}ms` }} key={r.id}>
+                  {/* Overlay rather than wrapping the row, so the layout
+                      above stays exactly as designed. */}
+                  <button
+                    type="button"
+                    className="hp-row-open"
+                    onClick={() => navigate(`/cook/${r.id}`)}
+                    aria-label={`Open the summary card for ${r.title}`}
+                  />
                   <span className="mono hp-rank">{String(i + 1).padStart(2, "0")}</span>
                   <span className="hp-row-main">
                     <span className="hp-row-title-line">

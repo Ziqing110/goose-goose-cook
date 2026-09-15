@@ -1,0 +1,59 @@
+.summary-page { display: flex; flex-direction: column; gap: 16px; padding-bottom: calc(var(--voice-bar-height) + 24px); }
+
+.summary-headline {
+  margin: 0;
+  font-size: 1.35rem;
+  font-style: italic;
+  color: var(--ai-soft-ink);
+}
+.summary-error { color: var(--crit); }
+
+.summary-hero { padding: 0; overflow: hidden; }
+.summary-photo { display: block; width: 100%; max-height: 460px; object-fit: cover; }
+.summary-hero-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 20px;
+}
+
+.summary-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 48px 24px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.scoreboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+
+.score-panel { display: flex; flex-direction: column; gap: 6px; border-width: 2px; }
+.cook-border-mia { border-color: var(--cook-mia); }
+.cook-border-leo { border-color: var(--cook-leo); }
+.cook-border-sage { border-color: var(--cook-sage); }
+.score-panel.is-winner { box-shadow: 0 0 0 3px var(--success-soft); }
+
+.score-head { display: flex; align-items: center; gap: 10px; }
+.score-name { font-weight: 700; font-size: 1.1rem; }
+.score-head .tag { margin-left: auto; }
+
+/* Big, tabular, game-result numbers — same treatment as the live leaderboard. */
+.score-points { font-size: 3.4rem; font-weight: 700; line-height: 1.1; background: none; }
+.score-sub { margin-top: -4px; }
+.score-quip { margin: 6px 0 0; font-size: 0.95rem; color: var(--ink-soft); font-style: italic; }
+
+.ledger { display: flex; flex-direction: column; gap: 12px; }
+.ledger-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+.ledger-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ledger-col-head { font-weight: 700; padding: 4px 10px; border-radius: var(--radius-pill); align-self: flex-start; }
+.ledger-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+.ledger-list li { display: flex; justify-content: space-between; gap: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.ledger-list li:last-child { border-bottom: none; }
+.ledger-list li.is-skipped .ledger-label { text-decoration: line-through; color: var(--ink-faint); }
+.ledger-label { font-weight: 600; min-width: 0; }
+
+.band-footer-left { gap: 10px; }

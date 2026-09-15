@@ -359,6 +359,19 @@ export function AppStateProvider({ children }) {
     }
   };
 
+  // Mirrors discardSession. Without the PATCH the row stays `active`
+  // with a null ended_at, so a finished cook comes back as the *active*
+  // session on reload and never reaches history.
+  const finishSession = (summary) => {
+    if (!state.session) return;
+    const sessionId = state.session.id;
+    const endedAt = new Date().toISOString();
+    dispatch({ type: "session/finish", payload: { status: "completed" } });
+    sessionsApi
+      .updateSession(sessionId, { status: "completed", endedAt, summary })
+      .catch((err) => console.error("Failed to persist finished session:", err));
+  };
+
   // Live-cook writes skip the 600ms debounce. A run action records
   // something that already happened in the physical world (the pot went
   // on), so losing it to a refresh costs more than a redundant PATCH —
@@ -374,6 +387,7 @@ export function AppStateProvider({ children }) {
     state,
     dispatch,
     saveRunNow,
+    finishSession,
     addKitchenProfile,
     editKitchenProfile,
     removeKitchenProfile,

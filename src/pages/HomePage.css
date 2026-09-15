@@ -249,7 +249,22 @@ body:has(.home-v4) { background: var(--kp-bg); }
   padding: 12px 20px;
   border-top: 1px solid var(--kp-divider);
 }
-.hp-row-run { padding: 8px 20px; }
+.hp-row-run { padding: 8px 20px; position: relative; }
+
+/* Past runs open their summary card. The hit area is an overlay so the
+   row's own layout is untouched; the content sits above it and lets
+   clicks through. */
+.hp-row-open {
+  position: absolute;
+  inset: 0;
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.hp-row-open:hover { background: var(--kp-bg-tertiary); }
+.hp-row-open:focus-visible { outline: 2px solid var(--kp-accent); outline-offset: -2px; }
+.hp-row-run > *:not(.hp-row-open) { position: relative; pointer-events: none; }
 .hp-row-empty { justify-content: center; padding: 20px; }
 .hp-row-empty-stack { flex-direction: column; gap: 8px; }
 .hp-row-lead { flex: 0 0 auto; }

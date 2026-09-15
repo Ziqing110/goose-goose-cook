@@ -8,6 +8,7 @@ import RecipeGraphPage from "./pages/RecipeGraphPage.jsx";
 import VoiceBindingPage from "./pages/VoiceBindingPage.jsx";
 import SchedulePage from "./pages/SchedulePage.jsx";
 import LiveCookPage from "./pages/LiveCookPage.jsx";
+import CookSummaryPage from "./pages/CookSummaryPage.jsx";
 import { useAppState } from "./state/AppStateContext.jsx";
 import { isFullyApproved } from "./utils/graphLayout.js";
 import { areCooksBound } from "./utils/cooks.js";
@@ -158,6 +159,11 @@ export default function App() {
             }
           />
         </Route>
+
+        {/* Outside /session/* deliberately: the session guards bounce to
+            Home the moment a cook is saved, which would make the card
+            unreachable exactly when you want it. */}
+        <Route path="/cook/:sessionId" element={<CookSummaryPage />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

@@ -4,7 +4,7 @@
 //
 //   node scripts/screenshot-flow.mjs [outDir]
 import { chromium } from "playwright";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const OUT = process.argv[2] || "screenshots";
@@ -224,6 +224,45 @@ if (await claim.isVisible().catch(() => false)) {
 await click(/Finish early|Finish cooking/);
 await page.waitForTimeout(1200);
 await shot("live-summary");
+
+// --- summary card ---
+await click(/Save & see the card/);
+await page.waitForTimeout(1500);
+await shot("summary-empty");
+
+// Upload a generated fixture image rather than shipping a binary.
+const fixture = path.join(OUT, "fixture-food.png");
+const png = await page.evaluate(() => {
+  const c = document.createElement("canvas");
+  c.width = 900;
+  c.height = 600;
+  const x = c.getContext("2d");
+  const g = x.createLinearGradient(0, 0, 900, 600);
+  g.addColorStop(0, "#c0503c");
+  g.addColorStop(1, "#e6b35c");
+  x.fillStyle = g;
+  x.fillRect(0, 0, 900, 600);
+  x.fillStyle = "rgba(255,255,255,0.85)";
+  x.font = "bold 64px sans-serif";
+  x.fillText("dinner", 60, 320);
+  return c.toDataURL("image/png").split(",")[1];
+});
+writeFileSync(fixture, Buffer.from(png, "base64"));
+await page.setInputFiles('input[type="file"]', fixture);
+await page.waitForTimeout(2500);
+await shot("summary-with-photo");
+
+// Back to Home, then re-open the same card from the history list.
+await click(/Back to Home/);
+await page.waitForTimeout(1200);
+await shot("home-with-history");
+
+const historyRow = page.locator(".entity-row-link").first();
+if (await historyRow.isVisible().catch(() => false)) {
+  await historyRow.click();
+  await page.waitForTimeout(1500);
+  await shot("summary-reopened");
+}
 
 await browser.close();
 console.log(`\n${shots.length} screenshots in ${OUT}/`);

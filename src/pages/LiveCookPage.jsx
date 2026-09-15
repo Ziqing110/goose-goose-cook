@@ -1,7 +1,7 @@
-// The screen people actually cook from. Read at ~1.5m with wet hands,
+﻿// The screen people actually cook from. Read at ~1.5m with wet hands,
 // so: big type, 64px targets, and no affordance that depends on hover.
 // Every voice command has a button sitting next to the thing it acts on,
-// and both paths call the same handlers — parity is structural, not a
+// and both paths call the same handlers â€” parity is structural, not a
 // discipline.
 //
 // Sub-components live in this file rather than their own (same pattern as
@@ -19,9 +19,10 @@ import {
   applyUndo, endRun, appendTranscript, scoreStep, DIFFICULTY_POINTS,
 } from "../utils/liveCook.js";
 import { parseCommand, HELP_TEXT } from "../utils/voiceCommands.js";
+import { buildSummary } from "../utils/summaryCard.js";
 import "./LiveCookPage.css";
 
-/** One clock for the page — not one per card. */
+/** One clock for the page â€” not one per card. */
 function useNow(paused) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -38,7 +39,7 @@ const clock = (sec) => {
 };
 
 export default function LiveCookPage() {
-  const { state, dispatch, saveRunNow } = useAppState();
+  const { state, saveRunNow, finishSession } = useAppState();
   const navigate = useNavigate();
   const { recipes, sharedSteps, cooks } = state.session;
   const kitchenProfile = state.kitchenProfiles.find((p) => p.id === state.session.kitchenProfileId) || null;
@@ -100,7 +101,7 @@ export default function LiveCookPage() {
     const at = new Date().toISOString();
     const v = stepVariance(byId[stepId], { ...run.steps[stepId], endedAt: at });
     let next = applyDone({ run, stepId, cookId, at, source });
-    // Recompile the rest of the plan on every completion — real times
+    // Recompile the rest of the plan on every completion â€” real times
     // diverge from estimates, so what's left genuinely changes shape.
     if (!isCompetition) next = replan({ nodes, run: next, cooks, kitchenProfile });
     const pts = scoreStep(byId[stepId], { record: next.steps[stepId], run: next, nodes, cooks }).points;
@@ -144,7 +145,7 @@ export default function LiveCookPage() {
         already_claimed: verdict.tie
           ? `Dead heat. ${name(verdict.holderCookId)} is behind, so ${name(verdict.holderCookId)} takes it.`
           : `${name(verdict.holderCookId)} called it first.`,
-        not_ready: `Not yet — that needs ${(verdict.blockedBy || []).map((d) => byId[d]?.label).join(", ")} first.`,
+        not_ready: `Not yet â€” that needs ${(verdict.blockedBy || []).map((d) => byId[d]?.label).join(", ")} first.`,
         already_done: "That one's already finished.",
         noop: "You've already got that one.",
         unknown_step: "I don't know that step.",
@@ -163,13 +164,13 @@ export default function LiveCookPage() {
     if (result.rejected) {
       const text = {
         too_late: "Too late to undo that one.",
-        downstream_started: "Can't undo — something downstream already started.",
+        downstream_started: "Can't undo â€” something downstream already started.",
         nothing: "Nothing of yours to undo.",
       }[result.rejected];
       commit(say(run, text));
       return;
     }
-    commit(say(result.run, `Rolled back — ${result.label} is active again.`));
+    commit(say(result.run, `Rolled back â€” ${result.label} is active again.`));
   };
 
   const doFinish = () => {
@@ -177,9 +178,17 @@ export default function LiveCookPage() {
     commit(endRun({ run, nodes, at: new Date().toISOString() }));
   };
 
-  const saveAndExit = () => {
-    dispatch({ type: "session/finish", payload: { status: "completed" } });
-    navigate("/");
+  // Freeze the card, persist it with the session, then hand over to it.
+  const saveAndSeeCard = () => {
+    const sessionId = state.session.id;
+    const summary = buildSummary({
+      outcome: runOutcome(run, nodes, cooks),
+      cooks,
+      dish: approved?.title || "Untitled cook",
+      mode: run.mode,
+    });
+    finishSession(summary);
+    navigate(`/cook/${sessionId}`);
   };
 
   // --- voice: parse, then call the exact same handlers ---
@@ -273,7 +282,7 @@ export default function LiveCookPage() {
       </div>
 
       {finished ? (
-        <RunSummary outcome={runOutcome(run, nodes, cooks)} cooks={cooks} isCompetition={isCompetition} onExit={saveAndExit} />
+        <RunSummary outcome={runOutcome(run, nodes, cooks)} cooks={cooks} isCompetition={isCompetition} onExit={saveAndSeeCard} />
       ) : (
         <>
           {isCompetition && <Leaderboard board={board} cooks={cooks} />}
@@ -364,7 +373,7 @@ export default function LiveCookPage() {
               className="voice-command-input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={`Say something as ${cooks.find((c) => c.id === speakerId)?.name || "a cook"} — "done", "take the garlic"…`}
+              placeholder={`Say something as ${cooks.find((c) => c.id === speakerId)?.name || "a cook"} â€” "done", "take the garlic"â€¦`}
             />
             <button type="submit" className="btn btn-primary" disabled={!input.trim()}>
               Send
@@ -407,8 +416,8 @@ function CookFocusCard({ cook, colorKey, run, byId, now, isCompetition, points, 
         {isCompetition && <span className="tag mono focus-points">{points} pts</span>}
       </div>
 
-      {/* Every branch renders the same skeleton — eyebrow, title, body,
-          then an action block pinned to the bottom — so both cooks' cards
+      {/* Every branch renders the same skeleton â€” eyebrow, title, body,
+          then an action block pinned to the bottom â€” so both cooks' cards
           line up instead of one looking half-empty. */}
       {node ? (
         <>
@@ -419,7 +428,7 @@ function CookFocusCard({ cook, colorKey, run, byId, now, isCompetition, points, 
             <span className={`focus-timer mono ${variance.over ? "is-over" : ""}`}>{clock(variance.actualSec)}</span>
             <span className="hint mono">
               est {formatDuration(variance.estSec)}
-              {variance.over ? ` · ${clock(variance.deltaSec)} over` : ""}
+              {variance.over ? ` Â· ${clock(variance.deltaSec)} over` : ""}
             </span>
           </div>
           <div className="focus-tags">
@@ -449,7 +458,7 @@ function CookFocusCard({ cook, colorKey, run, byId, now, isCompetition, points, 
         </>
       ) : suggested ? (
         <>
-          <span className="mini-title">{assignment?.reason === "idle_fill" ? "Blocked — pick this up?" : "Up next"}</span>
+          <span className="mini-title">{assignment?.reason === "idle_fill" ? "Blocked â€” pick this up?" : "Up next"}</span>
           <h2 className="focus-step-title">{suggested.label}</h2>
           {suggested.description && <p className="focus-step-desc">{suggested.description}</p>}
           <div className="focus-tags">
@@ -556,12 +565,12 @@ function RunSummary({ outcome, cooks, isCompetition, onExit }) {
       <span className="mini-title">Service done</span>
       <h2 className="summary-headline">
         {clock(outcome.totalSec)} on the clock
-        {outcome.estimatedSec != null && <span className="hint"> · planned {clock(outcome.estimatedSec)}</span>}
+        {outcome.estimatedSec != null && <span className="hint"> Â· planned {clock(outcome.estimatedSec)}</span>}
       </h2>
 
       {isCompetition && winners.length > 0 && (
         <p className="summary-winner">
-          {winners.length > 1 ? `Tied — ${winners.join(" and ")}, ${outcome.scoreboard[0].points} each` : `${winners[0]} wins it`}
+          {winners.length > 1 ? `Tied â€” ${winners.join(" and ")}, ${outcome.scoreboard[0].points} each` : `${winners[0]} wins it`}
         </p>
       )}
 
@@ -573,7 +582,7 @@ function RunSummary({ outcome, cooks, isCompetition, onExit }) {
               <span className="leader-points mono">{entry.points}</span>
               <span>{entry.name}</span>
               <span className="hint">
-                {entry.doneCount} done{entry.skippedCount ? ` · ${entry.skippedCount} skipped` : ""}
+                {entry.doneCount} done{entry.skippedCount ? ` Â· ${entry.skippedCount} skipped` : ""}
               </span>
             </div>
           );
@@ -587,14 +596,14 @@ function RunSummary({ outcome, cooks, isCompetition, onExit }) {
             <span className="hint mono">
               {s.status === "skipped"
                 ? "skipped"
-                : `est ${clock(s.estSec)} · actual ${clock(s.actualSec)}${s.deltaSec > 0 ? ` · ${clock(s.deltaSec)} over` : ""}`}
+                : `est ${clock(s.estSec)} Â· actual ${clock(s.actualSec)}${s.deltaSec > 0 ? ` Â· ${clock(s.deltaSec)} over` : ""}`}
             </span>
           </li>
         ))}
       </ul>
 
       <button className="btn btn-primary btn-lg" onClick={onExit}>
-        Save &amp; back to Home
+        Save &amp; see the card
       </button>
     </div>
   );

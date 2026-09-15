@@ -3,17 +3,21 @@ import cors from "cors";
 import { kitchensRouter } from "./routes/kitchens.js";
 import { recipeTemplatesRouter, materialsRouter } from "./routes/recipeTemplates.js";
 import { sessionsRouter } from "./routes/sessions.js";
+import { photoRouter } from "./routes/photo.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(express.json());
+// Summary photos travel as base64 data URLs, which blow past the default
+// 100kb body limit.
+app.use(express.json({ limit: "12mb" }));
 
 app.use("/api/kitchens", kitchensRouter);
 app.use("/api/recipe-templates", recipeTemplatesRouter);
 app.use("/api/materials", materialsRouter);
 app.use("/api/sessions", sessionsRouter);
+app.use("/api/photo", photoRouter);
 
 app.listen(PORT, () => {
   console.log(`Kitchen Path API listening on http://localhost:${PORT}`);
