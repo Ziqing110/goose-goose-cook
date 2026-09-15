@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { ELICITATION_QUESTIONS } from "../data/dishes.js";
+import Icon from "../components/Icon.jsx";
 import VoiceInput from "../components/VoiceInput.jsx";
 import "./ConversationPage.css";
 
@@ -52,51 +53,72 @@ export default function ConversationPage() {
     dispatch({ type: "session/conversation/reset" });
   };
 
-  const answered = Math.min(questionIndex, ELICITATION_QUESTIONS.length);
+  const total = ELICITATION_QUESTIONS.length;
+  const answered = Math.min(questionIndex, total);
 
   return (
     <section className="page conversation-page">
-      <div className="band-header">
-        <div className="band-header-left">
-          <div>
-            <p className="band-eyebrow">Kitchen Path Agent</p>
-            <h1>Let&rsquo;s talk about tonight&rsquo;s cook</h1>
-          </div>
+      <header className="convo-title-row">
+        <div className="convo-title">
+          <h1>Let&rsquo;s talk about tonight&rsquo;s cook</h1>
+          <p className="convo-sub">A few quick questions, then I&rsquo;ll draft your recipe graph.</p>
         </div>
-        <div className="band-header-right">
-          <span className="tag mono">
-            {answered}/{ELICITATION_QUESTIONS.length}
-          </span>
+      </header>
+
+      {/* Question progress within this conversation. The stage path
+          above tracks the whole session. */}
+      <div className={`convo-progress${complete ? " is-complete" : ""}`}>
+        <span className="convo-progress-label">
+          {complete ? "All questions answered" : `Question ${questionIndex + 1} of ${total}`}
+        </span>
+        <div
+          className="convo-progress-track"
+          role="progressbar"
+          aria-label="Questions answered"
+          aria-valuemin={0}
+          aria-valuemax={total}
+          aria-valuenow={answered}
+        >
+          <span className="convo-progress-fill" style={{ width: `${(answered / total) * 100}%` }} />
         </div>
       </div>
 
-      <div className="card convo-card">
-        <div className="progress-track">
-          <div className="progress-fill" style={{ width: `${(answered / ELICITATION_QUESTIONS.length) * 100}%` }} />
-        </div>
-
+      {/* Session position is shown by the stage path above (SessionProgress),
+          so this panel carries only the transcript. */}
+      <div className="convo-panel">
         <div className="transcript" ref={transcriptRef} role="log" aria-live="polite">
           {transcript.map((entry, i) => (
             <div key={i} className={`chat-row chat-${entry.speaker}`}>
-              <span className="chat-who mono">{entry.speaker === "agent" ? "Agent" : "You"}</span>
+              <span className="chat-who">{entry.speaker === "agent" ? "Agent" : "You"}</span>
               <p className="chat-bubble">{entry.text}</p>
             </div>
           ))}
+          {!complete && (
+            <div className="chat-row chat-cook" aria-hidden="true">
+              <span className="chat-who">You</span>
+              <p className="chat-bubble typing-bubble">
+                <span className="typing-dot" />
+                <span className="typing-dot" />
+                <span className="typing-dot" />
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="band-footer">
+      <div className="convo-footer">
         {complete ? (
           <>
-            <div className="band-footer-left">
-              <span className="hint">Conversation complete.</span>
-            </div>
-            <div className="band-footer-right">
+            <span className="convo-done">
+              <Icon glyph="checkmark-burst" size={20} />
+              Conversation complete
+            </span>
+            <div className="convo-done-actions">
               <button className="btn btn-ghost" onClick={restart}>
                 Start over
               </button>
               <button className="btn btn-primary btn-lg" onClick={() => navigate("/session/recipe-graph")}>
-                Generate recipe graph &rarr;
+                Generate recipe graph
               </button>
             </div>
           </>

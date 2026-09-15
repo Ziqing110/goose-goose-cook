@@ -48,11 +48,21 @@ export default function VoiceInput({ question, onAnswer }) {
     <div className="answer-bar">
       {question.options.length > 0 && (
         <div className="answer-templates">
-          {question.options.map((o) => (
-            <button key={o.value} type="button" className="btn template-chip" onClick={() => applyTemplate(o.label)}>
-              {o.label}
-            </button>
-          ))}
+          <span className="answer-templates-label">Quick answers</span>
+          {question.options.map((o) => {
+            const active = muted && text === o.label;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                className={`btn template-chip${active ? " is-active" : ""}`}
+                aria-pressed={active}
+                onClick={() => applyTemplate(o.label)}
+              >
+                {o.label}
+              </button>
+            );
+          })}
         </div>
       )}
 

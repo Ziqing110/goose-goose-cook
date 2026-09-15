@@ -17,6 +17,7 @@
      flipped: cream bar, dark text). */
   --vb-fg: var(--bg);
 }
+.voice-bar-inner { display: contents; }
 
 .voice-avatar {
   flex: none;

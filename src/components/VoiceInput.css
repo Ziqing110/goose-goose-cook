@@ -20,3 +20,47 @@
   color: var(--ink-faint);
   background: var(--surface-sunken);
 }
+
+/* ---------------- design system v4 ----------------
+   Quick answers are light pill Chips — hairline outline on the page
+   white, accent tint once their text is in the input — so they read
+   as suggestions rather than a row of competing buttons. The input is
+   a 44px field with a hairline border, flat Send beside it.
+   `.btn.template-chip` out-specifies the shared `.ds-v4 .btn` rules. */
+.ds-v4 .answer-bar { gap: 12px; }
+.ds-v4 .answer-templates { align-items: center; }
+.ds-v4 .answer-templates-label { margin-right: 4px; font-size: 13px; line-height: 18px; color: var(--ink-faint); }
+.ds-v4 .btn.template-chip {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  transition: transform 120ms ease-out, background 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out;
+}
+.ds-v4 .btn.template-chip:hover { background: var(--surface-sunken); border-color: var(--line-strong); }
+.ds-v4 .btn.template-chip.is-active,
+.ds-v4 .btn.template-chip.is-active:hover {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+}
+.ds-v4 .answer-input-row { gap: 8px; }
+.ds-v4 .answer-input {
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  font-size: 15px;
+}
+.ds-v4 .answer-input::placeholder { color: var(--ink-faint); }
+.ds-v4 .answer-input.is-listening {
+  font-style: normal;
+  border-color: transparent;
+  background: var(--ds-chip);
+  color: var(--ink-faint);
+}

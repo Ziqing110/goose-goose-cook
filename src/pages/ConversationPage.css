@@ -1,23 +1,178 @@
-.convo-card { gap: 16px; display: flex; flex-direction: column; }
+/* ---------------------------------------------------------------
+   Conversation page — design system v4. Tokens, buttons, topbar and
+   VoiceBar live in styles/design-v4.css (route-scoped via AppShell).
+   Layout: title row → one bg-secondary transcript panel → answer
+   row on the page white.
+----------------------------------------------------------------*/
+
+.conversation-page { gap: 0; }
+
+/* Title, progress, transcript and answer row share one centred
+   reading-width column, the same width as the stage path above it
+   (5 × 120px nodes + 4 × 48px connectors), which is centred too. */
+.convo-title-row,
+.convo-progress,
+.convo-panel,
+.convo-footer {
+  align-self: center;
+  width: 100%;
+  max-width: 792px;
+}
+
+/* ---------------- title row ---------------- */
+.convo-title-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 40px;
+  padding: 24px 0 20px;
+}
+.convo-title { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.convo-title h1 { font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.01em; }
+.convo-sub { margin: 0; font-size: 15px; line-height: 22px; color: var(--ink-soft); }
+
+/* ---------------- question progress ----------------
+   One continuous 4px bar: divider-grey track, accent fill that grows
+   with answered questions, status-done green once complete. */
+.convo-progress { display: flex; flex-direction: column; gap: 8px; padding-bottom: 16px; }
+.convo-progress-label { font-size: 13px; line-height: 18px; font-weight: 500; color: var(--ink-soft); }
+.convo-progress-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.convo-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 240ms ease-out, background 240ms ease-out;
+}
+.convo-progress.is-complete .convo-progress-label { color: var(--success); }
+.convo-progress.is-complete .convo-progress-fill { background: var(--success); }
+
+/* ---------------- transcript panel ---------------- */
+.convo-panel {
+  background: var(--surface-sunken);
+  border-radius: var(--radius-card);
+  padding: 24px;
+}
 
 .transcript {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  max-height: 360px;
+  gap: 16px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+.transcript::-webkit-scrollbar { width: 6px; }
+.transcript::-webkit-scrollbar-track { background: transparent; }
+.transcript::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
+
+/* ---------------- viewport-fit layout ----------------
+   On roomy screens the page is exactly one viewport tall: the shell is
+   locked to 100dvh and every level down to the transcript is a
+   shrinkable flex column, so the transcript takes whatever height is
+   left and scrolls internally. */
+@media (min-height: 761px) and (min-width: 721px) {
+  .app-shell.ds-v4:has(.conversation-page) { height: 100dvh; min-height: 0; }
+  .ds-v4 .stage-root:has(.conversation-page),
+  .ds-v4 .session-shell:has(.conversation-page),
+  .conversation-page {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .convo-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .transcript { flex: 1 1 auto; min-height: 0; }
 }
 
-.chat-row { display: flex; flex-direction: column; gap: 3px; max-width: 74%; }
-.chat-agent { align-items: flex-start; }
-.chat-cook { align-items: flex-end; align-self: flex-end; }
-.chat-who { font-size: 0.66rem; color: var(--ink-faint); letter-spacing: 0.03em; }
+/* Short or narrow screens: a fill-the-rest transcript would be too
+   cramped, so size it from the viewport and let the page scroll. */
+@media (max-height: 760px), (max-width: 720px) {
+  .transcript { height: clamp(240px, 55dvh, 480px); }
+}
+
+.chat-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: min(74%, 560px);
+  animation: ds-reveal 240ms ease-out both;
+}
+.chat-agent { align-self: flex-start; align-items: flex-start; }
+.chat-cook { align-self: flex-end; align-items: flex-end; }
+
+.chat-who { font-size: 13px; line-height: 18px; font-weight: 500; color: var(--ink-soft); }
+.chat-agent .chat-who { color: var(--ai); }
+
+/* White tile on bg-secondary for the agent; accent tint marks the
+   cook's own replies. Body text stays ink on both for contrast. */
 .chat-bubble {
   margin: 0;
-  padding: 10px 13px;
-  border-radius: 12px;
-  background: var(--surface-sunken);
-  font-size: 0.9rem;
+  padding: 12px 16px;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 22px;
+  text-wrap: pretty;
 }
-.chat-cook .chat-bubble { background: var(--accent-soft); color: var(--accent-soft-ink); }
+.chat-cook .chat-bubble { background: var(--accent-soft); }
+
+/* Waiting-for-you placeholder in the cook's slot. Uses the loading
+   "dots" fade rather than a bounce — pulse loops are reserved for the
+   stage ring and the listening dot. */
+.chat-cook .typing-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 46px;
+  background: transparent;
+  border: 1px dashed var(--ds-waiting);
+}
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+  animation: ds-dots 1600ms ease-in-out infinite;
+}
+.typing-dot:nth-child(2) { animation-delay: 200ms; }
+.typing-dot:nth-child(3) { animation-delay: 400ms; }
+
+/* ---------------- answer row / completion ---------------- */
+.convo-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  padding-top: 20px;
+}
+.convo-done {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--success);
+  font-size: 15px;
+  font-weight: 500;
+}
+.convo-done-actions { display: flex; align-items: center; gap: 8px; }
+
+@media (max-width: 720px) {
+  .convo-title-row { padding: 16px 0; }
+  .convo-panel { padding: 16px; }
+  .chat-row { max-width: 88%; }
+  .convo-done-actions { width: 100%; justify-content: flex-end; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typing-dot { animation: none; opacity: 0.7; }
+}

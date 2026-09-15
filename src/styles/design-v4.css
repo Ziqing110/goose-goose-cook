@@ -1,0 +1,219 @@
+/* ---------------------------------------------------------------
+   Kitchen Path design system v4 (reference: "Kitchen Path Home v4").
+
+   Scoped under `.app-shell.ds-v4`, which AppShell adds only on the
+   routes in utils/designV4.js, so the shell chrome outside the routed
+   page (topbar, SessionProgress, VoiceBar) re-themes together with it
+   while every other route keeps the tokens.css look.
+
+   Flat by rule: panels have no border, controls have no border or
+   shadow. Hierarchy comes from the surface ladder — page white,
+   bg-secondary panels, chip-grey controls — plus one accent. Light
+   only; the reference defines no dark palette.
+----------------------------------------------------------------*/
+
+.app-shell.ds-v4 {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-sunken: #f7f6f3; /* bg-secondary: panels */
+  --ink: #1a1a1a;
+  --ink-soft: #6e6e6b;
+  --ink-faint: #a3a29e;
+  --line: #e8e6e1;
+  --line-strong: #c9c7c1;
+
+  --accent: #d4552a;
+  --accent-ink: #ffffff;
+  --accent-soft: #fbeee8;
+  --accent-soft-ink: #d4552a;
+
+  --success: #2e7d32;
+  --crit: #8b1a1a;
+  --crit-soft: #fdecec;
+  --crit-soft-ink: #8b1a1a;
+  --warning-soft: #fff4e5;
+  --warning-soft-ink: #7a4a00;
+
+  /* AI-authored content */
+  --ai: #6b5bd2;
+  --ai-on-dark: #bdb6f0;
+
+  --ds-chip: #f2f1ee;
+  --ds-chip-hover: #e8e6e1;
+  --ds-accent-hover: #c64e26;
+  --ds-waiting: #c9c7c1;
+  --ds-voice: #111111;
+  --ds-live: #34c759;
+
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --shadow-sm: none;
+
+  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  color-scheme: light;
+  /* body resolved its own font/color from the root tokens; restate
+     them here so descendants inherit the v4 values. */
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 22px;
+
+  max-width: 1184px; /* 1120 content column + 32px gutters */
+  padding: 0 32px 132px;
+  gap: 0;
+}
+
+/* The shell is a centred column; paint the full-bleed ground too. */
+body:has(.app-shell.ds-v4) { background: #ffffff; }
+
+/* ---------------- motion tokens ----------------
+   reveal 240ms on entry · pulse 1.6s only on the current stage ring
+   and the listening dot · tap 120ms scale 0.97 on buttons. */
+@keyframes ds-reveal { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes ds-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.82); } }
+@keyframes ds-ring { 0%, 100% { box-shadow: 0 0 0 0 rgba(212, 85, 42, 0.5); } 50% { box-shadow: 0 0 0 7px rgba(212, 85, 42, 0); } }
+@keyframes ds-dots { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+.ds-v4 .page { animation: ds-reveal 240ms ease-out both; }
+
+/* ---------------- topbar ---------------- */
+.ds-v4 .topbar { padding: 20px 0 16px; gap: 10px; }
+.ds-v4 .brand-name { font-size: 16px; font-weight: 500; }
+
+/* ---------------- buttons ----------------
+   default = secondary (chip grey), .btn-primary = accent,
+   .btn-ghost = text-secondary, .btn-lg = 56px hero size. */
+.ds-v4 .btn {
+  min-height: 44px;
+  padding: 0 16px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--ds-chip);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 500;
+  box-shadow: none;
+  transition: transform 120ms ease-out, background 120ms ease-out, color 120ms ease-out;
+}
+.ds-v4 .btn:hover { background: var(--ds-chip-hover); }
+.ds-v4 .btn:active:not(:disabled) { transform: scale(0.97); }
+.ds-v4 .btn-primary { padding: 0 20px; background: var(--accent); color: var(--accent-ink); }
+.ds-v4 .btn-primary:hover { background: var(--ds-accent-hover); filter: none; }
+.ds-v4 .btn-lg { min-height: 56px; padding: 0 28px; font-size: 18px; }
+.ds-v4 .btn-ghost,
+.ds-v4 .btn-ghost:hover { background: transparent; }
+.ds-v4 .btn-ghost { color: var(--ink-soft); }
+.ds-v4 .btn-ghost:hover { color: var(--ink); }
+.ds-v4 .btn:disabled {
+  opacity: 1;
+  background: var(--ds-chip);
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+.app-shell.ds-v4 :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* ---------------- VoiceBar ----------------
+   A white strip holding one dark rounded card. .voice-bar-inner is
+   `display: contents` outside this scope, so other routes are
+   unaffected by the extra wrapper. */
+.ds-v4 .voice-bar {
+  justify-content: center;
+  padding: 16px 32px;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  box-shadow: none;
+  color: #ffffff;
+}
+.ds-v4 .voice-bar-inner {
+  flex: 1 1 auto;
+  max-width: 1120px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--ds-voice);
+  border-radius: var(--radius-card);
+  box-shadow: 0 -8px 24px rgba(17, 17, 17, 0.16);
+}
+.ds-v4 .voice-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+.ds-v4 .voice-transcript-label,
+.ds-v4 .voice-meter { display: none; }
+.ds-v4 .voice-transcript-text { font-size: 15px; line-height: 22px; font-weight: 400; color: #ffffff; }
+
+.ds-v4 .voice-status-pill,
+.ds-v4 .voice-status-pill.is-listening,
+.ds-v4 .voice-status-pill.is-muted {
+  height: 32px;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+}
+.ds-v4 .voice-status-pill::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+}
+.ds-v4 .voice-status-pill.is-listening::before {
+  background: var(--ds-live);
+  animation: ds-pulse 1600ms ease-in-out infinite;
+}
+
+.ds-v4 .voice-mute-btn {
+  height: 44px;
+  padding: 0 16px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 500;
+  transition: transform 120ms ease-out, background 120ms ease-out;
+}
+.ds-v4 .voice-mute-btn:hover { background: rgba(255, 255, 255, 0.2); }
+.ds-v4 .voice-mute-btn:active { transform: scale(0.97); }
+.app-shell.ds-v4 .voice-mute-btn:focus-visible { outline-color: #ffffff; }
+
+/* ---------------- narrow ---------------- */
+@media (max-width: 720px) {
+  .app-shell.ds-v4 { padding: 0 16px 132px; }
+  .ds-v4 .topbar { padding: 16px 0 12px; }
+  .ds-v4 .voice-bar { padding: 12px 16px; }
+  .ds-v4 .voice-bar-inner { gap: 10px; padding: 10px 12px; }
+}
+@media (max-width: 480px) {
+  /* Mobile shows the listening dot alone; the label stays for AT. */
+  .ds-v4 .voice-status-pill,
+  .ds-v4 .voice-status-pill.is-listening,
+  .ds-v4 .voice-status-pill.is-muted { padding: 0; gap: 0; background: transparent; font-size: 0; }
+}
+
+/* ---------------- reduced motion ----------------
+   Everything becomes a 200ms fade; loops stop; the stage ring
+   becomes a static halo. */
+@media (prefers-reduced-motion: reduce) {
+  .ds-v4 *, .ds-v4 *::before, .ds-v4 *::after {
+    animation-duration: 200ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 200ms !important;
+  }
+  @keyframes ds-reveal { from { opacity: 0; } to { opacity: 1; } }
+  .ds-v4 .voice-status-pill.is-listening::before { animation-name: none !important; }
+}
