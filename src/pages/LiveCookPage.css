@@ -70,8 +70,11 @@
   font: inherit;
   color: var(--ink);
 }
-.pool-tile.is-claimable { cursor: pointer; }
-.pool-tile.is-claimable:hover { border-color: var(--ink); }
+.pool-tile.is-claimable { cursor: default; }
+/* One button per cook, so a tap on a shared screen says who tapped. */
+.pool-claimers { display: flex; gap: 8px; margin-top: 4px; }
+.pool-claim-btn { flex: 1 1 0; min-height: 44px; font-weight: 600; }
+.pool-claim-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .pool-tile.is-taken { border-color: transparent; }
 .pool-tile.is-blocked { border-style: dashed; opacity: 0.6; }
 .pool-label { font-weight: 700; font-size: 1rem; }

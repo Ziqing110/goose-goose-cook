@@ -53,6 +53,9 @@ export default function LiveCookPage() {
   const finished = Boolean(run?.endedAt);
   const now = useNow(finished);
   const [speakerId, setSpeakerId] = useState(cooks[0]?.id);
+  // Seeded once, so it can end up pointing at nobody if the line-up
+  // changed since. Fall back rather than attributing speech to a ghost.
+  const speaker = cooks.some((c) => c.id === speakerId) ? speakerId : cooks[0]?.id;
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(null); // inline disambiguation buttons
   const [saving, setSaving] = useState(false);
@@ -212,7 +215,7 @@ export default function LiveCookPage() {
     if (!text) return;
     setInput("");
     setPending(null);
-    const cookId = speakerId;
+    const cookId = speaker;
     const activeStepId = activeStepFor(cookId, run);
     const ownQueue = isCompetition
       ? claimSuggestions({ nodes, run, cookId })
@@ -342,7 +345,7 @@ export default function LiveCookPage() {
               byId={byId}
               cooks={cooks}
               now={now}
-              onClaim={(stepId) => doClaim(stepId, speakerId)}
+              onClaim={(stepId, cookId) => doClaim(stepId, cookId)}
             />
           )}
 
@@ -361,7 +364,7 @@ export default function LiveCookPage() {
                 <button
                   key={cook.id}
                   type="button"
-                  className={`btn speaker-pill cook-color-${cookColorKey(i)} ${speakerId === cook.id ? "is-active" : ""}`}
+                  className={`btn speaker-pill cook-color-${cookColorKey(i)} ${speaker === cook.id ? "is-active" : ""}`}
                   onClick={() => setSpeakerId(cook.id)}
                 >
                   {cook.name}
@@ -400,7 +403,7 @@ export default function LiveCookPage() {
               className="voice-command-input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={`Say something as ${cooks.find((c) => c.id === speakerId)?.name || "a cook"} â€” "done", "take the garlic"â€¦`}
+              placeholder={`Say something as ${cooks.find((c) => c.id === speaker)?.name || "a cook"} â€” "done", "take the garlic"â€¦`}
             />
             <button type="submit" className="btn btn-primary" disabled={!input.trim()}>
               Send
@@ -528,14 +531,30 @@ function TaskPoolBoard({ ready, blocked, run, byId, cooks, now, onClaim }) {
         </span>
       </div>
       <div className="pool-grid">
+        {/* One button per cook rather than a single "Claim" that scores
+            for whoever the voice-console pill happened to be left on.
+            On a screen two people share, a tap has to say who tapped. */}
         {ready.map((id) => (
-          <button key={id} type="button" className="pool-tile is-claimable" onClick={() => onClaim(id)}>
+          <div key={id} className="pool-tile is-claimable">
             <span className="pool-label">{byId[id].label}</span>
             <span className="pool-meta mono">
               {formatDuration(byId[id].estimated_duration_sec)} &middot; +{DIFFICULTY_POINTS[byId[id].difficulty]}
             </span>
-            <span className="pool-action">Claim</span>
-          </button>
+            <span className="pool-claimers">
+              {cooks.map((cook, i) => (
+                <button
+                  key={cook.id}
+                  type="button"
+                  className={`btn pool-claim-btn cook-color-${cookColorKey(i)}`}
+                  onClick={() => onClaim(id, cook.id)}
+                  disabled={Boolean(activeStepFor(cook.id, run))}
+                  title={activeStepFor(cook.id, run) ? `${cook.name} is still on something` : `${cook.name} takes it`}
+                >
+                  {cook.name}
+                </button>
+              ))}
+            </span>
+          </div>
         ))}
         {taken.map(([id, record]) => {
           const cookIndex = cooks.findIndex((c) => c.id === record.cookId);
