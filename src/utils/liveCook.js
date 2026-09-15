@@ -13,6 +13,10 @@ const UNDO_WINDOW_MS = 60_000;
 // Mid-run the remaining set is small and the answer is needed between
 // taps, so a re-plan trades proof for responsiveness.
 const LIVE_REPLAN_NODE_BUDGET = 20_000;
+// Mid-cook this runs on every completion with someone standing there
+// waiting to see their next step, so it gets a tighter deadline than
+// the planning page's.
+const LIVE_REPLAN_TIME_BUDGET_MS = 80;
 
 export const DIFFICULTY_POINTS = { low: 10, medium: 20, high: 35 };
 
@@ -366,7 +370,7 @@ export function replan({ nodes, run, cooks, kitchenProfile }) {
   }
   // scheduleSteps, not computeSchedule — the solo baseline is dead
   // weight mid-run and doubles the work.
-  const schedule = scheduleSteps(remaining, cooks, kitchenProfile, { nodeBudget: LIVE_REPLAN_NODE_BUDGET });
+  const schedule = scheduleSteps(remaining, cooks, kitchenProfile, { nodeBudget: LIVE_REPLAN_NODE_BUDGET, timeBudgetMs: LIVE_REPLAN_TIME_BUDGET_MS });
   const plan = planFromSchedule(schedule);
   return pushEvent({ ...run, plan }, {
     at: new Date().toISOString(),

@@ -32,6 +32,17 @@ const COOK_RESOURCE = "__cook__";
 // a lower bound anyway, the budget is set for a responsive page rather
 // than for exhaustive proof on large recipes.
 const SEARCH_NODE_BUDGET = 150000;
+// A node budget bounds the *work*, not the *wait*: the cost of a node
+// grows with the recipe, so 150k nodes is a third of a second on 19
+// steps and an unbounded freeze on a graph twice that size. The search
+// is anytime — it finds a strong schedule early and spends the rest
+// proving nothing beats it — so a wall-clock deadline cuts the part
+// nobody is waiting for. Whatever it had is still reported honestly
+// against the lower bound as "best of >= X".
+const SEARCH_TIME_BUDGET_MS = 250;
+// Checking the clock every node would cost more than the search; every
+// 512 is often enough to hold the deadline to a millisecond or two.
+const TIME_CHECK_INTERVAL = 512;
 
 // Equipment with 0 configured capacity (including hasWok/hasOven false)
 // is treated as capacity 1 â€” a "make it work" fallback instead of
@@ -175,7 +186,7 @@ const makespanOf = (placed) => placed.reduce((max, p) => Math.max(max, p.endSec)
  * activity's own earliest start plus its longest path to the end).
  * Returns the best ordering found and whether the search was exhaustive.
  */
-function searchBestOrder(nodes, byId, caps, seedOrder, nodeBudget = SEARCH_NODE_BUDGET) {
+function searchBestOrder(nodes, byId, caps, seedOrder, nodeBudget = SEARCH_NODE_BUDGET, timeBudgetMs = SEARCH_TIME_BUDGET_MS) {
   const tails = computeTails(nodes, byId);
   const total = nodes.length;
   const preds = new Map(nodes.map((n) => [n.id, (n.depends_on || []).filter((d) => byId[d])]));
@@ -198,10 +209,17 @@ function searchBestOrder(nodes, byId, caps, seedOrder, nodeBudget = SEARCH_NODE_
   let bestMakespan = makespanOf(seedPlaced);
   let explored = 0;
   let exhausted = true;
+  const deadline = Date.now() + timeBudgetMs;
+  let outOfTime = false;
+  const spent = () => {
+    if (outOfTime) return true;
+    if (explored % TIME_CHECK_INTERVAL === 0 && Date.now() > deadline) outOfTime = true;
+    return outOfTime;
+  };
 
   const dfs = (order, placed, finishById, scheduled) => {
     if (bestMakespan <= floor) return; // can't do better than the floor
-    if (explored++ > nodeBudget) {
+    if (explored++ > nodeBudget || spent()) {
       exhausted = false;
       return;
     }
@@ -251,7 +269,7 @@ function searchBestOrder(nodes, byId, caps, seedOrder, nodeBudget = SEARCH_NODE_
       scheduled.delete(n.id);
       finishById.delete(n.id);
       placed.pop();
-      if (!exhausted && explored > nodeBudget) break;
+      if (!exhausted) break;
     }
   };
 
@@ -368,7 +386,7 @@ function deriveStartCause(task, placed, byId, assignment, caps) {
 
 // `nodeBudget` lets a live re-plan trade proof for responsiveness: mid-cook
 // the remaining set is small and the answer is needed between taps.
-export function scheduleSteps(nodes, cooks, kitchenProfile, { nodeBudget } = {}) {
+export function scheduleSteps(nodes, cooks, kitchenProfile, { nodeBudget, timeBudgetMs } = {}) {
   if (cooks.length === 0 || nodes.length === 0) {
     return { steps: [], makespanSec: 0, criticalStepIds: new Set(), unscheduledIds: nodes.map((n) => n.id), optimal: true, lowerBoundSec: 0 };
   }
@@ -382,7 +400,7 @@ export function scheduleSteps(nodes, cooks, kitchenProfile, { nodeBudget } = {})
     return { steps: [], makespanSec: 0, criticalStepIds: new Set(), unscheduledIds: unordered, optimal: true, lowerBoundSec: 0 };
   }
 
-  const { order, optimal, lowerBoundSec } = searchBestOrder(schedulable, byId, caps, topo, nodeBudget);
+  const { order, optimal, lowerBoundSec } = searchBestOrder(schedulable, byId, caps, topo, nodeBudget, timeBudgetMs);
   const placed = buildSchedule(order, byId, caps);
   const assignment = assignCooks(placed, cooks, byId);
 
