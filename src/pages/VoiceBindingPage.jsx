@@ -23,6 +23,11 @@ export default function VoiceBindingPage() {
   const { state, dispatch } = useAppState();
   const navigate = useNavigate();
   const { cooks } = state.session;
+  // Once a run exists, its steps, claims and scores are all keyed by
+  // cook id. Removing a cook here would leave those pointing at someone
+  // who no longer exists, and a rename clears `bound`, which would bounce
+  // the cook out of the live page mid-cook. So the line-up freezes.
+  const locked = Boolean(state.session.run);
   const [recordingCookId, setRecordingCookId] = useState(null);
   const [recordingProgress, setRecordingProgress] = useState(0);
   const timeoutRef = useRef(null);
@@ -66,12 +71,12 @@ export default function VoiceBindingPage() {
   };
 
   const addCook = () => {
-    if (cooks.length >= MAX_COOKS) return;
+    if (locked || cooks.length >= MAX_COOKS) return;
     setCooks([...cooks, { id: crypto.randomUUID(), name: "", bound: false }]);
   };
 
   const removeCook = (id) => {
-    if (cooks.length <= 1) return;
+    if (locked || cooks.length <= 1) return;
     setCooks(cooks.filter((c) => c.id !== id));
     if (recordingCookId === id) stopRecording();
   };
@@ -122,6 +127,18 @@ export default function VoiceBindingPage() {
       </div>
 
       <div className="card cooks-card">
+        {locked && (
+          <div className="cooks-locked-note">
+            <span className="mini-title">Line-up locked</span>
+            <p className="hint">
+              A cook is in progress and every claim and score is filed under these two. Finish or start over from the
+              plan to change who&rsquo;s here.
+            </p>
+            <button type="button" className="btn btn-primary" onClick={() => navigate("/session/live-cook")}>
+              Back to the cook &rarr;
+            </button>
+          </div>
+        )}
         <p className="hint">
           Each cook reads their own line out loud — same words every time makes it easier to tell your voices apart
           when someone shouts &ldquo;done&rdquo; mid-cook.
@@ -134,7 +151,7 @@ export default function VoiceBindingPage() {
             const phrase = voicePhraseFor(index, cook.name.trim());
             return (
               <div className={`cook-slot ${isRecording ? "is-recording" : ""}`} key={cook.id}>
-                {cooks.length > 1 && (
+                {cooks.length > 1 && !locked && (
                   <button type="button" className="cook-slot-remove" onClick={() => removeCook(cook.id)} aria-label="Remove cook">
                     &times;
                   </button>
@@ -149,6 +166,7 @@ export default function VoiceBindingPage() {
                   placeholder={`Cook ${index + 1} — name`}
                   value={cook.name}
                   maxLength={MAX_COOK_NAME_LENGTH}
+                  disabled={locked}
                   aria-invalid={isDuplicate(cook)}
                   onChange={(e) => renameCook(cook.id, e.target.value)}
                 />
@@ -179,7 +197,7 @@ export default function VoiceBindingPage() {
                     <span className="hint">
                       {cook.bound ? "Got your voice" : hasName ? "Ready when you are" : "Add a name to get your line"}
                     </span>
-                    <button type="button" className="btn" disabled={!hasName} onClick={() => startRecording(cook.id)}>
+                    <button type="button" className="btn" disabled={!hasName || locked} onClick={() => startRecording(cook.id)}>
                       {cook.bound ? "Record again" : "Start reading"}
                     </button>
                   </>
@@ -187,7 +205,7 @@ export default function VoiceBindingPage() {
               </div>
             );
           })}
-          {cooks.length < MAX_COOKS && (
+          {cooks.length < MAX_COOKS && !locked && (
             <button type="button" className="btn cook-add-btn" onClick={addCook}>
               + Add a cook
             </button>
