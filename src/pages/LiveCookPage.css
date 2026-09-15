@@ -132,3 +132,6 @@
 .summary-step-label { font-weight: 600; }
 
 .summary-save-error { color: var(--crit); }
+
+.paused-banner { border-style: dashed; }
+.paused-banner .mini-title { color: var(--crit); }

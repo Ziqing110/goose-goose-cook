@@ -17,6 +17,7 @@ import {
   runProgress, isRunComplete, scoreboard, runOutcome, resolveAssignments, replan,
   arbitrateClaim, claimSuggestions, applyStart, applyDone, applySkip, applyDrop,
   applyUndo, endRun, appendTranscript, scoreStep, DIFFICULTY_POINTS,
+  isPaused, applyPause, applyResume,
 } from "../utils/liveCook.js";
 import { parseCommand, HELP_TEXT } from "../utils/voiceCommands.js";
 import { buildSummary } from "../utils/summaryCard.js";
@@ -51,7 +52,8 @@ export default function LiveCookPage() {
   const run = useMemo(() => (storedRun ? reconcileRun(storedRun, nodes) : null), [storedRun, nodes]);
 
   const finished = Boolean(run?.endedAt);
-  const now = useNow(finished);
+  const paused = isPaused(run);
+  const now = useNow(finished || paused);
   const [speakerId, setSpeakerId] = useState(cooks[0]?.id);
   // Seeded once, so it can end up pointing at nobody if the line-up
   // changed since. Fall back rather than attributing speech to a ghost.
@@ -78,7 +80,10 @@ export default function LiveCookPage() {
   }
 
   const isCompetition = run.mode === "competition";
-  const progress = runProgress(run, nodes, now);
+  // Frozen at the moment of the pause, so a reload mid-break shows the
+  // same numbers as the tab that paused rather than counting the break.
+  const clockNow = paused ? Date.parse(run.pausedAt) : now;
+  const progress = runProgress(run, nodes, clockNow);
   const board = scoreboard(run, nodes, cooks);
   const ready = readyStepIds(nodes, run);
   const blocked = blockedStepIds(nodes, run);
@@ -93,7 +98,7 @@ export default function LiveCookPage() {
   // --- the handlers every button AND every utterance routes through ---
 
   const doStart = (stepId, cookId, source = "tap") => {
-    if (!stepId || !isReady(stepId, nodes, run)) return;
+    if (paused || !stepId || !isReady(stepId, nodes, run)) return;
     if (activeStepFor(cookId, run)) return;
     const at = new Date().toISOString();
     let next = applyStart({ run, stepId, cookId, at, source });
@@ -102,7 +107,7 @@ export default function LiveCookPage() {
   };
 
   const doDone = (stepId, cookId, source = "tap") => {
-    if (!stepId || run.steps[stepId]?.status !== "active") return;
+    if (paused || !stepId || run.steps[stepId]?.status !== "active") return;
     const at = new Date().toISOString();
     const v = stepVariance(byId[stepId], { ...run.steps[stepId], endedAt: at });
     let next = applyDone({ run, stepId, cookId, at, source });
@@ -122,7 +127,7 @@ export default function LiveCookPage() {
   };
 
   const doSkip = (stepId, cookId, source = "tap") => {
-    if (!stepId) return;
+    if (paused || !stepId) return;
     const dependents = nodes.filter((n) => (n.depends_on || []).includes(stepId));
     if (dependents.length && !window.confirm(`${dependents.map((d) => d.label).join(", ")} was counting on this. Skip anyway?`)) return;
     const at = new Date().toISOString();
@@ -133,7 +138,7 @@ export default function LiveCookPage() {
   };
 
   const doDrop = (stepId, cookId, source = "tap") => {
-    if (!stepId) return;
+    if (paused || !stepId) return;
     const at = new Date().toISOString();
     let next = applyDrop({ run, stepId, cookId, at, source });
     if (!isCompetition) next = replan({ nodes, run: next, cooks, kitchenProfile });
@@ -141,6 +146,7 @@ export default function LiveCookPage() {
   };
 
   const doClaim = (stepId, cookId, source = "tap") => {
+    if (paused) return;
     const at = new Date().toISOString();
     const verdict = arbitrateClaim({ run, nodes, cooks, stepId, cookId, at });
     const name = (id) => cooks.find((c) => c.id === id)?.name ?? "someone";
@@ -176,6 +182,15 @@ export default function LiveCookPage() {
       return;
     }
     commit(say(result.run, `Rolled back â€” ${result.label} is active again.`));
+  };
+
+  const togglePause = () => {
+    const at = new Date().toISOString();
+    if (paused) {
+      commit(say(applyResume({ run, at }), "Back on. Clock's running again."));
+    } else {
+      commit(say(applyPause({ run, at }), "Paused. Nothing's being timed until you say go."));
+    }
   };
 
   const doFinish = () => {
@@ -216,6 +231,10 @@ export default function LiveCookPage() {
     setInput("");
     setPending(null);
     const cookId = speaker;
+    if (paused && !/(resume|unpause|back on|go)/i.test(text)) {
+      return commit(say(appendTranscript(run, { at: new Date().toISOString(), speaker: cookId, text }), "We're paused — say \"resume\" when you're ready."));
+    }
+    if (paused) return togglePause();
     const activeStepId = activeStepFor(cookId, run);
     const ownQueue = isCompetition
       ? claimSuggestions({ nodes, run, cookId })
@@ -297,6 +316,11 @@ export default function LiveCookPage() {
           {/* The plan was previously only reachable by browser-Back,
               which nobody finds. Leaving doesn't end the run. */}
           {!finished && (
+            <button type="button" className={`btn ${paused ? "btn-primary" : "btn-ghost"}`} onClick={togglePause}>
+              {paused ? "Resume" : "Pause"}
+            </button>
+          )}
+          {!finished && (
             <button type="button" className="btn btn-ghost" onClick={() => navigate("/session/schedule")}>
               See the plan
             </button>
@@ -315,6 +339,16 @@ export default function LiveCookPage() {
         />
       ) : (
         <>
+          {paused && (
+            <div className="card paused-banner" role="status">
+              <span className="mini-title">Paused</span>
+              <p className="hint">
+                Every clock is stopped and the break won&rsquo;t count against anyone&rsquo;s time. Nothing can be
+                started or finished until you resume.
+              </p>
+            </div>
+          )}
+
           {isCompetition && <Leaderboard board={board} cooks={cooks} />}
 
           <div className="focus-row">
@@ -325,8 +359,9 @@ export default function LiveCookPage() {
                 colorKey={cookColorKey(i)}
                 run={run}
                 byId={byId}
-                now={now}
+                now={clockNow}
                 isCompetition={isCompetition}
+                paused={paused}
                 points={board.find((b) => b.cookId === cook.id)?.points ?? 0}
                 assignment={assignments?.byCook[cook.id]}
                 onStart={(stepId) => doStart(stepId, cook.id)}
@@ -344,7 +379,8 @@ export default function LiveCookPage() {
               run={run}
               byId={byId}
               cooks={cooks}
-              now={now}
+              now={clockNow}
+              paused={paused}
               onClaim={(stepId, cookId) => doClaim(stepId, cookId)}
             />
           )}
@@ -431,7 +467,7 @@ export default function LiveCookPage() {
   );
 }
 
-function CookFocusCard({ cook, colorKey, run, byId, now, isCompetition, points, assignment, onStart, onDone, onSkip, onDrop }) {
+function CookFocusCard({ cook, colorKey, run, byId, now, isCompetition, paused, points, assignment, onStart, onDone, onSkip, onDrop }) {
   const activeId = activeStepFor(cook.id, run);
   const node = activeId ? byId[activeId] : null;
   const variance = node ? stepVariance(node, run.steps[activeId], now) : null;
@@ -471,15 +507,15 @@ function CookFocusCard({ cook, colorKey, run, byId, now, isCompetition, points, 
             {isCompetition && <span className="tag mono">worth +{DIFFICULTY_POINTS[node.difficulty]}</span>}
           </div>
           <div className="focus-actions">
-            <button className="btn btn-success btn-lg focus-primary" onClick={() => onDone(activeId)}>
+            <button className="btn btn-success btn-lg focus-primary" disabled={paused} onClick={() => onDone(activeId)}>
               Done
             </button>
             <div className="focus-secondary">
-              <button className="btn btn-ghost" onClick={() => onSkip(activeId)}>
+              <button className="btn btn-ghost" disabled={paused} onClick={() => onSkip(activeId)}>
                 Skip step
               </button>
               {isCompetition && (
-                <button className="btn btn-ghost" onClick={() => onDrop(activeId)}>
+                <button className="btn btn-ghost" disabled={paused} onClick={() => onDrop(activeId)}>
                   Put it back
                 </button>
               )}
@@ -496,7 +532,7 @@ function CookFocusCard({ cook, colorKey, run, byId, now, isCompetition, points, 
             <span className="tag mono">{formatDuration(suggested.estimated_duration_sec)}</span>
           </div>
           <div className="focus-actions">
-            <button className="btn btn-primary btn-lg focus-primary" onClick={() => onStart(suggestedId)}>
+            <button className="btn btn-primary btn-lg focus-primary" disabled={paused} onClick={() => onStart(suggestedId)}>
               {assignment?.reason === "idle_fill" ? "Take it" : "Start"}
             </button>
           </div>
@@ -520,7 +556,7 @@ function CookFocusCard({ cook, colorKey, run, byId, now, isCompetition, points, 
   );
 }
 
-function TaskPoolBoard({ ready, blocked, run, byId, cooks, now, onClaim }) {
+function TaskPoolBoard({ ready, blocked, run, byId, cooks, now, paused, onClaim }) {
   const taken = Object.entries(run.steps).filter(([, r]) => r.status === "active");
   return (
     <div className="card pool-board">
@@ -547,7 +583,7 @@ function TaskPoolBoard({ ready, blocked, run, byId, cooks, now, onClaim }) {
                   type="button"
                   className={`btn pool-claim-btn cook-color-${cookColorKey(i)}`}
                   onClick={() => onClaim(id, cook.id)}
-                  disabled={Boolean(activeStepFor(cook.id, run))}
+                  disabled={paused || Boolean(activeStepFor(cook.id, run))}
                   title={activeStepFor(cook.id, run) ? `${cook.name} is still on something` : `${cook.name} takes it`}
                 >
                   {cook.name}
