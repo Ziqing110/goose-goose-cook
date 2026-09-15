@@ -28,14 +28,16 @@ function makeSession(id, kitchenProfileId) {
     recipes: [],
     sharedSteps: [],
     cooks: [],
+    unavailableMaterials: [], // materials the cook says they don't have
     mode: null,
     run: null, // set when cooking actually starts — see LiveCookPage
   };
 }
 
-function sessionSummary(session, kitchenProfiles, status) {
+function sessionSummary(session, kitchenProfiles, status, hasSummary = false) {
   const kitchenProfile = kitchenProfiles.find((p) => p.id === session.kitchenProfileId) || null;
   return {
+    hasSummary, // abandoned runs froze no card — Home uses this to know
     id: session.id,
     dish: session.recipes.map((r) => r.working?.title).filter(Boolean).join(" + ") || session.conversation.answers.dishIdea || null,
     servings: session.recipes[0]?.working?.servings ?? null,
@@ -112,8 +114,13 @@ function reducer(state, action) {
       return {
         ...state,
         session: null,
-        sessionHistory: [sessionSummary(state.session, state.kitchenProfiles, action.payload.status), ...state.sessionHistory],
+        sessionHistory: [
+          sessionSummary(state.session, state.kitchenProfiles, action.payload.status, action.payload.hasSummary),
+          ...state.sessionHistory,
+        ],
       };
+    case "sessionHistory/remove":
+      return { ...state, sessionHistory: state.sessionHistory.filter((s) => s.id !== action.payload.id) };
 
     case "session/conversation/update":
       if (!state.session) return state;
@@ -208,7 +215,9 @@ export function AppStateProvider({ children }) {
   // any) and load history for Home's "recent sessions" list.
   useEffect(() => {
     dispatch({ type: "session/loading" });
-    Promise.all([sessionsApi.listSessions(["active"]), sessionsApi.listSessions(["completed", "abandoned"])])
+    // The active session is needed in full; history only feeds a list,
+    // so it uses the compact projection (no photos or transcripts).
+    Promise.all([sessionsApi.listSessions(["active"]), sessionsApi.listSessionSummaries(["completed", "abandoned"])])
       .then(([activeSessions, history]) => {
         const active = activeSessions[0] || null;
         if (active) {
@@ -238,6 +247,7 @@ export function AppStateProvider({ children }) {
           conversation: session.conversation,
           selectedNodeId: session.selectedNodeId,
           cooks: session.cooks,
+          unavailableMaterials: session.unavailableMaterials || [],
           mode: session.mode,
           run: session.run,
         })
@@ -362,14 +372,29 @@ export function AppStateProvider({ children }) {
   // Mirrors discardSession. Without the PATCH the row stays `active`
   // with a null ended_at, so a finished cook comes back as the *active*
   // session on reload and never reaches history.
-  const finishSession = (summary) => {
+  //
+  // Unlike the rest of the app this one persists *before* dispatching,
+  // and the caller awaits it. Two reasons: the summary card is fetched
+  // back by id immediately afterwards, so navigating before the write
+  // lands renders the "no card for this cook" dead end for a cook that
+  // saved fine; and the dispatch clears state.session, which unmounts
+  // the live-cook page via the route guards — optimism here would strand
+  // the user on Home with no way to retry a failed save.
+  const finishSession = async (summary) => {
     if (!state.session) return;
     const sessionId = state.session.id;
     const endedAt = new Date().toISOString();
-    dispatch({ type: "session/finish", payload: { status: "completed" } });
-    sessionsApi
-      .updateSession(sessionId, { status: "completed", endedAt, summary })
-      .catch((err) => console.error("Failed to persist finished session:", err));
+    await sessionsApi.updateSession(sessionId, { status: "completed", endedAt, summary });
+    dispatch({ type: "session/finish", payload: { status: "completed", hasSummary: Boolean(summary) } });
+  };
+
+  const removeRunFromHistory = async (id) => {
+    dispatch({ type: "sessionHistory/remove", payload: { id } });
+    try {
+      await sessionsApi.deleteSession(id);
+    } catch (err) {
+      console.error("Failed to delete session:", err);
+    }
   };
 
   // Live-cook writes skip the 600ms debounce. A run action records
@@ -388,6 +413,7 @@ export function AppStateProvider({ children }) {
     dispatch,
     saveRunNow,
     finishSession,
+    removeRunFromHistory,
     addKitchenProfile,
     editKitchenProfile,
     removeKitchenProfile,

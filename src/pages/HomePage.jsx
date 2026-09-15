@@ -130,6 +130,7 @@ export default function HomePage() {
     refetchKitchens,
     startSession,
     discardSession,
+    removeRunFromHistory,
   } = useAppState();
   const navigate = useNavigate();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -212,6 +213,11 @@ export default function HomePage() {
     if (profiles.length === 0) return openAddProfileModal(true);
     if (profiles.length === 1) return handleStartSession(profiles[0].id);
     setPickerOpen(true);
+  };
+
+  const handleDeleteRun = (row) => {
+    if (!window.confirm(`Delete "${row.title}" from your run log? This can't be undone.`)) return;
+    removeRunFromHistory(row.id);
   };
 
   const handleAbandon = () => {
@@ -469,15 +475,23 @@ export default function HomePage() {
                 r.endedAt ? <span className="mono">{formatShortDate(r.endedAt)}</span> : null,
               ].filter(Boolean);
               return (
-                <li className="hp-row hp-row-run hp-reveal" style={{ animationDelay: `${300 + i * 60}ms` }} key={r.id}>
+                <li
+                  className={`hp-row hp-row-run hp-reveal${r.hasCard ? "" : " has-no-card"}`}
+                  style={{ animationDelay: `${300 + i * 60}ms` }}
+                  key={r.id}
+                >
                   {/* Overlay rather than wrapping the row, so the layout
-                      above stays exactly as designed. */}
-                  <button
-                    type="button"
-                    className="hp-row-open"
-                    onClick={() => navigate(`/cook/${r.id}`)}
-                    aria-label={`Open the summary card for ${r.title}`}
-                  />
+                      above stays exactly as designed. Only runs that
+                      finished have a card to open — an abandoned one
+                      would land on a dead end, so it isn't clickable. */}
+                  {r.hasCard && (
+                    <button
+                      type="button"
+                      className="hp-row-open"
+                      onClick={() => navigate(`/cook/${r.id}`)}
+                      aria-label={`Open the summary card for ${r.title}`}
+                    />
+                  )}
                   <span className="mono hp-rank">{String(i + 1).padStart(2, "0")}</span>
                   <span className="hp-row-main">
                     <span className="hp-row-title-line">
@@ -507,6 +521,16 @@ export default function HomePage() {
                       <span className="hp-chip-text">Abandoned</span>
                     </Chip>
                   )}
+                  {/* Sits above the row-open overlay so it stays clickable. */}
+                  <button
+                    type="button"
+                    className="hp-row-delete"
+                    onClick={() => handleDeleteRun(r)}
+                    aria-label={`Delete the run ${r.title}`}
+                    title="Delete this run"
+                  >
+                    &times;
+                  </button>
                 </li>
               );
             })}

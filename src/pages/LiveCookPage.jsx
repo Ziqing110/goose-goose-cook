@@ -55,6 +55,8 @@ export default function LiveCookPage() {
   const [speakerId, setSpeakerId] = useState(cooks[0]?.id);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(null); // inline disambiguation buttons
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
   const transcriptRef = useRef(null);
 
   useEffect(() => {
@@ -179,7 +181,11 @@ export default function LiveCookPage() {
   };
 
   // Freeze the card, persist it with the session, then hand over to it.
-  const saveAndSeeCard = () => {
+  // The wait matters: the card page fetches this session back by id, so
+  // navigating before the write lands shows "no card for this cook" for
+  // a cook that saved perfectly well. If the write fails, stay put and
+  // say so rather than handing over to a page that has nothing to show.
+  const saveAndSeeCard = async () => {
     const sessionId = state.session.id;
     const summary = buildSummary({
       outcome: runOutcome(run, nodes, cooks),
@@ -187,8 +193,15 @@ export default function LiveCookPage() {
       dish: approved?.title || "Untitled cook",
       mode: run.mode,
     });
-    finishSession(summary);
-    navigate(`/cook/${sessionId}`);
+    setSaveError(null);
+    setSaving(true);
+    try {
+      await finishSession(summary);
+      navigate(`/cook/${sessionId}`);
+    } catch (err) {
+      setSaving(false);
+      setSaveError(err.message || "Couldn't save the card.");
+    }
   };
 
   // --- voice: parse, then call the exact same handlers ---
@@ -282,7 +295,14 @@ export default function LiveCookPage() {
       </div>
 
       {finished ? (
-        <RunSummary outcome={runOutcome(run, nodes, cooks)} cooks={cooks} isCompetition={isCompetition} onExit={saveAndSeeCard} />
+        <RunSummary
+          outcome={runOutcome(run, nodes, cooks)}
+          cooks={cooks}
+          isCompetition={isCompetition}
+          onExit={saveAndSeeCard}
+          saving={saving}
+          saveError={saveError}
+        />
       ) : (
         <>
           {isCompetition && <Leaderboard board={board} cooks={cooks} />}
@@ -558,7 +578,7 @@ function Leaderboard({ board, cooks }) {
   );
 }
 
-function RunSummary({ outcome, cooks, isCompetition, onExit }) {
+function RunSummary({ outcome, cooks, isCompetition, onExit, saving, saveError }) {
   const winners = outcome.winnerCookIds.map((id) => cooks.find((c) => c.id === id)?.name).filter(Boolean);
   return (
     <div className="card run-summary">
@@ -602,8 +622,13 @@ function RunSummary({ outcome, cooks, isCompetition, onExit }) {
         ))}
       </ul>
 
-      <button className="btn btn-primary btn-lg" onClick={onExit}>
-        Save &amp; see the card
+      {saveError && (
+        <p className="hint summary-save-error" role="alert">
+          {saveError} Nothing is lost — try again.
+        </p>
+      )}
+      <button className="btn btn-primary btn-lg" onClick={onExit} disabled={saving}>
+        {saving ? "Saving…" : saveError ? "Try again" : "Save & see the card"}
       </button>
     </div>
   );

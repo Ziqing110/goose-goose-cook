@@ -127,3 +127,5 @@
 .summary-steps li:last-child { border-bottom: none; }
 .summary-steps li.is-skipped .summary-step-label { text-decoration: line-through; color: var(--ink-faint); }
 .summary-step-label { font-weight: 600; }
+
+.summary-save-error { color: var(--crit); }

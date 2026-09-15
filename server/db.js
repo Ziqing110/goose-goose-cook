@@ -55,6 +55,7 @@ db.exec(`
     mode TEXT,
     run_json TEXT,
     summary_json TEXT,
+    unavailable_materials_json TEXT NOT NULL DEFAULT '[]',
     updated_at TEXT NOT NULL
   );
 
@@ -105,6 +106,9 @@ if (!sessionColumns.includes("run_json")) {
 }
 if (!sessionColumns.includes("summary_json")) {
   db.exec("ALTER TABLE sessions ADD COLUMN summary_json TEXT");
+}
+if (!sessionColumns.includes("unavailable_materials_json")) {
+  db.exec("ALTER TABLE sessions ADD COLUMN unavailable_materials_json TEXT NOT NULL DEFAULT '[]'");
 }
 
 // ---------------------------------------------------------------------
