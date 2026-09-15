@@ -75,3 +75,6 @@
 .diff-danger { color: var(--crit); }
 .diff-warning { color: var(--warning); }
 .diff-list { margin: 0; padding-left: 18px; font-size: 0.85rem; color: var(--ink-soft); }
+
+.equipment-warning { border-color: var(--crit); }
+.equipment-warning .mini-title { color: var(--crit); }

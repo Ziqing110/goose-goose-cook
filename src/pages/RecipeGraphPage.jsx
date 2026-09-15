@@ -15,6 +15,7 @@ import {
   mergeRecipesForDisplay,
   extractSharedSteps,
 } from "../utils/graphLayout.js";
+import { missingEquipment, EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
 import StepCard from "../components/StepCard.jsx";
 import GraphCanvas from "../components/GraphCanvas.jsx";
 import Drawer from "../components/Drawer.jsx";
@@ -189,6 +190,7 @@ export default function RecipeGraphPage() {
   };
 
   const allMaterials = [...new Set(working.nodes.flatMap((n) => n.required_materials || []))];
+  const lacking = missingEquipment(working.nodes, kitchenProfile);
   const affectedStepCount = affectedSteps.size;
   const dishIsUndoable = impossibleSteps.size > 0;
 
@@ -440,6 +442,19 @@ export default function RecipeGraphPage() {
           </span>
         </div>
       </div>
+
+      {lacking.length > 0 && (
+        <div className="card equipment-warning">
+          <span className="mini-title">
+            Needs {lacking.map((e) => EQUIPMENT_LABELS[e] || e).join(" and ")} — {kitchenProfile?.name} hasn&rsquo;t got
+            {lacking.length === 1 ? " one" : " them"}
+          </span>
+          <p className="hint">
+            I&rsquo;ll plan as if there were exactly one, so the timings still work. Improvise, or edit the kitchen to
+            match what you really have.
+          </p>
+        </div>
+      )}
 
       {allMaterials.length > 0 && (
         <div className="card materials-card">

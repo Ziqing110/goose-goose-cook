@@ -36,6 +36,24 @@ const SEARCH_NODE_BUDGET = 150000;
 // Equipment with 0 configured capacity (including hasWok/hasOven false)
 // is treated as capacity 1 â€” a "make it work" fallback instead of
 // declaring the recipe unschedulable.
+// The fallback above is a kindness, but a silent one: a kitchen with the
+// wok toggled off still gets wok steps planned as though it had one.
+// This reports which equipment a plan leans on that the kitchen says it
+// hasn't got, so the pages can say so out loud instead of quietly
+// planning a cook that can't happen.
+export function missingEquipment(nodes, kitchenProfile) {
+  if (!kitchenProfile) return [];
+  const configured = {
+    cutting_board: kitchenProfile.cuttingBoards ?? 1,
+    stove_burner: kitchenProfile.burners ?? 1,
+    pot: kitchenProfile.pots ?? 1,
+    wok: kitchenProfile.hasWok ? 1 : 0,
+    oven: kitchenProfile.hasOven ? 1 : 0,
+  };
+  const needed = new Set((nodes || []).flatMap((n) => n.required_equipment || []));
+  return [...needed].filter((type) => (configured[type] ?? 1) === 0);
+}
+
 export function equipmentCapacity(kitchenProfile) {
   const kp = kitchenProfile || {};
   return {
