@@ -1,21 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
-import { nextNodeId, slugifyMaterialId, MATERIAL_CATEGORY_LABELS, MATERIAL_CATEGORY_ORDER } from "../data/dishes.js";
+import { nextNodeId, slugifyMaterialId } from "../data/dishes.js";
 import { useSessionRecipes } from "../state/useSessionRecipes.js";
 import {
   diffGraphs,
   cloneGraph,
   groupByPhase,
   computeStepAvailability,
-  computeDownstreamClosure,
-  computeMaterialTotals,
   layoutLevels,
   mergeRecipesForDisplay,
 } from "../utils/graphLayout.js";
 import { missingEquipment, EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
 import StepCard from "../components/StepCard.jsx";
-import GraphCanvas from "../components/GraphCanvas.jsx";
 import Drawer from "../components/Drawer.jsx";
 import NodeEditorPanel from "../components/NodeEditorPanel.jsx";
 import "./RecipeGraphPage.css";
@@ -86,49 +83,8 @@ export default function RecipeGraphPage() {
   const materialsInfo = { ...baseMaterials, ...working.custom_materials };
   const materialLabel = (m) => materialsInfo[m]?.label || m;
 
-  // The catalog's amount/unit is a flat default that doesn't know how
-  // many steps (or dishes) actually draw on it — a shared step's own
-  // material_usage states the true combined need, so the checklist
-  // shows that total instead wherever a step has stated one.
-  const materialTotals = computeMaterialTotals(working.nodes, materialsInfo);
-
-  // A material's priority is how many steps its availability ultimately
-  // affects — the step(s) it's directly used in, plus everything
-  // downstream of those (inherited through the dependency graph), not
-  // just a raw count of where it's literally listed.
-  const downstreamClosure = computeDownstreamClosure(working.nodes);
-  const materialPriority = (m) => {
-    const affected = new Set();
-    working.nodes.forEach((n) => {
-      if ((n.required_materials || []).includes(m)) {
-        downstreamClosure.get(n.id)?.forEach((id) => affected.add(id));
-      }
-    });
-    return affected.size;
-  };
-
-  const allMaterials = [...new Set(working.nodes.flatMap((n) => n.required_materials || []))];
   const lacking = missingEquipment(working.nodes, kitchenProfile);
-  const affectedStepCount = affectedSteps.size;
   const dishIsUndoable = impossibleSteps.size > 0;
-
-  // Group by basic ingredient type, then order within each group by how
-  // many steps depend on it (most-depended-on first), falling back to
-  // portion size to break ties.
-  const materialsByCategory = {};
-  allMaterials.forEach((m) => {
-    const category = materialsInfo[m]?.category || "other";
-    if (!materialsByCategory[category]) materialsByCategory[category] = [];
-    materialsByCategory[category].push(m);
-  });
-  const orderedCategories = MATERIAL_CATEGORY_ORDER.filter((cat) => materialsByCategory[cat]?.length > 0);
-  orderedCategories.forEach((cat) => {
-    materialsByCategory[cat].sort((a, b) => {
-      const byPriority = materialPriority(b) - materialPriority(a);
-      if (byPriority !== 0) return byPriority;
-      return (materialTotals[b]?.amount || 0) - (materialTotals[a]?.amount || 0);
-    });
-  });
 
   const formatImpossibleReason = (reason) => {
     if (!reason) return null;
@@ -144,11 +100,6 @@ export default function RecipeGraphPage() {
     return bits.join("; ");
   };
 
-  const toggleMaterial = (id) => {
-    const next = new Set(unavailableMaterials);
-    next.has(id) ? next.delete(id) : next.add(id);
-    dispatch({ type: "session/update", payload: { outMaterialIds: [...next] } });
-  };
 
   // The escape hatch that makes the approval gate below fair: rather
   // than only being told the cook isn't doable, drop what can't be done
@@ -186,26 +137,9 @@ export default function RecipeGraphPage() {
     dispatch({ type: "session/recipes/updateOne", payload: { recipeId, patch: { working: nextWorking } } });
   };
 
-  const updateSharedStepWorking = (sharedStepId, mutateFn) => {
-    const step = sharedSteps.find((s) => s.id === sharedStepId);
-    if (!step) return;
-    const nextWorking = cloneGraph(step.working);
-    mutateFn(nextWorking);
-    dispatch({ type: "session/sharedSteps/updateOne", payload: { sharedStepId, patch: { working: nextWorking } } });
-  };
 
   const selectNode = (nodeId) => dispatch({ type: "session/update", payload: { selectedNodeId: nodeId } });
 
-  const updateNode = (nodeId, patchFn) => {
-    const shared = findSharedStep(nodeId);
-    if (shared) return updateSharedStepWorking(shared.id, patchFn);
-    const recipe = findRecipeForNode(nodeId);
-    if (!recipe) return;
-    updateRecipeWorking(recipe.id, (w) => {
-      const node = w.nodes.find((n) => n.id === nodeId);
-      if (node) patchFn(node);
-    });
-  };
 
   // A new step belongs to exactly one dish, so with more than one dish
   // in the session the target has to be chosen explicitly — see the
@@ -332,8 +266,8 @@ export default function RecipeGraphPage() {
   Object.values(phaseGroups).forEach((group) => group.sort((a, b) => stepIndex.get(a.id) - stepIndex.get(b.id)));
   const dishLabelFor = (node) => (node._shared ? "Shared" : recipes.find((r) => r.id === node._recipeId)?.working.title || null);
 
-  // A merged shared step's own material_usage only holds the combined
-  // total (shown in the Required materials panel); usage_breakdown keeps
+  // A merged shared step's own material_usage holds the combined total
+  // (the Inventory page shows that); usage_breakdown keeps
   // each contributing dish's own amount so the per-dish split is still
   // visible on the step itself, even though it's now done as one step.
   const usageBreakdownFor = (node) => {
@@ -374,64 +308,7 @@ export default function RecipeGraphPage() {
         </div>
       )}
 
-      {allMaterials.length > 0 && (
-        <div className="card materials-card">
-          <div className="materials-card-head">
-            <span className="mini-title">Required materials</span>
-            <span className={`hint ${dishIsUndoable ? "materials-summary-critical" : ""}`}>
-              {dishIsUndoable
-                ? `Not doable as-is — ${impossibleSteps.size} of ${working.nodes.length} steps blocked`
-                : affectedStepCount > 0
-                ? `${affectedStepCount} of ${working.nodes.length} steps affected`
-                : "All steps covered"}
-            </span>
-          </div>
-          <p className="hint">
-            {approved
-              ? "Locked in with the plan — hit Revise to change what you have."
-              : "All selected by default — uncheck what you don't have and the steps that need it drop out."}
-          </p>
-          <div className="materials-groups">
-            {orderedCategories.map((cat) => (
-              <div className="materials-group" key={cat}>
-                <span className="materials-group-label mono">{MATERIAL_CATEGORY_LABELS[cat] || cat}</span>
-                <div className="checkbox-grid">
-                  {materialsByCategory[cat].map((m) => {
-                    const total = materialTotals[m];
-                    return (
-                      <label
-                        className={`checkbox-pill ${unavailableMaterials.has(m) ? "is-unavailable" : ""} ${
-                          approved ? "is-locked" : ""
-                        }`}
-                        key={m}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={!unavailableMaterials.has(m)}
-                          disabled={Boolean(approved)}
-                          onChange={() => toggleMaterial(m)}
-                        />
-                        <span>
-                          {materialLabel(m)}
-                          {total && (
-                            <span className="mono materials-portion">
-                              {" "}
-                              &middot; {total.amount} {total.unit}
-                            </span>
-                          )}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="graph-page-layout">
-        <div className="phase-columns">
+      <div className="phase-columns">
           {PHASE_COLUMNS.map((col) => (
             <div className="phase-column" key={col.key}>
               <div className="phase-column-head">
@@ -485,15 +362,6 @@ export default function RecipeGraphPage() {
           ))}
         </div>
 
-        <div className="card dependency-graph-card">
-          <span className="mini-title">Dependency graph</span>
-          <GraphCanvas
-            nodes={working.nodes}
-            selectedNodeId={selectedNodeId}
-            onSelect={(id) => !approved && selectNode(id)}
-          />
-        </div>
-      </div>
 
       {approved ? (
         <ApprovedPanel draft={draft} approved={approved} onRevise={revise} />
