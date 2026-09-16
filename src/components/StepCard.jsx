@@ -1,5 +1,5 @@
 // One step card in a phase column. Click to select it — the editor
-// itself opens in a side drawer (RecipeGraphPage), not inline here,
+// itself opens in a side drawer, not inline here,
 // so a long edit form doesn't push the rest of the page down.
 import { formatDuration } from "../utils/graphLayout.js";
 import { equipmentLabel } from "../data/dishes.js";

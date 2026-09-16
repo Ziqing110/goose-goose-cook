@@ -1,7 +1,7 @@
 // Generic, dish-agnostic helpers. The actual recipe content (the Mapo
 // Tofu demo, its steps, and the materials catalog) now lives in the
 // database — see server/db.js's seed data and src/api/recipeTemplates.js
-// — so RecipeGraphPage renders whatever template comes back from the
+// — so the main line renders whatever template comes back from the
 // API instead of one hand-authored dish baked into the bundle.
 
 export const ELICITATION_QUESTIONS = [

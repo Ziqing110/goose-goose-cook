@@ -15,8 +15,7 @@ import "./SessionProgress.css";
 const SESSION_STEPS = [
   { key: "kitchen-setup", label: "Kitchen", path: "/session/kitchen-setup" },
   { key: "conversation", label: "Conversation", path: "/session/conversation" },
-  { key: "inventory", label: "Inventory", path: "/session/inventory" },
-  { key: "recipe-graph", label: "Recipe graph", path: "/session/recipe-graph" },
+  { key: "inventory", label: "Main line", path: "/session/inventory" },
   { key: "voice-binding", label: "Cooks", path: "/session/voice-binding" },
   { key: "schedule", label: "Schedule", path: "/session/schedule" },
   { key: "live-cook", label: "Live cook", path: "/session/live-cook" },

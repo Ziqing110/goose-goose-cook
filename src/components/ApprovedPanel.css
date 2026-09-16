@@ -1,0 +1,11 @@
+/* Moved from RecipeGraphPage.css with the panel itself. */
+.approve-row { margin-top: 4px; display: flex; }
+.approve-row-split { justify-content: space-between; }
+.approved-panel { display: flex; flex-direction: column; gap: 14px; }
+.diff-block { display: flex; flex-direction: column; gap: 12px; }
+.diff-group { display: flex; flex-direction: column; gap: 4px; }
+.diff-group-title { font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.diff-success { color: var(--success); }
+.diff-danger { color: var(--crit); }
+.diff-warning { color: var(--warning); }
+.diff-list { margin: 0; padding-left: 18px; font-size: 0.85rem; color: var(--ink-soft); }

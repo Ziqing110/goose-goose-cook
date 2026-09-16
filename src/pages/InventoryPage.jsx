@@ -9,9 +9,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { useSessionRecipes } from "../state/useSessionRecipes.js";
-import { mergeRecipesForDisplay, computeStepAvailability, cyclicDependencyIds } from "../utils/graphLayout.js";
+import { mergeRecipesForDisplay, computeStepAvailability, cyclicDependencyIds, cloneGraph } from "../utils/graphLayout.js";
+import { missingEquipment, EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
 import RecipeBoard from "../components/RecipeBoard.jsx";
 import AddStepPanel from "../components/AddStepPanel.jsx";
+import ApprovedPanel from "../components/ApprovedPanel.jsx";
 import DeleteStepDialog from "../components/DeleteStepDialog.jsx";
 import Drawer from "../components/Drawer.jsx";
 import NodeEditorPanel from "../components/NodeEditorPanel.jsx";
@@ -156,7 +158,7 @@ export default function InventoryPage() {
   );
 
   // The same steps the ingredients above are folded under, as a board.
-  const { working } = useMemo(() => mergeRecipesForDisplay(recipes, sharedSteps), [recipes, sharedSteps]);
+  const { working, draft, approved } = useMemo(() => mergeRecipesForDisplay(recipes, sharedSteps), [recipes, sharedSteps]);
   const boardNodes = working.nodes || [];
   const blockedIds = useMemo(
     () => computeStepAvailability(boardNodes, new Set(outMaterialIds)).impossible,
@@ -173,6 +175,37 @@ export default function InventoryPage() {
   // the editor), so the editor sees the catalog plus this run's own.
   const materialsInfo = { ...(catalog || {}), ...(working.custom_materials || {}) };
   const selectedNode = selectedId ? boardNodes.find((n) => n.id === selectedId) || null : null;
+
+  // Approval is what the rest of the run reads: the schedule and the
+  // live cook run off `approved`, never `working`, so editing a step
+  // can't rewrite a plan someone is already cooking from.
+  const kitchenProfile = state.kitchenProfiles.find((p) => p.id === session.kitchenProfileId) || null;
+  const lacking = missingEquipment(boardNodes, kitchenProfile);
+  const dishIsUndoable = blockedIds.size > 0;
+
+  const approve = () => {
+    recipes.forEach((r) =>
+      dispatch({ type: "session/recipes/updateOne", payload: { recipeId: r.id, patch: { approved: cloneGraph(r.working) } } })
+    );
+    sharedSteps.forEach((st) =>
+      dispatch({ type: "session/sharedSteps/updateOne", payload: { sharedStepId: st.id, patch: { approved: cloneGraph(st.working) } } })
+    );
+    setSelectedId(null);
+  };
+  const revise = () => {
+    recipes.forEach((r) => dispatch({ type: "session/recipes/updateOne", payload: { recipeId: r.id, patch: { approved: null } } }));
+    sharedSteps.forEach((st) => dispatch({ type: "session/sharedSteps/updateOne", payload: { sharedStepId: st.id, patch: { approved: null } } }));
+  };
+
+  // The escape hatch that makes the gate fair: drop what can't be done
+  // and cook the rest. blockedIds is already the full closure.
+  const dropBlockedSteps = () => {
+    const ids = [...blockedIds.keys()];
+    if (!ids.length) return;
+    if (!window.confirm(`Remove ${ids.length} step${ids.length === 1 ? "" : "s"} you can't do without those materials?`)) return;
+    ids.forEach((id) => deleteNode(id, { confirm: false }));
+    setSelectedId(null);
+  };
 
   const nodePositions = session.nodePositions || {};
   const moveNode = (id, at) =>
@@ -381,6 +414,7 @@ export default function InventoryPage() {
                 </span>
                 <span className="inv-meta is-tertiary">Drag a card to move it. Click one to edit.</span>
               </div>
+              {!approved && (
               <AddStepPanel
                 recipes={recipes}
                 nodes={boardNodes}
@@ -389,17 +423,31 @@ export default function InventoryPage() {
                   if (id) setSelectedId(id); // open the new card for the details
                 }}
               />
+              )}
               <RecipeBoard
                 nodes={boardNodes}
                 positions={nodePositions}
                 selectedNodeId={selectedId}
                 dishLabelFor={dishLabelFor}
                 blockedIds={blockedIds}
-                onSelect={selectNode}
+                onSelect={approved ? () => {} : selectNode}
                 onMove={moveNode}
               />
             </section>
           )}
+
+          {lacking.length > 0 && (
+            <div className="inv-card inv-equipment-warning">
+              <span className="inv-card-title">
+                Planned with {lacking.map((e) => EQUIPMENT_LABELS[e] || e).join(" and ")} you don&rsquo;t have
+              </span>
+              <span className="inv-meta">
+                {kitchenProfile?.name} has none configured, so these timings assume exactly one of each.
+              </span>
+            </div>
+          )}
+
+          {approved && <ApprovedPanel draft={draft} approved={approved} onRevise={revise} />}
 
           {/* ---- Footer band ---- */}
           <div className="inv-footer">
@@ -412,9 +460,16 @@ export default function InventoryPage() {
                   Mark everything on hand
                 </button>
               )}
-              <button type="button" className="btn btn-primary btn-lg" onClick={() => navigate("/session/recipe-graph")}>
-                {coverage.blocked > 0 ? "Set the main line anyway →" : "Set the main line →"}
-              </button>
+              {!approved && dishIsUndoable && (
+                <button type="button" className="btn btn-ghost" onClick={dropBlockedSteps}>
+                  Remove the blocked {blockedIds.size === 1 ? "step" : "steps"}
+                </button>
+              )}
+              {!approved && (
+                <button type="button" className="btn btn-primary btn-lg" onClick={approve} disabled={dishIsUndoable}>
+                  Approve and schedule &rarr;
+                </button>
+              )}
             </div>
           </div>
         </>

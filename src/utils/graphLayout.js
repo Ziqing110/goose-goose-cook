@@ -291,7 +291,7 @@ function buildMergedSharedNode(sharedId, shareKey, members) {
  * left as a normal per-recipe step.
  *
  * Runs once, against the initial batch of recipes instantiated together
- * (RecipeGraphPage's mount effect). There is no support for promoting
+ * (useSessionRecipes' mount effect). There is no support for promoting
  * an existing per-dish step into a shared one after the fact.
  */
 export function extractSharedSteps(recipeGraphs) {
