@@ -11,6 +11,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useReducer } from "react";
 import * as kitchensApi from "../api/kitchens.js";
 import * as sessionsApi from "../api/sessions.js";
+import { runTitle } from "../utils/runStats.js";
 
 function emptySessionConversation() {
   return { complete: false, transcript: [], answers: {}, questionIndex: 0 };
@@ -30,6 +31,7 @@ function makeSession(id, kitchenProfileId) {
     cooks: [],
     mode: null,
     outMaterialIds: [], // ingredients marked "Out" on the Inventory page
+    inventoryChecked: false, // cook left Inventory via "Set the main line"
     run: null, // set when cooking actually starts — see LiveCookPage
   };
 }
@@ -39,12 +41,13 @@ function sessionSummary(session, kitchenProfiles, status, hasSummary = false) {
   return {
     hasSummary, // abandoned runs froze no card — Home uses this to know
     id: session.id,
-    dish: session.recipes.map((r) => r.working?.title).filter(Boolean).join(" + ") || session.conversation.answers.dishIdea || null,
+    dish: runTitle(session),
     servings: session.recipes[0]?.working?.servings ?? null,
     kitchenProfileId: session.kitchenProfileId,
     kitchenProfileName: kitchenProfile?.name || null,
     startedAt: session.startedAt,
     endedAt: new Date().toISOString(),
+    run: session.run ? { startedAt: session.run.startedAt, endedAt: session.run.endedAt } : null,
     status,
   };
 }
@@ -239,21 +242,30 @@ export function AppStateProvider({ children }) {
   // to the server. Brand-new recipes are created explicitly (see
   // addRecipeToSession below) — this effect only ever PATCHes, never
   // creates, so it never races a recipe's initial POST.
+  const sessionPatch = (session) => ({
+    kitchenProfileId: session.kitchenProfileId,
+    conversation: session.conversation,
+    selectedNodeId: session.selectedNodeId,
+    cooks: session.cooks,
+    mode: session.mode,
+    outMaterialIds: session.outMaterialIds,
+    inventoryChecked: session.inventoryChecked,
+    run: session.run,
+  });
+  // The session whose top-level sync is still waiting on the debounce,
+  // so a reload/close inside that window can flush it (see below).
+  const pendingSyncRef = useRef(null);
+
   useEffect(() => {
+    pendingSyncRef.current = null;
     if (!state.session) return;
     const session = state.session;
     clearTimeout(debounceRef.current);
+    pendingSyncRef.current = session;
     debounceRef.current = setTimeout(() => {
+      pendingSyncRef.current = null;
       sessionsApi
-        .updateSession(session.id, {
-          kitchenProfileId: session.kitchenProfileId,
-          conversation: session.conversation,
-          selectedNodeId: session.selectedNodeId,
-          cooks: session.cooks,
-          mode: session.mode,
-          outMaterialIds: session.outMaterialIds,
-          run: session.run,
-        })
+        .updateSession(session.id, sessionPatch(session))
         .catch((err) => console.error("Failed to sync session:", err));
 
       session.recipes.forEach((recipe) => {
@@ -276,6 +288,19 @@ export function AppStateProvider({ children }) {
     }, 600);
     return () => clearTimeout(debounceRef.current);
   }, [state.session, recipesSyncedIds, sharedStepsSyncedIds]);
+
+  // Refreshing or closing the tab inside the 600ms window would drop the
+  // latest answer/toggle; fire the top-level patch anyway with keepalive.
+  useEffect(() => {
+    const flush = () => {
+      const session = pendingSyncRef.current;
+      if (!session) return;
+      pendingSyncRef.current = null;
+      sessionsApi.updateSession(session.id, sessionPatch(session), { keepalive: true }).catch(() => {});
+    };
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, []);
 
   const refetchKitchens = () => {
     dispatch({ type: "kitchenProfiles/loading" });

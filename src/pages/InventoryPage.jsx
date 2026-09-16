@@ -92,13 +92,21 @@ function StepLine({ step, delay }) {
   );
 }
 
+// Step detail stays folded so the list reads as a checklist; a row
+// opens on its disclosure (or by clicking its text), and an "out" row
+// opens itself so the cook sees what they just affected.
 function IngredientRow({ item, onToggle, delay }) {
   const onHand = !item.out;
+  const [opened, setOpened] = useState(false);
+  const expanded = !onHand || opened;
+  const detailId = `inv-detail-${item.id}`;
+  const reachText = `${item.reach} ${item.reach === 1 ? "step" : "steps"}`;
+  const reachTitle = onHand ? `Missing this would affect ${reachText}` : `Missing — affects ${reachText}`;
   return (
-    <li className={`inv-row ${onHand ? "" : "is-out"}`} style={{ animationDelay: `${delay}ms` }}>
+    <li className={`inv-row ${onHand ? "" : "is-out"} ${expanded ? "is-open" : ""}`} style={{ animationDelay: `${delay}ms` }}>
       <div className="inv-row-head">
         <Checkbox checked={onHand} label={item.label} onChange={onToggle} />
-        <span className="inv-row-main">
+        <span className="inv-row-main" onClick={() => setOpened((v) => !v)}>
           <span className="inv-row-title-line">
             <span className="inv-row-title">{item.label}</span>
             {item.amount != null && (
@@ -122,15 +130,29 @@ function IngredientRow({ item, onToggle, delay }) {
             ))}
           </span>
         </span>
-        <span className={`inv-reach mono is-${item.reachTone}`}>
-          → {item.reach} {item.reach === 1 ? "step" : "steps"}
+        <span className={`inv-reach mono is-${item.reachTone}`} title={reachTitle} aria-label={reachTitle}>
+          → {reachText}
         </span>
+        <button
+          type="button"
+          className="inv-row-toggle"
+          aria-expanded={expanded}
+          aria-controls={detailId}
+          aria-label={`${expanded ? "Hide" : "Show"} the steps that use ${item.label}`}
+          onClick={() => setOpened((v) => !v)}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
       </div>
-      <div className="inv-row-detail">
-        {item.usedIn.map((step, i) => (
-          <StepLine key={step.id} step={step} delay={i * 60} />
-        ))}
-      </div>
+      {expanded && (
+        <div className="inv-row-detail" id={detailId}>
+          {item.usedIn.map((step, i) => (
+            <StepLine key={step.id} step={step} delay={i * 60} />
+          ))}
+        </div>
+      )}
     </li>
   );
 }
@@ -167,6 +189,10 @@ export default function InventoryPage() {
     setOut([...next]);
   };
   const markAllOnHand = () => setOut([]);
+  const setMainLine = () => {
+    dispatch({ type: "session/update", payload: { inventoryChecked: true } });
+    navigate("/session/recipe-graph");
+  };
 
   const { coverage } = inv;
   const metaBits = [];
@@ -346,16 +372,9 @@ export default function InventoryPage() {
             <span className="mono inv-footer-tag">
               {coverage.craftable} of {coverage.total} steps craftable
             </span>
-            <div className="inv-footer-actions">
-              {coverage.blocked > 0 && (
-                <button type="button" className="btn btn-ghost inv-btn-accent" onClick={markAllOnHand}>
-                  Mark everything on hand
-                </button>
-              )}
-              <button type="button" className="btn btn-primary btn-lg" onClick={() => navigate("/session/recipe-graph")}>
-                {coverage.blocked > 0 ? "Set the main line anyway →" : "Set the main line →"}
-              </button>
-            </div>
+            <button type="button" className="btn btn-primary btn-lg" onClick={setMainLine}>
+              {coverage.blocked > 0 ? "Set the main line anyway →" : "Set the main line →"}
+            </button>
           </div>
         </>
       )}

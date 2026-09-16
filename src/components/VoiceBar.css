@@ -21,8 +21,8 @@
 
 .voice-avatar {
   flex: none;
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
@@ -60,6 +60,19 @@
   white-space: nowrap;
 }
 
+/* Narrow: the hint wraps to two lines rather than truncating; the AI
+   sub-line gives way so the bar keeps its fixed height. */
+@media (max-width: 480px) {
+  .voice-transcript-text {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.3;
+  }
+  .voice-transcript-sub { display: none; }
+}
+
 .voice-meter {
   flex: none;
   display: inline-flex;
@@ -87,24 +100,29 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .meter-bar.is-live { animation: none; height: 14px; }
+  .voice-status-pill.is-listening::before { animation: none; }
 }
 
+/* Status is a readout, not a control: a dot and a word, no pill, so it
+   can't be mistaken for the Mute button beside it. */
 .voice-status-pill {
   flex: none;
-  height: 44px;
   display: inline-flex;
   align-items: center;
-  padding: 0 18px;
-  border-radius: var(--radius-pill);
-  font-size: 0.85rem;
-  font-weight: 600;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
-.voice-status-pill.is-listening { background: var(--cook-sage-soft); color: var(--cook-sage); }
-.voice-status-pill.is-muted { background: color-mix(in srgb, var(--vb-fg) 12%, transparent); color: color-mix(in srgb, var(--vb-fg) 70%, transparent); }
+.voice-status-pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.voice-status-pill.is-listening { color: var(--cook-sage); }
+.voice-status-pill.is-listening::before { animation: status-pulse 1.6s ease-in-out infinite; }
+@keyframes status-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.voice-status-pill.is-muted { color: color-mix(in srgb, var(--vb-fg) 55%, transparent); }
 
 .voice-mute-btn {
   flex: none;
-  height: 44px;
+  height: 40px;
   padding: 0 20px;
   border-radius: var(--radius-pill);
   border: 1px solid color-mix(in srgb, var(--vb-fg) 30%, transparent);
@@ -121,4 +139,11 @@
 @media (max-width: 720px) {
   .voice-bar { padding: 0 16px; gap: 12px; }
   .voice-meter { display: none; }
+}
+@media (max-width: 480px) {
+  /* The status pill collapses to its dot (mirrors the v4 bar) and the
+     avatar goes, leaving the hint most of the row. Label stays for AT. */
+  .voice-avatar { display: none; }
+  .voice-transcript-label { display: none; }
+  .voice-status-pill { font-size: 0; gap: 0; }
 }

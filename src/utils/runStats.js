@@ -2,9 +2,7 @@
 // card": title, difficulty flames, HUD stats, phase split, stage path,
 // and run-log timings. Everything here is computed from data the
 // backend already returns (see AppStateContext.jsx) — no new fields.
-import { ELICITATION_QUESTIONS } from "../data/dishes.js";
-
-export const CONVERSATION_QUESTION_COUNT = ELICITATION_QUESTIONS.length;
+import { sessionStageStates } from "./sessionSteps.js";
 
 const DIFFICULTY_FLAMES = { low: 1, medium: 2, high: 3 };
 
@@ -18,9 +16,11 @@ export function allWorkingNodes(session) {
 
 export function runTitle(session) {
   if (!session) return "Untitled run";
+  // Sorted so the same pair of dishes reads the same in every run log row.
   const fromRecipes = (session.recipes || [])
     .map((r) => r.working?.title)
     .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b))
     .join(" + ");
   return fromRecipes || session.conversation?.answers?.dishIdea || "Untitled run";
 }
@@ -54,43 +54,9 @@ export function runPhaseCounts(session) {
   return counts;
 }
 
-/**
- * The three stages of a run. Returns [{ id, label, state, count }] where
- * state is "done" | "current" | "future" and count is the mono progress
- * string shown under the current stage ("2 of 5").
- */
+/** Home's stage path — the same stages, states and counts as the in-session chrome. */
 export function runStages(session) {
-  const hasKitchen = Boolean(session?.kitchenProfileId);
-  const conversation = session?.conversation || { complete: false, questionIndex: 0 };
-  const recipes = session?.recipes || [];
-  const mainLineDone = recipes.length > 0 && recipes.every((r) => r.approved);
-
-  const kitchen = hasKitchen ? "done" : "current";
-  let conversationState = "future";
-  let mainLine = "future";
-  if (hasKitchen) {
-    conversationState = conversation.complete ? "done" : "current";
-    if (conversation.complete) mainLine = mainLineDone ? "done" : "current";
-  }
-
-  const answered = Math.min(conversation.questionIndex || 0, CONVERSATION_QUESTION_COUNT);
-  const approvedCount = recipes.filter((r) => r.approved).length;
-
-  return [
-    { id: "kitchen", label: "Kitchen", state: kitchen, count: null },
-    {
-      id: "conversation",
-      label: "Conversation",
-      state: conversationState,
-      count: conversationState === "current" ? `${answered} of ${CONVERSATION_QUESTION_COUNT}` : null,
-    },
-    {
-      id: "mainLine",
-      label: "Main line",
-      state: mainLine,
-      count: mainLine === "current" && recipes.length > 0 ? `${approvedCount} of ${recipes.length}` : null,
-    },
-  ];
+  return sessionStageStates(session).map(({ key, label, state, count }) => ({ id: key, label, state, count }));
 }
 
 /** "42:00" — always mm:ss, minutes unpadded past 99. */
@@ -130,8 +96,12 @@ export function summarizeRun(item, kitchenProfiles) {
   const profile = kitchenProfiles.find((p) => p.id === item.kitchenProfileId) || null;
   const startedAt = item.startedAt;
   const endedAt = item.endedAt;
-  const durationSec =
-    startedAt && endedAt ? Math.max(0, (new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 1000) : null;
+  // Cooking time only — the live-cook clock, not the whole session
+  // (planning a run can take hours; that isn't a time to beat). A run
+  // that never reached live cook has no duration.
+  const run = item.run;
+  const cookEnd = run?.startedAt ? run.endedAt || endedAt : null;
+  const durationSec = cookEnd ? Math.max(0, (new Date(cookEnd).getTime() - new Date(run.startedAt).getTime()) / 1000) : null;
   return {
     id: item.id,
     title: isFull ? runTitle(item) : item.dish || "Untitled run",

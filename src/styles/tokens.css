@@ -73,7 +73,7 @@
 
   /* Persistent shell chrome height — modals/drawers stop above this so
      they never cover (or steal clicks from) the voice bar. */
-  --voice-bar-height: 104px;
+  --voice-bar-height: 88px;
 
   --font-display: "Figtree", ui-sans-serif, system-ui, sans-serif;
   --font-body: "Figtree", ui-sans-serif, system-ui, sans-serif;

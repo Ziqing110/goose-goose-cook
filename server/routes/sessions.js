@@ -41,6 +41,9 @@ function sessionRowToApi(row, recipeRows, sharedStepRows) {
     // Ingredients the cook marked "out" on the Inventory page — the
     // one input that page writes; the main line reads the same set.
     outMaterialIds: JSON.parse(row.out_material_ids_json || "[]"),
+    // Set once the cook leaves Inventory via "Set the main line" — the
+    // page has no other completion signal (an empty "out" set is valid).
+    inventoryChecked: Boolean(row.inventory_checked),
     summary: row.summary_json ? JSON.parse(row.summary_json) : null,
     recipes: recipeRows.map(recipeRowToApi),
     sharedSteps: sharedStepRows.map(sharedStepRowToApi),
@@ -93,13 +96,13 @@ const getSessionStmt = db.prepare("SELECT * FROM sessions WHERE id = ?");
 const getRecipesForSessionStmt = db.prepare("SELECT * FROM recipe_instances WHERE session_id = ? ORDER BY position ASC");
 const getSharedStepsForSessionStmt = db.prepare("SELECT * FROM shared_steps WHERE session_id = ? ORDER BY id ASC");
 const insertSessionStmt = db.prepare(`
-  INSERT INTO sessions (id, kitchen_profile_id, status, started_at, ended_at, conversation_json, selected_node_id, cooks_json, mode, run_json, summary_json, out_material_ids_json, updated_at)
-  VALUES (@id, @kitchen_profile_id, @status, @started_at, @ended_at, @conversation_json, @selected_node_id, @cooks_json, @mode, @run_json, @summary_json, @out_material_ids_json, @updated_at)
+  INSERT INTO sessions (id, kitchen_profile_id, status, started_at, ended_at, conversation_json, selected_node_id, cooks_json, mode, run_json, summary_json, out_material_ids_json, inventory_checked, updated_at)
+  VALUES (@id, @kitchen_profile_id, @status, @started_at, @ended_at, @conversation_json, @selected_node_id, @cooks_json, @mode, @run_json, @summary_json, @out_material_ids_json, @inventory_checked, @updated_at)
 `);
 const updateSessionStmt = db.prepare(`
   UPDATE sessions SET kitchen_profile_id=@kitchen_profile_id, status=@status, ended_at=@ended_at,
     conversation_json=@conversation_json, selected_node_id=@selected_node_id, cooks_json=@cooks_json,
-    mode=@mode, run_json=@run_json, summary_json=@summary_json, out_material_ids_json=@out_material_ids_json, updated_at=@updated_at
+    mode=@mode, run_json=@run_json, summary_json=@summary_json, out_material_ids_json=@out_material_ids_json, inventory_checked=@inventory_checked, updated_at=@updated_at
   WHERE id=@id
 `);
 
@@ -129,6 +132,7 @@ sessionsRouter.post("/", (req, res) => {
     mode: null,
     run_json: null,
     out_material_ids_json: JSON.stringify([]),
+    inventory_checked: 0,
     summary_json: null,
     updated_at: now,
   };
@@ -157,7 +161,7 @@ sessionsRouter.patch("/:id", (req, res) => {
   const existing = getSessionStmt.get(req.params.id);
   if (!existing) return res.status(404).json({ error: "session not found" });
 
-  const { kitchenProfileId, status, endedAt, conversation, selectedNodeId, cooks, mode, run, summary, outMaterialIds } = req.body;
+  const { kitchenProfileId, status, endedAt, conversation, selectedNodeId, cooks, mode, run, summary, outMaterialIds, inventoryChecked } = req.body;
   const row = {
     id: existing.id,
     kitchen_profile_id: kitchenProfileId !== undefined ? kitchenProfileId : existing.kitchen_profile_id,
@@ -170,6 +174,7 @@ sessionsRouter.patch("/:id", (req, res) => {
     run_json: run !== undefined ? (run ? JSON.stringify(run) : null) : existing.run_json,
     summary_json: summary !== undefined ? (summary ? JSON.stringify(summary) : null) : existing.summary_json,
     out_material_ids_json: outMaterialIds !== undefined ? JSON.stringify(outMaterialIds) : existing.out_material_ids_json,
+    inventory_checked: inventoryChecked !== undefined ? (inventoryChecked ? 1 : 0) : existing.inventory_checked,
     updated_at: new Date().toISOString(),
   };
   updateSessionStmt.run(row);

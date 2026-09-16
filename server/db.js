@@ -56,6 +56,7 @@ db.exec(`
     run_json TEXT,
     summary_json TEXT,
     out_material_ids_json TEXT NOT NULL DEFAULT '[]',
+    inventory_checked INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL
   );
 
@@ -109,6 +110,9 @@ if (!sessionColumns.includes("summary_json")) {
 }
 if (!sessionColumns.includes("out_material_ids_json")) {
   db.exec("ALTER TABLE sessions ADD COLUMN out_material_ids_json TEXT NOT NULL DEFAULT '[]'");
+}
+if (!sessionColumns.includes("inventory_checked")) {
+  db.exec("ALTER TABLE sessions ADD COLUMN inventory_checked INTEGER NOT NULL DEFAULT 0");
 }
 
 // ---------------------------------------------------------------------
