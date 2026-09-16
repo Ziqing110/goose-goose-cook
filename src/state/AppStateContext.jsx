@@ -30,6 +30,7 @@ function makeSession(id, kitchenProfileId) {
     cooks: [],
     mode: null,
     outMaterialIds: [], // ingredients marked "Out" on the Inventory page
+    nodePositions: {}, // where each step card sits on the board
     run: null, // set when cooking actually starts — see LiveCookPage
   };
 }
@@ -252,6 +253,7 @@ export function AppStateProvider({ children }) {
           cooks: session.cooks,
           mode: session.mode,
           outMaterialIds: session.outMaterialIds,
+          nodePositions: session.nodePositions || {},
           run: session.run,
         })
         .catch((err) => console.error("Failed to sync session:", err));

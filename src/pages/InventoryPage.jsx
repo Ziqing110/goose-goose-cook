@@ -9,6 +9,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { useSessionRecipes } from "../state/useSessionRecipes.js";
+import { mergeRecipesForDisplay, computeStepAvailability } from "../utils/graphLayout.js";
+import RecipeBoard from "../components/RecipeBoard.jsx";
 import { buildInventory, formatClock, formatStepDuration, PHASE_LABELS } from "../utils/inventory.js";
 import dishMapoTofu from "../assets/dish-mapo-tofu.png";
 import dishNoodleSoup from "../assets/dish-noodle-soup.png";
@@ -147,6 +149,21 @@ export default function InventoryPage() {
     () => buildInventory({ recipes, sharedSteps, catalog, outIds: outMaterialIds }),
     [recipes, sharedSteps, catalog, outMaterialIds]
   );
+
+  // The same steps the ingredients above are folded under, as a board.
+  const { working } = useMemo(() => mergeRecipesForDisplay(recipes, sharedSteps), [recipes, sharedSteps]);
+  const boardNodes = working.nodes || [];
+  const blockedIds = useMemo(
+    () => computeStepAvailability(boardNodes, new Set(outMaterialIds)).impossible,
+    [boardNodes, outMaterialIds]
+  );
+  const dishLabelFor = (node) =>
+    node._shared ? "Shared" : recipes.find((r) => r.id === node._recipeId)?.working.title || null;
+  const nodePositions = session.nodePositions || {};
+  const moveNode = (id, at) =>
+    dispatch({ type: "session/update", payload: { nodePositions: { ...nodePositions, [id]: at } } });
+  const selectNode = (id) =>
+    dispatch({ type: "session/update", payload: { selectedNodeId: session.selectedNodeId === id ? null : id } });
 
   const hasDishes = recipes.length > 0;
   const hasOut = outMaterialIds.length > 0;
@@ -340,6 +357,27 @@ export default function InventoryPage() {
               )}
             </aside>
           </div>
+
+          {/* ---- The steps themselves, as a board you can rearrange ---- */}
+          {boardNodes.length > 0 && (
+            <section className="inv-card inv-board-card" aria-labelledby="inv-board-title">
+              <div className="inv-card-head">
+                <span id="inv-board-title" className="inv-card-title">
+                  The main line
+                </span>
+                <span className="inv-meta is-tertiary">Drag a card to move it. Click one to edit.</span>
+              </div>
+              <RecipeBoard
+                nodes={boardNodes}
+                positions={nodePositions}
+                selectedNodeId={session.selectedNodeId}
+                dishLabelFor={dishLabelFor}
+                blockedIds={blockedIds}
+                onSelect={selectNode}
+                onMove={moveNode}
+              />
+            </section>
+          )}
 
           {/* ---- Footer band ---- */}
           <div className="inv-footer">
