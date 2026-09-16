@@ -39,8 +39,53 @@ function sessionRowToApi(row, recipeRows, sharedStepRows) {
     mode: row.mode,
     run: row.run_json ? JSON.parse(row.run_json) : null,
     summary: row.summary_json ? JSON.parse(row.summary_json) : null,
+    // Materials the cook said they don't have. Session-level because a
+    // material can feed steps in more than one of its recipes.
+    unavailableMaterials: JSON.parse(row.unavailable_materials_json || "[]"),
     recipes: recipeRows.map(recipeRowToApi),
     sharedSteps: sharedStepRows.map(sharedStepRowToApi),
+  };
+}
+
+// Home's run log needs a title, a kitchen, a duration and a status —
+// not a whole session. Returning full rows there meant every past cook's
+// base64 photo and run transcript was downloaded just to render a list
+// of titles, so `?view=list` projects instead. json_extract does the
+// digging inside SQLite, so the big JSON columns never cross the wire.
+// The shape deliberately matches the compact row the client appends
+// locally when a run ends (see sessionSummary in AppStateContext).
+function listSessionsStmt(statuses) {
+  return db.prepare(`
+    SELECT id, kitchen_profile_id, status, started_at, ended_at,
+           json_extract(conversation_json, '$.answers.dishIdea') AS dish_idea,
+           json_extract(conversation_json, '$.answers.servings') AS answer_servings,
+           json_extract(summary_json, '$.dish') AS summary_dish,
+           summary_json IS NOT NULL AS has_summary
+    FROM sessions
+    ${statuses.length ? `WHERE status IN (${statuses.map(() => "?").join(",")})` : ""}
+    ORDER BY started_at DESC
+  `);
+}
+
+const listRecipeTitlesStmt = db.prepare(`
+  SELECT json_extract(working_json, '$.title') AS title,
+         json_extract(working_json, '$.servings') AS servings
+  FROM recipe_instances WHERE session_id = ? ORDER BY position ASC
+`);
+
+function sessionRowToListApi(row) {
+  const recipeRows = listRecipeTitlesStmt.all(row.id);
+  const fromRecipes = recipeRows.map((r) => r.title).filter(Boolean).join(" + ");
+  return {
+    id: row.id,
+    kitchenProfileId: row.kitchen_profile_id,
+    status: row.status,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    dish: row.summary_dish || fromRecipes || row.dish_idea || null,
+    servings: recipeRows[0]?.servings ?? (Number(row.answer_servings) || null),
+    // Abandoned runs never froze a summary, so there's no card to open.
+    hasSummary: Boolean(row.has_summary),
   };
 }
 
@@ -48,20 +93,31 @@ const getSessionStmt = db.prepare("SELECT * FROM sessions WHERE id = ?");
 const getRecipesForSessionStmt = db.prepare("SELECT * FROM recipe_instances WHERE session_id = ? ORDER BY position ASC");
 const getSharedStepsForSessionStmt = db.prepare("SELECT * FROM shared_steps WHERE session_id = ? ORDER BY id ASC");
 const insertSessionStmt = db.prepare(`
-  INSERT INTO sessions (id, kitchen_profile_id, status, started_at, ended_at, conversation_json, selected_node_id, cooks_json, mode, run_json, summary_json, updated_at)
-  VALUES (@id, @kitchen_profile_id, @status, @started_at, @ended_at, @conversation_json, @selected_node_id, @cooks_json, @mode, @run_json, @summary_json, @updated_at)
+  INSERT INTO sessions (id, kitchen_profile_id, status, started_at, ended_at, conversation_json, selected_node_id, cooks_json, mode, run_json, summary_json, unavailable_materials_json, updated_at)
+  VALUES (@id, @kitchen_profile_id, @status, @started_at, @ended_at, @conversation_json, @selected_node_id, @cooks_json, @mode, @run_json, @summary_json, @unavailable_materials_json, @updated_at)
 `);
 const updateSessionStmt = db.prepare(`
   UPDATE sessions SET kitchen_profile_id=@kitchen_profile_id, status=@status, ended_at=@ended_at,
     conversation_json=@conversation_json, selected_node_id=@selected_node_id, cooks_json=@cooks_json,
-    mode=@mode, run_json=@run_json, summary_json=@summary_json, updated_at=@updated_at
+    mode=@mode, run_json=@run_json, summary_json=@summary_json,
+    unavailable_materials_json=@unavailable_materials_json, updated_at=@updated_at
   WHERE id=@id
 `);
+
+// The client resumes `activeSessions[0]` and silently drops the rest, so
+// a second active row is unreachable forever: it never resumes and never
+// reaches history. Starting a run therefore closes out any other active
+// session, making "at most one active" an invariant the API guarantees
+// rather than something the UI merely avoids tripping.
+const abandonOtherActiveStmt = db.prepare(
+  "UPDATE sessions SET status='abandoned', ended_at=@now, updated_at=@now WHERE status='active' AND id != @id"
+);
 
 sessionsRouter.post("/", (req, res) => {
   const { id, kitchenProfileId } = req.body;
   if (!id) return res.status(400).json({ error: "id is required" });
   const now = new Date().toISOString();
+  abandonOtherActiveStmt.run({ id, now });
   const row = {
     id,
     kitchen_profile_id: kitchenProfileId ?? null,
@@ -74,6 +130,7 @@ sessionsRouter.post("/", (req, res) => {
     mode: null,
     run_json: null,
     summary_json: null,
+    unavailable_materials_json: "[]",
     updated_at: now,
   };
   insertSessionStmt.run(row);
@@ -82,6 +139,9 @@ sessionsRouter.post("/", (req, res) => {
 
 sessionsRouter.get("/", (req, res) => {
   const statuses = (req.query.status || "").split(",").filter(Boolean);
+  if (req.query.view === "list") {
+    return res.json(listSessionsStmt(statuses).all(...statuses).map(sessionRowToListApi));
+  }
   const rows = statuses.length
     ? db.prepare(`SELECT * FROM sessions WHERE status IN (${statuses.map(() => "?").join(",")}) ORDER BY started_at DESC`).all(...statuses)
     : db.prepare("SELECT * FROM sessions ORDER BY started_at DESC").all();
@@ -98,7 +158,8 @@ sessionsRouter.patch("/:id", (req, res) => {
   const existing = getSessionStmt.get(req.params.id);
   if (!existing) return res.status(404).json({ error: "session not found" });
 
-  const { kitchenProfileId, status, endedAt, conversation, selectedNodeId, cooks, mode, run, summary } = req.body;
+  const { kitchenProfileId, status, endedAt, conversation, selectedNodeId, cooks, mode, run, summary, unavailableMaterials } =
+    req.body;
   const row = {
     id: existing.id,
     kitchen_profile_id: kitchenProfileId !== undefined ? kitchenProfileId : existing.kitchen_profile_id,
@@ -110,10 +171,31 @@ sessionsRouter.patch("/:id", (req, res) => {
     mode: mode !== undefined ? mode : existing.mode,
     run_json: run !== undefined ? (run ? JSON.stringify(run) : null) : existing.run_json,
     summary_json: summary !== undefined ? (summary ? JSON.stringify(summary) : null) : existing.summary_json,
+    unavailable_materials_json:
+      unavailableMaterials !== undefined ? JSON.stringify(unavailableMaterials) : existing.unavailable_materials_json,
     updated_at: new Date().toISOString(),
   };
   updateSessionStmt.run(row);
   res.json(sessionRowToApi(getSessionStmt.get(existing.id), getRecipesForSessionStmt.all(existing.id), getSharedStepsForSessionStmt.all(existing.id)));
+});
+
+// Without this a run could never leave the log — every test cook and
+// misfire stayed on Home permanently. There are no FK cascades on these
+// tables, so the children go first, in one transaction.
+const deleteRecipesForSessionStmt = db.prepare("DELETE FROM recipe_instances WHERE session_id = ?");
+const deleteSharedStepsForSessionStmt = db.prepare("DELETE FROM shared_steps WHERE session_id = ?");
+const deleteSessionStmt = db.prepare("DELETE FROM sessions WHERE id = ?");
+const deleteSessionCascade = db.transaction((id) => {
+  deleteSharedStepsForSessionStmt.run(id);
+  deleteRecipesForSessionStmt.run(id);
+  deleteSessionStmt.run(id);
+});
+
+sessionsRouter.delete("/:id", (req, res) => {
+  const existing = getSessionStmt.get(req.params.id);
+  if (!existing) return res.status(404).json({ error: "session not found" });
+  deleteSessionCascade(existing.id);
+  res.status(204).end();
 });
 
 const insertRecipeStmt = db.prepare(`

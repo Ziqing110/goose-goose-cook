@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { nextNodeId, slugifyMaterialId, MATERIAL_CATEGORY_LABELS, MATERIAL_CATEGORY_ORDER } from "../data/dishes.js";
@@ -15,6 +15,7 @@ import {
   mergeRecipesForDisplay,
   extractSharedSteps,
 } from "../utils/graphLayout.js";
+import { missingEquipment, EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
 import StepCard from "../components/StepCard.jsx";
 import GraphCanvas from "../components/GraphCanvas.jsx";
 import Drawer from "../components/Drawer.jsx";
@@ -85,7 +86,13 @@ export default function RecipeGraphPage() {
   const { state, dispatch, addRecipeToSession, addSharedStepToSession, deleteSharedStepFromSession } = useAppState();
   const { conversation, selectedNodeId, recipes, sharedSteps = [] } = state.session;
   const kitchenProfile = state.kitchenProfiles.find((p) => p.id === state.session.kitchenProfileId) || null;
-  const [unavailableMaterials, setUnavailableMaterials] = useState(new Set());
+  // Lives on the session, not in component state: "I don't have garlic"
+  // is a fact about tonight's cook that has to survive a refresh and a
+  // trip to another page, and it gates approval below.
+  const unavailableMaterials = useMemo(
+    () => new Set(state.session.unavailableMaterials || []),
+    [state.session.unavailableMaterials]
+  );
   const [addPickerPhase, setAddPickerPhase] = useState(null); // which column's "which dish?" picker is open
   const [templates, setTemplates] = useState(null);
   const [baseMaterials, setBaseMaterials] = useState(null);
@@ -183,6 +190,7 @@ export default function RecipeGraphPage() {
   };
 
   const allMaterials = [...new Set(working.nodes.flatMap((n) => n.required_materials || []))];
+  const lacking = missingEquipment(working.nodes, kitchenProfile);
   const affectedStepCount = affectedSteps.size;
   const dishIsUndoable = impossibleSteps.size > 0;
 
@@ -219,11 +227,34 @@ export default function RecipeGraphPage() {
   };
 
   const toggleMaterial = (id) => {
-    setUnavailableMaterials((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
+    const next = new Set(unavailableMaterials);
+    next.has(id) ? next.delete(id) : next.add(id);
+    dispatch({ type: "session/update", payload: { unavailableMaterials: [...next] } });
+  };
+
+  // The escape hatch that makes the approval gate below fair: rather
+  // than only being told the cook isn't doable, drop what can't be done
+  // and cook the rest. `impossibleSteps` is already the full closure —
+  // the steps missing materials plus everything downstream of them — so
+  // removing the whole set leaves a graph with no dangling work.
+  const dropBlockedSteps = () => {
+    const blockedIds = [...impossibleSteps.keys()];
+    if (blockedIds.length === 0) return;
+    if (!window.confirm(`Remove ${blockedIds.length} step${blockedIds.length === 1 ? "" : "s"} you can't do without those materials?`))
+      return;
+    const blocked = new Set(blockedIds);
+    // Shared steps are session-owned; their delete scrubs depends_on
+    // across every dish, which a per-recipe edit can't reach.
+    sharedSteps.filter((s) => blocked.has(s.working.id)).forEach((s) => deleteSharedStepFromSession(s.id));
+    recipes.forEach((recipe) => {
+      if (!recipe.working.nodes.some((n) => blocked.has(n.id) || (n.depends_on || []).some((d) => blocked.has(d)))) return;
+      updateRecipeWorking(recipe.id, (w) => {
+        w.nodes = w.nodes
+          .filter((n) => !blocked.has(n.id))
+          .map((n) => ({ ...n, depends_on: (n.depends_on || []).filter((d) => !blocked.has(d)) }));
+      });
     });
+    if (selectedNodeId && blocked.has(selectedNodeId)) selectNode(null);
   };
 
   const findRecipeForNode = (nodeId) => recipes.find((r) => r.working.nodes.some((n) => n.id === nodeId));
@@ -412,6 +443,19 @@ export default function RecipeGraphPage() {
         </div>
       </div>
 
+      {lacking.length > 0 && (
+        <div className="card equipment-warning">
+          <span className="mini-title">
+            Needs {lacking.map((e) => EQUIPMENT_LABELS[e] || e).join(" and ")} — {kitchenProfile?.name} hasn&rsquo;t got
+            {lacking.length === 1 ? " one" : " them"}
+          </span>
+          <p className="hint">
+            I&rsquo;ll plan as if there were exactly one, so the timings still work. Improvise, or edit the kitchen to
+            match what you really have.
+          </p>
+        </div>
+      )}
+
       {allMaterials.length > 0 && (
         <div className="card materials-card">
           <div className="materials-card-head">
@@ -424,7 +468,11 @@ export default function RecipeGraphPage() {
                 : "All steps covered"}
             </span>
           </div>
-          <p className="hint">All selected by default — uncheck what you don't have to see what's still craftable.</p>
+          <p className="hint">
+            {approved
+              ? "Locked in with the plan — hit Revise to change what you have."
+              : "All selected by default — uncheck what you don't have and the steps that need it drop out."}
+          </p>
           <div className="materials-groups">
             {orderedCategories.map((cat) => (
               <div className="materials-group" key={cat}>
@@ -433,8 +481,18 @@ export default function RecipeGraphPage() {
                   {materialsByCategory[cat].map((m) => {
                     const total = materialTotals[m];
                     return (
-                      <label className={`checkbox-pill ${unavailableMaterials.has(m) ? "is-unavailable" : ""}`} key={m}>
-                        <input type="checkbox" checked={!unavailableMaterials.has(m)} onChange={() => toggleMaterial(m)} />
+                      <label
+                        className={`checkbox-pill ${unavailableMaterials.has(m) ? "is-unavailable" : ""} ${
+                          approved ? "is-locked" : ""
+                        }`}
+                        key={m}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!unavailableMaterials.has(m)}
+                          disabled={Boolean(approved)}
+                          onChange={() => toggleMaterial(m)}
+                        />
                         <span>
                           {materialLabel(m)}
                           {total && (
@@ -526,9 +584,22 @@ export default function RecipeGraphPage() {
           <div className="band-footer-left">
             <span className="tag">{working.nodes.length} steps</span>
             {editedCount > 0 && <span className="tag step-card-edited">{editedCount} edited by you</span>}
+            {/* Unchecking a material has to mean something. Scheduling a
+                plan whose steps can't be done would be planning a cook
+                that fails at the stove. */}
+            {dishIsUndoable && (
+              <span className="hint materials-summary-critical">
+                {impossibleSteps.size} step{impossibleSteps.size === 1 ? "" : "s"} can&rsquo;t be done with what you have.
+              </span>
+            )}
           </div>
           <div className="band-footer-right">
-            <button className="btn btn-primary btn-lg" onClick={approve}>
+            {dishIsUndoable && (
+              <button className="btn btn-ghost" onClick={dropBlockedSteps}>
+                Remove the blocked {impossibleSteps.size === 1 ? "step" : "steps"}
+              </button>
+            )}
+            <button className="btn btn-primary btn-lg" onClick={approve} disabled={dishIsUndoable}>
               Approve and schedule &rarr;
             </button>
           </div>

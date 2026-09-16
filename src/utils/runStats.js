@@ -141,6 +141,9 @@ export function summarizeRun(item, kitchenProfiles) {
     endedAt,
     durationSec,
     status: item.status,
+    // Only a run that finished froze a summary card. Abandoned ones have
+    // nothing to open, so the row must not pretend otherwise.
+    hasCard: isFull ? Boolean(item.summary) : Boolean(item.hasSummary),
   };
 }
 

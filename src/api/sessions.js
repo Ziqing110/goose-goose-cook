@@ -19,6 +19,18 @@ export function listSessions(statuses) {
   return request(query, { method: "GET" });
 }
 
+// Compact rows for Home's run log — no recipes, run transcript or
+// base64 photo. Use this for anything that only lists sessions;
+// listSessions() is for when the whole session is actually needed.
+export function listSessionSummaries(statuses) {
+  const status = statuses?.length ? `&status=${statuses.join(",")}` : "";
+  return request(`?view=list${status}`, { method: "GET" });
+}
+
+export function deleteSession(id) {
+  return request(`/${id}`, { method: "DELETE" });
+}
+
 export function updateSession(id, patch) {
   return request(`/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
 }

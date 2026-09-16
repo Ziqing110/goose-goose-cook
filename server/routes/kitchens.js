@@ -65,8 +65,21 @@ kitchensRouter.put("/:id", (req, res) => {
   res.json(toApi(getStmt.get(req.params.id)));
 });
 
+// Deleting the kitchen a live run is using used to succeed silently:
+// the session's kitchen_profile_id went null, the route guards bounced
+// the cook to kitchen setup mid-cook, and every later re-plan fell back
+// to a one-burner, one-board kitchen without saying so. Refuse instead;
+// finished runs hold no such claim and don't block it.
+const countActiveSessionsStmt = db.prepare(
+  "SELECT COUNT(*) AS n FROM sessions WHERE kitchen_profile_id = ? AND status = 'active'"
+);
+
 kitchensRouter.delete("/:id", (req, res) => {
-  const result = deleteStmt.run(req.params.id);
-  if (result.changes === 0) return res.status(404).json({ error: "kitchen not found" });
+  const existing = getStmt.get(req.params.id);
+  if (!existing) return res.status(404).json({ error: "kitchen not found" });
+  if (countActiveSessionsStmt.get(req.params.id).n > 0) {
+    return res.status(409).json({ error: `"${existing.name}" is in use by the run you have in progress. Finish or abandon that run first.` });
+  }
+  deleteStmt.run(req.params.id);
   res.status(204).end();
 });

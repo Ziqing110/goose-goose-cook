@@ -196,7 +196,7 @@ await shot("live-coop-after-reload");
 // --- live cooking, competition ---
 await page.goto(`${BASE}/session/schedule`, { waitUntil: "networkidle" });
 await page.waitForTimeout(800);
-await click(/Start over/);
+await click(/Throw away this cook/);
 await page.waitForTimeout(800);
 await click(/Competition/);
 await page.waitForTimeout(400);
@@ -204,15 +204,17 @@ await click(/Start cooking/);
 await page.waitForTimeout(1500);
 await shot("live-comp-start");
 
-const claim = page.locator(".pool-tile.is-claimable").first();
+// Each tile carries one claim button per cook; the first is cook 1.
+const claim = page.locator(".pool-tile.is-claimable .pool-claim-btn").first();
 if (await claim.isVisible().catch(() => false)) {
   await claim.click();
   await page.waitForTimeout(800);
   await shot("live-comp-claimed");
-  // Same cook tries to grab a second task while still holding one.
-  const second = page.locator(".pool-tile.is-claimable").first();
+  // Same cook tries to grab a second task while still holding one —
+  // their button is now disabled, which is the refusal made visible.
+  const second = page.locator(".pool-tile.is-claimable .pool-claim-btn").first();
   if (await second.isVisible().catch(() => false)) {
-    await second.click();
+    await second.click({ force: true }).catch(() => {});
     await page.waitForTimeout(700);
     await shot("live-comp-busy-refusal");
   }

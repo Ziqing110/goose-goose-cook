@@ -70,8 +70,11 @@
   font: inherit;
   color: var(--ink);
 }
-.pool-tile.is-claimable { cursor: pointer; }
-.pool-tile.is-claimable:hover { border-color: var(--ink); }
+.pool-tile.is-claimable { cursor: default; }
+/* One button per cook, so a tap on a shared screen says who tapped. */
+.pool-claimers { display: flex; gap: 8px; margin-top: 4px; }
+.pool-claim-btn { flex: 1 1 0; min-height: 44px; font-weight: 600; }
+.pool-claim-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .pool-tile.is-taken { border-color: transparent; }
 .pool-tile.is-blocked { border-style: dashed; opacity: 0.6; }
 .pool-label { font-weight: 700; font-size: 1rem; }
@@ -127,3 +130,8 @@
 .summary-steps li:last-child { border-bottom: none; }
 .summary-steps li.is-skipped .summary-step-label { text-decoration: line-through; color: var(--ink-faint); }
 .summary-step-label { font-weight: 600; }
+
+.summary-save-error { color: var(--crit); }
+
+.paused-banner { border-style: dashed; }
+.paused-banner .mini-title { color: var(--crit); }

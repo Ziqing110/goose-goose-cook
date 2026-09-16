@@ -13,6 +13,10 @@ const UNDO_WINDOW_MS = 60_000;
 // Mid-run the remaining set is small and the answer is needed between
 // taps, so a re-plan trades proof for responsiveness.
 const LIVE_REPLAN_NODE_BUDGET = 20_000;
+// Mid-cook this runs on every completion with someone standing there
+// waiting to see their next step, so it gets a tighter deadline than
+// the planning page's.
+const LIVE_REPLAN_TIME_BUDGET_MS = 80;
 
 export const DIFFICULTY_POINTS = { low: 10, medium: 20, high: 35 };
 
@@ -51,6 +55,9 @@ const emptyRecord = () => ({
   endedAt: null,
   source: null,
   skipReason: null,
+  // Seconds this step spent inside a pause. Subtracted from its actual
+  // time so a break doesn't read as the cook being slow.
+  pausedSec: 0,
 });
 
 export function makeStepRecords(nodes) {
@@ -99,6 +106,10 @@ export function createRun({ nodes, mode, schedule, opening, now = new Date() }) 
     // mid-cook can't desync what's already happened.
     mode,
     steps: makeStepRecords(nodes),
+    // Closed pause time, and the open pause if one is running. Time
+    // spent paused is nobody's cooking time.
+    pausedSec: 0,
+    pausedAt: null,
     events: [{ id: crypto.randomUUID(), at: now.toISOString(), type: "run_start", cookId: null, stepId: null }],
     plan: isCompetition ? null : planFromSchedule(schedule),
     openingSuggestions:
@@ -165,7 +176,7 @@ export function stepVariance(node, record, now = Date.now()) {
   const estSec = node?.estimated_duration_sec ?? 0;
   if (!record?.startedAt) return { estSec, actualSec: 0, deltaSec: 0, over: false, running: false };
   const end = record.endedAt ? Date.parse(record.endedAt) : now;
-  const actualSec = Math.max(0, Math.round((end - Date.parse(record.startedAt)) / 1000));
+  const actualSec = Math.max(0, Math.round((end - Date.parse(record.startedAt)) / 1000) - (record.pausedSec || 0));
   const deltaSec = actualSec - estSec;
   return { estSec, actualSec, deltaSec, over: deltaSec > 0, running: !record.endedAt };
 }
@@ -182,7 +193,7 @@ export function runProgress(run, nodes, now = Date.now()) {
   const total = nodes.length;
   const elapsedSec = Math.max(
     0,
-    Math.round(((run.endedAt ? Date.parse(run.endedAt) : now) - Date.parse(run.startedAt)) / 1000)
+    Math.round(((run.endedAt ? Date.parse(run.endedAt) : now) - Date.parse(run.startedAt)) / 1000) - (run.pausedSec || 0)
   );
   const remainingEstSec = nodes
     .filter((n) => !["done", "skipped"].includes(run.steps[n.id]?.status))
@@ -198,7 +209,8 @@ export function runProgress(run, nodes, now = Date.now()) {
     const last = finished[finished.length - 1];
     if (last && run.plan.startSecById[last.id] != null) {
       const plannedEnd = run.plan.startSecById[last.id] + last.estimated_duration_sec;
-      const actualEnd = Math.round((Date.parse(run.steps[last.id].endedAt) - Date.parse(run.startedAt)) / 1000);
+      const actualEnd =
+        Math.round((Date.parse(run.steps[last.id].endedAt) - Date.parse(run.startedAt)) / 1000) - (run.pausedSec || 0);
       driftSec = actualEnd - plannedEnd;
     }
   }
@@ -358,7 +370,7 @@ export function replan({ nodes, run, cooks, kitchenProfile }) {
   }
   // scheduleSteps, not computeSchedule — the solo baseline is dead
   // weight mid-run and doubles the work.
-  const schedule = scheduleSteps(remaining, cooks, kitchenProfile, { nodeBudget: LIVE_REPLAN_NODE_BUDGET });
+  const schedule = scheduleSteps(remaining, cooks, kitchenProfile, { nodeBudget: LIVE_REPLAN_NODE_BUDGET, timeBudgetMs: LIVE_REPLAN_TIME_BUDGET_MS });
   const plan = planFromSchedule(schedule);
   return pushEvent({ ...run, plan }, {
     at: new Date().toISOString(),
@@ -490,8 +502,36 @@ export function applyUndo({ run, nodes, cookId, at }) {
 
 /** Freeze the run. Anything still pending is swept to skipped so the
  *  summary accounts for every step. */
+export function isPaused(run) {
+  return Boolean(run?.pausedAt);
+}
+
+export function applyPause({ run, at }) {
+  if (isPaused(run) || run.endedAt) return run;
+  return pushEvent({ ...run, pausedAt: at }, { at, type: "run_pause", cookId: null, stepId: null });
+}
+
+/**
+ * Credits the pause to the run and to every step that was mid-flight
+ * when it started — those are the only ones whose clock was affected.
+ * Steps finished before the pause, or started after it, are untouched.
+ */
+export function applyResume({ run, at }) {
+  if (!isPaused(run)) return run;
+  const pausedSec = Math.max(0, Math.round((Date.parse(at) - Date.parse(run.pausedAt)) / 1000));
+  const steps = { ...run.steps };
+  Object.entries(steps).forEach(([id, record]) => {
+    if (record.status === "active") steps[id] = { ...record, pausedSec: (record.pausedSec || 0) + pausedSec };
+  });
+  const next = { ...run, steps, pausedAt: null, pausedSec: (run.pausedSec || 0) + pausedSec };
+  return pushEvent(next, { at, type: "run_resume", cookId: null, stepId: null });
+}
+
 export function endRun({ run, nodes, at }) {
-  let next = { ...run, steps: { ...run.steps } };
+  // Finishing while paused would otherwise bank the whole break as
+  // cooking time, so close the open pause first.
+  const settled = isPaused(run) ? applyResume({ run, at }) : run;
+  let next = { ...settled, steps: { ...settled.steps } };
   nodes.forEach((n) => {
     if (next.steps[n.id]?.status === "pending") {
       next.steps[n.id] = { ...next.steps[n.id], status: "skipped", endedAt: at, skipReason: "run_ended" };

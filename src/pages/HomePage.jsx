@@ -128,8 +128,10 @@ export default function HomePage() {
     editKitchenProfile,
     removeKitchenProfile,
     refetchKitchens,
+    refetchSessions,
     startSession,
     discardSession,
+    removeRunFromHistory,
   } = useAppState();
   const navigate = useNavigate();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -142,6 +144,7 @@ export default function HomePage() {
   const sessionLoading = state.sessionStatus === "idle" || state.sessionStatus === "loading";
   const kitchensLoading = state.kitchensStatus === "idle" || state.kitchensStatus === "loading";
   const kitchensLoadError = state.kitchensStatus === "error" ? state.kitchensError : null;
+  const sessionLoadError = state.sessionStatus === "error" ? state.sessionError : null;
 
   const activeKitchen = session ? profiles.find((p) => p.id === session.kitchenProfileId) || null : null;
   const taglineKitchen = activeKitchen || (profiles.length === 1 ? profiles[0] : null);
@@ -149,7 +152,9 @@ export default function HomePage() {
   // Which hero state we're in, so the VoiceBar copy can follow it.
   const heroState = sessionLoading
     ? "loading"
-    : session
+    : sessionLoadError
+      ? "sessionError"
+      : session
       ? "resumable"
       : kitchensLoading
         ? "loading"
@@ -185,6 +190,8 @@ export default function HomePage() {
         line: "Say “start the run” and I'll set the main line.",
         sub: profiles.length === 1 ? profiles[0].name : null,
       };
+    } else if (heroState === "sessionError") {
+      hint = { line: "I can't read the run log right now.", sub: "The kitchen server didn't answer — try again." };
     } else if (heroState === "noKitchen") {
       hint = { line: "Tell me about your kitchen and I'll build it.", sub: null };
     }
@@ -214,6 +221,11 @@ export default function HomePage() {
     setPickerOpen(true);
   };
 
+  const handleDeleteRun = (row) => {
+    if (!window.confirm(`Delete "${row.title}" from your run log? This can't be undone.`)) return;
+    removeRunFromHistory(row.id);
+  };
+
   const handleAbandon = () => {
     if (!window.confirm("Abandon this run? It moves to your run log and can't be resumed.")) return;
     discardSession();
@@ -238,7 +250,13 @@ export default function HomePage() {
   };
 
   const deleteProfile = async () => {
-    if (!window.confirm(`Delete "${modalProfile.name}"?`)) return;
+    // Past runs only hold the kitchen's id, so deleting it leaves them
+    // without a kitchen name in the run log. Small, but say so rather
+    // than let the rows quietly change under them. (A run in progress is
+    // a harder block — the server refuses that outright.)
+    const pastRuns = state.sessionHistory.filter((s) => s.kitchenProfileId === modalProfile.id).length;
+    const note = pastRuns > 0 ? ` ${pastRuns} past ${pastRuns === 1 ? "run" : "runs"} will lose its kitchen name.` : "";
+    if (!window.confirm(`Delete "${modalProfile.name}"?${note}`)) return;
     try {
       await removeKitchenProfile(modalProfile.id);
       setModalProfile(undefined);
@@ -263,6 +281,23 @@ export default function HomePage() {
           <div className="hp-hero-state">
             <div className="hp-error-block">Couldn&rsquo;t reach the kitchen server: {kitchensLoadError}</div>
             <button type="button" className="hp-btn hp-btn-secondary" onClick={refetchKitchens}>
+              Retry
+            </button>
+          </div>
+        );
+
+      // Deliberately offers no way to start a run: a failed fetch says
+      // nothing about whether a run is already in progress, and starting
+      // one closes out any other active session server-side. Retrying is
+      // the only safe move.
+      case "sessionError":
+        return (
+          <div className="hp-hero-state">
+            <div className="hp-error-block">
+              Couldn&rsquo;t load your runs: {sessionLoadError}. If a cook is already in progress it&rsquo;s still
+              safe — this is just the reading of it.
+            </div>
+            <button type="button" className="hp-btn hp-btn-secondary" onClick={refetchSessions}>
               Retry
             </button>
           </div>
@@ -469,15 +504,23 @@ export default function HomePage() {
                 r.endedAt ? <span className="mono">{formatShortDate(r.endedAt)}</span> : null,
               ].filter(Boolean);
               return (
-                <li className="hp-row hp-row-run hp-reveal" style={{ animationDelay: `${300 + i * 60}ms` }} key={r.id}>
+                <li
+                  className={`hp-row hp-row-run hp-reveal${r.hasCard ? "" : " has-no-card"}`}
+                  style={{ animationDelay: `${300 + i * 60}ms` }}
+                  key={r.id}
+                >
                   {/* Overlay rather than wrapping the row, so the layout
-                      above stays exactly as designed. */}
-                  <button
-                    type="button"
-                    className="hp-row-open"
-                    onClick={() => navigate(`/cook/${r.id}`)}
-                    aria-label={`Open the summary card for ${r.title}`}
-                  />
+                      above stays exactly as designed. Only runs that
+                      finished have a card to open — an abandoned one
+                      would land on a dead end, so it isn't clickable. */}
+                  {r.hasCard && (
+                    <button
+                      type="button"
+                      className="hp-row-open"
+                      onClick={() => navigate(`/cook/${r.id}`)}
+                      aria-label={`Open the summary card for ${r.title}`}
+                    />
+                  )}
                   <span className="mono hp-rank">{String(i + 1).padStart(2, "0")}</span>
                   <span className="hp-row-main">
                     <span className="hp-row-title-line">
@@ -507,6 +550,16 @@ export default function HomePage() {
                       <span className="hp-chip-text">Abandoned</span>
                     </Chip>
                   )}
+                  {/* Sits above the row-open overlay so it stays clickable. */}
+                  <button
+                    type="button"
+                    className="hp-row-delete"
+                    onClick={() => handleDeleteRun(r)}
+                    aria-label={`Delete the run ${r.title}`}
+                    title="Delete this run"
+                  >
+                    &times;
+                  </button>
                 </li>
               );
             })}

@@ -11,8 +11,25 @@ export function cookColorKey(index) {
   return COOK_COLOR_KEYS[index % COOK_COLOR_KEYS.length];
 }
 
+// Long enough for a real name, short enough not to wreck the schedule
+// lane labels or the leaderboard.
+export const MAX_COOK_NAME_LENGTH = 24;
+
+// Two cooks called "Mia" make every name-addressed voice command
+// ambiguous and give the scoreboard two identical panels, so names have
+// to be distinct. Compared trimmed and case-insensitively, because
+// "mia" and "Mia " are the same person to everyone but a string.
+export function duplicateCookNames(cooks) {
+  const counts = new Map();
+  cooks.forEach((c) => {
+    const key = c.name.trim().toLowerCase();
+    if (key) counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return new Set([...counts].filter(([, n]) => n > 1).map(([key]) => key));
+}
+
 export function areCooksBound(cooks) {
-  return cooks.length > 0 && cooks.every((c) => c.name.trim() && c.bound);
+  return cooks.length > 0 && cooks.every((c) => c.name.trim() && c.bound) && duplicateCookNames(cooks).size === 0;
 }
 
 // Each cook reads a fixed line rather than saying anything they like:
