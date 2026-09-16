@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "server": "node --env-file-if-exists=.env server/index.js",
+    "lab": "node --env-file-if-exists=.env voice-lab/server.js",
+    "score": "node scripts/score-voice-log.mjs",
     "dev:full": "concurrently -n web,api -c blue,green \"npm:dev\" \"npm:server\"",
     "build": "vite build",
     "preview": "vite preview",

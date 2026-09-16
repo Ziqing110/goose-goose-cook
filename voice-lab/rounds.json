@@ -1,0 +1,236 @@
+{
+  "_comment": "Test scripts for VOICE_TEST_PLAN.md. The lab prompts these one line at a time and stamps the expected line onto each turn, which is what lets scripts/score-voice-log.mjs grade a round without a human re-reading transcripts. Step labels are the real seeded ones from server/db.js — if the seed changes, change these.",
+
+  "R-core": {
+    "label": "the whole test, 7 minutes",
+    "group": "Run this",
+    "mode": "mixed",
+    "secondsPerLine": 5,
+    "note": "One connection, one download, no reconnects. Answers the four questions that gate Stage C. Read straight through; don't stop between blocks.",
+    "entries": [
+      { "kind": "banner", "text": "CALIBRATION — can it tell your voices apart? Alternate, normal voice, don't rush." },
+      { "kind": "line", "speaker": "Lindy", "text": "This is Lindy speaking, and I am reading a sentence long enough to give the model something to work with." },
+      { "kind": "line", "speaker": "Zeina", "text": "This is Zeina speaking, and I am also reading a fairly long sentence for the same reason." },
+      { "kind": "line", "speaker": "Lindy", "text": "Lindy again. The kitchen is quiet and I am about a metre and a half from the microphone." },
+      { "kind": "line", "speaker": "Zeina", "text": "Zeina again. I am standing roughly the same distance away, give or take a step." },
+      { "kind": "line", "speaker": "Lindy", "text": "Lindy once more. We are cooking mapo tofu and chicken noodle soup this evening." },
+      { "kind": "line", "speaker": "Zeina", "text": "Zeina once more. I will be handling the noodles and most of the chopping tonight." },
+
+      { "kind": "banner", "text": "NAMES — does your name survive transcription? Vary how you say it." },
+      { "kind": "line", "speaker": "Lindy", "text": "Lindy, done", "intent": "done" },
+      { "kind": "line", "speaker": "Zeina", "text": "Zeina, done", "intent": "done" },
+      { "kind": "line", "speaker": "Lindy", "text": "This is Lindy, starting now", "intent": "start" },
+      { "kind": "line", "speaker": "Zeina", "text": "This is Zeina, starting now", "intent": "start" },
+      { "kind": "line", "speaker": "Lindy", "text": "Lindy here — I'll take the garlic", "intent": "claim", "step": "Mince garlic" },
+      { "kind": "line", "speaker": "Zeina", "text": "Zeina here — I'll take the chicken", "intent": "claim", "stepExpect": "ambiguous", "why": "four seeded steps mention chicken" },
+      { "kind": "line", "speaker": "Lindy", "text": "Lindy? Status.", "intent": "status" },
+      { "kind": "line", "speaker": "Zeina", "text": "Zeina? Score.", "intent": "score" },
+
+      { "kind": "banner", "text": "SHORT COMMANDS — say these FAST, don't enunciate. Bare ones must be rejected." },
+      { "kind": "line", "speaker": "Lindy", "text": "Lindy, done", "intent": "done", "addressed": true },
+      { "kind": "line", "speaker": "Lindy", "text": "done", "intent": "done", "addressed": false },
+      { "kind": "line", "speaker": "Zeina", "text": "Zeina, go", "intent": "start", "addressed": true },
+      { "kind": "line", "speaker": "Zeina", "text": "go", "intent": "start", "addressed": false },
+      { "kind": "line", "speaker": "Lindy", "text": "Lindy, next", "intent": "status", "addressed": true, "knownGap": "parseCommand has no bare 'next' pattern — natural phrasing C2 should add" },
+      { "kind": "line", "speaker": "Lindy", "text": "next", "intent": "status", "addressed": false, "knownGap": "same gap, bare form" },
+      { "kind": "line", "speaker": "Zeina", "text": "Zeina, skip", "intent": "skip", "addressed": true },
+      { "kind": "line", "speaker": "Zeina", "text": "skip", "intent": "skip", "addressed": false },
+
+      { "kind": "banner", "text": "CROSS-TALK — on a count of three. The FIRST speaker starts a beat earlier." },
+      { "kind": "pair", "stagger": "300ms", "first": { "speaker": "Lindy", "text": "Lindy, I'll take the garlic" }, "second": { "speaker": "Zeina", "text": "Zeina, I'll take the garlic" }, "step": "Mince garlic" },
+      { "kind": "pair", "stagger": "300ms", "first": { "speaker": "Zeina", "text": "Zeina, I'll take the garlic" }, "second": { "speaker": "Lindy", "text": "Lindy, I'll take the garlic" }, "step": "Mince garlic" },
+      { "kind": "pair", "stagger": "300ms", "first": { "speaker": "Lindy", "text": "Lindy, I've got the noodles" }, "second": { "speaker": "Zeina", "text": "Zeina, I've got the noodles" }, "step": "Cook egg noodles in the broth" },
+      { "kind": "pair", "stagger": "simultaneous", "first": { "speaker": "Zeina", "text": "Zeina, take the sauce" }, "second": { "speaker": "Lindy", "text": "Lindy, take the sauce" }, "step": "Mix sauce & slurry" },
+      { "kind": "pair", "stagger": "simultaneous", "first": { "speaker": "Lindy", "text": "Lindy, take the sauce" }, "second": { "speaker": "Zeina", "text": "Zeina, take the sauce" }, "step": "Mix sauce & slurry" },
+
+      { "kind": "banner", "text": "FALSE POSITIVES — talk NORMALLY. Nobody says a name. This is the hard gate." },
+      { "kind": "trap", "text": "I'm done with this wine" },
+      { "kind": "trap", "text": "are we done here?" },
+      { "kind": "trap", "text": "I'll take the bin out after" },
+      { "kind": "trap", "text": "skip the coriander, I hate it" },
+      { "kind": "trap", "text": "start the timer on your phone" },
+      { "kind": "trap", "text": "can you help me with this lid" },
+      { "kind": "trap", "text": "drop it in the pot" },
+      { "kind": "trap", "text": "that's it, that's the whole recipe" },
+      { "kind": "trap", "text": "no, the other one, next to the stock" },
+      { "kind": "trap", "text": "we should do this again next week" }
+    ]
+  },
+
+  "R-cal": {
+    "label": "voice separation, longer sample",
+    "group": "Follow-ups — only if R-core flags something",
+    "mode": "sequential",
+    "repeat": 1,
+    "secondsPerLine": 7,
+    "note": "Alternate speakers, one line each, normal speaking voice. There is NO voice enrollment in AssemblyAI — nothing here teaches the API your voices. This measures whether its diarization separates them on its own, and learns which label (A/B) is whose. Lines are deliberately long so none falls under the ~1s PENDING threshold.",
+    "lines": [
+      { "speaker": "Lindy", "text": "This is Lindy speaking, and I am reading a sentence long enough to give the model something to work with." },
+      { "speaker": "Zeina", "text": "This is Zeina speaking, and I am also reading a fairly long sentence for the same reason." },
+      { "speaker": "Lindy", "text": "Lindy again. The extractor fan is off, the kitchen is quiet, and I am about a metre and a half away." },
+      { "speaker": "Zeina", "text": "Zeina again. I am standing roughly the same distance from the microphone, give or take a step." },
+      { "speaker": "Lindy", "text": "Lindy once more. We are cooking mapo tofu and chicken noodle soup this evening." },
+      { "speaker": "Zeina", "text": "Zeina once more. I will be handling the noodles and most of the chopping tonight." },
+      { "speaker": "Lindy", "text": "Lindy, last one. If the speaker labels are stable by now the model has our voices sorted." },
+      { "speaker": "Zeina", "text": "Zeina, last one. If they are still flipping around, we fall back to saying our names." }
+    ]
+  },
+
+  "R0-sanity": {
+    "label": "mic check, 30 seconds",
+    "group": "If something looks broken",
+    "mode": "sequential",
+    "repeat": 1,
+    "secondsPerLine": 7,
+    "lines": [
+      { "speaker": "Lindy", "text": "The quick brown fox jumps over the lazy dog." },
+      { "speaker": "Lindy", "text": "We are cooking mapo tofu and chicken noodle soup tonight." },
+      { "speaker": "Lindy", "text": "There are two of us in the kitchen and about forty minutes." },
+      { "speaker": "Lindy", "text": "The doubanjiang goes in after the pork has browned." },
+      { "speaker": "Lindy", "text": "Testing one two three, this is the sanity round." }
+    ]
+  },
+
+  "R1-quiet": {
+    "label": "noise · quiet, 1.5m",
+    "group": "Follow-ups — only if R-core flags something",
+    "mode": "sequential",
+    "conditionOf": "R1",
+    "repeat": 1,
+    "secondsPerLine": 6,
+    "lines": [
+      { "speaker": "Lindy", "text": "Lindy, start", "intent": "start" },
+      { "speaker": "Lindy", "text": "Lindy, done", "intent": "done" },
+      { "speaker": "Lindy", "text": "Lindy, I'll take mincing the garlic", "intent": "claim", "step": "Mince garlic" },
+      { "speaker": "Lindy", "text": "Lindy, status", "intent": "status" },
+      { "speaker": "Lindy", "text": "Lindy, drop it", "intent": "drop" },
+      { "speaker": "Lindy", "text": "Lindy, take the doubanjiang", "intent": "claim", "stepExpect": "ambiguous", "why": "doubanjiang is a material, not a step label — today's matcher only sees labels" },
+      { "speaker": "Lindy", "text": "Lindy, skip that", "intent": "skip" },
+      { "speaker": "Lindy", "text": "Lindy, score", "intent": "score" },
+      { "speaker": "Lindy", "text": "Lindy, what's next", "intent": "status" },
+      { "speaker": "Lindy", "text": "Lindy, we're done", "intent": "finish_run" }
+    ]
+  },
+  "R1-fan": { "label": "noise · extractor fan",
+    "group": "Follow-ups — only if R-core flags something", "mode": "sequential", "conditionOf": "R1", "sameLinesAs": "R1-quiet" },
+  "R1-fan-sizzle": { "label": "noise · fan + sizzling",
+    "group": "Follow-ups — only if R-core flags something", "mode": "sequential", "conditionOf": "R1", "sameLinesAs": "R1-quiet" },
+  "R1-fan-sizzle-tap": { "label": "noise · fan + sizzle + tap",
+    "group": "Follow-ups — only if R-core flags something", "mode": "sequential", "conditionOf": "R1", "sameLinesAs": "R1-quiet" },
+
+  "R2-names": {
+    "label": "names, deeper sample",
+    "group": "Follow-ups — only if R-core flags something",
+    "mode": "sequential",
+    "repeat": 2,
+    "secondsPerLine": 5,
+    "note": "Repeat the whole block twice per cook to reach 10 samples each.",
+    "lines": [
+      { "speaker": "Lindy", "text": "Lindy, done", "intent": "done" },
+      { "speaker": "Lindy", "text": "Lindy — I'll take the garlic", "intent": "claim", "step": "Mince garlic" },
+      { "speaker": "Lindy", "text": "This is Lindy, starting now", "intent": "start" },
+      { "speaker": "Lindy", "text": "Lindy here, done", "intent": "done" },
+      { "speaker": "Lindy", "text": "Lindy? Done.", "intent": "done" },
+      { "speaker": "Zeina", "text": "Zeina, done", "intent": "done" },
+      { "speaker": "Zeina", "text": "Zeina — I'll take the garlic", "intent": "claim", "step": "Mince garlic" },
+      { "speaker": "Zeina", "text": "This is Zeina, starting now", "intent": "start" },
+      { "speaker": "Zeina", "text": "Zeina here, done", "intent": "done" },
+      { "speaker": "Zeina", "text": "Zeina? Done.", "intent": "done" }
+    ]
+  },
+
+  "R3-short": {
+    "label": "short commands, deeper sample",
+    "group": "Follow-ups — only if R-core flags something",
+    "mode": "sequential",
+    "repeat": 10,
+    "secondsPerLine": 4,
+    "note": "Repeat the block 10x. The bare lines MUST come back unaddressed.",
+    "lines": [
+      { "speaker": "Lindy", "text": "Lindy, done", "intent": "done", "addressed": true },
+      { "speaker": "Lindy", "text": "done", "intent": "done", "addressed": false },
+      { "speaker": "Lindy", "text": "Lindy, go", "intent": "start", "addressed": true },
+      { "speaker": "Lindy", "text": "Lindy, next", "intent": "status", "addressed": true }
+    ]
+  },
+
+  "R4-steps": {
+    "label": "step matching",
+    "group": "Follow-ups — only if R-core flags something",
+    "mode": "sequential",
+    "repeat": 1,
+    "secondsPerLine": 6,
+    "lines": [
+      { "speaker": "Lindy", "text": "Lindy, I'll take mincing the garlic", "intent": "claim", "step": "Mince garlic" },
+      { "speaker": "Lindy", "text": "Lindy, take the garlic", "intent": "claim", "step": "Mince garlic" },
+      { "speaker": "Lindy", "text": "Lindy, give me the tofu one", "intent": "claim", "step": "Cut tofu into cubes" },
+      { "speaker": "Lindy", "text": "Lindy, I've got the noodles", "intent": "claim", "step": "Cook egg noodles in the broth" },
+      { "speaker": "Lindy", "text": "Lindy, take the thing with the doubanjiang", "intent": "claim", "stepExpect": "ambiguous", "why": "same ingredient-only reference" },
+      { "speaker": "Lindy", "text": "Lindy, take the sauce", "intent": "claim", "step": "Mix sauce & slurry" },
+      { "speaker": "Lindy", "text": "Lindy, dice the onion and carrot", "intent": "claim", "step": "Dice onion, carrot & celery" },
+      { "speaker": "Lindy", "text": "Lindy, I'll shred the chicken", "intent": "claim", "step": "Shred the cooked chicken" }
+    ]
+  },
+
+  "R5-crosstalk": {
+    "label": "cross-talk, deeper sample",
+    "group": "Follow-ups — only if R-core flags something",
+    "mode": "paired",
+    "repeat": 1,
+    "secondsPerLine": 9,
+    "note": "On a count of three. 5 pairs simultaneous, 5 staggered ~300ms (the 'first' speaker starts first).",
+    "pairs": [
+      { "stagger": "simultaneous", "first": { "speaker": "Lindy", "text": "Lindy, I'll take the garlic" }, "second": { "speaker": "Zeina", "text": "Zeina, I'll take the garlic" }, "step": "Mince garlic" },
+      { "stagger": "simultaneous", "first": { "speaker": "Zeina", "text": "Zeina, I'll take the garlic" }, "second": { "speaker": "Lindy", "text": "Lindy, I'll take the garlic" }, "step": "Mince garlic" },
+      { "stagger": "simultaneous", "first": { "speaker": "Lindy", "text": "Lindy, take the tofu" }, "second": { "speaker": "Zeina", "text": "Zeina, take the tofu" }, "stepExpect": "ambiguous" },
+      { "stagger": "simultaneous", "first": { "speaker": "Zeina", "text": "Zeina, take the sauce" }, "second": { "speaker": "Lindy", "text": "Lindy, take the sauce" }, "step": "Mix sauce & slurry" },
+      { "stagger": "simultaneous", "first": { "speaker": "Lindy", "text": "Lindy, I've got the noodles" }, "second": { "speaker": "Zeina", "text": "Zeina, I've got the noodles" }, "step": "Cook egg noodles in the broth" },
+      { "stagger": "300ms", "first": { "speaker": "Lindy", "text": "Lindy, I'll take the garlic" }, "second": { "speaker": "Zeina", "text": "Zeina, I'll take the garlic" }, "step": "Mince garlic" },
+      { "stagger": "300ms", "first": { "speaker": "Zeina", "text": "Zeina, I'll take the garlic" }, "second": { "speaker": "Lindy", "text": "Lindy, I'll take the garlic" }, "step": "Mince garlic" },
+      { "stagger": "300ms", "first": { "speaker": "Lindy", "text": "Lindy, take the tofu" }, "second": { "speaker": "Zeina", "text": "Zeina, take the tofu" }, "stepExpect": "ambiguous" },
+      { "stagger": "300ms", "first": { "speaker": "Zeina", "text": "Zeina, take the sauce" }, "second": { "speaker": "Lindy", "text": "Lindy, take the sauce" }, "step": "Mix sauce & slurry" },
+      { "stagger": "300ms", "first": { "speaker": "Lindy", "text": "Lindy, I've got the noodles" }, "second": { "speaker": "Zeina", "text": "Zeina, I've got the noodles" }, "step": "Cook egg noodles in the broth" }
+    ]
+  },
+
+  "R6-falsepos": {
+    "label": "false positives, 3 min of real talk",
+    "group": "Follow-ups — only if R-core flags something",
+    "mode": "freeform",
+    "durationSeconds": 180,
+    "note": "Cook actual food and talk normally. Work these traps in naturally — every one contains a real intent keyword. NOBODY says a cook's name.",
+    "traps": [
+      "I'm done with this wine",
+      "are we done here?",
+      "I'll take the bin out after",
+      "skip the coriander, I hate it",
+      "start the timer on your phone",
+      "can you help me with this lid",
+      "drop it in the pot",
+      "that's it, that's the whole recipe"
+    ]
+  },
+
+  "R9-composure": {
+    "label": "composure (needs LLM Gateway set up)",
+    "group": "Follow-ups — only if R-core flags something",
+    "mode": "sequential",
+    "repeat": 1,
+    "secondsPerLine": 6,
+    "note": "Requires an llm_gateway config in the lab. The delivery label is the ground truth the scorer grades against.",
+    "lines": [
+      { "speaker": "Lindy", "text": "Lindy, done", "delivery": "calm" },
+      { "speaker": "Lindy", "text": "Lindy, done", "delivery": "rushed" },
+      { "speaker": "Lindy", "text": "Lindy, done", "delivery": "panicked" },
+      { "speaker": "Lindy", "text": "Lindy, the tofu is sticking", "delivery": "calm" },
+      { "speaker": "Lindy", "text": "Lindy, the tofu is sticking", "delivery": "rushed" },
+      { "speaker": "Lindy", "text": "Lindy, the tofu is sticking", "delivery": "panicked" },
+      { "speaker": "Zeina", "text": "Zeina, I need the garlic now", "delivery": "calm" },
+      { "speaker": "Zeina", "text": "Zeina, I need the garlic now", "delivery": "rushed" },
+      { "speaker": "Zeina", "text": "Zeina, I need the garlic now", "delivery": "panicked" },
+      { "speaker": "Zeina", "text": "Zeina, how long on the broth", "delivery": "calm" },
+      { "speaker": "Zeina", "text": "Zeina, how long on the broth", "delivery": "rushed" },
+      { "speaker": "Zeina", "text": "Zeina, how long on the broth", "delivery": "panicked" }
+    ]
+  }
+}

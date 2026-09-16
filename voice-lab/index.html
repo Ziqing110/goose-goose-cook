@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Voice Lab — AssemblyAI Real-time STT</title>
+<style>
+  :root {
+    --bg: #14110f; --panel: #1d1917; --line: #322c28;
+    --ink: #f2ede8; --muted: #9a8f86;
+    --accent: #e4572e; --ok: #6a9955; --warn: #d9a441;
+    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 "Work Sans", system-ui, sans-serif;
+  }
+  header.top {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 12px 16px; border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; background: var(--bg); z-index: 5;
+  }
+  h1 { font-size: 15px; margin: 0 8px 0 0; letter-spacing: .02em; }
+  .status {
+    font-family: var(--mono); font-size: 12px; padding: 4px 10px;
+    border-radius: 999px; border: 1px solid var(--line); color: var(--muted);
+  }
+  .status.live { color: var(--ok); border-color: var(--ok); }
+  .status.connecting { color: var(--warn); border-color: var(--warn); }
+  .status.error { color: var(--accent); border-color: var(--accent); }
+  .meter { width: 120px; height: 8px; background: var(--panel); border-radius: 4px; overflow: hidden; }
+  .meter span { display: block; height: 100%; width: 0; background: var(--ok); transition: width .06s linear; }
+  button {
+    font: inherit; padding: 7px 14px; border-radius: 8px; cursor: pointer;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+  }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  main { display: grid; grid-template-columns: 340px 1fr; gap: 0; min-height: calc(100vh - 57px); }
+  aside { border-right: 1px solid var(--line); padding: 16px; overflow-y: auto; }
+  section.out { padding: 16px; overflow-y: auto; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid var(--line); } }
+  fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 0 0 14px; }
+  legend { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 0 6px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  label:first-of-type { margin-top: 0; }
+  input[type=text], input[type=number], select, textarea {
+    width: 100%; font: inherit; padding: 6px 8px; border-radius: 6px;
+    background: var(--bg); color: var(--ink); border: 1px solid var(--line);
+  }
+  textarea { font-family: var(--mono); font-size: 12px; resize: vertical; }
+  .check { display: flex; align-items: center; gap: 8px; margin: 10px 0; }
+  .check input { width: auto; }
+  .check label { margin: 0; color: var(--ink); font-size: 13px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+  .presets button { font-size: 12px; padding: 5px 10px; }
+  .hint { font-size: 11px; color: var(--muted); margin: 6px 0 0; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  #partial {
+    font-family: var(--mono); font-size: 13px; color: var(--warn);
+    min-height: 20px; padding: 8px 10px; border: 1px dashed var(--line);
+    border-radius: 8px; margin-bottom: 12px;
+  }
+  .turn { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 10px; background: var(--panel); }
+  .turn header { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .tag {
+    font-family: var(--mono); font-size: 10.5px; padding: 2px 7px;
+    border: 1px solid var(--line); border-radius: 999px; color: var(--muted);
+  }
+  .tag.ok { color: var(--ok); border-color: var(--ok); }
+  .tag.warn { color: var(--warn); border-color: var(--warn); }
+  .transcript { font-size: 17px; margin: 0 0 8px; }
+  .words { display: flex; flex-wrap: wrap; gap: 4px; }
+  .word { font-family: var(--mono); font-size: 11px; color: var(--muted); border-bottom: 1px solid transparent; cursor: help; }
+  .word.low { color: var(--accent); border-bottom-color: var(--accent); }
+  pre#raw { font-family: var(--mono); font-size: 11px; white-space: pre-wrap; word-break: break-all; color: var(--muted); margin: 0; }
+  .config-echo { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  /* Prompter — read at 1.5m with wet hands, same constraint as the app's
+     live-cook screen. Big type, high contrast, no hover affordances. */
+  #prompter {
+    border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; background: var(--panel);
+  }
+  .prompter-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .prompter-label { font-size: 12px; color: var(--muted); }
+  .prompter-note, .prompter-note-inline { font-size: 11.5px; color: var(--muted); margin: 0; }
+  .prompter-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .prompter-text { font-size: 30px; line-height: 1.25; margin: 4px 0 0; width: 100%; font-weight: 600; }
+  .prompter-next { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+  .prompter-done { font-size: 20px; color: var(--ok); margin: 0; }
+  .prompter-idle { font-size: 12px; color: var(--muted); margin: 0; }
+  .speaker {
+    font-family: var(--mono); font-size: 13px; font-weight: 600;
+    padding: 3px 10px; border-radius: 999px; border: 1px solid currentColor;
+  }
+  .prompter-banner {
+    font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--warn); margin: 0 0 10px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .speaker-either { color: var(--muted); }
+  .speaker-lindy { color: var(--accent); }
+  .speaker-zeina { color: var(--ok); }
+  .traps { margin: 8px 0 0; padding-left: 20px; font-size: 13px; color: var(--muted); }
+  .traps li { margin: 3px 0; }
+  .turn.discarded { opacity: .45; border-style: dashed; }
+  .note { font-family: var(--mono); font-size: 11.5px; color: var(--muted); padding: 5px 0; border-bottom: 1px solid var(--line); }
+  #notes { max-height: 170px; overflow-y: auto; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>Voice Lab</h1>
+  <span id="status" class="status idle">Idle</span>
+  <div class="meter"><span id="meter-fill"></span></div>
+  <button id="connect" class="primary">Connect</button>
+  <button id="apply-live" title="Push keyterms + turn settings without reconnecting">Apply live</button>
+  <select id="round" style="width:260px"><option value="">(loading rounds…)</option></select>
+  <button id="redo" title="Flubbed the line, or one utterance split into two turns">Redo line</button>
+  <button id="download">Download log</button>
+  <button id="clear">Clear</button>
+</header>
+
+<main>
+  <aside>
+    <div class="presets">
+      <button data-preset="bare">Bare</button>
+      <button data-preset="kitchen">Kitchen</button>
+      <button data-preset="fast">Fast commands</button>
+    </div>
+
+    <fieldset>
+      <legend>Model</legend>
+      <label for="speech_model">speech_model</label>
+      <select id="speech_model">
+        <option>universal-3-5-pro</option>
+        <option>universal-streaming-english</option>
+        <option>universal-streaming-multilingual</option>
+      </select>
+      <label for="mode">mode</label>
+      <select id="mode">
+        <option value="">(server default)</option>
+        <option>balanced</option>
+        <option>min_latency</option>
+        <option>max_accuracy</option>
+      </select>
+      <div class="check">
+        <input type="checkbox" id="format_turns" checked />
+        <label for="format_turns">format_turns (punctuation + casing)</label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Noise</legend>
+      <label for="voice_focus">voice_focus <span style="color:var(--warn)">(pro model only)</span></label>
+      <select id="voice_focus">
+        <option value="">off</option>
+        <option value="far-field">far-field — counter at 1.5m</option>
+        <option value="near-field">near-field — headset/handset</option>
+      </select>
+      <label for="voice_focus_threshold">voice_focus_threshold (0–1, higher = more aggressive)</label>
+      <input type="number" id="voice_focus_threshold" value="0.7" min="0" max="1" step="0.05" />
+      <div class="check">
+        <input type="checkbox" id="browser_dsp" />
+        <label for="browser_dsp">browser AEC/NS/AGC</label>
+      </div>
+      <p class="hint">Leave browser DSP off while testing Voice Focus — stacking both makes results impossible to attribute.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Speakers</legend>
+      <div class="check">
+        <input type="checkbox" id="speaker_labels" checked />
+        <label for="speaker_labels">speaker_labels</label>
+      </div>
+      <label for="max_speakers">max_speakers (1–10)</label>
+      <input type="number" id="max_speakers" value="2" min="1" max="10" />
+      <p class="hint">Turns under ~1s come back <code>PENDING</code> — watch for that on short commands.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Turn detection</legend>
+      <div class="row">
+        <div>
+          <label for="end_of_turn_confidence_threshold">eot confidence</label>
+          <input type="number" id="end_of_turn_confidence_threshold" placeholder="0.4" min="0" max="1" step="0.05" />
+        </div>
+        <div>
+          <label for="vad_threshold">vad_threshold</label>
+          <input type="number" id="vad_threshold" placeholder="0.2" min="0" max="1" step="0.05" />
+        </div>
+        <div>
+          <label for="min_turn_silence">min_turn_silence ms</label>
+          <input type="number" id="min_turn_silence" placeholder="auto" min="50" max="10000" step="10" />
+        </div>
+        <div>
+          <label for="max_turn_silence">max_turn_silence ms</label>
+          <input type="number" id="max_turn_silence" placeholder="1536" min="50" step="10" />
+        </div>
+      </div>
+      <p class="hint">Blank = server default. Sweep one at a time.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Accuracy steering</legend>
+      <label for="keyterms">keyterms_prompt — one per line (max 100, ≤50 chars)</label>
+      <textarea id="keyterms" rows="8"></textarea>
+      <label for="prompt">prompt — free-text domain context (≤1750 chars)</label>
+      <textarea id="prompt" rows="3"></textarea>
+      <p class="hint">Both update live via <strong>Apply live</strong>. Model/voice-focus changes need a reconnect.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>LLM Gateway (per-turn)</legend>
+      <label for="llm_gateway">llm_gateway JSON — blank to disable</label>
+      <textarea id="llm_gateway" rows="7" placeholder='{
+  "model": "claude-sonnet-4-6",
+  "messages": [{"role":"user","content":"Rate composure as calm|strained|panicked. JSON only: {{turn}}"}],
+  "max_tokens": 200
+}'></textarea>
+      <p class="hint">Fires on each completed turn; replies arrive as <code>LLMGatewayResponse</code> in the Raw tab.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Notes</legend>
+      <div id="notes"></div>
+    </fieldset>
+  </aside>
+
+  <section class="out">
+    <div class="tabs">
+      <button data-tab="turns" class="active">Turns (<span id="turn-count">0</span>)</button>
+      <button data-tab="raw">Raw messages (<span id="raw-count">0</span>)</button>
+    </div>
+    <div id="prompter"></div>
+    <div id="config-echo" class="config-echo"></div>
+    <div id="partial"></div>
+    <div id="panel-turns" class="panel active"><div id="turns"></div></div>
+    <div id="panel-raw" class="panel"><pre id="raw"></pre></div>
+  </section>
+</main>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
