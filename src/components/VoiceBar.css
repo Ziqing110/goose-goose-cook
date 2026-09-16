@@ -86,21 +86,20 @@
   border-radius: 2px;
   background: color-mix(in srgb, var(--vb-fg) 30%, transparent);
 }
-.meter-bar.is-live {
+/* Lit from the real signal now, not a CSS loop. The old animation ran
+   whether or not anyone was speaking, which made a muted-but-animating
+   bar indistinguishable from a working one. Height is driven by how
+   many bars the current peak lights, so silence reads as silence. */
+.meter-bar.is-lit {
   background: var(--cook-sage);
-  animation: meter-pulse 1.1s ease-in-out infinite;
+  height: 20px;
 }
-.meter-bar.is-live:nth-child(2) { animation-delay: 0.15s; }
-.meter-bar.is-live:nth-child(3) { animation-delay: 0.3s; }
-.meter-bar.is-live:nth-child(4) { animation-delay: 0.45s; }
+.meter-bar:nth-child(2).is-lit { height: 24px; }
+.meter-bar:nth-child(3).is-lit { height: 22px; }
 
-@keyframes meter-pulse {
-  0%, 100% { height: 8px; }
-  50% { height: 22px; }
-}
 @media (prefers-reduced-motion: reduce) {
-  .meter-bar.is-live { animation: none; height: 14px; }
   .voice-status-pill.is-listening::before { animation: none; }
+  .voice-status-pill.is-connecting::before { animation: none; }
 }
 
 /* Status is a readout, not a control: a dot and a word, no pill, so it
@@ -119,6 +118,19 @@
 .voice-status-pill.is-listening::before { animation: status-pulse 1.6s ease-in-out infinite; }
 @keyframes status-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 .voice-status-pill.is-muted { color: color-mix(in srgb, var(--vb-fg) 55%, transparent); }
+.voice-status-pill.is-connecting { color: var(--warning, #d9a441); }
+.voice-status-pill.is-connecting::before { animation: status-pulse 0.9s ease-in-out infinite; }
+/* An error has to out-shout the rest of the bar — a mic that silently
+   isn't listening is worse than one that says so. */
+.voice-status-pill.is-error { color: var(--accent, #e4572e); }
+
+/* Partials are provisional: the model revises them until end_of_turn.
+   Styling them as unfinished stops a mid-sentence guess from reading as
+   a final transcript. */
+.voice-transcript-text.is-partial {
+  font-style: italic;
+  color: color-mix(in srgb, var(--vb-fg) 75%, transparent);
+}
 
 .voice-mute-btn {
   flex: none;

@@ -1,17 +1,58 @@
 // Persistent bottom voice bar — shell-level chrome shown on every
-// screen, matching the reference mockups. Mute state is shared app
-// state (state.voice.muted): muting here switches the conversation
-// page's answer bar into typing mode, and typing there mutes this.
-// One look on every route — the v4 pages no longer restyle it.
+// screen, and now the app's single microphone.
+//
+// It lives in AppShell, above the router, so one connection follows you
+// across routes: moving between pages swaps keyterms via
+// UpdateConfiguration rather than reconnecting. Its mute toggle IS the
+// connection — unmuted opens the socket, muted closes it. That is not
+// just tidiness: AssemblyAI bills for the time the socket is open, not
+// the audio sent, so an idle mic is a real charge. Hence muted by
+// default (see AppStateContext) — turning it on is a deliberate act.
+//
+// Muting also switches the conversation page's answer bar into typing
+// mode, and typing there mutes this. That contract predates the real
+// microphone and still holds.
+import { useCallback, useState } from "react";
 import { useAppState } from "../state/AppStateContext.jsx";
+import { useStreamingTranscript } from "../hooks/useStreamingTranscript.js";
 import "./VoiceBar.css";
+
+// Four bars, lit proportionally to the current peak. The old markup
+// animated all four on a CSS loop whether or not anyone was speaking;
+// these respond to the actual signal.
+const METER_BARS = 4;
 
 export default function VoiceBar() {
   const { state, dispatch } = useAppState();
   const { muted, hint } = state.voice;
-  const status = muted ? "Muted" : "Listening";
+  const [error, setError] = useState(null);
 
-  const toggleMuted = () => dispatch({ type: "voice/setMuted", payload: { muted: !muted } });
+  const onError = useCallback((message) => setError(message), []);
+  const onTurn = useCallback((turn) => {
+    // Nothing consumes turns yet — navigation commands land here next.
+    // Logged rather than dropped so the wiring is visible while the
+    // rest is still being built.
+    if (turn.transcript) console.info("[voice] turn:", turn.transcript);
+  }, []);
+
+  const { status, partial, level } = useStreamingTranscript({
+    enabled: !muted,
+    onTurn,
+    onError,
+  });
+
+  const toggleMuted = () => {
+    setError(null);
+    dispatch({ type: "voice/setMuted", payload: { muted: !muted } });
+  };
+
+  // One source of truth for the three places that describe state, so
+  // the pill, the label and the body copy can never disagree.
+  const view = describe({ muted, status, error, partial, hint });
+
+  // A peak of ~0.5 is already loud speech, so scale before splitting
+  // across bars — otherwise normal talking barely lifts the first one.
+  const litBars = Math.round(Math.min(1, level * 2.2) * METER_BARS);
 
   return (
     <div className="voice-bar" role="status" aria-label="Voice agent status">
@@ -28,28 +69,87 @@ export default function VoiceBar() {
         </span>
 
         <div className="voice-transcript">
-          <span className="voice-transcript-label mono">
-            {muted ? "MIC MUTED" : "STANDING BY"}
+          <span className="voice-transcript-label mono">{view.label}</span>
+          <span className={`voice-transcript-text${view.isPartial ? " is-partial" : ""}`}>
+            {view.line}
           </span>
-          <span className="voice-transcript-text">
-            {muted ? "Voice check-ins are paused." : hint?.line || "Say the word when you're ready for the next step."}
-          </span>
-          {!muted && hint?.sub && <span className="voice-transcript-sub">{hint.sub}</span>}
+          {view.sub && <span className="voice-transcript-sub">{view.sub}</span>}
         </div>
 
         <div className="voice-meter" aria-hidden="true">
-          <span className={`meter-bar ${muted ? "" : "is-live"}`} />
-          <span className={`meter-bar ${muted ? "" : "is-live"}`} />
-          <span className={`meter-bar ${muted ? "" : "is-live"}`} />
-          <span className={`meter-bar ${muted ? "" : "is-live"}`} />
+          {Array.from({ length: METER_BARS }, (_, i) => (
+            <span key={i} className={`meter-bar${i < litBars ? " is-lit" : ""}`} />
+          ))}
         </div>
 
-        <span className={`voice-status-pill ${muted ? "is-muted" : "is-listening"}`}>{status}</span>
+        <span className={`voice-status-pill ${view.pillClass}`}>{view.pill}</span>
 
-        <button type="button" className="voice-mute-btn" onClick={toggleMuted}>
+        <button
+          type="button"
+          className="voice-mute-btn"
+          onClick={toggleMuted}
+          // Closing waits for the server's Termination so the last
+          // transcript isn't discarded; clicking again mid-close would
+          // race that.
+          disabled={status === "closing"}
+        >
           {muted ? "Unmute" : "Mute"}
         </button>
       </div>
     </div>
   );
+}
+
+/** Collapse mute + connection status + error into one view model. */
+function describe({ muted, status, error, partial, hint }) {
+  if (error) {
+    return {
+      label: "MIC ERROR",
+      line: error,
+      sub: "Unmute to try again.",
+      pill: "Error",
+      pillClass: "is-error",
+      isPartial: false,
+    };
+  }
+  if (muted) {
+    return {
+      label: "MIC MUTED",
+      line: "Voice check-ins are paused.",
+      sub: null,
+      pill: "Muted",
+      pillClass: "is-muted",
+      isPartial: false,
+    };
+  }
+  if (status === "connecting") {
+    return {
+      label: "CONNECTING",
+      line: "Opening the microphone…",
+      sub: null,
+      pill: "Connecting",
+      pillClass: "is-connecting",
+      isPartial: false,
+    };
+  }
+  if (status === "closing") {
+    return {
+      label: "FINISHING",
+      line: "Wrapping up the last thing you said…",
+      sub: null,
+      pill: "Closing",
+      pillClass: "is-connecting",
+      isPartial: false,
+    };
+  }
+  // Live. Show what's being heard right now if anything, otherwise the
+  // page's hint — which is what `hint` was always for.
+  return {
+    label: partial ? "HEARING" : "LISTENING",
+    line: partial || hint?.line || "Say the word when you're ready for the next step.",
+    sub: partial ? null : hint?.sub || null,
+    pill: "Listening",
+    pillClass: "is-listening",
+    isPartial: Boolean(partial),
+  };
 }
