@@ -11,6 +11,9 @@ import { useAppState } from "../state/AppStateContext.jsx";
 import { useSessionRecipes } from "../state/useSessionRecipes.js";
 import { mergeRecipesForDisplay, computeStepAvailability } from "../utils/graphLayout.js";
 import RecipeBoard from "../components/RecipeBoard.jsx";
+import Drawer from "../components/Drawer.jsx";
+import NodeEditorPanel from "../components/NodeEditorPanel.jsx";
+import { useStepEditing } from "../state/useStepEditing.js";
 import { buildInventory, formatClock, formatStepDuration, PHASE_LABELS } from "../utils/inventory.js";
 import dishMapoTofu from "../assets/dish-mapo-tofu.png";
 import dishNoodleSoup from "../assets/dish-noodle-soup.png";
@@ -159,11 +162,19 @@ export default function InventoryPage() {
   );
   const dishLabelFor = (node) =>
     node._shared ? "Shared" : recipes.find((r) => r.id === node._recipeId)?.working.title || null;
+  const { saveNode, deleteNode, registerMaterial } = useStepEditing();
+  // Which card is open is view state: persisting it meant a reload
+  // re-opened the editor on a step nobody had just clicked.
+  const [selectedId, setSelectedId] = useState(null);
+  // A step can carry materials the catalog doesn't know yet (added from
+  // the editor), so the editor sees the catalog plus this run's own.
+  const materialsInfo = { ...(catalog || {}), ...(working.custom_materials || {}) };
+  const selectedNode = selectedId ? boardNodes.find((n) => n.id === selectedId) || null : null;
+
   const nodePositions = session.nodePositions || {};
   const moveNode = (id, at) =>
     dispatch({ type: "session/update", payload: { nodePositions: { ...nodePositions, [id]: at } } });
-  const selectNode = (id) =>
-    dispatch({ type: "session/update", payload: { selectedNodeId: session.selectedNodeId === id ? null : id } });
+  const selectNode = (id) => setSelectedId((cur) => (cur === id ? null : id));
 
   const hasDishes = recipes.length > 0;
   const hasOut = outMaterialIds.length > 0;
@@ -370,7 +381,7 @@ export default function InventoryPage() {
               <RecipeBoard
                 nodes={boardNodes}
                 positions={nodePositions}
-                selectedNodeId={session.selectedNodeId}
+                selectedNodeId={selectedId}
                 dishLabelFor={dishLabelFor}
                 blockedIds={blockedIds}
                 onSelect={selectNode}
@@ -396,6 +407,24 @@ export default function InventoryPage() {
             </div>
           </div>
         </>
+      )}
+      {selectedNode && (
+        <Drawer label="Edit step" onClose={() => setSelectedId(null)}>
+          <NodeEditorPanel
+            node={selectedNode}
+            allNodes={boardNodes}
+            onSave={(id, draft) => {
+              saveNode(id, draft);
+              setSelectedId(null);
+            }}
+            onDelete={(id) => {
+              deleteNode(id);
+              setSelectedId(null);
+            }}
+            materialsInfo={materialsInfo}
+            onRegisterMaterial={(draft) => registerMaterial(draft, materialsInfo, selectedId)}
+          />
+        </Drawer>
       )}
     </section>
   );
