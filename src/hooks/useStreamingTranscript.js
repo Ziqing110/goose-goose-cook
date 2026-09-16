@@ -14,14 +14,31 @@ const WS_BASE = "wss://streaming.assemblyai.com/v3/ws";
 const CHUNK_MS = 50;
 const TERMINATE_GRACE_MS = 3000;
 
+// Idle handling exists because billing is per second of open socket, and
+// the obvious guard does not work: the server's `inactivity_timeout`
+// resets on any audio or message, not on speech, and we stream silent
+// PCM continuously while unmuted. It would never fire for someone who
+// unmuted and walked away — the case we actually care about. So idle is
+// detected here, from the signal.
+//
+// The server param is still set, as a backstop for a wedged client that
+// has stopped sending at all; that is the only case it catches.
+const IDLE_MS = 120_000;
+const IDLE_SERVER_BACKSTOP_S = 300;
+// Above room tone but below a quiet voice at arm's length. Too low and
+// a humming fridge holds the session open forever.
+const SPEECH_PEAK = 0.05;
+const IDLE_CHECK_MS = 5_000;
+
 /**
  * @param {object}   options
  * @param {boolean}  options.enabled      open the connection when true
  * @param {function} options.onTurn       (turn) => void, on each finalized turn
  * @param {object}   options.config       connection params (see buildParams)
  * @param {function} options.onError      (message) => void
+ * @param {function} options.onIdle       () => void, after IDLE_MS of no speech
  */
-export function useStreamingTranscript({ enabled, onTurn, config = {}, onError } = {}) {
+export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, onIdle } = {}) {
   const [status, setStatus] = useState("idle"); // idle|connecting|live|closing|error
   const [partial, setPartial] = useState("");
   const [level, setLevel] = useState(0);
@@ -36,9 +53,12 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError }
   // socket. The connection should outlive prop identity changes.
   const onTurnRef = useRef(onTurn);
   const onErrorRef = useRef(onError);
+  const onIdleRef = useRef(onIdle);
   const configRef = useRef(config);
+  const lastVoiceRef = useRef(0);
   onTurnRef.current = onTurn;
   onErrorRef.current = onError;
+  onIdleRef.current = onIdle;
   configRef.current = config;
 
   const teardownAudio = useCallback(() => {
@@ -60,6 +80,21 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError }
     ws.send(JSON.stringify({ type: "UpdateConfiguration", ...patch }));
     return true;
   }, []);
+
+  // Poll rather than a single timer: the deadline moves every time
+  // someone speaks, and rescheduling a timeout on every 50ms audio chunk
+  // would be far more work than one check every few seconds.
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const id = setInterval(() => {
+      if (!lastVoiceRef.current) return;
+      if (Date.now() - lastVoiceRef.current >= IDLE_MS) {
+        lastVoiceRef.current = 0; // fire once, not every tick
+        onIdleRef.current?.();
+      }
+    }, IDLE_CHECK_MS);
+    return () => clearInterval(id);
+  }, [enabled]);
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -135,6 +170,7 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError }
 
         node.port.onmessage = ({ data }) => {
           setLevel(data.peak);
+          if (data.peak > SPEECH_PEAK) lastVoiceRef.current = Date.now();
           if (ws.readyState === WebSocket.OPEN) {
             // Raw binary frame. Wrapping this in JSON or base64 is the
             // single most common way to get silence back from this API.
@@ -148,6 +184,7 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError }
         const sink = ctx.createGain();
         sink.gain.value = 0;
         node.connect(sink).connect(ctx.destination);
+        lastVoiceRef.current = Date.now();
         setStatus("live");
       };
 
@@ -170,6 +207,7 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError }
           case "Turn":
             if (msg.end_of_turn) {
               setPartial("");
+              lastVoiceRef.current = Date.now();
               onTurnRef.current?.(msg);
             } else {
               setPartial(msg.transcript || "");
@@ -182,6 +220,12 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError }
             break;
 
           case "Error":
+            // 3006 + inactivity is the server backstop doing its job —
+            // expected housekeeping, not something to alarm the user with.
+            if (msg.error_code === 3006 && /inactivity/i.test(msg.error || "")) {
+              onIdleRef.current?.();
+              break;
+            }
             setStatus("error");
             onErrorRef.current?.(`${msg.error_code}: ${msg.error}`);
             break;
@@ -258,6 +302,12 @@ function buildParams(token, sampleRate, cfg) {
   const keyterms = (cfg.keyterms || []).filter((t) => t && t.length <= 50).slice(0, 100);
   if (keyterms.length) p.set("keyterms_prompt", JSON.stringify(keyterms));
   if (cfg.prompt) p.set("prompt", cfg.prompt);
+
+  // Backstop only. This fires when the client stops sending entirely —
+  // a crashed tab, a wedged worklet — not when someone is simply silent,
+  // because silent PCM still counts as traffic. Idle-while-speaking-
+  // nothing is handled client-side; see IDLE_MS above.
+  p.set("inactivity_timeout", String(cfg.inactivityTimeout ?? IDLE_SERVER_BACKSTOP_S));
 
   for (const [key, value] of Object.entries(cfg.turnDetection || {})) {
     if (value !== undefined && value !== null && value !== "") p.set(key, String(value));

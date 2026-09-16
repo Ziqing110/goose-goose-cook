@@ -26,8 +26,17 @@ export default function VoiceBar() {
   const { state, dispatch } = useAppState();
   const { muted, hint } = state.voice;
   const [error, setError] = useState(null);
+  const [idled, setIdled] = useState(false);
 
   const onError = useCallback((message) => setError(message), []);
+
+  // Nobody has spoken for two minutes. Close the socket rather than keep
+  // billing for a mic pointed at an empty kitchen, and say why — a mic
+  // that switched itself off without explanation reads as a bug.
+  const onIdle = useCallback(() => {
+    setIdled(true);
+    dispatch({ type: "voice/setMuted", payload: { muted: true } });
+  }, [dispatch]);
   const onTurn = useCallback((turn) => {
     // Nothing consumes turns yet — navigation commands land here next.
     // Logged rather than dropped so the wiring is visible while the
@@ -39,16 +48,18 @@ export default function VoiceBar() {
     enabled: !muted,
     onTurn,
     onError,
+    onIdle,
   });
 
   const toggleMuted = () => {
     setError(null);
+    setIdled(false);
     dispatch({ type: "voice/setMuted", payload: { muted: !muted } });
   };
 
   // One source of truth for the three places that describe state, so
   // the pill, the label and the body copy can never disagree.
-  const view = describe({ muted, status, error, partial, hint });
+  const view = describe({ muted, status, error, idled, partial, hint });
 
   // A peak of ~0.5 is already loud speech, so scale before splitting
   // across bars — otherwise normal talking barely lifts the first one.
@@ -101,7 +112,7 @@ export default function VoiceBar() {
 }
 
 /** Collapse mute + connection status + error into one view model. */
-function describe({ muted, status, error, partial, hint }) {
+function describe({ muted, status, error, idled, partial, hint }) {
   if (error) {
     return {
       label: "MIC ERROR",
@@ -109,6 +120,16 @@ function describe({ muted, status, error, partial, hint }) {
       sub: "Unmute to try again.",
       pill: "Error",
       pillClass: "is-error",
+      isPartial: false,
+    };
+  }
+  if (muted && idled) {
+    return {
+      label: "MIC OFF",
+      line: "Muted after two minutes of quiet, to stop the meter running.",
+      sub: "Unmute whenever you're ready.",
+      pill: "Muted",
+      pillClass: "is-muted",
       isPartial: false,
     };
   }
