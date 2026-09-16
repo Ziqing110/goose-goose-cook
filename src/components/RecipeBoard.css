@@ -13,7 +13,13 @@
 .board {
   position: relative;
   min-width: 100%;
+  cursor: grab;
+  touch-action: none; /* the background pans by pointer, not native scroll */
 }
+.board-scroll.is-panning,
+.board-scroll.is-panning .board { cursor: grabbing; }
+/* Nothing should select while dragging the background around. */
+.board-scroll.is-panning { user-select: none; }
 
 .board-edges {
   position: absolute;

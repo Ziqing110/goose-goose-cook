@@ -42,6 +42,8 @@ export default function RecipeBoard({
   const cardRefs = useRef(new Map());
   const [edges, setEdges] = useState([]);
   const [drag, setDrag] = useState(null); // { id, dx, dy } while a card is held
+  const [panning, setPanning] = useState(false);
+  const scrollRef = useRef(null);
   const [ghost, setGhost] = useState(null); // live position during a drag
   const ghostRef = useRef(null);
   ghostRef.current = ghost;
@@ -99,6 +101,28 @@ export default function RecipeBoard({
     setGhost(p);
   };
 
+  const startPan = (e) => {
+    // Only the background pans; a card handles its own pointerdown.
+    if (e.button !== 0 || e.target.closest(".board-card")) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    setPanning(true);
+    const from = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop };
+    const move = (ev) => {
+      el.scrollLeft = from.left - (ev.clientX - from.x);
+      el.scrollTop = from.top - (ev.clientY - from.y);
+    };
+    const up = () => {
+      setPanning(false);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  };
+
   useEffect(() => {
     if (!drag) return undefined;
     const move = (e) => {
@@ -138,8 +162,8 @@ export default function RecipeBoard({
   );
 
   return (
-    <div className="board-scroll">
-      <div className="board" ref={boardRef} style={{ width: extent.w, height: extent.h }}>
+    <div className={`board-scroll${panning ? " is-panning" : ""}`} ref={scrollRef}>
+      <div className="board" ref={boardRef} style={{ width: extent.w, height: extent.h }} onPointerDown={startPan}>
         <svg className="board-edges" width={extent.w} height={extent.h} aria-hidden="true">
           {edges.map((e) => (
             <path key={e.key} d={e.d} className={`board-edge ${e.active ? "is-active" : ""}`} />
