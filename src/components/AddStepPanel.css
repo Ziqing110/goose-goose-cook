@@ -16,7 +16,7 @@
 .add-step-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .add-step-grow { flex: 1 1 260px; }
 
-.add-step-field input[type="text"],
+.add-step-field input,
 .add-step-field select {
   height: 36px;
   padding: 0 10px;
@@ -26,7 +26,7 @@
   font: inherit;
   font-size: 14px;
 }
-.add-step-field input[type="text"]:focus-visible,
+.add-step-field input:focus-visible,
 .add-step-field select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .add-step-deps {

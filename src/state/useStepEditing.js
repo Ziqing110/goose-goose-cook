@@ -32,8 +32,16 @@ export function useStepEditing() {
     dispatch({ type: "session/recipes/updateOne", payload: { recipeId, patch: { working: nextWorking } } });
   };
 
-  /** A new step belongs to exactly one dish, so the target is explicit. */
-  const addNode = (recipeId, { phase = "prep", dependsOn = [], label = "New step" } = {}) => {
+  /**
+   * A new step belongs to exactly one dish, so the target is explicit.
+   * So is the duration: the scheduler treats estimated_duration_sec as
+   * fact, so a step that quietly defaulted to a minute would shorten
+   * the plan by however long the task really takes.
+   */
+  const addNode = (
+    recipeId,
+    { phase = "prep", dependsOn = [], label = "New step", durationSec, difficulty = "low", equipment = [] } = {}
+  ) => {
     const recipe = recipes.find((r) => r.id === recipeId);
     if (!recipe) return null;
     const id = nextNodeId("step");
@@ -42,9 +50,9 @@ export function useStepEditing() {
         id,
         label,
         description: "",
-        estimated_duration_sec: 60,
-        difficulty: "low",
-        required_equipment: [],
+        estimated_duration_sec: Math.max(15, Math.round(durationSec ?? 120)),
+        difficulty,
+        required_equipment: equipment,
         required_materials: [],
         depends_on: dependsOn,
         status: "pending",
