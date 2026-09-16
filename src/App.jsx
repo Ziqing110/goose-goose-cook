@@ -12,6 +12,7 @@ import CookSummaryPage from "./pages/CookSummaryPage.jsx";
 import { useAppState } from "./state/AppStateContext.jsx";
 import { isFullyApproved } from "./utils/graphLayout.js";
 import { areCooksBound } from "./utils/cooks.js";
+import { currentSessionPath } from "./utils/sessionSteps.js";
 
 // Route guards: Home is always reachable (it's the entry point, not a
 // wizard step). Everything under /session requires an in-progress
@@ -93,17 +94,10 @@ function SessionIndexRedirect() {
   const { state } = useAppState();
   const redirect = nextRequiredPath(state);
   if (redirect) return <Navigate to={redirect} replace />;
-  if (!state.session.conversation.complete) return <Navigate to="/session/conversation" replace />;
-  // Inventory sits before the main line in the stage path, so resuming
-  // lands there rather than stepping over it — it's one click onward
-  // once the cook has looked at it. The guards above still send you to
-  // the main line, since that's where approval actually happens.
-  if (!isFullyApproved(state.session.recipes, state.session.sharedSteps)) return <Navigate to="/session/inventory" replace />;
-  if (!areCooksBound(state.session.cooks)) return <Navigate to="/session/voice-binding" replace />;
-  // Deliberately not checking endedAt — a finished run resumes to its
-  // summary, which lives on the same page.
-  if (state.session.run) return <Navigate to="/session/live-cook" replace />;
-  return <Navigate to="/session/schedule" replace />;
+  // Same stage order as the progress chrome and Home's run card, so
+  // "resume" lands on the stage those show as current. A finished run
+  // resumes to its summary, which lives on the live-cook page.
+  return <Navigate to={currentSessionPath(state.session)} replace />;
 }
 
 export default function App() {

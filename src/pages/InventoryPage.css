@@ -172,8 +172,26 @@
 }
 .inv-check.is-on .inv-check-box { background: var(--accent); border-color: var(--accent); }
 
-/* step detail — open by default on every row (a review surface) */
-.inv-row-detail { padding: 0 20px 14px 80px; display: flex; flex-direction: column; gap: 10px; }
+/* step detail — folded by default; open on the disclosure or when the row is "out" */
+.inv-row-main { cursor: pointer; }
+.inv-row-toggle {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 160ms ease-out, color 120ms ease-out;
+}
+.inv-row-toggle:hover { color: var(--ink); background: var(--surface); }
+.inv-row.is-open .inv-row-toggle { transform: rotate(180deg); }
+.inv-row-detail { padding: 0 20px 14px 80px; display: flex; flex-direction: column; gap: 10px; animation: inv-reveal 200ms ease-out both; }
 .inv-step { display: flex; flex-direction: column; gap: 4px; animation: inv-reveal 240ms ease-out both; }
 .inv-step-main { display: flex; align-items: center; gap: 10px; }
 .inv-step-num { font-size: 13px; color: var(--ink-faint); }
@@ -236,12 +254,13 @@
   border-top: 1px solid var(--line);
 }
 .inv-footer-tag { font-size: 14px; color: var(--ink-soft); }
-.inv-footer-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
 /* ---------------- mobile ---------------- */
 @media (max-width: 900px) {
+  /* Single column: the impact panel goes first so a toggle's
+     consequence is visible without scrolling past every ingredient. */
   .inv-columns { flex-direction: column; }
-  .inv-impact { flex: none; position: static; width: 100%; }
+  .inv-impact { flex: none; position: static; width: 100%; order: -1; }
 }
 @media (max-width: 720px) {
   .inv-title-row { flex-direction: column-reverse; align-items: flex-start; gap: 8px; padding: 16px 0; }
@@ -258,9 +277,15 @@
   .inv-row-head { padding: 8px 16px; gap: 12px; }
   .inv-row-detail { padding: 0 16px 12px 72px; }
   .inv-step-phase { width: 58px; }
-  .inv-footer { flex-direction: column; align-items: stretch; padding: 12px 0; }
-  .inv-footer-actions { flex-direction: column-reverse; align-items: stretch; }
-  .inv-footer-actions .btn { width: 100%; }
+  /* One row: the tag and the primary button, so the sticky footer plus
+     the VoiceBar stay well under a quarter of a phone screen. */
+  .inv-footer { padding: 10px 0; gap: 12px; }
+  .inv-footer-tag { font-size: 13px; }
+  .inv-footer .btn-lg { flex: 1 1 auto; padding-inline: 14px; font-size: 15px; white-space: nowrap; }
+}
+@media (max-width: 480px) {
+  /* The tag repeats the HUD legend; on a phone the button takes the row. */
+  .inv-footer-tag { display: none; }
 }
 
 /* ---------------- reduced motion ---------------- */

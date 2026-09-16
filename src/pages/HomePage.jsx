@@ -16,7 +16,6 @@ import {
   runFlames,
   runLogRecord,
   runPhaseCounts,
-  runPlayers,
   runServings,
   runStages,
   runTitle,
@@ -175,16 +174,15 @@ export default function HomePage() {
   useEffect(() => {
     let hint = null;
     if (heroState === "resumable") {
-      const conv = runStages(session).find((s) => s.id === "conversation");
-      hint = {
-        line: "Ready when you are — say “resume the run”.",
-        sub:
-          conv.state === "current"
-            ? `You're ${conv.count} into the conversation; I'll pick it up from there.`
-            : conv.state === "done"
-              ? "The main line is set; I'll take you straight to it."
-              : "Pick a kitchen and I'll pick it up from there.",
-      };
+      const stages = runStages(session);
+      const current = stages.find((s) => s.state === "current");
+      const sub =
+        current?.id === "kitchen-setup"
+          ? "Pick a kitchen and I'll pick it up from there."
+          : current?.id === "conversation"
+            ? `You're ${current.count} into the conversation; I'll pick it up from there.`
+            : "I'm your kitchen agent — we'll pick up right where you paused.";
+      hint = { line: "Ready when you are — say “resume the run”.", sub };
     } else if (heroState === "ready" || heroState === "picker") {
       hint = {
         line: "Say “start the run” and I'll set the main line.",
@@ -354,7 +352,6 @@ export default function HomePage() {
 
   const renderRunCard = () => {
     const flames = runFlames(session);
-    const players = runPlayers(session);
     const hasSteps = (session.recipes || []).length > 0 || (session.sharedSteps || []).length > 0;
     const totalSec = runTotalSeconds(session);
     const steps = session.recipes.reduce((n, r) => n + (r.working?.nodes?.length || 0), 0) + (session.sharedSteps || []).length;
@@ -371,18 +368,6 @@ export default function HomePage() {
                 {Array.from({ length: flames }, (_, i) => (
                   <KpIcon key={i} glyph="flame" size={16} />
                 ))}
-              </Chip>
-            )}
-            {players && (
-              <Chip className="hp-chip-players hp-pop" style={{ animationDelay: "260ms" }}>
-                <span className="hp-avatars" aria-hidden="true">
-                  {Array.from({ length: Math.min(players, 3) }, (_, i) => (
-                    <span key={i} className={`hp-avatar hp-avatar-${i % 3}`} />
-                  ))}
-                </span>
-                <span>
-                  <span className="mono">{players}</span> {players === 1 ? "player" : "players"}
-                </span>
               </Chip>
             )}
           </div>

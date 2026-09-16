@@ -9,18 +9,9 @@
 // (see utils/designV4.js).
 import { useLocation, useNavigate } from "react-router-dom";
 import { useDesignV4 } from "../utils/designV4.js";
+import { SESSION_STEPS } from "../utils/sessionSteps.js";
 import Icon from "./Icon.jsx";
 import "./SessionProgress.css";
-
-const SESSION_STEPS = [
-  { key: "kitchen-setup", label: "Kitchen", path: "/session/kitchen-setup" },
-  { key: "conversation", label: "Conversation", path: "/session/conversation" },
-  { key: "inventory", label: "Main line", path: "/session/inventory" },
-  { key: "voice-binding", label: "Cooks", path: "/session/voice-binding" },
-  { key: "schedule", label: "Schedule", path: "/session/schedule" },
-  { key: "live-cook", label: "Live cook", path: "/session/live-cook" },
-  // { key: "diary", label: "Diary", path: "/session/diary" },             // future
-];
 
 export default function SessionProgress() {
   const location = useLocation();

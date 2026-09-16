@@ -31,8 +31,11 @@ export function deleteSession(id) {
   return request(`/${id}`, { method: "DELETE" });
 }
 
-export function updateSession(id, patch) {
-  return request(`/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+// `keepalive` lets the request outlive the page (used to flush a
+// pending sync on unload); browsers cap keepalive bodies at ~64KB, so
+// it's only for the small top-level session patch.
+export function updateSession(id, patch, { keepalive = false } = {}) {
+  return request(`/${id}`, { method: "PATCH", body: JSON.stringify(patch), keepalive });
 }
 
 export function createRecipeInstance(sessionId, recipe) {

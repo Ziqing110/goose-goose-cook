@@ -80,8 +80,8 @@ body:has(.home-v4) { background: var(--kp-bg); }
   flex: 0 0 auto;
   display: block;
   width: 100%;
-  max-width: 340px;
-  aspect-ratio: 4 / 3;
+  max-width: 400px;
+  aspect-ratio: 2.2 / 1;
   object-fit: contain;
 }
 
@@ -135,13 +135,6 @@ body:has(.home-v4) { background: var(--kp-bg); }
 }
 .hp-chip .mono { font-size: 14px; }
 .hp-chip-difficulty { height: 32px; padding: 0 12px; gap: 3px; background: var(--kp-accent-tint); color: var(--kp-accent); }
-.hp-chip-players { height: 32px; padding: 0 12px 0 8px; gap: 8px; background: var(--kp-bg-tertiary); }
-.hp-avatars { display: inline-flex; align-items: center; }
-.hp-avatar { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--kp-bg-tertiary); }
-.hp-avatar + .hp-avatar { margin-left: -7px; }
-.hp-avatar-0 { background: var(--kp-cook-a); }
-.hp-avatar-1 { background: var(--kp-cook-b); }
-.hp-avatar-2 { background: var(--kp-phase-plate); }
 .hp-chip-equipment { background: var(--kp-bg); }
 .hp-chip-status { height: 32px; padding: 0 12px; }
 .hp-chip-inplay { height: 28px; padding: 0 10px; background: var(--kp-accent-tint); color: var(--kp-accent); }
@@ -199,15 +192,16 @@ body:has(.home-v4) { background: var(--kp-bg); }
 .hp-phase-plate { background: var(--kp-phase-plate); }
 .hp-phase-legend { font-size: 14px; color: var(--kp-text-secondary); }
 
-/* stage path — three 28px nodes on a 2px divider line */
-.hp-stages { list-style: none; margin: 0; padding: 4px 0 0; display: flex; align-items: flex-start; }
-.hp-stage { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; width: 120px; }
-.hp-stage + .hp-stage { margin-left: 48px; }
+/* stage path — the session's seven stages as 28px nodes on a 2px
+   divider line. Stages share the card width equally so the path
+   always fits; labels wrap under their node when narrow. */
+.hp-stages { list-style: none; margin: 0; padding: 4px 0 0; display: flex; align-items: flex-start; max-width: 720px; }
+.hp-stage { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .hp-stage-link {
   position: absolute;
   top: 13px;
   right: calc(50% + 14px);
-  width: calc(100% + 48px - 28px);
+  width: calc(100% - 28px);
   height: 2px;
   background: var(--kp-divider);
 }
@@ -313,7 +307,7 @@ body:has(.home-v4) { background: var(--kp-bg); }
 
 @media (max-width: 720px) {
   .hp-title-row { flex-direction: column-reverse; align-items: stretch; gap: 8px; padding: 0 0 16px; }
-  .hp-band { max-width: 250px; align-self: center; }
+  .hp-band { max-width: 320px; align-self: center; }
 
   .hp-hero { padding: 16px; }
   .hp-run { flex-direction: column; gap: 14px; }
@@ -325,9 +319,19 @@ body:has(.home-v4) { background: var(--kp-bg); }
   .hp-stats { gap: 8px; }
   .hp-stat { flex: 1 1 0; min-width: 0; padding: 10px 12px; }
 
-  .hp-stage { flex: 1 1 0; width: auto; gap: 6px; }
-  .hp-stage + .hp-stage { margin-left: 0; }
-  .hp-stage-link { width: calc(100% - 28px); }
+  /* Seven labels don't fit a phone: only the current stage keeps its
+     label on screen; the rest stay in the accessibility tree. */
+  .hp-stage { gap: 6px; }
+  .hp-stage-label { font-size: 12px; }
+  .hp-stage:not(.is-current) .hp-stage-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .hp-stage.is-current .hp-stage-label { white-space: nowrap; }
 
   .hp-card { margin-top: 16px; }
   .hp-card-head { padding: 14px 16px; gap: 12px; flex-wrap: wrap; }
