@@ -7,7 +7,7 @@
   border-radius: 12px;
   background:
     radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0) 0 0 / 24px 24px;
-  max-height: 560px;
+  max-height: 680px;
 }
 
 .board {
@@ -28,13 +28,15 @@
 }
 .board-edge {
   fill: none;
-  stroke: var(--line-strong);
+  stroke: var(--ink-faint);
   stroke-width: 1.5;
+  transition: opacity 120ms ease;
 }
-.board-edge.is-active {
-  stroke: var(--accent);
-  stroke-width: 2;
-}
+.board-edge.is-active { stroke: var(--accent); stroke-width: 2.25; }
+/* With something selected, everything else recedes rather than vanishes. */
+.board-edge.is-dimmed { opacity: 0.25; }
+.board-arrow-head { fill: var(--ink-faint); }
+.board-arrow-head.is-active { fill: var(--accent); }
 
 .board-card {
   position: absolute;
@@ -44,7 +46,7 @@
   align-items: flex-start;
   justify-content: center;
   text-align: left;
-  padding: 10px 12px;
+  padding: 10px 12px 10px 16px;
   overflow: hidden; /* the box is fixed; text clamps rather than growing it */
   border: 1px solid var(--line-strong);
   border-radius: 10px;
@@ -57,6 +59,23 @@
 .board-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .board-card.is-selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
 .board-card.is-blocked { border-style: dashed; opacity: 0.6; }
+.board-card.is-dimmed { opacity: 0.4; }
+
+/* Which part of the cook a step belongs to, in the same colours the
+   rest of the app uses for prep / cook / plate. */
+.board-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 10px 0 0 10px;
+  background: var(--board-phase, var(--line-strong));
+}
+.board-card.phase-prep { --board-phase: var(--kp-phase-prep, #8a8985); }
+.board-card.phase-cook { --board-phase: var(--kp-phase-cook, #d4552a); }
+.board-card.phase-plate { --board-phase: var(--kp-phase-plate, #5f9a2a); }
 .board-card.is-dragging {
   cursor: grabbing;
   z-index: 2;

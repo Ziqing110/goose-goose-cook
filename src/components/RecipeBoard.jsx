@@ -48,6 +48,18 @@ export default function RecipeBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes, positions, auto, ghost, drag]);
 
+  // With a card selected, its immediate neighbourhood is what matters —
+  // everything else dims so the connections can be followed.
+  const related = useMemo(() => {
+    if (!selectedNodeId) return null;
+    const set = new Set([selectedNodeId]);
+    nodes.forEach((n) => {
+      if (n.id === selectedNodeId) (n.depends_on || []).forEach((d) => set.add(d));
+      if ((n.depends_on || []).includes(selectedNodeId)) set.add(n.id);
+    });
+    return set;
+  }, [nodes, selectedNodeId]);
+
   const edges = useMemo(() => {
     const out = [];
     nodes.forEach((n) => {
@@ -151,8 +163,23 @@ export default function RecipeBoard({
         onPointerDown={startPan}
       >
         <svg className="board-edges" width={extent.w} height={extent.h} aria-hidden="true">
+          <defs>
+            {/* Two markers rather than context-stroke, which Safari
+                still doesn't support. */}
+            <marker id="board-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M 0 1 L 7 4 L 0 7 z" className="board-arrow-head" />
+            </marker>
+            <marker id="board-arrow-active" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M 0 1 L 7 4 L 0 7 z" className="board-arrow-head is-active" />
+            </marker>
+          </defs>
           {edges.map((e) => (
-            <path key={e.key} d={e.d} className={`board-edge ${e.active ? "is-active" : ""}`} />
+            <path
+              key={e.key}
+              d={e.d}
+              className={`board-edge ${e.active ? "is-active" : ""}${selectedNodeId && !e.active ? " is-dimmed" : ""}`}
+              markerEnd={`url(#board-arrow${e.active ? "-active" : ""})`}
+            />
           ))}
         </svg>
 
@@ -164,9 +191,9 @@ export default function RecipeBoard({
               type="button"
               key={n.id}
               title={n.label}
-              className={`board-card${selectedNodeId === n.id ? " is-selected" : ""}${
+              className={`board-card phase-${n.phase || "prep"}${selectedNodeId === n.id ? " is-selected" : ""}${
                 blockedIds?.has(n.id) ? " is-blocked" : ""
-              }${drag?.id === n.id ? " is-dragging" : ""}`}
+              }${drag?.id === n.id ? " is-dragging" : ""}${related && !related.has(n.id) ? " is-dimmed" : ""}`}
               style={{ left: p.x, top: p.y, width: CARD_W, height: CARD_H }}
               onPointerDown={(e) => startDrag(e, n.id)}
               onKeyDown={(e) => {
