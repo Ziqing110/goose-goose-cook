@@ -1,0 +1,41 @@
+/* Removing a step that others wait on. */
+
+.delete-step-panel { max-width: 560px; display: flex; flex-direction: column; gap: 12px; }
+
+.delete-step-dependents {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 14px;
+}
+
+.delete-step-modes { display: flex; flex-direction: column; gap: 6px; }
+.delete-step-mode {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.delete-step-mode.is-on { border-color: var(--accent); background: var(--accent-tint); }
+.delete-step-mode > span { display: flex; flex-direction: column; gap: 2px; }
+.delete-step-mode strong { font-size: 14px; font-weight: 600; }
+
+.delete-step-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.delete-step-pick { display: flex; flex-direction: column; gap: 6px; }
+
+.delete-step-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.btn-danger-solid { background: var(--crit); color: #fff; }

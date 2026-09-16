@@ -12,6 +12,7 @@ import { useSessionRecipes } from "../state/useSessionRecipes.js";
 import { mergeRecipesForDisplay, computeStepAvailability, cyclicDependencyIds } from "../utils/graphLayout.js";
 import RecipeBoard from "../components/RecipeBoard.jsx";
 import AddStepPanel from "../components/AddStepPanel.jsx";
+import DeleteStepDialog from "../components/DeleteStepDialog.jsx";
 import Drawer from "../components/Drawer.jsx";
 import NodeEditorPanel from "../components/NodeEditorPanel.jsx";
 import { useStepEditing } from "../state/useStepEditing.js";
@@ -167,6 +168,7 @@ export default function InventoryPage() {
   // Which card is open is view state: persisting it meant a reload
   // re-opened the editor on a step nobody had just clicked.
   const [selectedId, setSelectedId] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
   // A step can carry materials the catalog doesn't know yet (added from
   // the editor), so the editor sees the catalog plus this run's own.
   const materialsInfo = { ...(catalog || {}), ...(working.custom_materials || {}) };
@@ -417,6 +419,19 @@ export default function InventoryPage() {
           </div>
         </>
       )}
+      {pendingDelete && (
+        <DeleteStepDialog
+          node={pendingDelete.node}
+          dependents={pendingDelete.dependents}
+          allNodes={boardNodes}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={(reattach) => {
+            deleteNode(pendingDelete.node.id, { confirm: false, reattach });
+            setPendingDelete(null);
+          }}
+        />
+      )}
+
       {selectedNode && (
         <Drawer label="Edit step" onClose={() => setSelectedId(null)}>
           <NodeEditorPanel
@@ -428,8 +443,13 @@ export default function InventoryPage() {
               setSelectedId(null);
             }}
             onDelete={(id) => {
-              deleteNode(id);
+              // Removing a step other steps wait on changes the plan's
+              // shape, so it asks where they go rather than silently
+              // cutting the link.
+              const dependents = boardNodes.filter((n) => (n.depends_on || []).includes(id));
               setSelectedId(null);
+              if (dependents.length === 0) deleteNode(id);
+              else setPendingDelete({ node: boardNodes.find((n) => n.id === id), dependents });
             }}
             materialsInfo={materialsInfo}
             onRegisterMaterial={(draft) => registerMaterial(draft, materialsInfo, selectedId)}

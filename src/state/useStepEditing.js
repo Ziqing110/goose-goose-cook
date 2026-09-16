@@ -67,20 +67,56 @@ export function useStepEditing() {
   // across dish boundaries — deleteSharedStepFromSession owns that full
   // scrub, locally and server-side. A plain per-recipe node only ever
   // needs scrubbing within its own recipe.
-  const deleteNode = (nodeId, { confirm = true } = {}) => {
+  /**
+   * Removes a step. `reattach` maps each dependent to what it should
+   * wait on instead — without it, dependents silently lose the link and
+   * become startable immediately, which shortens the plan for a reason
+   * nobody chose.
+   *
+   * The reattach and the removal are applied in ONE pass per recipe.
+   * Two updateRecipeWorking calls in the same tick both read `recipes`
+   * from the render closure, so the second silently overwrote the
+   * first — the dependents' new links were lost the moment the step
+   * itself went.
+   */
+  const deleteNode = (nodeId, { confirm = true, reattach = null } = {}) => {
     if (confirm && !window.confirm("Remove this step? Any step depending on it will lose that dependency.")) return;
+
+    // A step can't be made to wait on itself or on the step being cut.
+    const depsFor = (id, current) => {
+      const next = reattach?.[id] ?? current;
+      return [...new Set(next.filter((d) => d !== nodeId && d !== id))];
+    };
+
     const shared = findSharedStep(nodeId);
-    if (shared) {
-      deleteSharedStepFromSession(shared.id);
-    } else {
-      const recipe = findRecipeForNode(nodeId);
-      if (!recipe) return;
+
+    // Shared steps are session-owned; their delete scrubs depends_on
+    // everywhere through the reducer, so reattaching one is a separate
+    // dispatch target and can't clobber.
+    sharedSteps.forEach((step) => {
+      if (step.working.id === nodeId || !reattach?.[step.working.id]) return;
+      dispatch({
+        type: "session/sharedSteps/updateOne",
+        payload: {
+          sharedStepId: step.id,
+          patch: { working: { ...step.working, depends_on: depsFor(step.working.id, step.working.depends_on || []) } },
+        },
+      });
+    });
+
+    recipes.forEach((recipe) => {
+      const touched =
+        recipe.working.nodes.some((n) => n.id === nodeId) ||
+        recipe.working.nodes.some((n) => reattach?.[n.id] || (n.depends_on || []).includes(nodeId));
+      if (!touched) return;
       updateRecipeWorking(recipe.id, (w) => {
         w.nodes = w.nodes
           .filter((n) => n.id !== nodeId)
-          .map((n) => ({ ...n, depends_on: (n.depends_on || []).filter((d) => d !== nodeId) }));
+          .map((n) => ({ ...n, depends_on: depsFor(n.id, n.depends_on || []) }));
       });
-    }
+    });
+
+    if (shared) deleteSharedStepFromSession(shared.id);
   };
 
   /** Commits a step's staged edits (from the drawer) in one go and closes it. */
