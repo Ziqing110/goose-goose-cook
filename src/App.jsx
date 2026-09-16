@@ -4,6 +4,7 @@ import HomePage from "./pages/HomePage.jsx";
 import SessionLayout from "./pages/SessionLayout.jsx";
 import SessionKitchenSetupPage from "./pages/SessionKitchenSetupPage.jsx";
 import ConversationPage from "./pages/ConversationPage.jsx";
+import InventoryPage from "./pages/InventoryPage.jsx";
 import RecipeGraphPage from "./pages/RecipeGraphPage.jsx";
 import VoiceBindingPage from "./pages/VoiceBindingPage.jsx";
 import SchedulePage from "./pages/SchedulePage.jsx";
@@ -124,6 +125,14 @@ export default function App() {
               <RequireKitchenProfile>
                 <ConversationPage />
               </RequireKitchenProfile>
+            }
+          />
+          <Route
+            path="inventory"
+            element={
+              <RequireConversationComplete>
+                <InventoryPage />
+              </RequireConversationComplete>
             }
           />
           <Route

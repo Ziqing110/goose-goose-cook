@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { nextNodeId, slugifyMaterialId, MATERIAL_CATEGORY_LABELS, MATERIAL_CATEGORY_ORDER } from "../data/dishes.js";
-import { listRecipeTemplates, listMaterials } from "../api/recipeTemplates.js";
+import { useSessionRecipes } from "../state/useSessionRecipes.js";
 import {
   diffGraphs,
   cloneGraph,
@@ -11,9 +11,7 @@ import {
   computeDownstreamClosure,
   computeMaterialTotals,
   layoutLevels,
-  namespaceTemplateNodes,
   mergeRecipesForDisplay,
-  extractSharedSteps,
 } from "../utils/graphLayout.js";
 import { missingEquipment, EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
 import StepCard from "../components/StepCard.jsx";
@@ -28,52 +26,6 @@ const PHASE_COLUMNS = [
   { key: "plate", label: "Plate" },
 ];
 
-// Demo wiring: every distinct dish in the templates table (grouped by
-// dish_idea_raw) gets instantiated into the session together — today
-// that's Mapo Tofu + Chicken Noodle Soup — so the multi-recipe-per-
-// session data model actually gets exercised instead of sitting unused.
-// Within each dish, the requested diet's variant is picked (falling
-// back to whatever variant that dish has). This is the documented seam
-// for a real LLM tool call later — same role generateRecipeGraph() used
-// to play, just choosing among DB-sourced templates instead of
-// hand-authoring the graph(s) inline, and eventually picking dishes
-// from what the user actually asked for instead of "all of them."
-function matchTemplates(templates, answers) {
-  const isMeatFree = answers.diet === "vegetarian" || answers.diet === "vegan";
-  const wantDiet = isMeatFree ? "vegetarian" : "none";
-  const byDish = new Map();
-  templates.forEach((t) => {
-    if (!byDish.has(t.dish_idea_raw)) byDish.set(t.dish_idea_raw, []);
-    byDish.get(t.dish_idea_raw).push(t);
-  });
-  return [...byDish.values()].map((variants) => variants.find((t) => t.diet === wantDiet) || variants[0]);
-}
-
-// Namespaces one template's nodes under a fresh recipe instance id.
-// Sharing detection (extractSharedSteps) runs afterward, once, across
-// the whole batch of dishes being instantiated together — namespacing
-// itself doesn't know or care whether a node will end up shared.
-function buildNamespacedGraph(template, answers, recipeId) {
-  return {
-    recipeId,
-    templateId: template.id,
-    title: template.title,
-    dish_idea_raw: template.dish_idea_raw,
-    servings: Number(answers.servings) || template.servings_default,
-    created_at: new Date().toISOString(),
-    nodes: namespaceTemplateNodes(template.nodes, recipeId),
-  };
-}
-
-function toRecipeInstance({ recipeId, templateId, nodes, ...rest }) {
-  const graph = { recipe_id: `recipe_${recipeId}`, ...rest, nodes };
-  return { id: recipeId, templateId, draft: graph, working: cloneGraph(graph), approved: null, custom_materials: {} };
-}
-
-function toSharedStepInstance(node) {
-  return { id: node.id, draft: node, working: cloneGraph(node), approved: null };
-}
-
 // The merged view tags every node with the recipe instance it came
 // from (or _shared for a session-owned shared step) for rendering;
 // strip those back off before persisting a node.
@@ -83,52 +35,18 @@ function stripRecipeTag(node) {
 }
 
 export default function RecipeGraphPage() {
-  const { state, dispatch, addRecipeToSession, addSharedStepToSession, deleteSharedStepFromSession } = useAppState();
-  const { conversation, selectedNodeId, recipes, sharedSteps = [] } = state.session;
+  const { state, dispatch, deleteSharedStepFromSession } = useAppState();
+  const { selectedNodeId, recipes, sharedSteps = [] } = state.session;
   const kitchenProfile = state.kitchenProfiles.find((p) => p.id === state.session.kitchenProfileId) || null;
-  // Lives on the session, not in component state: "I don't have garlic"
-  // is a fact about tonight's cook that has to survive a refresh and a
-  // trip to another page, and it gates approval below.
+  // "Out" ingredients are session state, set on the Inventory page and
+  // persisted with the session, so the main line and Inventory agree —
+  // and it gates approval below.
   const unavailableMaterials = useMemo(
-    () => new Set(state.session.unavailableMaterials || []),
-    [state.session.unavailableMaterials]
+    () => new Set(state.session.outMaterialIds || []),
+    [state.session.outMaterialIds]
   );
   const [addPickerPhase, setAddPickerPhase] = useState(null); // which column's "which dish?" picker is open
-  const [templates, setTemplates] = useState(null);
-  const [baseMaterials, setBaseMaterials] = useState(null);
-
-  // Reference data (recipe templates + the materials catalog) now comes
-  // from the database instead of being hardcoded in src/data/dishes.js.
-  useEffect(() => {
-    listRecipeTemplates()
-      .then(setTemplates)
-      .catch(() => setTemplates([]));
-    listMaterials()
-      .then((rows) => {
-        const catalog = {};
-        rows.forEach((m) => {
-          catalog[m.id] = { label: m.label, category: m.category, amount: m.amount, unit: m.unit };
-        });
-        setBaseMaterials(catalog);
-      })
-      .catch(() => setBaseMaterials({}));
-  }, []);
-
-  // Once templates have loaded, instantiate one recipe per distinct dish
-  // for this session if it doesn't have any recipes yet. Shareable steps
-  // (e.g. mincing garlic for both dishes) are detected once across the
-  // whole batch and split out into session-owned shared steps before
-  // any of it is persisted.
-  useEffect(() => {
-    if (!templates || recipes.length > 0) return;
-    const graphs = matchTemplates(templates, conversation.answers).map((template) =>
-      buildNamespacedGraph(template, conversation.answers, crypto.randomUUID())
-    );
-    const { recipes: splitGraphs, sharedSteps: extracted } = extractSharedSteps(graphs);
-    splitGraphs.forEach((g) => addRecipeToSession(toRecipeInstance(g)));
-    extracted.forEach((node) => addSharedStepToSession(toSharedStepInstance(node)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [templates, recipes.length]);
+  const { catalog: baseMaterials } = useSessionRecipes();
 
   const { working, draft, approved } = mergeRecipesForDisplay(recipes, sharedSteps);
 
@@ -229,7 +147,7 @@ export default function RecipeGraphPage() {
   const toggleMaterial = (id) => {
     const next = new Set(unavailableMaterials);
     next.has(id) ? next.delete(id) : next.add(id);
-    dispatch({ type: "session/update", payload: { unavailableMaterials: [...next] } });
+    dispatch({ type: "session/update", payload: { outMaterialIds: [...next] } });
   };
 
   // The escape hatch that makes the approval gate below fair: rather

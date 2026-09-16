@@ -11,7 +11,7 @@ import { useLocation } from "react-router-dom";
 // (SessionProgress, VoiceBar, Icon/KpIcon) should look and behave the
 // same across the entire site; once the team agrees on one version,
 // apply it globally and remove this route list and the hook.
-export const DESIGN_V4_ROUTES = ["/session/conversation"];
+export const DESIGN_V4_ROUTES = ["/session/conversation", "/session/inventory"];
 
 export function useDesignV4() {
   const { pathname } = useLocation();

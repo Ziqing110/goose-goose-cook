@@ -7,7 +7,7 @@
   border-bottom: 1px solid var(--line);
 }
 .session-progress .progress-track { flex: 1; }
-.session-exit-btn { flex: none; }
+.session-exit-btn { flex: none; white-space: nowrap; }
 
 @media (max-width: 600px) {
   .session-progress { flex-wrap: wrap; gap: 10px 14px; }
@@ -44,9 +44,10 @@
 .stage {
   position: relative;
   /* Fixed width (not just a flex-basis) so the <ol>'s intrinsic size
-     is 5 × 120 + gaps rather than the sum of the label widths. */
+     is 7 × 96 + gaps rather than the sum of the label widths — 840px,
+     which leaves room for the Exit button beside it at 1120. */
   flex: none;
-  width: 120px;
+  width: 96px;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -57,13 +58,13 @@
   line-height: 18px;
   color: var(--ink-soft);
 }
-.stage + .stage { margin-left: 48px; }
+.stage + .stage { margin-left: 28px; }
 .stage + .stage::before {
   content: "";
   position: absolute;
   top: 13px;
-  left: -48px;
-  width: 48px;
+  left: -28px;
+  width: 28px;
   height: 2px;
   background: var(--line);
 }

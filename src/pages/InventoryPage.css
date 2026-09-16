@@ -1,0 +1,275 @@
+/* ---------------------------------------------------------------
+   Inventory page — design system v4 ("Kitchen Path Inventory v3").
+   Tokens, buttons, topbar and VoiceBar come from styles/design-v4.css
+   (route-scoped via AppShell). Layout: title row → coverage HUD →
+   two columns (ingredient groups | sticky impact panel) → footer band.
+   Red (--inv-critical) appears only where the brief allows: the HUD
+   line + blocked tile, blocked bar segments, blocked impact entries
+   and the reach figure of an ingredient whose absence blocks a step.
+----------------------------------------------------------------*/
+
+.inventory-page {
+  --inv-critical: #b3261e;
+  --inv-warning: #7a4a00;
+  --inv-done: #2e7d32;
+  --inv-phase-prep: #8a8985;
+  --inv-phase-cook: #d4552a;
+  --inv-phase-plate: #5f9a2a;
+  --inv-ai-soft: #efe9f8;
+  --inv-ai-text: #6b5bd2;
+  gap: 0;
+}
+
+@keyframes inv-reveal { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes inv-pop { 0% { opacity: 0; transform: scale(0.6); } 60% { opacity: 1; transform: scale(1.08); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes inv-roll { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes inv-dots { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes inv-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.inv-roll { display: inline-block; animation: inv-roll 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.inv-dots { animation: inv-dots 1600ms ease-in-out infinite; }
+
+/* ---------------- title row ---------------- */
+.inv-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px 0 20px;
+  animation: inv-reveal 240ms ease-out both;
+}
+.inv-title { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.inv-title h1 { font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.01em; }
+.inv-meta { font-size: 13px; line-height: 18px; color: var(--ink-soft); }
+.inv-meta.is-tertiary { color: var(--ink-faint); }
+.inv-dish-marks { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
+.inv-dish-mark { width: 100px; height: 100px; object-fit: contain; animation: inv-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* ---------------- coverage HUD ---------------- */
+.inv-hud {
+  background: var(--surface-sunken);
+  border-radius: var(--radius-card);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: inv-reveal 240ms 80ms ease-out both;
+}
+.inv-hud-error { align-items: flex-start; gap: 14px; }
+.inv-hud-head { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.inv-summary { font-size: 18px; line-height: 24px; font-weight: 700; }
+.inv-summary.is-done { color: var(--inv-done); }
+.inv-summary.is-warning { color: var(--inv-warning); }
+.inv-summary.is-critical { color: var(--inv-critical); }
+.ds-v4 .inv-btn-accent, .ds-v4 .inv-btn-accent:hover { color: var(--accent); }
+.ds-v4 .inv-btn-accent:hover { background: var(--accent-soft); }
+
+.inv-error-block {
+  align-self: stretch;
+  background: var(--crit-soft);
+  color: var(--crit-soft-ink);
+  border-radius: var(--radius-control);
+  padding: 12px 14px;
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.inv-stats { display: flex; gap: 12px; flex-wrap: wrap; }
+.inv-stat {
+  min-width: 140px;
+  background: var(--surface);
+  border-radius: var(--radius-control);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.inv-stat-wide { min-width: 196px; }
+.inv-stat-value { font-size: 24px; line-height: 28px; font-weight: 500; }
+.inv-stat-value.is-critical { color: var(--inv-critical); }
+.inv-stat-label { font-size: 13px; color: var(--ink-soft); }
+
+.inv-stepbar-wrap { display: flex; flex-direction: column; gap: 8px; }
+.inv-stepbar { display: flex; gap: 2px; height: 4px; }
+.inv-stepbar-seg { flex: 1 1 0; height: 4px; border-radius: 999px; background: var(--inv-done); transition: background 240ms ease-out; }
+.inv-stepbar-seg.is-atRisk { background: var(--inv-warning); }
+.inv-stepbar-seg.is-blocked { background: var(--inv-critical); }
+.inv-stepbar-legend { font-size: 14px; color: var(--ink-soft); }
+
+/* ---------------- two columns ---------------- */
+.inv-columns { display: flex; align-items: flex-start; gap: 24px; margin-top: 24px; }
+.inv-groups { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.inv-impact { flex: 0 0 360px; position: sticky; top: 16px; }
+
+/* ---------------- list cards ---------------- */
+.inv-card {
+  background: var(--surface-sunken);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  animation: inv-reveal 240ms ease-out both;
+}
+.inv-card-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; }
+.inv-card-title { font-size: 18px; line-height: 24px; font-weight: 700; }
+.inv-card-count { font-size: 14px; color: var(--ink-soft); }
+.inv-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+
+/* ---------------- ingredient row ---------------- */
+.inv-row { border-top: 1px solid var(--line); animation: inv-reveal 240ms ease-out both; }
+.inv-row-head { display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 8px 20px; }
+.inv-row-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.inv-row-title-line, .inv-row-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.inv-row-title { font-size: 16px; font-weight: 500; }
+.inv-row-amount { font-size: 14px; color: var(--ink-soft); }
+.inv-row-meta { font-size: 13px; color: var(--ink-soft); }
+.inv-row.is-out .inv-row-title, .inv-row.is-out .inv-row-amount { color: var(--ink-faint); text-decoration: line-through; }
+
+.inv-reach { flex: 0 0 auto; font-size: 13px; color: var(--ink-faint); white-space: nowrap; }
+.inv-reach.is-warning { color: var(--inv-warning); }
+.inv-reach.is-critical { color: var(--inv-critical); }
+
+.inv-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.inv-chip-out { background: var(--ds-chip); animation: inv-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.inv-chip-added { background: var(--inv-ai-soft); color: var(--inv-ai-text); }
+
+/* 28px box on a 44px target; accent fill when on hand, waiting border when out */
+.inv-check {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 120ms ease-out;
+}
+.inv-check:active { transform: scale(0.97); }
+.inv-check-box {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  box-sizing: border-box;
+  border: 2px solid var(--ds-waiting);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms ease-out, border-color 120ms ease-out;
+}
+.inv-check.is-on .inv-check-box { background: var(--accent); border-color: var(--accent); }
+
+/* step detail — open by default on every row (a review surface) */
+.inv-row-detail { padding: 0 20px 14px 80px; display: flex; flex-direction: column; gap: 10px; }
+.inv-step { display: flex; flex-direction: column; gap: 4px; animation: inv-reveal 240ms ease-out both; }
+.inv-step-main { display: flex; align-items: center; gap: 10px; }
+.inv-step-num { font-size: 13px; color: var(--ink-faint); }
+.inv-step-phase { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; width: 66px; font-size: 13px; }
+.inv-step-phase-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.inv-step-phase.is-prep { color: var(--inv-phase-prep); }
+.inv-step-phase.is-cook { color: var(--inv-phase-cook); }
+.inv-step-phase.is-plate { color: var(--inv-phase-plate); }
+.inv-step-label { flex: 1 1 auto; min-width: 0; font-size: 15px; }
+.inv-step-dur { font-size: 13px; color: var(--ink-soft); }
+.inv-step-sub { padding-left: 40px; font-size: 13px; line-height: 18px; color: var(--ink-soft); }
+.inv-step-deps { color: var(--ink-faint); }
+
+/* ---------------- impact panel ---------------- */
+.inv-impact-empty { padding: 4px 20px 20px; font-size: 13px; color: var(--ink-faint); }
+.inv-impact-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--line);
+  animation: inv-reveal 240ms ease-out both;
+}
+.inv-impact-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; margin-top: 8px; background: var(--inv-warning); }
+.inv-impact-row.is-blocked .inv-impact-dot { background: var(--inv-critical); }
+.inv-impact-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.inv-impact-title-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.inv-impact-label { font-size: 16px; font-weight: 500; }
+.inv-impact-dur { font-size: 13px; color: var(--ink-soft); white-space: nowrap; }
+.inv-impact-reason { font-size: 13px; line-height: 18px; color: var(--ink-soft); }
+.inv-impact-more {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px 20px;
+  border: none;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+.inv-impact-more:hover { color: var(--ink); }
+
+/* ---------------- footer band ----------------
+   Sticky above the fixed VoiceBar so the primary action is always
+   reachable while scrolling a long ingredient list. */
+.inv-footer {
+  position: sticky;
+  bottom: var(--voice-bar-height);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 24px;
+  padding: 16px 0;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+}
+.inv-footer-tag { font-size: 14px; color: var(--ink-soft); }
+.inv-footer-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+/* ---------------- mobile ---------------- */
+@media (max-width: 900px) {
+  .inv-columns { flex-direction: column; }
+  .inv-impact { flex: none; position: static; width: 100%; }
+}
+@media (max-width: 720px) {
+  .inv-title-row { flex-direction: column-reverse; align-items: flex-start; gap: 8px; padding: 16px 0; }
+  .inv-dish-mark { width: 72px; height: 72px; }
+  .inv-hud { padding: 16px; gap: 14px; }
+  .inv-stats { gap: 8px; flex-wrap: nowrap; }
+  .inv-stat, .inv-stat-wide { flex: 1 1 0; min-width: 0; padding: 10px 12px; }
+  .inv-stat-value { font-size: 22px; white-space: nowrap; }
+  .inv-stat-sep { font-size: 0; }
+  .inv-stat-sep::before { content: "/"; font-size: 22px; }
+  .inv-long { display: none; }
+  .inv-columns { margin-top: 16px; gap: 16px; }
+  .inv-card-head { padding: 14px 16px; }
+  .inv-row-head { padding: 8px 16px; gap: 12px; }
+  .inv-row-detail { padding: 0 16px 12px 72px; }
+  .inv-step-phase { width: 58px; }
+  .inv-footer { flex-direction: column; align-items: stretch; padding: 12px 0; }
+  .inv-footer-actions { flex-direction: column-reverse; align-items: stretch; }
+  .inv-footer-actions .btn { width: 100%; }
+}
+
+/* ---------------- reduced motion ---------------- */
+@media (prefers-reduced-motion: reduce) {
+  .inventory-page *, .inventory-page *::before, .inventory-page *::after {
+    animation-duration: 200ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 200ms !important;
+  }
+  .inv-title-row, .inv-hud, .inv-card, .inv-row, .inv-step, .inv-impact-row, .inv-roll, .inv-chip-out, .inv-dish-mark { animation-name: inv-fade; }
+  .inv-dots { animation: none; }
+}

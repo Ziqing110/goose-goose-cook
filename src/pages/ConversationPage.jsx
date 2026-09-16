@@ -117,7 +117,7 @@ export default function ConversationPage() {
               <button className="btn btn-ghost" onClick={restart}>
                 Start over
               </button>
-              <button className="btn btn-primary btn-lg" onClick={() => navigate("/session/recipe-graph")}>
+              <button className="btn btn-primary btn-lg" onClick={() => navigate("/session/inventory")}>
                 Generate recipe graph
               </button>
             </div>

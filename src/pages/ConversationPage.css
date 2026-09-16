@@ -9,14 +9,14 @@
 
 /* Title, progress, transcript and answer row share one centred
    reading-width column, the same width as the stage path above it
-   (5 × 120px nodes + 4 × 48px connectors), which is centred too. */
+   (7 × 96px nodes + 6 × 28px connectors), which is centred too. */
 .convo-title-row,
 .convo-progress,
 .convo-panel,
 .convo-footer {
   align-self: center;
   width: 100%;
-  max-width: 792px;
+  max-width: 840px;
 }
 
 /* ---------------- title row ---------------- */
