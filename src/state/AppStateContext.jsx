@@ -31,7 +31,7 @@ function makeSession(id, kitchenProfileId) {
     cooks: [],
     mode: null,
     outMaterialIds: [], // ingredients marked "Out" on the Inventory page
-    inventoryChecked: false, // cook left Inventory via "Set the main line"
+    nodePositions: {}, // where each step card sits on the board
     run: null, // set when cooking actually starts — see LiveCookPage
   };
 }
@@ -249,7 +249,7 @@ export function AppStateProvider({ children }) {
     cooks: session.cooks,
     mode: session.mode,
     outMaterialIds: session.outMaterialIds,
-    inventoryChecked: session.inventoryChecked,
+    nodePositions: session.nodePositions || {},
     run: session.run,
   });
   // The session whose top-level sync is still waiting on the debounce,

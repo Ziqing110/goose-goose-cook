@@ -298,3 +298,9 @@
   .inv-title-row, .inv-hud, .inv-card, .inv-row, .inv-step, .inv-impact-row, .inv-roll, .inv-chip-out, .inv-dish-mark { animation-name: inv-fade; }
   .inv-dots { animation: none; }
 }
+
+/* The step board sits full-width under the ingredient columns. */
+.inv-board-card { display: flex; flex-direction: column; gap: 12px; }
+
+.inv-equipment-warning { display: flex; flex-direction: column; gap: 4px; border-color: var(--crit); }
+.inv-equipment-warning .inv-card-title { color: var(--crit); }

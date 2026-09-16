@@ -9,6 +9,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { useSessionRecipes } from "../state/useSessionRecipes.js";
+import { mergeRecipesForDisplay, computeStepAvailability, cyclicDependencyIds, cloneGraph } from "../utils/graphLayout.js";
+import { missingEquipment, EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
+import RecipeBoard from "../components/RecipeBoard.jsx";
+import AddStepPanel from "../components/AddStepPanel.jsx";
+import ApprovedPanel from "../components/ApprovedPanel.jsx";
+import DeleteStepDialog from "../components/DeleteStepDialog.jsx";
+import Drawer from "../components/Drawer.jsx";
+import NodeEditorPanel from "../components/NodeEditorPanel.jsx";
+import { useStepEditing } from "../state/useStepEditing.js";
 import { buildInventory, formatClock, formatStepDuration, PHASE_LABELS } from "../utils/inventory.js";
 import dishMapoTofu from "../assets/dish-mapo-tofu.png";
 import dishNoodleSoup from "../assets/dish-noodle-soup.png";
@@ -170,6 +179,61 @@ export default function InventoryPage() {
     [recipes, sharedSteps, catalog, outMaterialIds]
   );
 
+  // The same steps the ingredients above are folded under, as a board.
+  const { working, draft, approved } = useMemo(() => mergeRecipesForDisplay(recipes, sharedSteps), [recipes, sharedSteps]);
+  const boardNodes = working.nodes || [];
+  const blockedIds = useMemo(
+    () => computeStepAvailability(boardNodes, new Set(outMaterialIds)).impossible,
+    [boardNodes, outMaterialIds]
+  );
+  const dishLabelFor = (node) =>
+    node._shared ? "Shared" : recipes.find((r) => r.id === node._recipeId)?.working.title || null;
+  const { addNode, saveNode, deleteNode, registerMaterial } = useStepEditing();
+  // Which card is open is view state: persisting it meant a reload
+  // re-opened the editor on a step nobody had just clicked.
+  const [selectedId, setSelectedId] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  // A step can carry materials the catalog doesn't know yet (added from
+  // the editor), so the editor sees the catalog plus this run's own.
+  const materialsInfo = { ...(catalog || {}), ...(working.custom_materials || {}) };
+  const selectedNode = selectedId ? boardNodes.find((n) => n.id === selectedId) || null : null;
+
+  // Approval is what the rest of the run reads: the schedule and the
+  // live cook run off `approved`, never `working`, so editing a step
+  // can't rewrite a plan someone is already cooking from.
+  const kitchenProfile = state.kitchenProfiles.find((p) => p.id === session.kitchenProfileId) || null;
+  const lacking = missingEquipment(boardNodes, kitchenProfile);
+  const dishIsUndoable = blockedIds.size > 0;
+
+  const approve = () => {
+    recipes.forEach((r) =>
+      dispatch({ type: "session/recipes/updateOne", payload: { recipeId: r.id, patch: { approved: cloneGraph(r.working) } } })
+    );
+    sharedSteps.forEach((st) =>
+      dispatch({ type: "session/sharedSteps/updateOne", payload: { sharedStepId: st.id, patch: { approved: cloneGraph(st.working) } } })
+    );
+    setSelectedId(null);
+  };
+  const revise = () => {
+    recipes.forEach((r) => dispatch({ type: "session/recipes/updateOne", payload: { recipeId: r.id, patch: { approved: null } } }));
+    sharedSteps.forEach((st) => dispatch({ type: "session/sharedSteps/updateOne", payload: { sharedStepId: st.id, patch: { approved: null } } }));
+  };
+
+  // The escape hatch that makes the gate fair: drop what can't be done
+  // and cook the rest. blockedIds is already the full closure.
+  const dropBlockedSteps = () => {
+    const ids = [...blockedIds.keys()];
+    if (!ids.length) return;
+    if (!window.confirm(`Remove ${ids.length} step${ids.length === 1 ? "" : "s"} you can't do without those materials?`)) return;
+    ids.forEach((id) => deleteNode(id, { confirm: false }));
+    setSelectedId(null);
+  };
+
+  const nodePositions = session.nodePositions || {};
+  const moveNode = (id, at) =>
+    dispatch({ type: "session/update", payload: { nodePositions: { ...nodePositions, [id]: at } } });
+  const selectNode = (id) => setSelectedId((cur) => (cur === id ? null : id));
+
   const hasDishes = recipes.length > 0;
   const hasOut = outMaterialIds.length > 0;
   const loading = hasDishes && !catalog && !catalogError;
@@ -189,10 +253,6 @@ export default function InventoryPage() {
     setOut([...next]);
   };
   const markAllOnHand = () => setOut([]);
-  const setMainLine = () => {
-    dispatch({ type: "session/update", payload: { inventoryChecked: true } });
-    navigate("/session/recipe-graph");
-  };
 
   const { coverage } = inv;
   const metaBits = [];
@@ -367,16 +427,111 @@ export default function InventoryPage() {
             </aside>
           </div>
 
+          {/* ---- The steps themselves, as a board you can rearrange ---- */}
+          {boardNodes.length > 0 && (
+            <section className="inv-card inv-board-card" aria-labelledby="inv-board-title">
+              <div className="inv-card-head">
+                <span id="inv-board-title" className="inv-card-title">
+                  The main line
+                </span>
+                <span className="inv-meta is-tertiary">Drag a card to move it. Click one to edit.</span>
+              </div>
+              {!approved && (
+              <AddStepPanel
+                recipes={recipes}
+                nodes={boardNodes}
+                onAdd={(recipeId, spec) => {
+                  const id = addNode(recipeId, spec);
+                  if (id) setSelectedId(id); // open the new card for the details
+                }}
+              />
+              )}
+              <RecipeBoard
+                nodes={boardNodes}
+                positions={nodePositions}
+                selectedNodeId={selectedId}
+                dishLabelFor={dishLabelFor}
+                blockedIds={blockedIds}
+                onSelect={approved ? () => {} : selectNode}
+                onMove={moveNode}
+              />
+            </section>
+          )}
+
+          {lacking.length > 0 && (
+            <div className="inv-card inv-equipment-warning">
+              <span className="inv-card-title">
+                Planned with {lacking.map((e) => EQUIPMENT_LABELS[e] || e).join(" and ")} you don&rsquo;t have
+              </span>
+              <span className="inv-meta">
+                {kitchenProfile?.name} has none configured, so these timings assume exactly one of each.
+              </span>
+            </div>
+          )}
+
+          {approved && <ApprovedPanel draft={draft} approved={approved} onRevise={revise} />}
+
           {/* ---- Footer band ---- */}
           <div className="inv-footer">
             <span className="mono inv-footer-tag">
               {coverage.craftable} of {coverage.total} steps craftable
             </span>
-            <button type="button" className="btn btn-primary btn-lg" onClick={setMainLine}>
-              {coverage.blocked > 0 ? "Set the main line anyway →" : "Set the main line →"}
-            </button>
+            <div className="inv-footer-actions">
+              {coverage.blocked > 0 && (
+                <button type="button" className="btn btn-ghost inv-btn-accent" onClick={markAllOnHand}>
+                  Mark everything on hand
+                </button>
+              )}
+              {!approved && dishIsUndoable && (
+                <button type="button" className="btn btn-ghost" onClick={dropBlockedSteps}>
+                  Remove the blocked {blockedIds.size === 1 ? "step" : "steps"}
+                </button>
+              )}
+              {!approved && (
+                <button type="button" className="btn btn-primary btn-lg" onClick={approve} disabled={dishIsUndoable}>
+                  Approve and schedule &rarr;
+                </button>
+              )}
+            </div>
           </div>
         </>
+      )}
+      {pendingDelete && (
+        <DeleteStepDialog
+          node={pendingDelete.node}
+          dependents={pendingDelete.dependents}
+          allNodes={boardNodes}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={(reattach) => {
+            deleteNode(pendingDelete.node.id, { confirm: false, reattach });
+            setPendingDelete(null);
+          }}
+        />
+      )}
+
+      {selectedNode && (
+        <Drawer label="Edit step" onClose={() => setSelectedId(null)}>
+          <NodeEditorPanel
+            node={selectedNode}
+            allNodes={boardNodes}
+            blockedDependencyIds={cyclicDependencyIds(boardNodes, selectedId)}
+            onSave={(id, draft) => {
+              saveNode(id, draft);
+              setSelectedId(null);
+            }}
+            onDelete={(id) => {
+              // Removing a step other steps wait on changes the plan's
+              // shape, so it asks where they go rather than silently
+              // cutting the link.
+              const dependents = boardNodes.filter((n) => (n.depends_on || []).includes(id));
+              setSelectedId(null);
+              if (dependents.length === 0) deleteNode(id);
+              else setPendingDelete({ node: boardNodes.find((n) => n.id === id), dependents });
+            }}
+            materialsInfo={materialsInfo}
+            onRegisterMaterial={(draft) => registerMaterial(draft, materialsInfo, selectedId)}
+          />
+        </Drawer>
       )}
     </section>
   );

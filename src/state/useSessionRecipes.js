@@ -2,7 +2,7 @@
 // main line): loads the reference data (recipe templates + materials
 // catalog) and, once templates are in, instantiates the session's
 // recipes if it doesn't have any yet. Lives here rather than in
-// RecipeGraphPage so whichever page the cook reaches first does the
+// the pages so whichever one the cook reaches first does the
 // instantiation and the others just find it done.
 import { useEffect, useState } from "react";
 import { useAppState } from "./AppStateContext.jsx";

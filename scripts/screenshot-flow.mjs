@@ -87,18 +87,19 @@ for (let i = 0; i < 8; i++) {
 }
 await shot("conversation-complete");
 
-// Inventory now sits between the conversation and the main line.
+// Inventory carries the whole main line now: ingredients, the step
+// board, its editor and approval are all one page.
 await click(/Check the inventory/);
-await page.waitForTimeout(1500);
+await page.waitForTimeout(2000);
 await shot("inventory");
 
-await click(/Set the main line/);
-await page.waitForTimeout(1200);
-await shot("recipe-graph");
+await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+await page.waitForTimeout(400);
+await shot("inventory-board");
 
 await click(/Approve and schedule/);
-await page.waitForTimeout(600);
-await shot("recipe-graph-approved");
+await page.waitForTimeout(800);
+await shot("inventory-approved");
 
 await click(/Continue to schedule/);
 await page.waitForTimeout(600);

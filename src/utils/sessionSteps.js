@@ -12,11 +12,14 @@ export const CONVERSATION_QUESTION_COUNT = ELICITATION_QUESTIONS.length;
 export const SESSION_STEPS = [
   { key: "kitchen-setup", label: "Kitchen", path: "/session/kitchen-setup", isDone: (s) => Boolean(s.kitchenProfileId) },
   { key: "conversation", label: "Conversation", path: "/session/conversation", isDone: (s) => Boolean(s.conversation?.complete) },
-  { key: "inventory", label: "Inventory", path: "/session/inventory", isDone: (s) => Boolean(s.inventoryChecked) },
+  // Inventory and the main line are one page: the ingredients and the
+  // step board live together, and you leave by approving. Approval is
+  // the completion signal — strictly stronger than the "did they look
+  // at it" flag this stage used when they were two pages.
   {
-    key: "recipe-graph",
+    key: "inventory",
     label: "Main line",
-    path: "/session/recipe-graph",
+    path: "/session/inventory",
     isDone: (s) => (s.recipes || []).length > 0 && isFullyApproved(s.recipes, s.sharedSteps || []),
   },
   { key: "voice-binding", label: "Cooks", path: "/session/voice-binding", isDone: (s) => areCooksBound(s.cooks || []) },
@@ -30,7 +33,7 @@ function stageCount(step, session) {
     const answered = Math.min(session.conversation?.questionIndex || 0, CONVERSATION_QUESTION_COUNT);
     return `${answered} of ${CONVERSATION_QUESTION_COUNT}`;
   }
-  if (step.key === "recipe-graph" && (session.recipes || []).length > 0) {
+  if (step.key === "inventory" && (session.recipes || []).length > 0) {
     const approved = session.recipes.filter((r) => r.approved).length;
     return `${approved} of ${session.recipes.length}`;
   }

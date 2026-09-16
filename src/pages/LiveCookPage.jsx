@@ -5,7 +5,7 @@
 // discipline.
 //
 // Sub-components live in this file rather than their own (same pattern as
-// RecipeGraphPage's ApprovedPanel) since none of them is used elsewhere.
+// the summary panel) since none of them is used elsewhere.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";

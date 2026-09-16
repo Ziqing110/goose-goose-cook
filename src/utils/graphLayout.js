@@ -39,6 +39,21 @@ export function layoutLevels(nodes) {
  * as a required material once — this is what lets that inherit through
  * the dependency graph instead of only counting direct usage.
  */
+/**
+ * The steps that can't be dependencies of `nodeId` without closing a
+ * loop: the step itself, and anything already downstream of it. A cook
+ * can't wait on something that is itself waiting on them.
+ *
+ * Adding a brand-new step can never cycle — nothing depends on it yet —
+ * so this only really bites when editing an existing step's "depends
+ * on" list, which is exactly where it used to be possible to hang the
+ * scheduler with an unschedulable graph.
+ */
+export function cyclicDependencyIds(nodes, nodeId) {
+  const closure = computeDownstreamClosure(nodes);
+  return closure.get(nodeId) || new Set([nodeId]);
+}
+
 export function computeDownstreamClosure(nodes) {
   const dependents = new Map(nodes.map((n) => [n.id, []]));
   nodes.forEach((n) => {
@@ -276,7 +291,7 @@ function buildMergedSharedNode(sharedId, shareKey, members) {
  * left as a normal per-recipe step.
  *
  * Runs once, against the initial batch of recipes instantiated together
- * (RecipeGraphPage's mount effect). There is no support for promoting
+ * (useSessionRecipes' mount effect). There is no support for promoting
  * an existing per-dish step into a shared one after the fact.
  */
 export function extractSharedSteps(recipeGraphs) {

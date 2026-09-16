@@ -5,7 +5,6 @@ import SessionLayout from "./pages/SessionLayout.jsx";
 import SessionKitchenSetupPage from "./pages/SessionKitchenSetupPage.jsx";
 import ConversationPage from "./pages/ConversationPage.jsx";
 import InventoryPage from "./pages/InventoryPage.jsx";
-import RecipeGraphPage from "./pages/RecipeGraphPage.jsx";
 import VoiceBindingPage from "./pages/VoiceBindingPage.jsx";
 import SchedulePage from "./pages/SchedulePage.jsx";
 import LiveCookPage from "./pages/LiveCookPage.jsx";
@@ -64,7 +63,7 @@ function RequireRecipeApproved({ children }) {
   const redirect = nextRequiredPath(state);
   if (redirect) return <Navigate to={redirect} replace />;
   if (!state.session.conversation.complete) return <Navigate to="/session/conversation" replace />;
-  if (!isFullyApproved(state.session.recipes, state.session.sharedSteps)) return <Navigate to="/session/recipe-graph" replace />;
+  if (!isFullyApproved(state.session.recipes, state.session.sharedSteps)) return <Navigate to="/session/inventory" replace />;
   return children;
 }
 
@@ -73,7 +72,7 @@ function RequireCooksBound({ children }) {
   const redirect = nextRequiredPath(state);
   if (redirect) return <Navigate to={redirect} replace />;
   if (!state.session.conversation.complete) return <Navigate to="/session/conversation" replace />;
-  if (!isFullyApproved(state.session.recipes, state.session.sharedSteps)) return <Navigate to="/session/recipe-graph" replace />;
+  if (!isFullyApproved(state.session.recipes, state.session.sharedSteps)) return <Navigate to="/session/inventory" replace />;
   if (!areCooksBound(state.session.cooks)) return <Navigate to="/session/voice-binding" replace />;
   return children;
 }
@@ -83,7 +82,7 @@ function RequireModeSelected({ children }) {
   const redirect = nextRequiredPath(state);
   if (redirect) return <Navigate to={redirect} replace />;
   if (!state.session.conversation.complete) return <Navigate to="/session/conversation" replace />;
-  if (!isFullyApproved(state.session.recipes, state.session.sharedSteps)) return <Navigate to="/session/recipe-graph" replace />;
+  if (!isFullyApproved(state.session.recipes, state.session.sharedSteps)) return <Navigate to="/session/inventory" replace />;
   if (!areCooksBound(state.session.cooks)) return <Navigate to="/session/voice-binding" replace />;
   if (!state.session.mode) return <Navigate to="/session/schedule" replace />;
   return children;
@@ -130,14 +129,6 @@ export default function App() {
             element={
               <RequireConversationComplete>
                 <InventoryPage />
-              </RequireConversationComplete>
-            }
-          />
-          <Route
-            path="recipe-graph"
-            element={
-              <RequireConversationComplete>
-                <RecipeGraphPage />
               </RequireConversationComplete>
             }
           />

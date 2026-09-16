@@ -56,7 +56,7 @@ db.exec(`
     run_json TEXT,
     summary_json TEXT,
     out_material_ids_json TEXT NOT NULL DEFAULT '[]',
-    inventory_checked INTEGER NOT NULL DEFAULT 0,
+    node_positions_json TEXT NOT NULL DEFAULT '{}',
     updated_at TEXT NOT NULL
   );
 
@@ -111,8 +111,11 @@ if (!sessionColumns.includes("summary_json")) {
 if (!sessionColumns.includes("out_material_ids_json")) {
   db.exec("ALTER TABLE sessions ADD COLUMN out_material_ids_json TEXT NOT NULL DEFAULT '[]'");
 }
-if (!sessionColumns.includes("inventory_checked")) {
-  db.exec("ALTER TABLE sessions ADD COLUMN inventory_checked INTEGER NOT NULL DEFAULT 0");
+// Where each step card sits on the board. Deliberately not on the nodes
+// themselves: the recipe graph is what an LLM will generate, and where a
+// cook happened to drag a card is not part of the recipe.
+if (!sessionColumns.includes("node_positions_json")) {
+  db.exec("ALTER TABLE sessions ADD COLUMN node_positions_json TEXT NOT NULL DEFAULT '{}'");
 }
 
 // ---------------------------------------------------------------------
