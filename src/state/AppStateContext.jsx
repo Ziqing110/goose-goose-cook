@@ -28,7 +28,6 @@ function makeSession(id, kitchenProfileId) {
     recipes: [],
     sharedSteps: [],
     cooks: [],
-    unavailableMaterials: [], // materials the cook says they don't have
     mode: null,
     outMaterialIds: [], // ingredients marked "Out" on the Inventory page
     run: null, // set when cooking actually starts — see LiveCookPage
@@ -251,7 +250,6 @@ export function AppStateProvider({ children }) {
           conversation: session.conversation,
           selectedNodeId: session.selectedNodeId,
           cooks: session.cooks,
-          unavailableMaterials: session.unavailableMaterials || [],
           mode: session.mode,
           outMaterialIds: session.outMaterialIds,
           run: session.run,

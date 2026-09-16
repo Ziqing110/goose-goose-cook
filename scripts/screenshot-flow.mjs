@@ -68,7 +68,7 @@ await shot("conversation");
 // Answer the scripted questions. The first has no preset options, so
 // the input has to be typed; the rest offer chips that fill it.
 for (let i = 0; i < 8; i++) {
-  if (await page.getByRole("button", { name: /Generate recipe graph/ }).first().isVisible().catch(() => false)) break;
+  if (await page.getByRole("button", { name: /Check the inventory/ }).first().isVisible().catch(() => false)) break;
   const input = page.locator(".answer-input");
   await input.click(); // clicking mutes the mic and enables typing
   await page.waitForTimeout(100);
@@ -87,7 +87,12 @@ for (let i = 0; i < 8; i++) {
 }
 await shot("conversation-complete");
 
-await click(/Generate recipe graph/);
+// Inventory now sits between the conversation and the main line.
+await click(/Check the inventory/);
+await page.waitForTimeout(1500);
+await shot("inventory");
+
+await click(/Set the main line/);
 await page.waitForTimeout(1200);
 await shot("recipe-graph");
 

@@ -118,7 +118,7 @@ export default function ConversationPage() {
                 Start over
               </button>
               <button className="btn btn-primary btn-lg" onClick={() => navigate("/session/inventory")}>
-                Generate recipe graph
+                Check the inventory &rarr;
               </button>
             </div>
           </>
