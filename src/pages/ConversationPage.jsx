@@ -55,6 +55,11 @@ export default function ConversationPage() {
 
   const total = ELICITATION_QUESTIONS.length;
   const answered = Math.min(questionIndex, total);
+  // A session started before a question was removed can sit past the end
+  // of the (now shorter) list without being flagged complete; there's
+  // nothing left to ask, so treat it as done rather than rendering an
+  // answer bar for a question that no longer exists.
+  const isComplete = complete || !currentQuestion;
 
   return (
     <section className="page conversation-page">
@@ -67,9 +72,9 @@ export default function ConversationPage() {
 
       {/* Question progress within this conversation. The stage path
           above tracks the whole session. */}
-      <div className={`convo-progress${complete ? " is-complete" : ""}`}>
+      <div className={`convo-progress${isComplete ? " is-complete" : ""}`}>
         <span className="convo-progress-label">
-          {complete ? "All questions answered" : `Question ${questionIndex + 1} of ${total}`}
+          {isComplete ? "All questions answered" : `Question ${questionIndex + 1} of ${total}`}
         </span>
         <div
           className="convo-progress-track"
@@ -89,25 +94,33 @@ export default function ConversationPage() {
         <div className="transcript" ref={transcriptRef} role="log" aria-live="polite">
           {transcript.map((entry, i) => (
             <div key={i} className={`chat-row chat-${entry.speaker}`}>
-              <span className="chat-who">{entry.speaker === "agent" ? "Agent" : "You"}</span>
-              <p className="chat-bubble">{entry.text}</p>
+              <span className="chat-avatar" aria-hidden="true">
+                {entry.speaker === "agent" && <Icon glyph="waveform" size={16} />}
+              </span>
+              <div className="chat-msg">
+                <span className="chat-who">{entry.speaker === "agent" ? "Agent" : "You"}</span>
+                <p className="chat-bubble">{entry.text}</p>
+              </div>
             </div>
           ))}
-          {!complete && (
+          {!isComplete && (
             <div className="chat-row chat-cook" aria-hidden="true">
-              <span className="chat-who">You</span>
-              <p className="chat-bubble typing-bubble">
-                <span className="typing-dot" />
-                <span className="typing-dot" />
-                <span className="typing-dot" />
-              </p>
+              <span className="chat-avatar" />
+              <div className="chat-msg">
+                <span className="chat-who">You</span>
+                <p className="chat-bubble typing-bubble">
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                </p>
+              </div>
             </div>
           )}
         </div>
       </div>
 
       <div className="convo-footer">
-        {complete ? (
+        {isComplete ? (
           <>
             <span className="convo-done">
               <Icon glyph="checkmark-burst" size={20} />

@@ -41,17 +41,12 @@ export const ELICITATION_QUESTIONS = [
     ],
     freeTextPlaceholder: "e.g. 35 minutes",
   },
-  {
-    id: "cooks",
-    agentText: "How many cooks are in the kitchen right now?",
-    options: [
-      { label: "Just me", value: "1" },
-      { label: "2 cooks", value: "2" },
-      { label: "3 cooks", value: "3" },
-    ],
-    freeTextPlaceholder: "e.g. 4 cooks",
-  },
 ];
+
+// Cook count is no longer asked in the conversation — every session
+// starts as a two-cook run (VoiceBindingPage caps it at two anyway, and
+// the count can still be changed there).
+export const DEFAULT_COOK_COUNT = "2";
 
 export function nextNodeId(prefix = "step") {
   return `${prefix}_${crypto.randomUUID()}`;

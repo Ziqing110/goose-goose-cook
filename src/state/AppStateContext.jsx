@@ -12,9 +12,12 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, us
 import * as kitchensApi from "../api/kitchens.js";
 import * as sessionsApi from "../api/sessions.js";
 import { runTitle } from "../utils/runStats.js";
+import { DEFAULT_COOK_COUNT } from "../data/dishes.js";
 
 function emptySessionConversation() {
-  return { complete: false, transcript: [], answers: {}, questionIndex: 0 };
+  // cooks isn't asked about any more, so it starts at the default that
+  // the rest of the flow (voice binding, schedule, run stats) reads.
+  return { complete: false, transcript: [], answers: { cooks: DEFAULT_COOK_COUNT }, questionIndex: 0 };
 }
 
 function makeSession(id, kitchenProfileId) {

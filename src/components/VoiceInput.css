@@ -27,7 +27,10 @@
    as suggestions rather than a row of competing buttons. The input is
    a 44px field with a hairline border, flat Send beside it.
    `.btn.template-chip` out-specifies the shared `.ds-v4 .btn` rules. */
-.ds-v4 .answer-bar { gap: 12px; }
+/* The whole answer block is one centred column exactly as wide as the
+   field + Send (560 + 8 + 160), so the quick answers start on the same
+   left edge as the input below them. */
+.ds-v4 .answer-bar { gap: 12px; width: 100%; max-width: 728px; margin-inline: auto; }
 .ds-v4 .answer-templates { align-items: center; }
 .ds-v4 .answer-templates-label { margin-right: 4px; font-size: 13px; line-height: 18px; color: var(--ink-faint); }
 .ds-v4 .btn.template-chip {
@@ -49,18 +52,33 @@
   color: var(--accent);
 }
 .ds-v4 .answer-input-row { gap: 8px; }
+/* Hero-height field with the heavier of the two neutral borders: the
+   hairline divider colour disappeared against the page white. */
 .ds-v4 .answer-input {
-  height: 44px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
+  height: 56px;
+  padding: 0 16px;
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-control);
   background: var(--bg);
   font-size: 15px;
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out, background 120ms ease-out;
 }
+.ds-v4 .answer-input:hover:not(.is-listening) { border-color: var(--ink-faint); }
+.app-shell.ds-v4 .answer-input:focus-visible,
+.app-shell.ds-v4 .answer-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+/* Cap the field so it stops growing with the content column: Send then
+   sits just past it instead of at the far right edge. */
+.ds-v4 .answer-input { max-width: 560px; }
 .ds-v4 .answer-input::placeholder { color: var(--ink-faint); }
+/* Wider Send: the row spans the full content column, so a snug button
+   leaves a long trip from the quick answers to the primary action. */
+.ds-v4 .answer-input-row .btn-primary { min-width: 160px; min-height: 56px; }
 .ds-v4 .answer-input.is-listening {
   font-style: normal;
-  border-color: transparent;
   background: var(--ds-chip);
   color: var(--ink-faint);
 }

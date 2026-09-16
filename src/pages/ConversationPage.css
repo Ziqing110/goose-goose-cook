@@ -7,17 +7,9 @@
 
 .conversation-page { gap: 0; }
 
-/* Title, progress, transcript and answer row share one centred
-   reading-width column, the same width as the stage path above it
-   (7 × 96px nodes + 6 × 28px connectors), which is centred too. */
-.convo-title-row,
-.convo-progress,
-.convo-panel,
-.convo-footer {
-  align-self: center;
-  width: 100%;
-  max-width: 840px;
-}
+/* Title, progress, transcript and answer row all span the shell's
+   content column — the same width Home's panels use, so moving between
+   the two pages doesn't shift the layout. */
 
 /* ---------------- title row ---------------- */
 .convo-title-row {
@@ -101,13 +93,35 @@
 
 .chat-row {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: flex-start;
+  gap: 10px;
   max-width: min(74%, 560px);
   animation: ds-reveal 240ms ease-out both;
 }
-.chat-agent { align-self: flex-start; align-items: flex-start; }
-.chat-cook { align-self: flex-end; align-items: flex-end; }
+/* Avatar leads the agent's messages and trails the cook's, so each
+   speaker's column stays on its own side of the panel. */
+.chat-agent { align-self: flex-start; }
+.chat-cook { align-self: flex-end; flex-direction: row-reverse; }
+
+.chat-msg { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.chat-agent .chat-msg { align-items: flex-start; }
+.chat-cook .chat-msg { align-items: flex-end; }
+
+/* Round avatars, per the design system: the agent takes the AI hue with
+   a waveform glyph (it speaks), the cook is a plain identity-coloured
+   PlayerAvatar with no initials. */
+.chat-avatar {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-top: 20px; /* sits beside the bubble, not the name above it */
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.chat-agent .chat-avatar { background: var(--ai); color: #ffffff; }
+.chat-cook .chat-avatar { background: var(--kp-cook-a); }
 
 .chat-who { font-size: 13px; line-height: 18px; font-weight: 500; color: var(--ink-soft); }
 .chat-agent .chat-who { color: var(--ai); }
