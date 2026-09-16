@@ -8,7 +8,7 @@ import "./NodeEditorPanel.css";
 // exception: it registers immediately on the recipe (via
 // onRegisterMaterial) so it's available to every other step too, but
 // still only turns on for *this* step once Saved.
-export default function NodeEditorPanel({ node, allNodes, onSave, onDelete, materialsInfo, onRegisterMaterial }) {
+export default function NodeEditorPanel({ node, allNodes, onSave, onDelete, materialsInfo, onRegisterMaterial, blockedDependencyIds }) {
   const [draft, setDraft] = useState(node);
 
   useEffect(() => setDraft(node), [node.id]);
@@ -126,16 +126,30 @@ export default function NodeEditorPanel({ node, allNodes, onSave, onDelete, mate
         <label>Depends on</label>
         <div className="checkbox-grid checkbox-grid-col">
           {others.length ? (
-            others.map((o) => (
-              <label className="checkbox-pill" key={o.id}>
-                <input
-                  type="checkbox"
-                  checked={draft.depends_on.includes(o.id)}
-                  onChange={(e) => patch((n) => (n.depends_on = toggleSet(n.depends_on, o.id, e.target.checked)))}
-                />
-                <span>{o.label}</span>
-              </label>
-            ))
+            others.map((o) => {
+              // Ticking this would make the step wait on something that
+              // is already waiting on it — offered but refused, so the
+              // reason is visible rather than the option just missing.
+              const wouldLoop = blockedDependencyIds?.has(o.id) && !draft.depends_on.includes(o.id);
+              return (
+                <label
+                  className={`checkbox-pill ${wouldLoop ? "is-locked" : ""}`}
+                  key={o.id}
+                  title={wouldLoop ? `"${o.label}" already comes after this step` : undefined}
+                >
+                  <input
+                    type="checkbox"
+                    disabled={wouldLoop}
+                    checked={draft.depends_on.includes(o.id)}
+                    onChange={(e) => patch((n) => (n.depends_on = toggleSet(n.depends_on, o.id, e.target.checked)))}
+                  />
+                  <span>
+                    {o.label}
+                    {wouldLoop && <span className="hint"> — comes after</span>}
+                  </span>
+                </label>
+              );
+            })
           ) : (
             <p className="hint">No other steps yet.</p>
           )}

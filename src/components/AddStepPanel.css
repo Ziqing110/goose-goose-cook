@@ -1,0 +1,44 @@
+/* The add-a-task panel above the board. Collapsed it's one button; open
+   it's a compact form so the board stays the focus of the page. */
+
+.add-step-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper-2, transparent);
+}
+
+.add-step-form { flex-direction: column; align-items: stretch; gap: 12px; }
+.add-step-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.add-step-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.add-step-grow { flex: 1 1 260px; }
+
+.add-step-field input[type="text"],
+.add-step-field select {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--paper);
+  font: inherit;
+  font-size: 14px;
+}
+.add-step-field input[type="text"]:focus-visible,
+.add-step-field select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.add-step-deps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 132px;
+  overflow-y: auto;
+}
+
+.add-step-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+@media (max-width: 720px) {
+  .add-step-row { flex-direction: column; align-items: stretch; }
+}

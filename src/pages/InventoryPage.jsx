@@ -9,8 +9,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { useSessionRecipes } from "../state/useSessionRecipes.js";
-import { mergeRecipesForDisplay, computeStepAvailability } from "../utils/graphLayout.js";
+import { mergeRecipesForDisplay, computeStepAvailability, cyclicDependencyIds } from "../utils/graphLayout.js";
 import RecipeBoard from "../components/RecipeBoard.jsx";
+import AddStepPanel from "../components/AddStepPanel.jsx";
 import Drawer from "../components/Drawer.jsx";
 import NodeEditorPanel from "../components/NodeEditorPanel.jsx";
 import { useStepEditing } from "../state/useStepEditing.js";
@@ -162,7 +163,7 @@ export default function InventoryPage() {
   );
   const dishLabelFor = (node) =>
     node._shared ? "Shared" : recipes.find((r) => r.id === node._recipeId)?.working.title || null;
-  const { saveNode, deleteNode, registerMaterial } = useStepEditing();
+  const { addNode, saveNode, deleteNode, registerMaterial } = useStepEditing();
   // Which card is open is view state: persisting it meant a reload
   // re-opened the editor on a step nobody had just clicked.
   const [selectedId, setSelectedId] = useState(null);
@@ -378,6 +379,14 @@ export default function InventoryPage() {
                 </span>
                 <span className="inv-meta is-tertiary">Drag a card to move it. Click one to edit.</span>
               </div>
+              <AddStepPanel
+                recipes={recipes}
+                nodes={boardNodes}
+                onAdd={(recipeId, spec) => {
+                  const id = addNode(recipeId, spec);
+                  if (id) setSelectedId(id); // open the new card for the details
+                }}
+              />
               <RecipeBoard
                 nodes={boardNodes}
                 positions={nodePositions}
@@ -413,6 +422,7 @@ export default function InventoryPage() {
           <NodeEditorPanel
             node={selectedNode}
             allNodes={boardNodes}
+            blockedDependencyIds={cyclicDependencyIds(boardNodes, selectedId)}
             onSave={(id, draft) => {
               saveNode(id, draft);
               setSelectedId(null);

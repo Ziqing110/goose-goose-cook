@@ -40,3 +40,7 @@
 .add-material-form input[type="text"] { flex: 1 1 140px; min-width: 100px; }
 .add-material-amount { width: 64px; }
 .add-material-unit { width: 72px; }
+
+/* A dependency that would close a loop: shown, but not selectable. */
+.checkbox-pill.is-locked { opacity: 0.45; cursor: not-allowed; }
+.checkbox-pill.is-locked input { cursor: not-allowed; }
