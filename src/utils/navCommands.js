@@ -68,24 +68,24 @@ const NOT_NAVIGATION = [
 const ACTIONS = [
   {
     action: "back",
-    explicit: [
-      /\bgo back\b/,
-      /\b(?:last|previous) (?:page|step|screen)\b/,
-      /返回/,
-      /上一步/,
-      /上一页/,
-    ],
-    bare: [/\bback\b/, /\bprevious\b/, /后退/],
+    // The Chinese command words live in `bare`, not here. "go back" is
+    // explicit because it takes three English words to say — the
+    // phrasing is the evidence. 返回 is one word, so 返回厨房拿个碗
+    // ("go back to the kitchen for a bowl") contains it exactly the way
+    // "back" hides inside "back in a minute". It needs the same gate.
+    explicit: [/\bgo back\b/, /\b(?:last|previous) (?:page|step|screen)\b/],
+    bare: [/\bback\b/, /\bprevious\b/, /返回/, /后退/, /上一步/, /上一页/],
   },
   {
     action: "next",
     explicit: [
       /\b(?:go|move|take me|skip|jump) (?:on |to )?(?:the )?next\b/,
       /\bnext (?:page|step|screen)\b/,
-      /下一步/,
-      /下一页/,
     ],
-    bare: [/\bnext\b/, /\bcontinue\b/, /\bcarry on\b/, /\bkeep going\b/, /\bmove on\b/, /继续/],
+    bare: [
+      /\bnext\b/, /\bcontinue\b/, /\bcarry on\b/, /\bkeep going\b/, /\bmove on\b/,
+      /下一步/, /下一页/, /继续/,
+    ],
   },
   {
     action: "help",
@@ -137,9 +137,20 @@ export function matchNavCommand(text, { route = "/", reachable } = {}) {
 
   if (NOT_NAVIGATION.some((p) => p.test(said))) return { action: "none" };
 
-  // CJK has no spaces, so counting words there is meaningless; collapse
-  // each run to one token before measuring.
-  const wordCount = said.replace(/[一-鿿]+/g, " x ").split(" ").filter(Boolean).length;
+  // Length, in units comparable across both scripts.
+  //
+  // CJK has no spaces, so Latin word-splitting sees a whole Chinese
+  // sentence as one token. Collapsing each run to a single unit — which
+  // is what this did first — gave Chinese NO length protection at all:
+  // 继续搅拌直到变稠 ("continue stirring until it thickens") counted as
+  // one word and passed a gate meant to stop exactly that.
+  //
+  // Counting characters instead is crude but correctly shaped. Chinese
+  // command words here are two characters (继续, 返回), so the same cap
+  // admits a bare command and rejects a sentence containing one.
+  const latinWords = said.replace(/[一-鿿]/g, " ").split(" ").filter(Boolean).length;
+  const cjkChars = (said.match(/[一-鿿]/g) || []).length;
+  const wordCount = latinWords + cjkChars;
 
   for (const { action, explicit, bare } of ACTIONS) {
     if (explicit.some((p) => p.test(said))) return { action };
