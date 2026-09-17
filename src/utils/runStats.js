@@ -48,7 +48,13 @@ export function runServings(session) {
 }
 
 export function runTotalSeconds(session) {
-  return allWorkingNodes(session).reduce((sum, n) => sum + (Number(n.estimated_duration_sec) || 0), 0);
+  // Hands-on time. Waits are real minutes but nobody spends them, and
+  // lumping them in told the run card a 2-minute cook would take 67.
+  // Summing them would be wrong twice over, since concurrent waits do
+  // not add up either.
+  return allWorkingNodes(session)
+    .filter((n) => n.attended !== false)
+    .reduce((sum, n) => sum + (Number(n.estimated_duration_sec) || 0), 0);
 }
 
 export function runPhaseCounts(session) {

@@ -21,22 +21,29 @@ const LIVE_REPLAN_TIME_BUDGET_MS = 80;
 export const DIFFICULTY_POINTS = { low: 10, medium: 20, high: 35 };
 
 /**
- * What starting an unattended step is worth, to whoever starts it.
+ * Starting an unattended step is itself a small hands-on task, and is
+ * scored like one: by difficulty. Getting a hard braise going is worth
+ * more than putting rice on, because it is a harder thing to get right.
  *
- * A wait pays in two parts: this on starting, the remainder on
- * finishing. Both halves are deliberate.
+ * The rest is held back until the step is finished, so one unattended
+ * step pays out twice — once for starting it, once for coming back. That
+ * second half is what makes anyone return to the pot.
  *
- * Paying the starter at all is because getting the congee on early is
- * genuinely the most valuable move in the run — the claim pool already
- * ranks it first, and an incentive that contradicts the advice is worse
- * than no incentive. Paying them only a little is because they put a lid
- * on a pot: before this, a 40-minute simmer scored 20 against 10 for
- * actually chopping something, so the strongest competition strategy was
- * to grab every wait, never be busy, and collect points for standing
- * still. Holding the rest back until the step is done is what makes
- * someone come back to it.
+ * A quarter is the split. It has to be small enough that a 40-minute
+ * simmer cannot out-earn real cooking — before this it scored 20 against
+ * 10 for actually chopping something, so the strongest competition
+ * strategy was to grab every wait and collect points for standing still
+ * — and large enough that starting the congee early is still rewarded,
+ * because the claim pool ranks it first and an incentive that
+ * contradicts the advice is worse than no incentive at all.
  */
-export const UNATTENDED_START_POINTS = 5;
+export const UNATTENDED_START_SHARE = 0.25;
+
+/** What starting an unattended step of this difficulty pays. */
+export function unattendedStartPoints(node) {
+  const full = DIFFICULTY_POINTS[node?.difficulty] ?? DIFFICULTY_POINTS.low;
+  return Math.max(1, Math.round(full * UNATTENDED_START_SHARE));
+}
 
 /**
  * SCORING SEAM — the single place points are decided.
@@ -64,7 +71,7 @@ export function scoreStep(node, ctx = {}) {
     {
       key: "difficulty",
       label: unattended ? `${node.difficulty} step, finished` : `${node.difficulty} step`,
-      points: unattended ? Math.max(0, full - UNATTENDED_START_POINTS) : full,
+      points: unattended ? Math.max(0, full - unattendedStartPoints(node)) : full,
     },
   ];
   return { points: breakdown.reduce((sum, b) => sum + b.points, 0), breakdown };
@@ -242,11 +249,16 @@ export function passiveStepsFor(cookId, run, nodes) {
 
 export function stepVariance(node, record, now = Date.now()) {
   const estSec = node?.estimated_duration_sec ?? 0;
+  // Running long only means someone was slow if someone was doing it.
+  // A simmer that takes 45 minutes against a 40-minute estimate is a
+  // simmer, not a cook falling behind, and telling them they are five
+  // minutes over is blaming them for a pot.
+  const blameable = node?.attended !== false;
   if (!record?.startedAt) return { estSec, actualSec: 0, deltaSec: 0, over: false, running: false };
   const end = record.endedAt ? Date.parse(record.endedAt) : now;
   const actualSec = Math.max(0, Math.round((end - Date.parse(record.startedAt)) / 1000) - (record.pausedSec || 0));
   const deltaSec = actualSec - estSec;
-  return { estSec, actualSec, deltaSec, over: deltaSec > 0, running: !record.endedAt };
+  return { estSec, actualSec, deltaSec, over: blameable && deltaSec > 0, running: !record.endedAt };
 }
 
 export function isRunComplete(run, nodes) {
@@ -263,9 +275,21 @@ export function runProgress(run, nodes, now = Date.now()) {
     0,
     Math.round(((run.endedAt ? Date.parse(run.endedAt) : now) - Date.parse(run.startedAt)) / 1000) - (run.pausedSec || 0)
   );
-  const remainingEstSec = nodes
-    .filter((n) => !["done", "skipped"].includes(run.steps[n.id]?.status))
+  // Hands-on work adds up, because one cook does one thing at a time.
+  // Waits do NOT: a 40-minute simmer and a 25-minute poach running
+  // together are 40 minutes, not 65. Summing them told people a run was
+  // half an hour longer than it was, and the longer the waits the worse
+  // the lie got. The remaining waits contribute their longest, which is
+  // what they actually cost.
+  const unfinished = nodes.filter((n) => !["done", "skipped"].includes(run.steps[n.id]?.status));
+  const remainingHandsSec = unfinished
+    .filter((n) => n.attended !== false)
     .reduce((sum, n) => sum + n.estimated_duration_sec, 0);
+  const remainingWaitSec = Math.max(
+    0,
+    ...unfinished.filter((n) => n.attended === false).map((n) => n.estimated_duration_sec),
+  );
+  const remainingEstSec = Math.max(remainingHandsSec, remainingWaitSec);
 
   // Drift against the plan: how late the most recently finished step
   // landed compared with when the plan expected it to finish.
@@ -293,6 +317,8 @@ export function runProgress(run, nodes, now = Date.now()) {
     elapsedSec,
     estimatedTotalSec: run.plan?.makespanSec ?? null,
     remainingEstSec,
+    remainingHandsSec,
+    remainingWaitSec,
     driftSec,
   };
 }
@@ -321,7 +347,7 @@ export function startAwards(run, nodes) {
   firstStarter.forEach((cookId, stepId) => {
     const status = run.steps[stepId]?.status;
     if (status !== "active" && status !== "done") return;
-    byCook[cookId] = (byCook[cookId] || 0) + UNATTENDED_START_POINTS;
+    byCook[cookId] = (byCook[cookId] || 0) + unattendedStartPoints(byId[stepId]);
   });
   return byCook;
 }
@@ -370,13 +396,25 @@ export function runOutcome(run, nodes, cooks) {
     perStep: nodes.map((n) => {
       const record = run.steps[n.id] || emptyRecord();
       const variance = stepVariance(n, record, run.endedAt ? Date.parse(run.endedAt) : Date.now());
+      const unattended = n.attended === false;
       return {
         id: n.id,
         label: n.label,
         cookId: record.cookId,
         status: record.status,
+        attended: !unattended,
         ...variance,
         points: scoreStep(n, { record, run, nodes, cooks }).points,
+        // An unattended step paid twice, and the summary has to account
+        // for both halves or the start awards appear in the totals from
+        // nowhere. startedByCookId is read from the event log because
+        // applyDone overwrites cookId with whoever finished.
+        ...(unattended
+          ? {
+              startPoints: unattendedStartPoints(n),
+              startedByCookId: (run.events || []).find((e) => e.type === "start" && e.stepId === n.id)?.cookId ?? null,
+            }
+          : {}),
       };
     }),
   };
