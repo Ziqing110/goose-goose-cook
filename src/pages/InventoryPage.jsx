@@ -170,7 +170,7 @@ export default function InventoryPage() {
   const { state, dispatch } = useAppState();
   const session = state.session;
   const { recipes, sharedSteps = [], outMaterialIds = [] } = session;
-  const { catalog, catalogError, retryCatalog } = useSessionRecipes();
+  const { catalog, catalogError, retryCatalog, generating } = useSessionRecipes();
   const [showAllImpact, setShowAllImpact] = useState(false);
 
   const inv = useMemo(
@@ -307,7 +307,11 @@ export default function InventoryPage() {
           <h1>Inventory</h1>
           {!hasDishes ? (
             <span className="inv-meta is-tertiary">
-              The agent is still setting your dishes <span className="mono inv-dots">…</span>
+              {/* Generation is a real half-minute of model work, so say
+                  what is happening rather than leaving a bare ellipsis
+                  that reads as a hang. */}
+              {generating ? "Writing your recipes — this takes a moment" : "The agent is still setting your dishes"}{" "}
+              <span className="mono inv-dots">…</span>
             </span>
           ) : loading ? (
             <span className="inv-meta is-tertiary">Loading your ingredients…</span>
