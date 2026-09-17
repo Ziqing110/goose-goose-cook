@@ -392,23 +392,34 @@ export function resolveAssignments({ nodes, run, cooks, now = Date.now() }) {
   const claimedFills = new Set();
   const byCook = {};
 
+  // TWO PASSES, and the order matters. Everyone's own queued work is
+  // reserved before anyone is offered somebody else's.
+  //
+  // One pass let a cook who was only minding a simmer fall through to
+  // the idle-fill branch and be handed a step that was about to be
+  // assigned to its actual owner — both cooks pointed at "make sauce".
+  // That was unreachable while holding anything made you busy; letting a
+  // cook hold a wait and stay free is what opened it. It is the exact
+  // failure the comment on the fill branch below warns about.
+  const queues = new Map();
   cooks.forEach((cook) => {
-    // Holding something ATTENDED? That's the answer — and it's what stops
-    // a busy cook being offered more work. A simmer they left running is
-    // not holding them, so they still get suggestions while it cooks.
     const active = activeStepFor(cook.id, run, nodes);
     if (active) {
       byCook[cook.id] = { stepId: active, reason: "active", waitingOnStepId: null, waitingOnCookId: null, etaSec: null };
       return;
     }
-
     const queue = (run.plan?.order?.[cook.id] || []).filter((id) => run.steps[id]?.status === "pending");
-    const head = queue.find((id) => ready.has(id));
+    queues.set(cook.id, queue);
+    const head = queue.find((id) => ready.has(id) && !claimedFills.has(id));
     if (head) {
       byCook[cook.id] = { stepId: head, reason: "assigned", waitingOnStepId: null, waitingOnCookId: null, etaSec: null };
       claimedFills.add(head);
-      return;
     }
+  });
+
+  cooks.forEach((cook) => {
+    if (byCook[cook.id]) return;
+    const queue = queues.get(cook.id) || [];
 
     if (queue.length === 0) {
       const anythingLeft = nodes.some((n) => ["pending", "active"].includes(run.steps[n.id]?.status));

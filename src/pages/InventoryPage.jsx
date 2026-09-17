@@ -70,7 +70,10 @@ function StepLine({ step, delay }) {
         </span>
         <span className="inv-step-label">{step.label}</span>
         <Mono>
-          <span className="inv-step-dur">{formatStepDuration(step.durationSec)}</span>
+          <span className={`inv-step-dur ${step.attended === false ? "is-unattended" : ""}`}>
+            {formatStepDuration(step.durationSec)}
+            {step.attended === false && " unattended"}
+          </span>
         </Mono>
       </span>
       {step.split.length > 0 && (
@@ -288,7 +291,13 @@ export default function InventoryPage() {
     if (inv.servings != null) metaBits.push(<><Mono>{inv.servings}</Mono> servings</>);
     if (catalog) metaBits.push(<><Mono>{inv.ingredients.length}</Mono> ingredients</>);
     metaBits.push(<><Mono>{inv.stepCount}</Mono> steps</>);
-    metaBits.push(<Mono>{formatClock(inv.totalSeconds)}</Mono>);
+    // Hands-on time is the number that decides whether tonight is
+    // manageable. The waiting is real but it is not work, and lumping
+    // them together told people a 21-minute cook would take 96.
+    metaBits.push(<><Mono>{formatClock(inv.attendedSeconds)}</Mono> hands-on</>);
+    if (inv.unattendedSeconds > 0) {
+      metaBits.push(<><Mono>{formatClock(inv.unattendedSeconds)}</Mono> waiting</>);
+    }
   }
 
   // Blocked entries and at-risk entries with their own missing

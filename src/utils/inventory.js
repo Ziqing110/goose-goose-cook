@@ -48,6 +48,15 @@ export function buildInventory({ recipes, sharedSteps = [], catalog, outIds }) {
   const sortedNodes = [...nodes].sort((a, b) => stepNumber.get(a.id) - stepNumber.get(b.id));
 
   const totalSeconds = nodes.reduce((sum, n) => sum + (Number(n.estimated_duration_sec) || 0), 0);
+  // Split, because the total on its own is misleading in both readings.
+  // A congee run totals 96 minutes: it is not 96 minutes of work (21 is)
+  // and it is not 96 minutes of evening (about 44 is, once the waiting
+  // overlaps). Saying which is which is the only honest version, and it
+  // tells the cook what kind of evening this is before they commit.
+  const attendedSeconds = nodes
+    .filter((n) => n.attended !== false)
+    .reduce((sum, n) => sum + (Number(n.estimated_duration_sec) || 0), 0);
+  const unattendedSeconds = totalSeconds - attendedSeconds;
   const recipeTitle = (recipeId) => recipes.find((r) => r.id === recipeId)?.working.title || null;
   const dishesForNode = (n) => {
     if (n._shared) {
@@ -110,6 +119,9 @@ export function buildInventory({ recipes, sharedSteps = [], catalog, outIds }) {
         label: n.label,
         phase: n.phase,
         durationSec: n.estimated_duration_sec,
+        // So a 40-minute wait does not read like 40 minutes of standing
+        // over a pot in the step list.
+        attended: n.attended !== false,
         status: stepStatus(n.id),
         dependsOn: (n.depends_on || [])
           .map((d) => byId[d])
@@ -171,6 +183,8 @@ export function buildInventory({ recipes, sharedSteps = [], catalog, outIds }) {
     dishTitles: recipes.map((r) => r.working.title),
     stepCount: total,
     totalSeconds,
+    attendedSeconds,
+    unattendedSeconds,
     steps: sortedNodes.map((n) => ({ id: n.id, status: stepStatus(n.id) })),
     ingredients,
     groups,

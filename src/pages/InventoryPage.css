@@ -304,3 +304,10 @@
 
 .inv-equipment-warning { display: flex; flex-direction: column; gap: 4px; border-color: var(--crit); }
 .inv-equipment-warning .inv-card-title { color: var(--crit); }
+
+/* A wait, shown next to its duration. Quieter than hands-on time: the
+   minutes are real but nobody spends them. */
+.inv-step-dur.is-unattended {
+  color: var(--ink-faint);
+  font-style: italic;
+}
