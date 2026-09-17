@@ -1,23 +1,38 @@
 /* ---------------------------------------------------------------
    Conversation page — design system v4. Tokens, buttons, topbar and
    VoiceBar live in styles/design-v4.css (route-scoped via AppShell).
-   Layout: title row → one bg-secondary transcript panel → answer
-   row on the page white.
+   Layout: title row → split row. The split is a grid: the transcript
+   column (question progress → bg-secondary transcript panel → answer
+   row) on the left, the understanding sidecar (UnderstandingSidecar)
+   spanning its full height on the right.
 ----------------------------------------------------------------*/
 
-.conversation-page { gap: 0; }
+/* Doubled class: tokens.css's `.page { gap: 20px }` loads after this
+   file, so a lone class would lose to it. The sections space
+   themselves. */
+.page.conversation-page { gap: 0; }
 
-/* Title, progress, transcript and answer row share one centred
-   reading-width column, the same width as the stage path above it
-   (7 × 96px nodes + 6 × 28px connectors), which is centred too. */
-.convo-title-row,
-.convo-progress,
-.convo-panel,
-.convo-footer {
-  align-self: center;
-  width: 100%;
-  max-width: 840px;
+/* 32px between the answer row and the fixed VoiceBar (the shell's
+   default is 28px), so Send never sits right on top of Mute. */
+.app-shell.ds-v4:has(.conversation-page) { padding-bottom: calc(var(--voice-bar-height) + 32px); }
+
+/* The split spans the shell's content column — the same width Home's
+   panels use, so moving between the two pages doesn't shift the
+   layout. Only the sidecar has a fixed width. */
+.convo-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 376px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "progress side"
+    "panel    side"
+    "footer   side";
+  column-gap: 20px;
 }
+.convo-split > .convo-progress { grid-area: progress; }
+.convo-split > .convo-panel { grid-area: panel; }
+.convo-split > .us-sidecar { grid-area: side; }
+.convo-split > .convo-footer { grid-area: footer; }
 
 /* ---------------- title row ---------------- */
 .convo-title-row {
@@ -33,8 +48,9 @@
 .convo-sub { margin: 0; font-size: 15px; line-height: 22px; color: var(--ink-soft); }
 
 /* ---------------- question progress ----------------
-   One continuous 4px bar: divider-grey track, accent fill that grows
-   with answered questions, status-done green once complete. */
+   One continuous 4px bar, as wide as the transcript: divider-grey
+   track, accent fill that grows with answered questions, status-done
+   green once complete. */
 .convo-progress { display: flex; flex-direction: column; gap: 8px; padding-bottom: 16px; }
 .convo-progress-label { font-size: 13px; line-height: 18px; font-weight: 500; color: var(--ink-soft); }
 .convo-progress-track {
@@ -77,9 +93,10 @@
 /* ---------------- viewport-fit layout ----------------
    On roomy screens the page is exactly one viewport tall: the shell is
    locked to 100dvh and every level down to the transcript is a
-   shrinkable flex column, so the transcript takes whatever height is
-   left and scrolls internally. */
-@media (min-height: 761px) and (min-width: 721px) {
+   shrinkable flex column (the split's middle row is minmax(0, 1fr)),
+   so the transcript and the sidecar rail take whatever height is left
+   and scroll internally. */
+@media (min-height: 761px) and (min-width: 1100px) {
   .app-shell.ds-v4:has(.conversation-page) { height: 100dvh; min-height: 0; }
   .ds-v4 .stage-root:has(.conversation-page),
   .ds-v4 .session-shell:has(.conversation-page),
@@ -89,25 +106,61 @@
     flex: 1 1 auto;
     min-height: 0;
   }
-  .convo-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .convo-split { flex: 1 1 auto; min-height: 0; }
+  .convo-panel { min-height: 0; display: flex; flex-direction: column; }
   .transcript { flex: 1 1 auto; min-height: 0; }
 }
 
 /* Short or narrow screens: a fill-the-rest transcript would be too
    cramped, so size it from the viewport and let the page scroll. */
-@media (max-height: 760px), (max-width: 720px) {
+@media (max-height: 760px), (max-width: 1099px) {
   .transcript { height: clamp(240px, 55dvh, 480px); }
+}
+
+/* Narrow: one column. The sidecar drops between the transcript and the
+   answer row (so the reading sits right above where you'd correct it),
+   and its cards wrap in a row instead of scrolling a rail. */
+@media (max-width: 1099px) {
+  .convo-split {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-template-areas: "progress" "panel" "side" "footer";
+  }
+  .convo-split > .us-sidecar { margin-top: 16px; }
+  .convo-split .us-rail { flex-direction: row; flex-wrap: wrap; overflow: visible; }
+  .convo-split .us-card { flex: 1 1 200px; }
 }
 
 .chat-row {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-width: min(74%, 560px);
+  align-items: flex-start;
+  gap: 10px;
+  max-width: min(80%, 560px);
   animation: ds-reveal 240ms ease-out both;
 }
-.chat-agent { align-self: flex-start; align-items: flex-start; }
-.chat-cook { align-self: flex-end; align-items: flex-end; }
+/* Avatar leads the agent's messages and trails the cook's, so each
+   speaker's column stays on its own side of the panel. */
+.chat-agent { align-self: flex-start; }
+.chat-cook { align-self: flex-end; flex-direction: row-reverse; }
+
+.chat-msg { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.chat-agent .chat-msg { align-items: flex-start; }
+.chat-cook .chat-msg { align-items: flex-end; }
+
+/* Round avatars, per the design system: the agent takes the AI hue with
+   a waveform glyph (it speaks), the cook is a plain identity-coloured
+   PlayerAvatar with no initials. */
+.chat-avatar {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.chat-agent .chat-avatar { background: var(--ai); color: #ffffff; }
+.chat-cook .chat-avatar { background: var(--kp-cook-a); }
 
 .chat-who { font-size: 13px; line-height: 18px; font-weight: 500; color: var(--ink-soft); }
 .chat-agent .chat-who { color: var(--ai); }

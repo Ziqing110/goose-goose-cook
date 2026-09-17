@@ -8,6 +8,7 @@ import {
   duplicateCookNames,
   MAX_COOK_NAME_LENGTH,
 } from "../utils/cooks.js";
+import Icon from "../components/Icon.jsx";
 import "./VoiceBindingPage.css";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 
@@ -34,8 +35,9 @@ export default function VoiceBindingPage() {
   const timeoutRef = useRef(null);
   const intervalRef = useRef(null);
 
-  // Seed default slots once, from the conversation's "how many cooks"
-  // answer — captured earlier in the flow but otherwise never read.
+  // Seed default slots once, from the session's cook count — the
+  // two-cook default (data/dishes.js) unless an older session answered
+  // the "how many cooks" question the conversation no longer asks.
   useEffect(() => {
     if (cooks.length > 0) return;
     const count = Math.min(MAX_COOKS, Math.max(1, Number(state.session.conversation.answers.cooks) || 2));
@@ -130,37 +132,35 @@ export default function VoiceBindingPage() {
 
   return (
     <section className="page voice-binding-page">
-      <div className="band-header">
-        <div className="band-header-left">
-          <div>
-            <p className="band-eyebrow">Kitchen Path Agent</p>
-            <h1>Who&rsquo;s in the kitchen?</h1>
-          </div>
+      <header className="vb-title-row">
+        <div className="vb-title">
+          <h1>Who&rsquo;s in the kitchen?</h1>
+          <p className="vb-sub">
+            Each cook reads their own line out loud — the same words every time makes it easier to tell your voices
+            apart when someone shouts &ldquo;done&rdquo; mid-cook.
+          </p>
         </div>
-        <div className="band-header-right">
-          <span className={`tag mono ${bound ? "tag-difficulty-low" : ""}`}>
-            {boundCount} of {cooks.length} bound
-          </span>
-        </div>
-      </div>
+        <span className={`vb-count mono${bound ? " is-done" : ""}`}>
+          {boundCount}/{cooks.length} bound
+        </span>
+      </header>
 
-      <div className="card cooks-card">
+      <div className="vb-panel">
+        {/* The intro line lives in the title row above, so the panel
+            carries only the locked note (when a cook is running) and
+            the slots themselves. */}
         {locked && (
           <div className="cooks-locked-note">
-            <span className="mini-title">Line-up locked</span>
-            <p className="hint">
+            <span className="cook-phrase-label">Line-up locked</span>
+            <p className="cook-status">
               A cook is in progress and every claim and score is filed under these two. Finish or start over from the
               plan to change who&rsquo;s here.
             </p>
             <button type="button" className="btn btn-primary" onClick={() => navigate("/session/live-cook")}>
-              Back to the cook &rarr;
+              Back to the cook
             </button>
           </div>
         )}
-        <p className="hint">
-          Each cook reads their own line out loud — same words every time makes it easier to tell your voices apart
-          when someone shouts &ldquo;done&rdquo; mid-cook.
-        </p>
         <div className="cooks-grid">
           {cooks.map((cook, index) => {
             const colorKey = cookColorKey(index);
@@ -176,7 +176,11 @@ export default function VoiceBindingPage() {
                 )}
                 <div className={`cook-avatar cook-color-${colorKey}`}>
                   {cook.name.trim() ? cook.name.trim()[0].toUpperCase() : index + 1}
-                  {cook.bound && <span className="cook-avatar-badge">&check;</span>}
+                  {cook.bound && (
+                    <span className="cook-avatar-badge">
+                      <Icon glyph="checkmark-burst" size={12} stroke={2.25} />
+                    </span>
+                  )}
                 </div>
                 <input
                   type="text"
@@ -193,7 +197,7 @@ export default function VoiceBindingPage() {
                 )}
                 {(isRecording || (hasName && !cook.bound)) && (
                   <div className={`cook-phrase ${isRecording ? "is-active" : ""}`}>
-                    <span className="mini-title">Read this aloud</span>
+                    <span className="cook-phrase-label">Read this aloud</span>
                     <p className="cook-phrase-text">&ldquo;{phrase}&rdquo;</p>
                   </div>
                 )}
@@ -205,14 +209,14 @@ export default function VoiceBindingPage() {
                         <span className="cook-waveform-bar" key={i} style={{ animationDelay: `${i * 0.12}s` }} />
                       ))}
                     </div>
-                    <span className="hint mono">Listening&hellip; {Math.round(recordingProgress)}%</span>
+                    <span className="cook-progress mono">Listening&hellip; {Math.round(recordingProgress)}%</span>
                     <button type="button" className="btn btn-primary" onClick={() => completeRecording(cook.id)}>
                       Stop and save
                     </button>
                   </div>
                 ) : (
                   <>
-                    <span className="hint">
+                    <span className="cook-status">
                       {cook.bound ? "Got your voice" : hasName ? "Ready when you are" : "Add a name to get your line"}
                     </span>
                     <button type="button" className="btn" disabled={!hasName || locked} onClick={() => startRecording(cook.id)}>
@@ -231,21 +235,13 @@ export default function VoiceBindingPage() {
         </div>
       </div>
 
-      <div className="band-footer">
-        <div className="band-footer-left">
-          <span className="hint">
-            {duplicates.size > 0 ? "Give each cook a different name to carry on." : "Voices stay on this device."}
-          </span>
-        </div>
-        <div className="band-footer-right">
-          <button
-            className="btn btn-primary btn-lg"
-            disabled={!bound}
-            onClick={() => navigate("/session/schedule")}
-          >
-            Continue to scheduling &rarr;
-          </button>
-        </div>
+      <div className="vb-footer">
+        <span className="vb-note">
+          {duplicates.size > 0 ? "Give each cook a different name to carry on." : "Voices stay on this device."}
+        </span>
+        <button className="btn btn-primary btn-lg" disabled={!bound} onClick={() => navigate("/session/schedule")}>
+          Continue to scheduling
+        </button>
       </div>
     </section>
   );

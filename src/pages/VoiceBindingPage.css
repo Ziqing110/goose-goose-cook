@@ -1,8 +1,35 @@
-﻿.cooks-card { display: flex; flex-direction: column; gap: 16px; }
+/* ---------------------------------------------------------------
+   Voice binding page — design system v4 (tokens in styles/design-v4.css).
+
+   Same furniture as the conversation page: title row, one
+   bg-secondary panel, footer row. Cook slots are white tiles on that
+   panel; identity colours come from the shared kp palette, so a cook
+   is the same colour here as in Home's players chip.
+----------------------------------------------------------------*/
+
+.voice-binding-page { gap: 0; }
+
+/* ---------------- title row ---------------- */
+.vb-title-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px 40px;
+  flex-wrap: wrap;
+  padding: 24px 0 20px;
+}
+.vb-title { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.vb-title h1 { font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.01em; }
+.vb-sub { margin: 0; max-width: 62ch; font-size: 15px; line-height: 22px; color: var(--ink-soft); }
+.vb-count { font-size: 14px; line-height: 20px; color: var(--ink-soft); }
+.vb-count.is-done { color: var(--success); }
+
+/* ---------------- cook slots ---------------- */
+.vb-panel { background: var(--surface-sunken); border-radius: var(--radius-card); padding: 24px; }
 
 .cooks-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
 }
 
@@ -11,83 +38,118 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 20px 16px;
-  border: 1.5px dashed var(--line);
-  border-radius: var(--radius-card);
+  gap: 12px;
+  padding: 24px 20px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--bg);
   text-align: center;
 }
-.cook-slot.is-recording {
-  border: 2px solid var(--cook-leo);
-  border-style: solid;
-  box-shadow: 0 0 0 4px var(--cook-leo-soft);
-}
+/* Recording is the one live state on the page, so it takes the accent
+   ring — the same signal the current stage node uses. */
+.cook-slot.is-recording { box-shadow: 0 0 0 2px var(--accent); }
 
 .cook-slot-remove {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 22px;
-  height: 22px;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border: none;
   border-radius: 50%;
-  border: 1px solid var(--line-strong);
-  background: var(--surface);
+  background: transparent;
   color: var(--ink-faint);
-  font-size: 0.9rem;
+  font-size: 16px;
   line-height: 1;
   cursor: pointer;
+  transition: background 120ms ease-out, color 120ms ease-out;
 }
-.cook-slot-remove:hover { color: var(--ink); border-color: var(--ink-faint); }
+.cook-slot-remove:hover { background: var(--ds-chip); color: var(--ink); }
 
-.cook-avatar-badge {
-  position: absolute;
-  bottom: -2px;
-  right: -2px;
-  width: 20px;
-  height: 20px;
+.cook-avatar {
+  position: relative;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  background: var(--success);
-  color: var(--accent-ink);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.7rem;
-  border: 2px solid var(--surface);
+  font-size: 20px;
+  font-weight: 700;
+}
+/* Identity colours, scoped so the other (v1.0) pages keep theirs. */
+.ds-v4 .cook-color-mia { background: var(--kp-cook-a); color: #ffffff; }
+.ds-v4 .cook-color-leo { background: var(--kp-cook-b); color: #ffffff; }
+.ds-v4 .cook-color-sage { background: var(--ai); color: #ffffff; }
+
+.cook-avatar-badge {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--bg);
+  background: var(--success);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .cook-name-input {
   width: 100%;
-  text-align: center;
+  height: 44px;
+  padding: 0 12px;
   font: inherit;
-  font-weight: 600;
-  padding: 8px 10px;
-  border-radius: var(--radius-input);
+  font-size: 15px;
+  font-weight: 500;
+  text-align: center;
   border: 1px solid var(--line-strong);
-  background: var(--surface-sunken);
+  border-radius: var(--radius-control);
+  background: var(--bg);
   color: var(--ink);
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out;
+}
+.cook-name-input::placeholder { color: var(--ink-faint); font-weight: 400; }
+.cook-name-input:hover { border-color: var(--ink-faint); }
+.app-shell.ds-v4 .cook-name-input:focus,
+.app-shell.ds-v4 .cook-name-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .cook-phrase {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: var(--radius-textarea);
-  background: var(--surface-sunken);
-  border: 1px dashed var(--line-strong);
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--radius-control);
+  background: var(--ds-chip);
 }
-.cook-phrase.is-active { border-style: solid; border-color: var(--cook-leo); background: var(--cook-leo-soft); }
-.cook-phrase-text { margin: 0; font-size: 0.9rem; font-weight: 600; line-height: 1.35; }
+.cook-phrase.is-active { background: var(--accent-soft); }
+.cook-phrase-label {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.cook-phrase.is-active .cook-phrase-label { color: var(--accent); }
+.cook-phrase-text { margin: 0; font-size: 15px; line-height: 22px; font-weight: 500; text-wrap: pretty; }
 
-.cook-recording { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
+.cook-status { font-size: 13px; line-height: 18px; color: var(--ink-soft); }
+.cook-progress { font-size: 14px; line-height: 20px; color: var(--ink-soft); }
 
+.cook-recording { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
 .cook-waveform { display: inline-flex; align-items: center; gap: 4px; height: 24px; }
 .cook-waveform-bar {
   width: 4px;
   height: 8px;
   border-radius: 2px;
-  background: var(--cook-leo);
+  background: var(--accent);
   animation: cook-waveform-pulse 1.1s ease-in-out infinite;
 }
 @keyframes cook-waveform-pulse {
@@ -98,9 +160,33 @@
   .cook-waveform-bar { animation: none; height: 14px; }
 }
 
-.cook-add-btn {
-  border-style: dashed;
-  min-height: 140px;
+/* Empty slot: dashed outline, the one dashed shape on the page (same
+   role as the transcript's waiting bubble). */
+.ds-v4 .btn.cook-add-btn {
+  min-height: 180px;
+  border: 1px dashed var(--line-strong);
+  background: transparent;
+  color: var(--ink-soft);
+  border-radius: var(--radius-control);
+}
+.ds-v4 .btn.cook-add-btn:hover { background: var(--ds-chip); color: var(--ink); }
+
+/* ---------------- footer ---------------- */
+.vb-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  flex-wrap: wrap;
+  padding-top: 20px;
+}
+.vb-note { font-size: 13px; line-height: 18px; color: var(--ink-faint); }
+
+@media (max-width: 720px) {
+  .vb-title-row { padding: 16px 0; }
+  .vb-panel { padding: 16px; }
+  .cooks-grid { grid-template-columns: 1fr; }
+  .ds-v4 .btn.cook-add-btn { min-height: 88px; }
 }
 
 .cook-name-input.is-invalid { border-color: var(--crit); }

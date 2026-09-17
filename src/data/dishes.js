@@ -7,12 +7,14 @@
 export const ELICITATION_QUESTIONS = [
   {
     id: "dishIdea",
+    slotLabel: "Dish",
     agentText: "What do you want to cook tonight?",
     options: [],
     freeTextPlaceholder: "e.g. mapo tofu",
   },
   {
     id: "servings",
+    slotLabel: "Servings",
     agentText: "How many people are we cooking for?",
     options: [
       { label: "2 servings", value: "2" },
@@ -23,6 +25,7 @@ export const ELICITATION_QUESTIONS = [
   },
   {
     id: "diet",
+    slotLabel: "Dietary",
     agentText: "Any dietary constraints I should design around?",
     options: [
       { label: "No restrictions", value: "none" },
@@ -33,6 +36,7 @@ export const ELICITATION_QUESTIONS = [
   },
   {
     id: "targetTime",
+    slotLabel: "Target time",
     agentText: "What's the target finish time, start to plated?",
     options: [
       { label: "20 minutes", value: "20" },
@@ -41,17 +45,12 @@ export const ELICITATION_QUESTIONS = [
     ],
     freeTextPlaceholder: "e.g. 35 minutes",
   },
-  {
-    id: "cooks",
-    agentText: "How many cooks are in the kitchen right now?",
-    options: [
-      { label: "Just me", value: "1" },
-      { label: "2 cooks", value: "2" },
-      { label: "3 cooks", value: "3" },
-    ],
-    freeTextPlaceholder: "e.g. 4 cooks",
-  },
 ];
+
+// Cook count is no longer asked in the conversation — every session
+// starts as a two-cook run (VoiceBindingPage caps it at two anyway, and
+// the count can still be changed there).
+export const DEFAULT_COOK_COUNT = "2";
 
 export function nextNodeId(prefix = "step") {
   return `${prefix}_${crypto.randomUUID()}`;

@@ -3,7 +3,7 @@ import { db } from "../db.js";
 
 export const sessionsRouter = Router();
 
-const emptyConversation = () => ({ complete: false, transcript: [], answers: {}, questionIndex: 0 });
+const emptyConversation = () => ({ complete: false, transcript: [], answers: {}, understanding: {}, questionIndex: 0 });
 
 function recipeRowToApi(row) {
   return {

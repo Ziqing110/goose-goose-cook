@@ -19,47 +19,51 @@
    only; the reference defines no dark palette.
 ----------------------------------------------------------------*/
 
+/* Every colour comes from the shared --kp-* tokens in tokens.css, the
+   same source the Home page uses, so the two pages can't drift apart
+   (and this page follows the theme exactly as Home does). The names
+   below are the generic ones the rest of the app's CSS already
+   references; this block only re-points them at the kp palette. */
 .app-shell.ds-v4 {
-  --bg: #ffffff;
-  --surface: #ffffff;
-  --surface-sunken: #f7f6f3; /* bg-secondary: panels */
-  --ink: #1a1a1a;
-  --ink-soft: #6e6e6b;
-  --ink-faint: #a3a29e;
-  --line: #e8e6e1;
-  --line-strong: #c9c7c1;
+  --bg: var(--kp-bg);
+  --surface: var(--kp-bg);
+  --surface-sunken: var(--kp-bg-secondary); /* panels */
+  --ink: var(--kp-text);
+  --ink-soft: var(--kp-text-secondary);
+  --ink-faint: var(--kp-text-tertiary);
+  --line: var(--kp-divider);
+  --line-strong: var(--kp-status-waiting);
 
-  --accent: #d4552a;
+  --accent: var(--kp-accent);
   --accent-ink: #ffffff;
-  --accent-soft: #fbeee8;
-  --accent-soft-ink: #d4552a;
+  --accent-soft: var(--kp-accent-tint);
+  --accent-soft-ink: var(--kp-accent);
 
-  --success: #2e7d32;
-  --crit: #8b1a1a;
-  --crit-soft: #fdecec;
-  --crit-soft-ink: #8b1a1a;
-  --warning-soft: #fff4e5;
-  --warning-soft-ink: #7a4a00;
+  --success: var(--kp-status-done);
+  --crit: var(--kp-error-text);
+  --crit-soft: var(--kp-error-bg);
+  --crit-soft-ink: var(--kp-error-text);
+  --warning-soft: var(--kp-warning-bg);
+  --warning-soft-ink: var(--kp-warning-text);
 
-  /* AI-authored content */
+  /* AI-authored content. Home only needs the on-dark lavender (voice
+     bar); the agent's chat label is this page's own light-ground pair. */
   --ai: #6b5bd2;
-  --ai-on-dark: #bdb6f0;
+  --ai-on-dark: var(--kp-voice-ai);
 
-  --ds-chip: #f2f1ee;
-  --ds-chip-hover: #e8e6e1;
-  --ds-accent-hover: #c64e26;
-  --ds-waiting: #c9c7c1;
-  --ds-live: #34c759;
+  --ds-chip: var(--kp-bg-tertiary);
+  --ds-chip-hover: var(--kp-divider);
+  --ds-accent-hover: var(--kp-accent-hover);
+  --ds-waiting: var(--kp-status-waiting);
+  --ds-live: var(--kp-status-live);
 
   --radius-card: 12px;
   --radius-control: 8px;
   --shadow-sm: none;
 
-  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
-
-  color-scheme: light;
+  --font-display: var(--kp-font);
+  --font-body: var(--kp-font);
+  --font-mono: var(--kp-mono);
   /* body resolved its own font/color from the root tokens; restate
      them here so descendants inherit the v4 values. */
   background: var(--bg);
@@ -68,13 +72,14 @@
   font-size: 15px;
   line-height: 22px;
 
-  max-width: 1184px; /* 1120 content column + 32px gutters */
-  padding: 0 32px calc(var(--voice-bar-height) + 28px);
+  /* Width/gutters stay as AppShell.css has them, so these pages' content
+     column is exactly Home's and moving between them doesn't shift.
+     Only the gap goes, because the sections below space themselves. */
   gap: 0;
 }
 
 /* The shell is a centred column; paint the full-bleed ground too. */
-body:has(.app-shell.ds-v4) { background: #ffffff; }
+body:has(.app-shell.ds-v4) { background: var(--kp-bg); }
 
 /* ---------------- motion tokens ----------------
    reveal 240ms on entry · pulse 1.6s only on the current stage ring
@@ -109,7 +114,9 @@ body:has(.app-shell.ds-v4) { background: #ffffff; }
 .ds-v4 .btn:active:not(:disabled) { transform: scale(0.97); }
 .ds-v4 .btn-primary { padding: 0 20px; background: var(--accent); color: var(--accent-ink); }
 .ds-v4 .btn-primary:hover { background: var(--ds-accent-hover); filter: none; }
-.ds-v4 .btn-lg { min-height: 56px; padding: 0 28px; font-size: 18px; }
+/* Shared min-width so the hero action is the same size on every page
+   (Generate recipe graph / Continue to scheduling) regardless of label. */
+.ds-v4 .btn-lg { min-height: 56px; min-width: 280px; padding: 0 28px; font-size: 18px; }
 .ds-v4 .btn-ghost,
 .ds-v4 .btn-ghost:hover { background: transparent; }
 .ds-v4 .btn-ghost { color: var(--ink-soft); }
@@ -125,7 +132,6 @@ body:has(.app-shell.ds-v4) { background: #ffffff; }
 
 /* ---------------- narrow ---------------- */
 @media (max-width: 720px) {
-  .app-shell.ds-v4 { padding: 0 16px calc(var(--voice-bar-height) + 28px); }
   .ds-v4 .topbar { padding: 16px 0 12px; }
 }
 

@@ -51,20 +51,21 @@ export default function VoiceInput({ question, onAnswer }) {
   };
 
   // One place both paths go through, so a spoken answer and a typed one
-  // are handled identically — including the template match, which is
-  // what makes "two" arrive as the value 2 rather than the string.
+  // are handled identically.
+  //
+  // It passes the words through untouched: reading an answer — mapping
+  // "two" to the value 2, spotting a low-confidence one — belongs to the
+  // page now (utils/understanding.js). This bar used to do that matching
+  // itself, which would have quietly given spoken answers a different
+  // interpretation from typed ones.
   const send = useCallback(
     (raw) => {
       const val = (raw ?? "").trim();
       if (!val) return;
-      const match = question.options.find(
-        (o) => o.label.toLowerCase() === val.toLowerCase(),
-      );
-      if (match) onAnswer(match.value, match.label);
-      else onAnswer(val, val);
+      onAnswer(val);
       setText("");
     },
-    [question, onAnswer],
+    [onAnswer],
   );
 
   const submit = (e) => {

@@ -25,9 +25,12 @@
    Quick answers are light pill Chips — hairline outline on the page
    white, accent tint once their text is in the input — so they read
    as suggestions rather than a row of competing buttons. The input is
-   a 44px field with a hairline border, flat Send beside it.
+   a 44px field beside a standard primary Send; while listening it's a
+   borderless chip-grey affordance, typing gives it a real border.
    `.btn.template-chip` out-specifies the shared `.ds-v4 .btn` rules. */
-.ds-v4 .answer-bar { gap: 12px; }
+/* The answer block fills the transcript column, so its left edge lines
+   up with the transcript panel above. */
+.ds-v4 .answer-bar { gap: 12px; width: 100%; }
 .ds-v4 .answer-templates { align-items: center; }
 .ds-v4 .answer-templates-label { margin-right: 4px; font-size: 13px; line-height: 18px; color: var(--ink-faint); }
 .ds-v4 .btn.template-chip {
@@ -49,13 +52,24 @@
   color: var(--accent);
 }
 .ds-v4 .answer-input-row { gap: 8px; }
+/* Typing: the heavier of the two neutral borders — the hairline divider
+   colour disappeared against the page white. */
 .ds-v4 .answer-input {
+  min-width: 0;
   height: 44px;
   padding: 0 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-control);
   background: var(--bg);
   font-size: 15px;
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out, background 120ms ease-out;
+}
+.ds-v4 .answer-input:hover:not(.is-listening) { border-color: var(--ink-faint); }
+.app-shell.ds-v4 .answer-input:focus-visible,
+.app-shell.ds-v4 .answer-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .ds-v4 .answer-input::placeholder { color: var(--ink-faint); }
 .ds-v4 .answer-input.is-listening {
