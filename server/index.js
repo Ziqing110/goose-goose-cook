@@ -6,6 +6,7 @@ import { sessionsRouter } from "./routes/sessions.js";
 import { photoRouter } from "./routes/photo.js";
 import { voiceRouter } from "./routes/voice.js";
 import { understandingRouter } from "./routes/understanding.js";
+import { recipesRouter } from "./routes/recipes.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -22,6 +23,7 @@ app.use("/api/sessions", sessionsRouter);
 app.use("/api/photo", photoRouter);
 app.use("/api/voice", voiceRouter);
 app.use("/api/understanding", understandingRouter);
+app.use("/api/recipes", recipesRouter);
 
 app.listen(PORT, () => {
   console.log(`Kitchen Path API listening on http://localhost:${PORT}`);
