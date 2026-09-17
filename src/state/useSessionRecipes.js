@@ -166,6 +166,20 @@ export function useSessionRecipes() {
         setGeneratedBy(result.generatedBy || null);
         setMissingDishes(result.missingDishes || []);
 
+        // Nothing on screen distinguishes a primary run from a fallback
+        // one yet, and they differ enough to matter: the fallback shares
+        // no prep and can drop a dish entirely. Until the page says so,
+        // the console does — otherwise a degraded board is indis-
+        // tinguishable from a good one while debugging.
+        const fellBack = !result.sharedStepsPossible;
+        console[fellBack ? "warn" : "info"](
+          `[recipes] ${result.templates.length} dish(es) by ${result.generatedBy}` +
+            `${fellBack ? " — FALLBACK: no shared prep" : ""}`,
+        );
+        if (result.missingDishes?.length) {
+          console.warn(`[recipes] could not generate: ${result.missingDishes.join("; ")}`);
+        }
+
         // Every generated dish carries the whole materials list. It is a
         // handful of entries and the alternative — working out which
         // dish uses which — would drop an ingredient the moment a step
