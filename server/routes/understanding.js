@@ -11,49 +11,81 @@
 // Streaming STT and unlike the Voice Agent API's `Bearer`. Three
 // products, two schemes. See CLAUDE.md.
 //
-// MODEL NOTE. This account only has qwen3.5-4b-32k-fast, which does NOT
-// support `response_format` — schema-constrained output is unavailable,
-// so the JSON is asked for in the prompt and validated here instead.
-// Measured over the four slots it returned clean, correct JSON every
-// time at a median of 349ms, so this is workable, but "the model said
-// so" is never enough on its own: everything below is checked, coerced
-// and clamped before it leaves this file.
+// MODEL NOTE. claude-sonnet-4-6 — the same model recipes.js uses, so
+// the two jobs cannot drift apart in how they read a dish name.
+// Benchmarked over ten known-answer cases:
 //
-// RATE LIMIT. The account 429s after roughly two calls in quick
-// succession and takes tens of seconds to recover. A real conversation
-// paces itself — a person is talking between answers — but this will
-// still be hit, which is why the client keeps its regex readers as a
-// fallback rather than treating this endpoint as required.
+//   gemini-2.5-flash-lite      10/10   654ms   (cheapest)
+//   gemini-3.5-flash-lite      10/10   896ms
+//   claude-sonnet-4-6          10/10  1291ms   <- chosen
+//   claude-haiku-4-5            9/10  3462ms
+//
+// Ten cases cannot separate two models that both score perfectly, so
+// this is not a measured win over the Gemini pair — it is a deliberate
+// trade of roughly 600ms for the more capable model on the messy, real,
+// half-garbled speech that a ten-case bench does not contain. Haiku is
+// ruled out on the numbers: less accurate AND slower.
+//
+// If the extra latency ever shows in a real conversation, swap
+// AAI_LLM_GATEWAY_MODEL to gemini-2.5-flash-lite; it needs no code
+// change, because the schema below is deliberately portable.
+//
+// "The model said so" is still never enough: everything below is
+// checked, coerced and clamped before it leaves this file.
 import { Router } from "express";
 
 export const understandingRouter = Router();
 
 const API_KEY = process.env.ASSEMBLYAI_API_KEY || "";
 const GATEWAY = "https://llm-gateway.assemblyai.com/v1/chat/completions";
-const MODEL = process.env.AAI_LLM_GATEWAY_MODEL || "qwen3.5-4b-32k-fast";
+const MODEL = process.env.AAI_LLM_GATEWAY_MODEL || "claude-sonnet-4-6";
+
+// Single-typed fields throughout. A union like ["string","array","null"]
+// is accepted by Anthropic's schema validator and rejected outright by
+// Gemini's and OpenAI's ("Invalid JSON payload") — which silently turns
+// a model choice into a validator choice. Dishes therefore get their own
+// array field rather than overloading `value`, and "absent" is the empty
+// string rather than null.
+const SCHEMA = {
+  name: "answer_reading",
+  strict: true,
+  schema: {
+    type: "object",
+    properties: {
+      value: { type: "string", description: "Empty string when there is no value yet." },
+      dishes: {
+        type: "array",
+        items: { type: "string" },
+        description: "Dish names, for the dishIdea slot only. Empty array otherwise.",
+      },
+      display: { type: "string" },
+      status: { type: "string", enum: ["confirmed", "low-confidence", "needs-followup"] },
+      followUp: { type: "string", description: "Empty string unless status is needs-followup." },
+    },
+    required: ["value", "dishes", "display", "status", "followUp"],
+    additionalProperties: false,
+  },
+};
 
 // Someone is standing in a kitchen waiting for the next question, so a
 // slow read is worse than a crude one — the client falls back to its
-// regex readers when this takes too long or fails. Measured max was
-// 536ms, so this is generous.
-const TIMEOUT_MS = 5000;
+// regex readers when this takes too long or fails. Sonnet's median is
+// 1291ms and a cold first call ran 4s, so the budget has to clear that
+// without being so long that a stalled call holds up the conversation.
+const TIMEOUT_MS = 8000;
 const MAX_TOKENS = 200;
 
 const STATUSES = new Set(["confirmed", "low-confidence", "needs-followup"]);
 const SKILL_LEVELS = new Set(["beginner", "regular", "confident"]);
 
-// Spelled out rather than schema-enforced, because this model has no
-// response_format. "none" is called out explicitly: the first version of
+// The schema fixes the shape; this fixes the meaning. "none" is called
+// out explicitly: the first version of
 // this prompt let "no pork please" come back as value "none", which
 // reads as "no restrictions" downstream and silently drops the one
 // constraint the cook actually gave.
 const SYSTEM = `You convert one answer from a cooking app's setup conversation into JSON.
 
-Reply with ONLY a JSON object. No prose, no markdown fence, no explanation.
-
-{"value": string|string[]|null, "display": string, "status": "confirmed"|"low-confidence"|"needs-followup", "followUp": string|null}
-
-value      the answer in canonical form, or null if it cannot be determined.
+value      the answer in canonical form, or "" if it cannot be determined.
            servings   -> a bare integer, e.g. "4"
            targetTime -> total MINUTES as a bare integer, e.g. "90"
            diet       -> "none" ONLY when there are no restrictions at all.
@@ -61,13 +93,17 @@ value      the answer in canonical form, or null if it cannot be determined.
                          Otherwise the constraint itself, in their words
                          ("no pork", "nut allergy"). Never answer "none"
                          when they named a restriction.
-           dishIdea   -> an ARRAY of dish names, even for a single dish:
-                         ["mapo tofu"], or ["mapo tofu", "egg drop soup"].
-                         Names only, no quantities or method. Watch for
-                         dish names that contain "and" — "macaroni and
-                         cheese" is ONE dish, not two.
-           skill      -> how much each step should explain:
-                         "beginner", "regular", or "confident".
+           dishIdea   -> leave value "" and put the names in the dishes
+                         field. Names only, no quantities or method.
+                         Watch for dish names containing "and":
+                         "macaroni and cheese" is ONE dish, not two.
+           skill      -> how much each step should EXPLAIN:
+                         "beginner"  = explain everything, they are new to this
+                         "regular"   = normal detail
+                         "confident" = just the essentials, they only need
+                                       reminding, not teaching
+                         Naming the levels without defining them made every
+                         model read "just the essentials thanks" as beginner.
                          This is about explanation, never about ability:
                          a beginner may attempt any dish, however hard.
                          Never use it to discourage or refuse a dish.
@@ -76,14 +112,21 @@ display    short label for the UI, e.g. "4 servings", "90 minutes", "Vegan",
 status     confirmed        the answer is clear
            low-confidence   you had to guess
            needs-followup   you cannot land on a value without asking again
-followUp   ONE short question, only when status is needs-followup, else null.
+followUp   ONE short question, only when status is needs-followup, else "".
            It must be answerable in a few words and must NOT repeat the
            question already asked.
 
 Work out what the person means, not just what parses. "me and three mates"
 is 4 servings. "half an hour" is 30 minutes. "an hour and a half" is 90.
 Never invent a dish they did not name. The answer may be lightly garbled:
-it came from speech recognition in a kitchen.`;
+it came from speech recognition in a kitchen.
+
+For servings and targetTime, a vague quantity ALWAYS needs a follow-up:
+"a few", "some", "a handful", "a couple of hours". The serving count
+scales every ingredient amount in the plan, so reading "a few people" as
+3 when they meant 6 is a shopping list wrong by half — and nobody will
+notice until they are cooking. Ask the one short question instead of
+guessing. Never return a range in display when value is a single number.`;
 
 const clampText = (s, max) => String(s ?? "").slice(0, max);
 
@@ -132,7 +175,9 @@ function extractJson(raw) {
 function coerce(reading, slot, said) {
   if (!reading || typeof reading !== "object") return null;
 
-  let value = reading.value == null ? null : reading.value;
+  // "" is how the schema says "no value" — it has no nulls, because a
+  // nullable union is exactly what the Gemini validator rejects.
+  let value = reading.value == null || reading.value === "" ? null : reading.value;
 
   // The model sometimes nests the answer under the slot name:
   //   {"value": {"dishIdea": ["mapo tofu", "egg drop soup"]}}
@@ -144,13 +189,16 @@ function coerce(reading, slot, said) {
     value = inner === undefined ? null : inner;
   }
   let status = STATUSES.has(reading.status) ? reading.status : "low-confidence";
-  let followUp = reading.followUp == null ? null : String(reading.followUp).trim();
+  let followUp = reading.followUp ? String(reading.followUp).trim() : null;
 
   // dishIdea is a list whatever the model felt like returning. A bare
   // string here would reach matchTemplates as a single dish and quietly
   // lose the second one.
   if (slot === "dishIdea") {
-    const list = (Array.isArray(value) ? value : [value])
+    // The schema gives dishes their own array field, so prefer it. The
+    // `value` fallback covers a model that answered in the old shape.
+    const raw = Array.isArray(reading.dishes) && reading.dishes.length ? reading.dishes : value;
+    const list = (Array.isArray(raw) ? raw : [raw])
       .filter((d) => d != null)
       .map((d) => String(d).trim())
       .filter(Boolean);
@@ -243,6 +291,7 @@ understandingRouter.post("/read", async (req, res) => {
             content: `Slot: ${clampText(slot, 40)}\n${asked}\nThe cook said: ${clampText(text, 600)}`,
           },
         ],
+        response_format: { type: "json_schema", json_schema: SCHEMA },
         post_processing_steps: [{ type: "json-repair" }],
       }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
