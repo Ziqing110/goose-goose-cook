@@ -406,9 +406,13 @@ button { font: inherit; cursor: pointer; }
   --kp-board-edge: #ddc9ac;
   --kp-board-lip: #dcc6a6;
 
-  --kp-phase-prep: #8a8985;
-  --kp-phase-cook: #d4552a;
-  --kp-phase-plate: #5f9a2a;
+  /* Prep / cook / plate. Deliberately not green-amber-red: those read
+     as done / at risk / blocked everywhere else in the app, and a
+     phase says nothing about whether a step is doable. Cool, evenly
+     spaced hues, each ≥4.5:1 on white so they carry legend text too. */
+  --kp-phase-prep: #5b7186;
+  --kp-phase-cook: #7a4f6d;
+  --kp-phase-plate: #3f4d8a;
 
   --kp-cook-a: #2f7dd1;
   --kp-cook-b: #e58a1f;
@@ -440,6 +444,12 @@ button { font: inherit; cursor: pointer; }
     --kp-warning-bg: #3a2a10;
     --kp-warning-text: #f2cf8a;
     --kp-warning-graphic: #d99a2b;
+  --kp-phase-prep: #9fb3c6;
+  --kp-phase-cook: #cf9cbb;
+  --kp-phase-plate: #97a4e2;
+    --kp-phase-prep: #9fb3c6;
+    --kp-phase-cook: #cf9cbb;
+    --kp-phase-plate: #97a4e2;
     --kp-board: #2a241d;
     --kp-board-edge: #3a3128;
     --kp-board-lip: #40362b;
