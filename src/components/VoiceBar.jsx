@@ -17,6 +17,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { useStreamingTranscript } from "../hooks/useStreamingTranscript.js";
 import { matchNavCommand, navCommandList, navHintFor } from "../utils/navCommands.js";
+import { sessionStageStates } from "../utils/sessionSteps.js";
 import "./VoiceBar.css";
 
 // Four bars, lit proportionally to the current peak. The old markup
@@ -50,9 +51,20 @@ export default function VoiceBar() {
   const { pathname } = useLocation();
   const feedbackTimer = useRef(null);
   // Read inside the turn handler, which must not be rebuilt on every
-  // route change — that would churn the connection.
+  // route change or session edit — that would churn the connection.
   const routeRef = useRef(pathname);
   routeRef.current = pathname;
+
+  // Where the session guards would let you go: everything finished, plus
+  // the stage you're on. Home is always reachable — it's the entry
+  // point, not a wizard step.
+  const reachableRef = useRef([]);
+  reachableRef.current = [
+    "/",
+    ...sessionStageStates(state.session)
+      .filter((s) => s.state !== "future")
+      .map((s) => s.path),
+  ];
 
   const onError = useCallback((message) => setError(message), []);
 
@@ -79,7 +91,26 @@ export default function VoiceBar() {
       const route = routeRef.current;
       if (NAV_OFF_ROUTES.includes(route)) return;
 
-      const { action, path } = matchNavCommand(text, { route });
+      // Two signals the matcher can't get from the words alone.
+      //
+      // confidence: the lowest word confidence in the turn. A garbled
+      // transcript should not move anyone — from the R-core recording,
+      // genuine mishearings bottomed out near 0.2-0.4 while clean short
+      // commands sat above 0.9.
+      //
+      // reachable: the stages the session guards would actually allow.
+      // Without it, "go to the live cook" navigates and is immediately
+      // bounced back, which reads as the command having failed rather
+      // than as being too early.
+      const confidence = (turn.words || []).reduce(
+        (lowest, w) => Math.min(lowest, w.confidence ?? 1),
+        1,
+      );
+      const { action, path } = matchNavCommand(text, {
+        route,
+        confidence,
+        reachable: reachableRef.current,
+      });
       switch (action) {
         case "goto":
           navigate(path);

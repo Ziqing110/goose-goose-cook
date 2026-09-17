@@ -50,15 +50,35 @@ const DESTINATIONS = [
 // but the right shape — nobody navigates a wizard in a long sentence.
 const MAX_BARE_COMMAND_WORDS = 4;
 
-// Phrases where a movement word is doing ordinary work. Checked first,
-// because "next week" contains "next" and always will.
+// Phrases where a movement word is doing ordinary work. A blocklist is
+// whack-a-mole by nature — it only knows the idioms someone thought of —
+// so it is the LAST line of defence here, not the first. The structural
+// rules below do the real work.
 const NOT_NAVIGATION = [
   /\bnext (?:week|time|day|month|year|morning|one)\b/,
   /\bback (?:in|up|off)\b/,
-  /\bgo back to that\b/,
   /\bcontinue (?:to|with|cooking|stirring|until)\b/,
   /下(?:个|一)(?:星期|礼拜|周|月|次)/,
 ];
+
+// A command has no subject. You say "next", not "we should go next" —
+// the moment a sentence names who is doing something, it is describing
+// or discussing, not instructing the app.
+//
+// This is the structural version of the blocklist, and it generalises:
+// "we should continue", "I'll be back", "you carry on", 我们继续做饭吧
+// are all caught by the same rule, without anyone having to predict
+// them. Applied only to bare words — "take me to the schedule" contains
+// "me" and is unambiguously a command, but it matches as a destination
+// before this is ever consulted.
+const HAS_SUBJECT =
+  /\b(?:i|i'll|i'm|i've|we|we'll|we're|you|you'll|you're|he|she|they|let|lets|let's)\b|我|你|他|她|咱们/;
+
+// Below this, the transcript is a guess. From the R-core recording,
+// genuinely garbled turns bottomed out around 0.2-0.4 word confidence
+// ("And that's you." at 0.39) while clean short commands sat above 0.9.
+// Acting on a guess is how you navigate somewhere nobody asked for.
+const MIN_BARE_CONFIDENCE = 0.6;
 
 // Two kinds of pattern per action:
 //   explicit — unmistakably an instruction. Allowed at any length,
@@ -111,11 +131,13 @@ const normalize = (s) =>
  * @param {string} ctx.route         current pathname
  * @param {string[]} [ctx.reachable] paths the session guards allow;
  *                                   omit to allow any
+ * @param {number} [ctx.confidence]  lowest word confidence in the turn,
+ *                                   0-1; omit to skip the check
  * @returns {{ action: string, path?: string }} "none" when nothing
  *          matched — the common case, since most of what gets said near
  *          a kitchen is not a command.
  */
-export function matchNavCommand(text, { route = "/", reachable } = {}) {
+export function matchNavCommand(text, { route = "/", reachable, confidence } = {}) {
   const said = normalize(text);
   if (!said) return { action: "none" };
 
@@ -152,11 +174,25 @@ export function matchNavCommand(text, { route = "/", reachable } = {}) {
   const cjkChars = (said.match(/[一-鿿]/g) || []).length;
   const wordCount = latinWords + cjkChars;
 
+  // Three independent reasons a bare word doesn't count. Computed once,
+  // because "help" is exempt from all of them — asking a question moves
+  // nobody, so none of these risks apply to it.
+  const tooLong = wordCount > MAX_BARE_COMMAND_WORDS;
+  const hasSubject = HAS_SUBJECT.test(said);
+  const unsure = typeof confidence === "number" && confidence < MIN_BARE_CONFIDENCE;
+
   for (const { action, explicit, bare } of ACTIONS) {
-    if (explicit.some((p) => p.test(said))) return { action };
-    if (bare.some((p) => p.test(said)) && wordCount <= MAX_BARE_COMMAND_WORDS) {
-      return { action };
-    }
+    const isExplicit = explicit.some((p) => p.test(said));
+    if (!isExplicit && !bare.some((p) => p.test(said))) continue;
+    if (action === "help") return { action };
+
+    // Explicit phrasing buys a pass on LENGTH — that is what makes it
+    // explicit — but not on having a subject. "I think we go back" is
+    // someone thinking out loud; the phrase being unambiguous doesn't
+    // make the sentence an instruction.
+    if (hasSubject || unsure) return { action: "none" };
+    if (!isExplicit && tooLong) return { action: "none" };
+    return { action };
   }
 
   return { action: "none" };
