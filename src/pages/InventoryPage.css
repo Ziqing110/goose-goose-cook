@@ -304,3 +304,42 @@
 
 .inv-equipment-warning { display: flex; flex-direction: column; gap: 4px; border-color: var(--crit); }
 .inv-equipment-warning .inv-card-title { color: var(--crit); }
+
+/* Waiting for the agent to write the recipes. The whole board is gated
+   on having them, so this stands in for the entire page — it has to
+   carry the wait on its own. */
+.inv-thinking {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.inv-thinking-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.inv-thinking-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-top: 7px;
+}
+.inv-thinking-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.25;
+  animation: inv-thinking-fade 1.2s ease-in-out infinite;
+}
+.inv-thinking-dot:nth-child(2) { animation-delay: 200ms; }
+.inv-thinking-dot:nth-child(3) { animation-delay: 400ms; }
+
+@keyframes inv-thinking-fade {
+  0%, 80%, 100% { opacity: 0.25; }
+  40% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inv-thinking-dot { animation: none; opacity: 0.7; }
+}
