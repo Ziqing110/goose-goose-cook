@@ -23,12 +23,26 @@ const TERMINATE_GRACE_MS = 3000;
 //
 // The server param is still set, as a backstop for a wedged client that
 // has stopped sending at all; that is the only case it catches.
+//
+// Idle means "no words heard", not "no sound heard". It used to mean the
+// latter, keyed off the level meter, which was wrong in exactly the room
+// this app is built for: an extractor fan sits above any sane audio
+// threshold indefinitely, so a loud empty kitchen never went idle and
+// never stopped billing.
 const IDLE_MS = 120_000;
 const IDLE_SERVER_BACKSTOP_S = 300;
-// Above room tone but below a quiet voice at arm's length. Too low and
-// a humming fridge holds the session open forever.
-const SPEECH_PEAK = 0.05;
 const IDLE_CHECK_MS = 5_000;
+
+// Background noise can read as speech to the VAD, and a turn that never
+// stops hearing "speech" never reaches the silence that would end it. It
+// stays open, transcribes nothing, and the app waits on a turn that is
+// never coming.
+//
+// So: if a turn has been open this long and has still not produced a
+// single word, stop waiting for silence and end it ourselves. Real
+// speech is exempt by construction — it produces a partial within about
+// a second, and any partial at all resets this.
+const EMPTY_TURN_MS = 9_000;
 
 /**
  * @param {object}   options
@@ -56,6 +70,11 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
   const onIdleRef = useRef(onIdle);
   const configRef = useRef(config);
   const lastVoiceRef = useRef(0);
+  // When the turn currently in progress started, and whether it has
+  // produced any transcript yet. Together they distinguish "someone is
+  // talking" from "the room is loud".
+  const turnStartedRef = useRef(0);
+  const wordsThisTurnRef = useRef(false);
   onTurnRef.current = onTurn;
   onErrorRef.current = onError;
   onIdleRef.current = onIdle;
@@ -87,6 +106,18 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
   useEffect(() => {
     if (!enabled) return undefined;
     const id = setInterval(() => {
+      // A turn the server opened on noise and can't close on its own.
+      // ForceEndpoint ends it immediately and returns its final Turn,
+      // which unblocks anything waiting on end_of_turn.
+      const openFor = Date.now() - turnStartedRef.current;
+      if (turnStartedRef.current && !wordsThisTurnRef.current && openFor >= EMPTY_TURN_MS) {
+        turnStartedRef.current = Date.now();
+        const ws = wsRef.current;
+        if (ws?.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "ForceEndpoint" }));
+        }
+      }
+
       if (!lastVoiceRef.current) return;
       if (Date.now() - lastVoiceRef.current >= IDLE_MS) {
         lastVoiceRef.current = 0; // fire once, not every tick
@@ -170,7 +201,6 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
 
         node.port.onmessage = ({ data }) => {
           setLevel(data.peak);
-          if (data.peak > SPEECH_PEAK) lastVoiceRef.current = Date.now();
           if (ws.readyState === WebSocket.OPEN) {
             // Raw binary frame. Wrapping this in JSON or base64 is the
             // single most common way to get silence back from this API.
@@ -185,6 +215,8 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
         sink.gain.value = 0;
         node.connect(sink).connect(ctx.destination);
         lastVoiceRef.current = Date.now();
+        turnStartedRef.current = Date.now();
+        wordsThisTurnRef.current = false;
         setStatus("live");
       };
 
@@ -204,15 +236,30 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
             }
             break;
 
-          case "Turn":
+          case "Turn": {
+            const heard = (msg.transcript || "").trim();
             if (msg.end_of_turn) {
               setPartial("");
-              lastVoiceRef.current = Date.now();
+              turnStartedRef.current = Date.now();
+              wordsThisTurnRef.current = false;
+              // Only words count as someone being here. Noise used to
+              // reset this via the level meter, which meant a loud empty
+              // kitchen never went idle and never stopped billing.
+              if (heard) lastVoiceRef.current = Date.now();
+              // A forced endpoint on pure noise lands here with nothing
+              // in it. Pass it on anyway — every consumer already ignores
+              // an empty transcript, and swallowing it would hide the
+              // watchdog from anyone debugging this later.
               onTurnRef.current?.(msg);
             } else {
-              setPartial(msg.transcript || "");
+              setPartial(heard);
+              if (heard) {
+                wordsThisTurnRef.current = true;
+                lastVoiceRef.current = Date.now();
+              }
             }
             break;
+          }
 
           case "Termination":
             clearTimeout(terminateRef.current);
@@ -291,7 +338,17 @@ function buildParams(token, sampleRate, cfg) {
       throw new Error("voiceFocus requires universal-3-5-pro; it would be silently ignored.");
     }
     p.set("voice_focus", cfg.voiceFocus);
+    if (cfg.voiceFocusThreshold != null) {
+      p.set("voice_focus_threshold", String(cfg.voiceFocusThreshold));
+    }
   }
+
+  // How much evidence the VAD needs before calling a frame speech. The
+  // default is low (the docs give 0.2 in one table and 0.3 in another,
+  // which is itself a reason to set it rather than inherit it), and a low
+  // threshold in a loud room is what lets noise open turns that then
+  // never close. Raise it and the room stops talking.
+  if (cfg.vadThreshold != null) p.set("vad_threshold", String(cfg.vadThreshold));
 
   if (cfg.speakerLabels) {
     p.set("speaker_labels", "true");

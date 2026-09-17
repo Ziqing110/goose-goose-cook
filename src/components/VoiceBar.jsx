@@ -63,6 +63,19 @@ const NAV_OFF_ROUTES = ["/session/live-cook"];
 const STREAM_CONFIG = {
   speechModel: "universal-3-5-pro",
   languageCodes: ["en", "zh"],
+  // This runs in a kitchen: extractor fans, running water, a second
+  // person talking, a laptop mic across the counter. Voice Focus strips
+  // that before the audio reaches the model, and far-field is the
+  // variant for exactly this capture distance (the docs name laptop mics
+  // under it). universal-3-5-pro only, which is what we're on — on any
+  // other model it would no-op silently, so buildParams throws instead.
+  voiceFocus: "far-field",
+  // Above the default, deliberately. The default is tuned not to miss
+  // quiet speech; in a loud room that same sensitivity opens turns on
+  // noise, and a turn opened on noise never hears the silence that would
+  // close it. Raising this trades a little sensitivity for turns that
+  // actually end.
+  vadThreshold: 0.55,
 };
 
 export default function VoiceBar() {
