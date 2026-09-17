@@ -257,12 +257,6 @@ export default function InventoryPage() {
   const selectNode = (id) => setSelectedId((cur) => (cur === id ? null : id));
 
   const hasDishes = recipes.length > 0;
-  // What the cook asked for, shown back to them while it is being
-  // written — a wait with your own dish names on it reads as work being
-  // done, where a bare spinner reads as a stall. Older sessions stored
-  // dishIdea as a string.
-  const asked = session.conversation?.answers?.dishIdea;
-  const askedDishes = (Array.isArray(asked) ? asked : [asked]).filter(Boolean);
   const hasOut = outMaterialIds.length > 0;
   const loading = hasDishes && !catalog && !catalogError;
 
@@ -341,31 +335,14 @@ export default function InventoryPage() {
         )}
       </header>
 
-      {/* The body below is gated on hasDishes && catalog, so until the
-          recipes land there is nothing on this page at all — and
-          generation is a real half-minute of model work. A blank page
-          for that long reads as broken, so this says what is being
-          written and for whom while it happens. */}
+      {/* The board below only renders once the recipes exist, so without
+          this the page is blank for the half-minute generation takes. */}
       {!hasDishes && (
-        <div className="inv-hud inv-thinking" role="status" aria-live="polite">
-          <span className="inv-thinking-mark" aria-hidden="true">
-            <span className="inv-thinking-dot" />
-            <span className="inv-thinking-dot" />
-            <span className="inv-thinking-dot" />
+        <div className="inv-hud" role="status" aria-live="polite">
+          <span className="inv-meta">
+            {generating ? "Writing your recipes" : "Setting your dishes"}{' '}
+            <span className="mono inv-dots">…</span>
           </span>
-          <div className="inv-thinking-body">
-            <span className="inv-summary is-ok">
-              {generating ? "Writing your recipes" : "Setting your dishes"}
-            </span>
-            {askedDishes.length > 0 && (
-              <span className="inv-meta">{askedDishes.join(" + ")}</span>
-            )}
-            <span className="inv-meta is-tertiary">
-              {generating
-                ? "Working out the steps, what they need, and what can happen at once. Usually under a minute."
-                : "One moment."}
-            </span>
-          </div>
         </div>
       )}
 
