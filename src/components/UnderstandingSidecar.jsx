@@ -4,6 +4,8 @@
 //  - low-confidence  warning card with the raw words it heard, plus
 //                    "That's right" (accept) and "Fix it" (inline field)
 //  - asking          dashed outline, the question on screen now
+//  - asking-again    dashed outline, the agent asked a follow-up because
+//                    the answer was not enough to fill the slot yet
 //  - pending         dashed outline, not asked yet
 // The page owns the readings (conversation.understanding); this only
 // holds which card is being edited and its draft.
@@ -11,7 +13,14 @@ import { useRef, useState } from "react";
 import Icon from "./Icon.jsx";
 import "./UnderstandingSidecar.css";
 
-const PLACEHOLDER = { asking: "Asking now…", pending: "Not asked yet" };
+const PLACEHOLDER = {
+  asking: "Asking now…",
+  // Distinct from "Asking now…" on purpose: the cook said something, it
+  // just was not enough. A card that reverted to the plain asking state
+  // would look like their answer had been thrown away.
+  "asking-again": "Just checking…",
+  pending: "Not asked yet",
+};
 
 export default function UnderstandingSidecar({ slots, locked = false, onConfirm, onCorrect }) {
   const [editingId, setEditingId] = useState(null);
@@ -66,7 +75,8 @@ export default function UnderstandingSidecar({ slots, locked = false, onConfirm,
         {slots.map((slot) => {
           const editing = editingId === slot.id;
           const isLow = slot.status === "low-confidence";
-          const isOpen = slot.status === "asking" || slot.status === "pending";
+          const isOpen =
+            slot.status === "asking" || slot.status === "asking-again" || slot.status === "pending";
           return (
             // Keyed by status too, so a card that just got written (or
             // confirmed) re-enters with the reveal.
@@ -81,7 +91,14 @@ export default function UnderstandingSidecar({ slots, locked = false, onConfirm,
                 )}
               </div>
 
-              {isOpen && <span className="us-placeholder">{PLACEHOLDER[slot.status]}</span>}
+              {isOpen && (
+                <>
+                  <span className="us-placeholder">{PLACEHOLDER[slot.status]}</span>
+                  {slot.status === "asking-again" && slot.display && (
+                    <span className="us-heard">heard: &ldquo;{slot.display}&rdquo;</span>
+                  )}
+                </>
+              )}
 
               {!isOpen &&
                 (editing ? (

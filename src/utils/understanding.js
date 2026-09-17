@@ -170,7 +170,7 @@ export function echoFor(reading) {
 /**
  * One slot per question, in question order:
  * [{ id, label, status, display, heard }] where status is
- * "confirmed" | "low-confidence" | "asking" | "pending".
+ * "confirmed" | "low-confidence" | "asking" | "asking-again" | "pending".
  */
 export function conversationSlots(conversation) {
   const { understanding = {}, answers = {}, questionIndex = 0, complete = false } = conversation;

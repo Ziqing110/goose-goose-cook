@@ -9,3 +9,7 @@ reference_html
 .env
 
 .venv-voice
+
+# Model comparison output for recipe generation. Big JSON dumps for
+# reading, not for keeping.
+recipe-bench/

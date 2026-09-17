@@ -30,12 +30,16 @@ import "./VoiceInput.css";
 // did. That is the trade being made deliberately.
 const THINKING_PAUSE = { min_turn_silence: 700, max_turn_silence: 4000 };
 
-export default function VoiceInput({ question, onAnswer }) {
+export default function VoiceInput({ question, onAnswer, busy = false }) {
   const { state, dispatch } = useAppState();
   const { pathname } = useLocation();
   const muted = state.voice.muted;
   const [text, setText] = useState("");
   const inputRef = useRef(null);
+  // Read inside send(), which is memoized on [onAnswer] and must not be
+  // rebuilt every time busy flips — that would re-register dictation.
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
 
   // Clear the draft when moving on to a new question.
   useEffect(() => setText(""), [question.id]);
@@ -64,6 +68,9 @@ export default function VoiceInput({ question, onAnswer }) {
     (raw) => {
       const val = (raw ?? "").trim();
       if (!val) return;
+      // A second turn arriving while the first is still being read would
+      // answer the wrong question: the page has not advanced yet.
+      if (busyRef.current) return;
       onAnswer(val);
       setText("");
     },
@@ -129,16 +136,20 @@ export default function VoiceInput({ question, onAnswer }) {
           onClick={startTyping}
           onChange={(e) => setText(e.target.value)}
           placeholder={
-            muted
-              ? question.freeTextPlaceholder
-              : "Listening — just answer, or click here to type instead"
+            busy
+              ? "Reading that…"
+              : muted
+                ? question.freeTextPlaceholder
+                : "Listening — just answer, or click here to type instead"
           }
           className={`answer-input ${!muted ? "is-listening" : ""}`}
         />
         {/* Nothing to press while the mic is on: the end of your
             sentence is the send. The button stays for typing. */}
-        <button type="submit" className="btn btn-primary" disabled={!muted || !text.trim()}>
-          {muted ? "Send" : "Listening…"}
+        {/* Busy beats both states: the answer has gone, and pressing
+            Send again would submit it twice. */}
+        <button type="submit" className="btn btn-primary" disabled={busy || !muted || !text.trim()}>
+          {busy ? "Reading…" : muted ? "Send" : "Listening…"}
         </button>
       </form>
     </div>

@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { ELICITATION_QUESTIONS } from "../data/dishes.js";
+// interpretAnswer is still used directly by correctReading below: a typed
+// correction in the sidecar is the cook's own word for the slot, so it is
+// taken as given rather than sent back to a model to be re-read.
 import { conversationSlots, echoFor, interpretAnswer } from "../utils/understanding.js";
+import { readAnswer } from "../api/understanding.js";
 import Icon from "../components/Icon.jsx";
 import VoiceInput from "../components/VoiceInput.jsx";
 import UnderstandingSidecar from "../components/UnderstandingSidecar.jsx";
@@ -15,6 +19,13 @@ export default function ConversationPage() {
   const { transcript, answers, questionIndex, complete } = conversation;
   const understanding = conversation.understanding || {};
   const transcriptRef = useRef(null);
+  // The follow-up currently outstanding, if any. Held here rather than in
+  // session state because it is about this turn, not about the run — a
+  // reload should re-ask the question, not resume half of it.
+  const [pendingFollowUp, setPendingFollowUp] = useState(null);
+  // True while the reader is thinking. The answer bar shows it, so a
+  // network round trip does not look like the app ignoring you.
+  const [reading, setReading] = useState(false);
   const currentQuestion = ELICITATION_QUESTIONS[questionIndex];
   // Recipes are drafted once, from the answers as they stand
   // (useSessionRecipes), so a correction after that would never reach
@@ -63,26 +74,61 @@ export default function ConversationPage() {
   // every render — including every partial transcript, since partials set
   // state there. That meant unregister/re-register per partial, and with
   // it an UpdateConfiguration sent over the live socket each time.
-  const handleAnswer = useCallback((text) => {
-    const reading = interpretAnswer(currentQuestion, text);
-    const nextAnswers = { ...answers, [currentQuestion.id]: reading.value };
-    const nextUnderstanding = { ...understanding, [currentQuestion.id]: reading };
-    const nextIndex = questionIndex + 1;
-    const isLast = nextIndex >= ELICITATION_QUESTIONS.length;
-    const nextLine = isLast ? "Got it — drafting your recipe graph now." : ELICITATION_QUESTIONS[nextIndex].agentText;
-    const agentText = reading.status === "low-confidence" ? `${echoFor(reading)} ${nextLine}` : nextLine;
+  const handleAnswer = useCallback(
+    async (text) => {
+      // The cook's words go up immediately, before the read comes back.
+      // A network round trip is long enough that waiting to echo them
+      // makes the app look like it did not hear.
+      const heardTranscript = [...transcript, { speaker: "cook", text }];
+      dispatch({ type: "session/conversation/update", payload: { transcript: heardTranscript } });
+      setReading(true);
 
-    dispatch({
-      type: "session/conversation/update",
-      payload: {
-        answers: nextAnswers,
-        understanding: nextUnderstanding,
-        transcript: [...transcript, { speaker: "cook", text }, { speaker: "agent", text: agentText }],
-        questionIndex: nextIndex,
-        ...(isLast ? { complete: true } : {}),
-      },
-    });
-  }, [answers, understanding, questionIndex, transcript, currentQuestion, dispatch]);
+      let result;
+      try {
+        result = await readAnswer(currentQuestion, text, pendingFollowUp);
+      } finally {
+        setReading(false);
+      }
+
+      // The answer was not enough to fill the slot, so the agent asks
+      // rather than guessing. The question index does NOT advance: we are
+      // still on this slot, and the next thing they say is an answer to
+      // the follow-up, which is passed back so a bare "three" is read as
+      // answering it.
+      if (result.status === "needs-followup" && result.followUp) {
+        setPendingFollowUp(result.followUp);
+        dispatch({
+          type: "session/conversation/update",
+          payload: {
+            transcript: [...heardTranscript, { speaker: "agent", text: result.followUp }],
+            understanding: {
+              ...understanding,
+              [currentQuestion.id]: { ...result, status: "asking-again" },
+            },
+          },
+        });
+        return;
+      }
+
+      setPendingFollowUp(null);
+      const nextIndex = questionIndex + 1;
+      const isLast = nextIndex >= ELICITATION_QUESTIONS.length;
+      const nextLine = isLast ? "Got it — drafting your recipe graph now." : ELICITATION_QUESTIONS[nextIndex].agentText;
+      const agentText = result.status === "low-confidence" ? `${echoFor(result)} ${nextLine}` : nextLine;
+
+      dispatch({
+        type: "session/conversation/update",
+        payload: {
+          answers: { ...answers, [currentQuestion.id]: result.value },
+          understanding: { ...understanding, [currentQuestion.id]: result },
+          transcript: [...heardTranscript, { speaker: "agent", text: agentText }],
+          questionIndex: nextIndex,
+          ...(isLast ? { complete: true } : {}),
+        },
+      });
+    },
+    [answers, understanding, questionIndex, transcript, currentQuestion, pendingFollowUp, dispatch],
+  );
 
   const confirmReading = (id) => {
     const reading = understanding[id];
@@ -203,7 +249,7 @@ export default function ConversationPage() {
               </div>
             </>
           ) : (
-            <VoiceInput question={currentQuestion} onAnswer={handleAnswer} />
+            <VoiceInput question={currentQuestion} onAnswer={handleAnswer} busy={reading} />
           )}
         </div>
       </div>

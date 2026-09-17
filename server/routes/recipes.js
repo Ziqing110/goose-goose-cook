@@ -6,11 +6,20 @@
 // dishes, so this turns them into the same node graphs the seeded
 // templates use.
 //
-// MODEL. claude-sonnet-4-6, not claude-sonnet-5 — Sonnet 5 and Opus 5 do
-// not support `response_format` on the gateway (they take `tools`
-// instead), so schema-constrained output is unavailable on them. Verified
-// against the live account, not just the docs table. A recipe graph has
-// far too much structure to ask for in prose and hope.
+// MODEL. gemini-3.8-flash, chosen on a three-dish benchmark — two dishes
+// turned out to be too easy to separate anything, since any model notices
+// that two dishes both need garlic.
+//
+// The deciding case was mouth-watering chicken, which is served COLD: the
+// poached chicken must chill before it is chopped and sauced. Sonnet 4.6
+// and Haiku 4.5 both skipped the chill and served it hot, which is not
+// the dish. Gemini 3.8 Flash got it right in 39s, the fastest of the
+// models that did, with no missing ingredient amounts.
+//
+// Note that claude-sonnet-5 and claude-opus-5 are not options at all:
+// neither supports `response_format` on the gateway (they take `tools`
+// instead), and a recipe graph has far too much structure to ask for in
+// prose and hope. Verified against the live account, not the docs table.
 //
 // This is a slow, one-off call behind a loading state, unlike the
 // per-answer reader in understanding.js, which is why it can afford a
@@ -21,7 +30,7 @@ export const recipesRouter = Router();
 
 const API_KEY = process.env.ASSEMBLYAI_API_KEY || "";
 const GATEWAY = "https://llm-gateway.assemblyai.com/v1/chat/completions";
-const MODEL = process.env.AAI_RECIPE_MODEL || "claude-sonnet-4-6";
+const MODEL = process.env.AAI_RECIPE_MODEL || "gemini-3.8-flash";
 
 // A whole multi-dish graph is a lot of tokens, and a truncated graph is
 // worse than none: it would arrive with steps depending on ids that were
@@ -37,7 +46,7 @@ const MAX_TOKENS = 8000;
 // The vocabulary the app already speaks. Everything here is checked
 // after generation too — a model that invents an equipment id would
 // otherwise produce steps the scheduler can never satisfy.
-const EQUIPMENT = ["stove_burner", "wok", "oven", "pot", "cutting_board"];
+export const EQUIPMENT = ["stove_burner", "wok", "oven", "pot", "cutting_board"];
 const PHASES = ["prep", "cook", "plate"];
 const DIFFICULTIES = ["low", "medium", "high"];
 const CATEGORIES = ["protein", "vegetable", "grain", "pantry"];
@@ -77,8 +86,12 @@ const nodeSchema = {
       description: "True only when another dish in this run needs the identical prep and it could be done once.",
     },
     share_key: {
-      type: ["string", "null"],
-      description: "Identical string on every step that shares the work, e.g. 'mince_garlic'. Null when not shareable.",
+      // Single-typed, not ["string","null"]. A nullable union is accepted
+      // by Anthropic's schema validator and rejected outright by Gemini's
+      // and OpenAI's, which would quietly restrict this endpoint to one
+      // vendor — and would rig any comparison between them.
+      type: "string",
+      description: "Identical string on every step that shares the work, e.g. 'mince_garlic'. Empty string when not shareable.",
     },
   },
   required: [
@@ -89,7 +102,7 @@ const nodeSchema = {
   additionalProperties: false,
 };
 
-const SCHEMA = {
+export const SCHEMA = {
   name: "recipe_plan",
   strict: true,
   schema: {
@@ -131,7 +144,7 @@ const SCHEMA = {
   },
 };
 
-function buildPrompt({ dishes, servings, diet, skill, targetTime, cooks, kitchen }) {
+export function buildPrompt({ dishes, servings, diet, skill, targetTime, cooks, kitchen }) {
   const kit = [
     `${kitchen.burners} stove burner(s)`,
     kitchen.hasWok ? "a wok" : null,
@@ -183,8 +196,8 @@ Rules:
 - Scale every material_usage amount to ${servings} servings.
 - Respect the dietary constraint in ingredient choice. Do not add a note about it; just design around it.
 ${dishes.length > 1
-  ? `- These dishes share a kitchen. Where two dishes need the IDENTICAL prep (same ingredient, same cut), mark both steps is_shareable true with the same share_key, so the work can be done once.`
-  : `- Only one dish, so nothing is shareable: is_shareable is false and share_key is null on every step.`}
+  ? `- These dishes share a kitchen. Where two dishes need the IDENTICAL prep (same ingredient, same cut), mark both steps is_shareable true with the same share_key, so the work can be done once. Every other step has is_shareable false and share_key "".`
+  : `- Only one dish, so nothing is shareable: is_shareable is false and share_key is "" on every step.`}
 - Every material id used in any step must appear exactly once in the top-level materials list.`;
 }
 
@@ -196,7 +209,7 @@ ${dishes.length > 1
  * would hang the scheduler with steps that can never become ready.
  * Better to fail here, where the message says what was wrong.
  */
-function validate(plan) {
+export function validate(plan) {
   if (!plan?.recipes?.length) return "no recipes returned";
   const declared = new Set((plan.materials || []).map((m) => m.id));
 
@@ -235,7 +248,7 @@ function validate(plan) {
 }
 
 /** Into the shape the app's own templates use. */
-function toTemplates(plan, { diet, dishes }) {
+export function toTemplates(plan, { diet, dishes }) {
   const usageMap = (list) =>
     Object.fromEntries((list || []).map((u) => [u.material_id, { amount: u.amount, unit: u.unit }]));
 
