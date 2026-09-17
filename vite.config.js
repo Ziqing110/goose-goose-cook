@@ -7,7 +7,14 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": "http://localhost:3001",
+      // 127.0.0.1, NOT localhost. On Windows, "localhost" resolves to
+      // ::1 first and Node 18+ does not reliably fall back to IPv4 on a
+      // proxied request — measured 3.6s to 13.4s for /api/kitchens
+      // through the proxy, against milliseconds hitting :3001 directly.
+      // The app fires its kitchen and session fetches on boot and renders
+      // nothing until they land, so that delay shows up as a white screen
+      // for ten seconds, which looks exactly like a crash.
+      "/api": "http://127.0.0.1:3001",
     },
   },
 });

@@ -13,6 +13,12 @@
 import { apiRequest } from "./client.js";
 import { interpretAnswer } from "../utils/understanding.js";
 
+// Comfortably above what this actually takes — measured 1.1-1.5s end to
+// end, warm — but below the point where a cook decides the app has hung.
+// The server's own gateway budget is 8s, so anything past this is the
+// network or the proxy, not the model thinking.
+const READ_TIMEOUT_MS = 12_000;
+
 /**
  * Read one answer.
  *
@@ -37,6 +43,12 @@ export async function readAnswer(question, text, followUpAsked) {
   try {
     const reading = await apiRequest("/api/understanding", "/read", {
       method: "POST",
+      // The server already caps its own call to the gateway; this caps
+      // everything in front of it — the dev proxy, a stalled socket, a
+      // server that accepted the request and went quiet. Without it a
+      // hung request leaves the answer bar saying "Reading…" forever,
+      // which is worse than the regex reading it would fall back to.
+      signal: AbortSignal.timeout(READ_TIMEOUT_MS),
       body: JSON.stringify({
         slot: question.id,
         question: question.agentText,
