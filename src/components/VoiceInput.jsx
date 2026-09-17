@@ -7,8 +7,9 @@
 // Demo-answer options render as template chips that fill the input
 // (not submit) so they're a quick starting point, not a shortcut that
 // skips the input entirely.
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppState } from "../state/AppStateContext.jsx";
+import { registerVoiceDictation } from "../utils/voicePageCommands.js";
 import "./VoiceInput.css";
 
 export default function VoiceInput({ question, onAnswer }) {
@@ -32,17 +33,42 @@ export default function VoiceInput({ question, onAnswer }) {
     inputRef.current?.focus();
   };
 
+  // One place both paths go through, so a spoken answer and a typed one
+  // are handled identically — including the template match, which is
+  // what makes "two" arrive as the value 2 rather than the string.
+  const send = useCallback(
+    (raw) => {
+      const val = (raw ?? "").trim();
+      if (!val) return;
+      const match = question.options.find(
+        (o) => o.label.toLowerCase() === val.toLowerCase(),
+      );
+      if (match) onAnswer(match.value, match.label);
+      else onAnswer(val, val);
+      setText("");
+    },
+    [question, onAnswer],
+  );
+
   const submit = (e) => {
     e.preventDefault();
-    const val = text.trim();
-    if (!val) return;
-    // If the text is exactly one of the demo templates (used as-is),
-    // submit its real value/label pair; otherwise treat it as free text.
-    const match = question.options.find((o) => o.label === val);
-    if (match) onAnswer(match.value, match.label);
-    else onAnswer(val, val);
-    setText("");
+    send(text);
   };
+
+  // While the mic is on, this bar takes dictation instead of typing.
+  //
+  // There is no Enter to press: end_of_turn IS the "I've finished
+  // speaking" signal, and asking someone to confirm it with a keystroke
+  // would defeat the point of talking. Partials fill the field as you
+  // speak so you can see it being heard, then the final turn submits and
+  // the agent asks the next question.
+  useEffect(() => {
+    if (muted) return undefined;
+    return registerVoiceDictation({
+      onPartial: (partial) => setText(partial || ""),
+      onFinal: (final) => send(final),
+    });
+  }, [muted, send]);
 
   return (
     <div className="answer-bar">
@@ -70,16 +96,24 @@ export default function VoiceInput({ question, onAnswer }) {
         <input
           ref={inputRef}
           type="text"
-          value={muted ? text : ""}
+          // Shows the dictated text now rather than staying blank while
+          // "listening" — the whole point is watching your answer arrive.
+          value={text}
           readOnly={!muted}
           onFocus={startTyping}
           onClick={startTyping}
           onChange={(e) => setText(e.target.value)}
-          placeholder={muted ? question.freeTextPlaceholder : "Listening — click to type your answer instead"}
+          placeholder={
+            muted
+              ? question.freeTextPlaceholder
+              : "Listening — just answer, or click here to type instead"
+          }
           className={`answer-input ${!muted ? "is-listening" : ""}`}
         />
+        {/* Nothing to press while the mic is on: the end of your
+            sentence is the send. The button stays for typing. */}
         <button type="submit" className="btn btn-primary" disabled={!muted || !text.trim()}>
-          Send
+          {muted ? "Send" : "Listening…"}
         </button>
       </form>
     </div>

@@ -224,7 +224,7 @@ export default function InventoryPage() {
   useEffect(() => {
     return registerVoiceCommands([
       {
-        phrases: [/approve/, /批准/, /确认菜谱/],
+        phrases: [/approve/],
         confirm: "Approve the board and move to scheduling? Say yes or no.",
         label: "Approved.",
         run: () => {

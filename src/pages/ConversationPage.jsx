@@ -29,6 +29,25 @@ export default function ConversationPage() {
     if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
   }, [transcript]);
 
+  // This page takes dictation, not commands, so the bar should say so —
+  // and should stop advertising navigation you can't use here.
+  useEffect(() => {
+    dispatch({
+      type: "voice/setHint",
+      payload: {
+        hint: complete
+          ? { line: "Say “check the inventory” when you're ready.", sub: null }
+          : {
+              // Reads correctly in both states: an invitation while
+              // muted, a description of what's happening while live.
+              line: "Just answer out loud — I'll type it for you.",
+              sub: "Nothing to press; it sends when you stop talking.",
+            },
+      },
+    });
+    return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
+  }, [complete, dispatch]);
+
   const handleAnswer = (value, label) => {
     const nextAnswers = { ...answers, [currentQuestion.id]: value };
     let nextTranscript = [...transcript, { speaker: "cook", text: label }];

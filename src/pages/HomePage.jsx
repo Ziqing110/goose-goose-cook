@@ -206,7 +206,7 @@ export default function HomePage() {
     if (heroState === "resumable") {
       return registerVoiceCommands([
         {
-          phrases: [/\bresume\b/, /\bcarry on with the run\b/, /继续做饭/, /恢复/],
+          phrases: [/\bresume\b/, /\bcarry on with the run\b/],
           label: "Resuming.",
           run: () => navigate("/session"),
         },
@@ -219,7 +219,7 @@ export default function HomePage() {
           // several profiles this opens a picker, and a voice command
           // that opens a dialog you then have to click is no better
           // than clicking the button.
-          phrases: [/\bstart (?:the )?(?:run|cooking|session)\b/, /开始做饭/, /开始/],
+          phrases: [/\bstart (?:the )?(?:run|cooking|session)\b/],
           label: profiles.length > 1 ? "Which kitchen?" : "Starting.",
           run: handleStartClick,
         },

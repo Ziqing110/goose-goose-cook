@@ -25,7 +25,7 @@ import {
   normalizeUtterance,
   pathLabel,
 } from "../utils/navCommands.js";
-import { matchPageCommand } from "../utils/voicePageCommands.js";
+import { getVoiceDictation, matchPageCommand } from "../utils/voicePageCommands.js";
 import { sessionStageStates } from "../utils/sessionSteps.js";
 import "./VoiceBar.css";
 
@@ -147,6 +147,16 @@ export default function VoiceBar() {
       const route = routeRef.current;
       if (NAV_OFF_ROUTES.includes(route)) return;
 
+      // A page taking dictation wants the words, not a command read of
+      // them. Checked before everything — including page commands — so
+      // that answering a question with "go back to basics" gets typed
+      // rather than navigating.
+      const dictating = getVoiceDictation();
+      if (dictating) {
+        dictating.onFinal(text);
+        return;
+      }
+
       // Two signals the matcher can't get from the words alone.
       //
       // confidence: the lowest word confidence in the turn. A garbled
@@ -247,6 +257,12 @@ export default function VoiceBar() {
     onError,
     onIdle,
   });
+
+  // Forward partials to a page taking dictation, so its input fills as
+  // you speak instead of jumping all at once when the turn ends.
+  useEffect(() => {
+    getVoiceDictation()?.onPartial?.(partial);
+  }, [partial]);
 
   const toggleMuted = () => {
     setError(null);

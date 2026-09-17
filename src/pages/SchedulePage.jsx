@@ -91,14 +91,14 @@ export default function SchedulePage() {
       run
         ? [
             {
-              phrases: [/resume cooking/, /back to the cook/, /继续做饭/],
+              phrases: [/resume cooking/, /back to the cook/],
               label: "Back to the cook.",
               run: () => navigate("/session/live-cook"),
             },
           ]
         : [
             {
-              phrases: [/start cooking/, /start the cook/, /开始做饭/],
+              phrases: [/start cooking/, /start the cook/],
               confirm: "Start cooking? Say yes or no.",
               label: "Starting.",
               run: () => {

@@ -5,10 +5,21 @@
 // latency to the one interaction with no tolerance for it — you said
 // "next" and you are staring at the screen waiting for it to happen.
 //
-// BILINGUAL BY NECESSITY, not ambition. universal-3-5-pro code-switches
-// natively and we don't tell it to stop, so a transcript can come back
-// in Mandarin mid-sentence. A matcher that only knew English would fail
-// silently on half of what gets said in this kitchen.
+// ENGLISH ONLY, deliberately. The model still code-switches and the
+// transcript can still come back in Mandarin — that is worth keeping for
+// dish names and for the live cook, where two people really do switch
+// mid-sentence. But the COMMAND vocabulary is English.
+//
+// The reason is word boundaries. Every guard here leans on the regex
+// word-boundary anchor, and CJK has no equivalent: a two-character
+// command word matches inside any longer word containing it, with
+// nothing to stop it. Half-guarded commands in one language and
+// fully-guarded ones in another is worse than one language done
+// properly. Multilingual belongs in the live cook, which is about what
+// people say rather than what they command.
+//
+// CJK still survives normalization below — dish names arrive in
+// Mandarin and other code has to read them.
 //
 // There is deliberately NO generic "next". "Next page" is a developer's
 // model of this app; nobody standing in a kitchen thinks in pages. They
@@ -25,30 +36,30 @@
 
 /** Routes reachable by name, with what people actually call them. */
 const DESTINATIONS = [
-  { path: "/", names: ["home", "the start", "首页", "主页", "回家"] },
+  { path: "/", names: ["home", "the start"] },
   {
     path: "/session/kitchen-setup",
-    names: ["kitchen setup", "the kitchen", "equipment", "厨房", "设备"],
+    names: ["kitchen setup", "the kitchen", "equipment"],
   },
   {
     path: "/session/conversation",
-    names: ["conversation", "the questions", "对话", "问题"],
+    names: ["conversation", "the questions"],
   },
   {
     path: "/session/inventory",
-    names: ["inventory", "the recipe", "the board", "ingredients", "食材", "配料", "菜谱"],
+    names: ["inventory", "the recipe", "the board", "ingredients"],
   },
   {
     path: "/session/voice-binding",
-    names: ["voice binding", "voices", "the cooks", "声音", "厨师"],
+    names: ["voice binding", "voices", "the cooks"],
   },
   {
     path: "/session/schedule",
-    names: ["schedule", "the timeline", "the plan", "时间表", "计划"],
+    names: ["schedule", "the timeline", "the plan"],
   },
   {
     path: "/session/live-cook",
-    names: ["live cook", "cooking", "the cook", "开始做饭", "做饭"],
+    names: ["live cook", "cooking", "the cook"],
   },
 ];
 
@@ -66,7 +77,6 @@ const NOT_NAVIGATION = [
   /\bnext (?:week|time|day|month|year|morning|one)\b/,
   /\bback (?:in|up|off)\b/,
   /\bcontinue (?:to|with|cooking|stirring|until)\b/,
-  /下(?:个|一)(?:星期|礼拜|周|月|次)/,
 ];
 
 // A command has no subject. You say "next", not "we should go next" —
@@ -74,13 +84,13 @@ const NOT_NAVIGATION = [
 // or discussing, not instructing the app.
 //
 // This is the structural version of the blocklist, and it generalises:
-// "we should continue", "I'll be back", "you carry on", 我们继续做饭吧
-// are all caught by the same rule, without anyone having to predict
-// them. Applied only to bare words — "take me to the schedule" contains
+// "we should go back", "I'll be back", "you go back" are all caught by
+// the same rule, without anyone having to predict them. Applied only to
+// bare words — "take me to the schedule" contains
 // "me" and is unambiguously a command, but it matches as a destination
 // before this is ever consulted.
 const HAS_SUBJECT =
-  /\b(?:i|i'll|i'm|i've|we|we'll|we're|you|you'll|you're|he|she|they|let|lets|let's)\b|我|你|他|她|咱们/;
+  /\b(?:i|i'll|i'm|i've|we|we'll|we're|you|you'll|you're|he|she|they|let|lets|let's)\b/;
 
 // Below this, the transcript is a guess. From the R-core recording,
 // genuinely garbled turns bottomed out around 0.2-0.4 word confidence
@@ -99,8 +109,20 @@ const MIN_BARE_CONFIDENCE = 0.6;
 const CONFIRM_CONFIDENCE = 0.4;
 const CONFIRM_COMMAND_WORDS = 8;
 
-const YES = /^(?:yes|yeah|yep|yup|sure|ok|okay|do it|go ahead|confirm|please)\b|^(?:是|是的|对|好|好的|确认|可以|行)/;
-const NO = /^(?:no|nope|nah|don't|do not|cancel|never ?mind|stop|wait)\b|^(?:不|不是|不要|取消|算了|等)/;
+const YES = /^(?:yes|yeah|yep|yup|sure|ok|okay|do it|go ahead|confirm|please)\b/;
+const NO = /^(?:no|nope|nah|don't|do not|cancel|never ?mind|stop|wait)\b/;
+
+/**
+ * Utterance length in units comparable across scripts: words for Latin,
+ * characters for CJK. Commands are English now, but Mandarin still
+ * arrives in the transcript, and treating a whole Chinese sentence as
+ * one "word" would let it past every length gate.
+ */
+function countUnits(said) {
+  const latin = said.replace(/[一-鿿]/g, " ").split(" ").filter(Boolean).length;
+  const cjk = (said.match(/[一-鿿]/g) || []).length;
+  return latin + cjk;
+}
 
 /**
  * Answer to a pending confirmation.
@@ -113,10 +135,7 @@ export function matchConfirmation(text) {
   if (!said) return null;
   // Answers are short. "no, the other one next to the stock" is someone
   // pointing at a jar, not declining a prompt.
-  const units =
-    said.replace(/[一-鿿]/g, " ").split(" ").filter(Boolean).length +
-    (said.match(/[一-鿿]/g) || []).length;
-  if (units > 4) return null;
+  if (countUnits(said) > 4) return null;
   if (YES.test(said)) return "yes";
   if (NO.test(said)) return "no";
   return null;
@@ -130,18 +149,16 @@ export function matchConfirmation(text) {
 const ACTIONS = [
   {
     action: "back",
-    // The Chinese command words live in `bare`, not here. "go back" is
-    // explicit because it takes three English words to say — the
-    // phrasing is the evidence. 返回 is one word, so 返回厨房拿个碗
-    // ("go back to the kitchen for a bowl") contains it exactly the way
-    // "back" hides inside "back in a minute". It needs the same gate.
+    // "go back" is explicit because it takes three words to say — the
+    // phrasing itself is the evidence. Bare "back" hides inside "back in
+    // a minute", so it stays gated.
     explicit: [/\bgo back\b/, /\b(?:last|previous) (?:page|step|screen)\b/],
-    bare: [/\bback\b/, /\bprevious\b/, /返回/, /后退/, /上一步/, /上一页/],
+    bare: [/\bback\b/, /\bprevious\b/],
   },
   {
     action: "help",
     // Asking a question moves nobody, so length never disqualifies it.
-    explicit: [/\bwhat can i say\b/, /\bhelp\b/, /\bcommands?\b/, /帮助/, /能说什么/],
+    explicit: [/\bwhat can i say\b/, /\bhelp\b/, /\bcommands?\b/],
     bare: [],
   },
 ];
@@ -149,9 +166,10 @@ const ACTIONS = [
 const normalize = (s) =>
   (s || "")
     .toLowerCase()
-    // Keep CJK — that block is where the dish names and the Chinese
-    // command words live. Stripping it would delete the Chinese
-    // entirely, and the failure would look like "it didn't hear me".
+    // CJK survives normalization even though no command uses it: dish
+    // names come through in Mandarin, and dropping those characters
+    // here would corrupt text that other code (and the live cook) still
+    // needs to read.
     .replace(/[^a-z0-9\s'一-鿿]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -179,7 +197,7 @@ export function matchNavCommand(text, { route = "/", reachable, confidence } = {
       if (!said.includes(normalize(name))) continue;
       // A name alone isn't a command — "the schedule looks tight" is
       // talking about it, not asking to go there. Require a verb.
-      if (!/\b(go|open|show|take me|jump|switch|navigate)\b|去|打开|回到|切换/.test(said)) continue;
+      if (!/\b(go|open|show|take me|jump|switch|navigate)\b/.test(said)) continue;
       if (dest.path === route) return { action: "already", path: dest.path };
       if (reachable && !reachable.includes(dest.path)) {
         return { action: "blocked", path: dest.path };
@@ -190,20 +208,7 @@ export function matchNavCommand(text, { route = "/", reachable, confidence } = {
 
   if (NOT_NAVIGATION.some((p) => p.test(said))) return { action: "none" };
 
-  // Length, in units comparable across both scripts.
-  //
-  // CJK has no spaces, so Latin word-splitting sees a whole Chinese
-  // sentence as one token. Collapsing each run to a single unit — which
-  // is what this did first — gave Chinese NO length protection at all:
-  // 继续搅拌直到变稠 ("continue stirring until it thickens") counted as
-  // one word and passed a gate meant to stop exactly that.
-  //
-  // Counting characters instead is crude but correctly shaped. Chinese
-  // command words here are two characters (继续, 返回), so the same cap
-  // admits a bare command and rejects a sentence containing one.
-  const latinWords = said.replace(/[一-鿿]/g, " ").split(" ").filter(Boolean).length;
-  const cjkChars = (said.match(/[一-鿿]/g) || []).length;
-  const wordCount = latinWords + cjkChars;
+  const wordCount = countUnits(said);
 
   // Three independent reasons a bare word doesn't count. Computed once,
   // because "help" is exempt from all of them — asking a question moves

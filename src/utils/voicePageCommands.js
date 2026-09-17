@@ -50,3 +50,30 @@ export function matchPageCommand(said) {
 export function clearVoiceCommands() {
   registered = [];
 }
+
+// --- dictation ----------------------------------------------------------
+//
+// The conversation page doesn't want commands, it wants what you said.
+// Every utterance there is an answer to a question, so while it is
+// listening the command matchers stand down entirely — otherwise
+// answering "go back to basics" would navigate instead of being typed.
+//
+// Partials are forwarded too, so the answer bar fills as you speak
+// rather than appearing all at once when the turn ends.
+
+let dictation = null;
+
+/**
+ * @param {{onPartial?: Function, onFinal: Function}} handlers
+ * @returns {Function} unregister
+ */
+export function registerVoiceDictation(handlers) {
+  dictation = handlers;
+  return () => {
+    if (dictation === handlers) dictation = null;
+  };
+}
+
+export function getVoiceDictation() {
+  return dictation;
+}
