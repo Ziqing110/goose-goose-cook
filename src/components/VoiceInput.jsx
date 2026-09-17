@@ -18,17 +18,29 @@ import "./VoiceInput.css";
 // 128ms of silence and force-ends at 1280ms, which turns one answer into
 // two and submits the first half.
 //
-//   min_turn_silence  how long to wait before even CHECKING whether the
-//                     turn is over. Below this, a pause is just a pause.
-//   max_turn_silence  the hard ceiling: end the turn regardless.
+// The two numbers do different jobs, and only one of them costs you time
+// on a sentence you have actually finished:
 //
-// A finished sentence still ends promptly, because the check runs at
-// 700ms and a complete thought reads as complete. It's the UNfinished
-// ones that now get room — up to 4s — instead of being cut off.
+//   min_turn_silence  how long a pause must run before the end-of-turn
+//                     check fires at all. Below this, a pause is just a
+//                     pause. EVERY answer pays this, so it moves in
+//                     small steps.
+//   max_turn_silence  the hard ceiling for a thought that never reads as
+//                     complete. A finished sentence never reaches it, so
+//                     this can be generous — and generous is the point:
+//                     the gap is in the middle of "uh... four, I think",
+//                     not at the end.
 //
-// The cost is honest: every answer takes ~600ms longer to submit than it
-// did. That is the trade being made deliberately.
-const THINKING_PAUSE = { min_turn_silence: 700, max_turn_silence: 4000 };
+// Started at 700/4000, raised to 1000/6000 after real use, where pauses
+// were still landing inside the answer rather than after it. A complete
+// thought still ends as soon as the check runs, because the check is
+// semantic rather than a timer.
+//
+// If it still cuts you off mid-thought, raise max_turn_silence first:
+// that is the one that costs nothing once you have finished talking.
+// Note that an answer now also waits on the LLM read (~1.3s) before the
+// next question appears, so the felt delay is longer than these numbers.
+const THINKING_PAUSE = { min_turn_silence: 1000, max_turn_silence: 6000 };
 
 export default function VoiceInput({ question, onAnswer, busy = false }) {
   const { state, dispatch } = useAppState();
