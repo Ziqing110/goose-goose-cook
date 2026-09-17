@@ -506,6 +506,16 @@ export function equipmentLanes(steps, nodes) {
     });
   });
 
+  // Waits that need no equipment at all — chilling, resting, marinating —
+  // have no cook lane (they occupy nobody) and no equipment lane (they
+  // use none), so they were drawn nowhere and simply vanished off the
+  // schedule. On a congee-and-chicken run that was two steps of six.
+  // They get a lane of their own.
+  const bare = ordered.filter((step) => {
+    const node = byId[step.id];
+    return node && !isAttended(node) && !(node.required_equipment || []).length;
+  });
+
   const out = [];
   EQUIPMENT_OPTIONS.forEach((type) => {
     (lanesByType.get(type) || []).forEach((lane, i) => {
@@ -519,6 +529,30 @@ export function equipmentLanes(steps, nodes) {
       });
     });
   });
+
+  if (bare.length) {
+    // Packed the same way, because two things can rest at once.
+    const laneEnds = [];
+    const laneSteps = [];
+    bare.forEach((step) => {
+      const i = laneEnds.findIndex((end) => end <= step.startSec);
+      if (i === -1) {
+        laneEnds.push(step.endSec);
+        laneSteps.push([step.id]);
+      } else {
+        laneEnds[i] = step.endSec;
+        laneSteps[i].push(step.id);
+      }
+    });
+    laneSteps.forEach((stepIds, i) => {
+      out.push({
+        type: "__unattended__",
+        index: i + 1,
+        label: laneSteps.length > 1 ? `waiting ${i + 1}` : "waiting",
+        stepIds,
+      });
+    });
+  }
   return out;
 }
 

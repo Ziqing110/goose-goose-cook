@@ -6,7 +6,7 @@
 // who owns it, when it started and ended, plus an append-only event log.
 // Everything that can be recomputed (scores, ready pools, elapsed time,
 // progress) is derived on read and never stored.
-import { scheduleSteps, computeTails } from "./scheduleLayout.js";
+import { scheduleSteps, computeTails, equipmentCapacity } from "./scheduleLayout.js";
 
 const TRANSCRIPT_LIMIT = 40;
 const UNDO_WINDOW_MS = 60_000;
@@ -19,6 +19,24 @@ const LIVE_REPLAN_NODE_BUDGET = 20_000;
 const LIVE_REPLAN_TIME_BUDGET_MS = 80;
 
 export const DIFFICULTY_POINTS = { low: 10, medium: 20, high: 35 };
+
+/**
+ * What starting an unattended step is worth, to whoever starts it.
+ *
+ * A wait pays in two parts: this on starting, the remainder on
+ * finishing. Both halves are deliberate.
+ *
+ * Paying the starter at all is because getting the congee on early is
+ * genuinely the most valuable move in the run — the claim pool already
+ * ranks it first, and an incentive that contradicts the advice is worse
+ * than no incentive. Paying them only a little is because they put a lid
+ * on a pot: before this, a 40-minute simmer scored 20 against 10 for
+ * actually chopping something, so the strongest competition strategy was
+ * to grab every wait, never be busy, and collect points for standing
+ * still. Holding the rest back until the step is done is what makes
+ * someone come back to it.
+ */
+export const UNATTENDED_START_POINTS = 5;
 
 /**
  * SCORING SEAM — the single place points are decided.
@@ -38,11 +56,15 @@ export const DIFFICULTY_POINTS = { low: 10, medium: 20, high: 35 };
  */
 export function scoreStep(node, ctx = {}) {
   if (!node || ctx.record?.status !== "done") return { points: 0, breakdown: [] };
+  const full = DIFFICULTY_POINTS[node.difficulty] ?? DIFFICULTY_POINTS.low;
+  // An unattended step already paid its starter; this is the rest of it,
+  // and it goes to whoever actually came back and dealt with the pot.
+  const unattended = node.attended === false;
   const breakdown = [
     {
       key: "difficulty",
-      label: `${node.difficulty} step`,
-      points: DIFFICULTY_POINTS[node.difficulty] ?? DIFFICULTY_POINTS.low,
+      label: unattended ? `${node.difficulty} step, finished` : `${node.difficulty} step`,
+      points: unattended ? Math.max(0, full - UNATTENDED_START_POINTS) : full,
     },
   ];
   return { points: breakdown.reduce((sum, b) => sum + b.points, 0), breakdown };
@@ -275,16 +297,47 @@ export function runProgress(run, nodes, now = Date.now()) {
   };
 }
 
+/**
+ * Who first started each unattended step, and is therefore owed the
+ * starting award.
+ *
+ * Read from the event log, not from run.steps, because applyDone
+ * OVERWRITES cookId with whoever finished — so by the time a simmer is
+ * done the record no longer remembers who put it on. The log does.
+ *
+ * Only steps that are still active or finished count. Otherwise start,
+ * drop, start, drop would pay every time, which is the farming this
+ * split exists to stop.
+ */
+export function startAwards(run, nodes) {
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const firstStarter = new Map();
+  (run.events || []).forEach((e) => {
+    if (e.type !== "start" || !e.stepId || !e.cookId) return;
+    if (byId[e.stepId]?.attended !== false) return;
+    if (!firstStarter.has(e.stepId)) firstStarter.set(e.stepId, e.cookId);
+  });
+  const byCook = {};
+  firstStarter.forEach((cookId, stepId) => {
+    const status = run.steps[stepId]?.status;
+    if (status !== "active" && status !== "done") return;
+    byCook[cookId] = (byCook[cookId] || 0) + UNATTENDED_START_POINTS;
+  });
+  return byCook;
+}
+
 export function scoreboard(run, nodes, cooks) {
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const started = startAwards(run, nodes);
   return cooks
     .map((cook) => {
       const mine = Object.entries(run.steps).filter(([, r]) => r.cookId === cook.id);
       const doneEntries = mine.filter(([, r]) => r.status === "done");
-      const points = doneEntries.reduce(
-        (sum, [id, record]) => sum + scoreStep(byId[id], { record, run, nodes, cooks }).points,
-        0
-      );
+      const points =
+        doneEntries.reduce(
+          (sum, [id, record]) => sum + scoreStep(byId[id], { record, run, nodes, cooks }).points,
+          0
+        ) + (started[cook.id] || 0);
       const lastDoneAt = doneEntries
         .map(([, r]) => (r.endedAt ? Date.parse(r.endedAt) : 0))
         .reduce((max, t) => Math.max(max, t), 0);
@@ -438,7 +491,30 @@ export function replan({ nodes, run, cooks, kitchenProfile }) {
  * and any future caller all hit the same wall — there is deliberately no
  * "drop this and take that" shortcut anywhere.
  */
-export function arbitrateClaim({ run, nodes, cooks, stepId, cookId, at }) {
+/**
+ * Is a piece of equipment this step needs already fully in use?
+ *
+ * Returns the equipment type that is short, or null. Counts only steps
+ * running RIGHT NOW — this is a live check against the actual kitchen,
+ * not the planner's model of it.
+ */
+export function equipmentShortage({ run, nodes, stepId, kitchenProfile }) {
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const needs = [...new Set(byId[stepId]?.required_equipment || [])];
+  if (!needs.length) return null;
+  const caps = equipmentCapacity(kitchenProfile);
+  const activeIds = Object.entries(run.steps)
+    .filter(([id, r]) => r.status === "active" && id !== stepId)
+    .map(([id]) => id);
+  for (const type of needs) {
+    const cap = caps[type] ?? 1;
+    const inUse = activeIds.filter((id) => (byId[id]?.required_equipment || []).includes(type)).length;
+    if (inUse >= cap) return type;
+  }
+  return null;
+}
+
+export function arbitrateClaim({ run, nodes, cooks, stepId, cookId, at, kitchenProfile }) {
   const record = run.steps[stepId];
   if (!record) return { ok: false, code: "unknown_step" };
   if (["done", "skipped"].includes(record.status)) return { ok: false, code: "already_done" };
@@ -448,6 +524,14 @@ export function arbitrateClaim({ run, nodes, cooks, stepId, cookId, at }) {
   // whole point of marking a step unattended.
   const holding = activeStepFor(cookId, run, nodes);
   if (holding && holding !== stepId) return { ok: false, code: "busy", holdingStepId: holding };
+
+  // The kitchen has a finite number of burners, and until unattended
+  // steps existed nothing had to say so here: one cook could hold one
+  // step, so two cooks could never run more than two things. Letting a
+  // cook hold several waits removed that accidental ceiling, and without
+  // this a single person can put three pots on two burners.
+  const shortage = equipmentShortage({ run, nodes, stepId, kitchenProfile });
+  if (shortage) return { ok: false, code: "no_equipment", equipmentType: shortage };
 
   if (record.status === "active") {
     if (record.cookId === cookId) return { ok: false, code: "noop" };

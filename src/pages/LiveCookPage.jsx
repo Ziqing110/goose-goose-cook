@@ -148,7 +148,7 @@ export default function LiveCookPage() {
   const doClaim = (stepId, cookId, source = "tap") => {
     if (paused) return;
     const at = new Date().toISOString();
-    const verdict = arbitrateClaim({ run, nodes, cooks, stepId, cookId, at });
+    const verdict = arbitrateClaim({ run, nodes, cooks, stepId, cookId, at, kitchenProfile });
     const name = (id) => cooks.find((c) => c.id === id)?.name ?? "someone";
     if (!verdict.ok) {
       const text = {
@@ -160,6 +160,7 @@ export default function LiveCookPage() {
         already_done: "That one's already finished.",
         noop: "You've already got that one.",
         unknown_step: "I don't know that step.",
+        no_equipment: `No ${EQUIPMENT_LABELS[verdict.equipmentType] || verdict.equipmentType} free — something else is on it.`,
       }[verdict.code];
       commit(say(run, text));
       return;
