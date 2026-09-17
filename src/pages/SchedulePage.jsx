@@ -3,7 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { createRun, runProgress } from "../utils/liveCook.js";
 import { mergeRecipesForDisplay, formatDuration } from "../utils/graphLayout.js";
-import { computeSchedule, computeOpeningAssignment, missingEquipment, EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
+import {
+  computeSchedule,
+  computeOpeningAssignment,
+  missingEquipment,
+  equipmentLanes,
+  isAttended,
+  EQUIPMENT_LABELS,
+} from "../utils/scheduleLayout.js";
 import { cookColorKey } from "../utils/cooks.js";
 import "./SchedulePage.css";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
@@ -142,8 +149,15 @@ export default function SchedulePage() {
     return "Waiting";
   };
 
+  // Cook lanes carry ATTENDED work only. An unattended step is owned by
+  // whoever starts it but does not occupy them, so putting it here would
+  // draw a person as busy for forty minutes of doing nothing — and would
+  // overlap their real work in a single-track lane. It goes on an
+  // equipment lane below instead, which is where it actually belongs.
   const lanes = cooks.map((cook) => {
-    const steps = schedule.steps.filter((s) => s.cookId === cook.id).sort((a, b) => a.startSec - b.startSec);
+    const steps = schedule.steps
+      .filter((s) => s.cookId === cook.id && isAttended(byId[s.id]))
+      .sort((a, b) => a.startSec - b.startSec);
     const blocks = [];
     let prevEnd = 0;
     steps.forEach((s) => {
@@ -155,6 +169,17 @@ export default function SchedulePage() {
     });
     return { cook, steps, blocks, busySec: steps.reduce((sum, s) => sum + (s.endSec - s.startSec), 0) };
   });
+
+  // One track per physical burner, pot, board, wok, oven actually used.
+  // This is where the long unattended work lives, and it also exposes
+  // equipment contention the scheduler has always enforced silently.
+  const gearLanes = equipmentLanes(schedule.steps, nodes).map((lane) => ({
+    ...lane,
+    steps: lane.stepIds
+      .map((id) => schedule.steps.find((s) => s.id === id))
+      .filter(Boolean)
+      .sort((a, b) => a.startSec - b.startSec),
+  }));
 
   if (!approved) {
     return (
@@ -277,7 +302,21 @@ export default function SchedulePage() {
                   </span>
                   <div>
                     <div className="schedule-lane-name">{cook.name}</div>
-                    <div className="hint mono">{formatMinutes(busySec)} min busy</div>
+                    <div className="hint mono">{formatMinutes(busySec)} min hands-on</div>
+                  </div>
+                </div>
+              ))}
+
+              {gearLanes.length > 0 && (
+                <div className="schedule-lane-divider" aria-hidden="true" />
+              )}
+              {gearLanes.map((lane) => (
+                <div className="schedule-lane-label is-equipment" key={`${lane.type}-${lane.index}`}>
+                  <div>
+                    <div className="schedule-lane-name">{lane.label}</div>
+                    <div className="hint mono">
+                      {formatMinutes(lane.steps.reduce((sum, x) => sum + (x.endSec - x.startSec), 0))} min in use
+                    </div>
                   </div>
                 </div>
               ))}
@@ -341,6 +380,46 @@ export default function SchedulePage() {
                     );
                   })}
                 </div>
+                ))}
+
+                {gearLanes.length > 0 && (
+                  <div className="schedule-lane-divider-track" aria-hidden="true" />
+                )}
+                {gearLanes.map((lane) => (
+                  <div className="schedule-lane-track is-equipment" key={`${lane.type}-${lane.index}`}>
+                    {lane.steps.map((step) => {
+                      const widthPx = Math.max(pxFor(step.endSec - step.startSec), 3);
+                      const node = byId[step.id];
+                      const hands = isAttended(node);
+                      return (
+                        <button
+                          type="button"
+                          // Unattended work is drawn quieter than hands-on
+                          // work: it is on the timeline because the pot is
+                          // busy, not because anyone has to be there.
+                          className={`schedule-block schedule-block-task is-equipment ${
+                            hands ? "is-hands-on" : "is-unattended"
+                          } ${selectedStepId === step.id ? "is-selected" : ""}`}
+                          key={step.id}
+                          style={{ left: pxFor(step.startSec), width: widthPx }}
+                          title={`${node?.label} · ${formatDuration(step.endSec - step.startSec)}${
+                            hands ? "" : " · runs on its own"
+                          }`}
+                          onClick={() => setSelectedStepId(selectedStepId === step.id ? null : step.id)}
+                        >
+                          {widthPx >= LABEL_MIN_PX && (
+                            <span className="schedule-block-label">{node?.label}</span>
+                          )}
+                          {widthPx >= META_MIN_PX && (
+                            <span className="schedule-block-meta mono">
+                              {formatDuration(step.endSec - step.startSec)}
+                              {hands ? "" : " · unattended"}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 ))}
               </div>
             </div>

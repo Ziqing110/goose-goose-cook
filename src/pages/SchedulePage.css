@@ -150,3 +150,34 @@ button.schedule-block:focus-visible { outline: 2px solid var(--accent); outline-
   .schedule-lane-labels { width: 110px; }
   .schedule-head-right { width: 100%; justify-content: space-between; }
 }
+
+/* --- equipment lanes -------------------------------------------------
+   Below the cooks: one track per burner, pot, board actually used. This
+   is where unattended work lives, since it occupies the equipment and
+   nobody. Quieter than the cook lanes on purpose — it is context for
+   the plan, not somebody's assignment. */
+.schedule-lane-divider,
+.schedule-lane-divider-track {
+  height: 1px;
+  background: var(--line);
+  margin: 6px 0;
+}
+.schedule-lane-label.is-equipment {
+  color: var(--ink-faint);
+}
+.schedule-lane-label.is-equipment .schedule-lane-name {
+  text-transform: lowercase;
+}
+.schedule-block-task.is-equipment {
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  color: var(--ink-soft);
+}
+/* Hands-on work shown on an equipment lane is the same step already drawn
+   on a cook lane, so it reads as a cross-reference rather than new work. */
+.schedule-block-task.is-equipment.is-hands-on {
+  opacity: 0.55;
+}
+.schedule-block-task.is-equipment.is-unattended {
+  border-style: dashed;
+}
