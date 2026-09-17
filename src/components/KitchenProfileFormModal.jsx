@@ -11,9 +11,9 @@ import "./KitchenProfileFormModal.css";
 // eight and say so, not fail silently or write a number the form could
 // never have produced by clicking.
 const LIMITS = {
-  burners: { min: 1, max: 8, label: "burners" },
-  cuttingBoards: { min: 1, max: 6, label: "cutting boards" },
-  pots: { min: 0, max: 6, label: "pots" },
+  burners: { min: 1, max: 8, label: "burners", one: "burner" },
+  cuttingBoards: { min: 1, max: 6, label: "cutting boards", one: "cutting board" },
+  pots: { min: 0, max: 6, label: "pots", one: "pot" },
 };
 
 const N = `(${NUMBER_TOKEN})`;
@@ -26,6 +26,42 @@ const FIELD_PHRASES = (word) => [
   new RegExp(`\\bset ${word} to ${N}\\b`),
   new RegExp(`\\b${N} ${word}\\b`),
   new RegExp(`\\bmake (?:it|that) ${N} ${word}\\b`),
+];
+
+// Every way someone actually flips a switch out loud. The first pass here
+// listed two phrasings per toggle and missed the shortest one there is —
+// "oven on" — which is exactly what a person says when their hands are
+// full. A toggle is a small closed idea; enumerate it properly once.
+//
+// The singular forms, for stepping one at a time. Plural stays out of
+// these on purpose: "\bpot\b" will not match "pots", which is what keeps
+// "one more pot" and "three pots" from fighting over the same words.
+const NUDGE_UP = (one) => [new RegExp(`\\b(?:add|one more|another) (?:a |an )?${one}\\b`)];
+const NUDGE_DOWN = (one) => [
+  new RegExp(`\\b(?:remove|drop|one less|one fewer) (?:a |an |the )?${one}\\b`),
+];
+
+// `a` is the article, so "an oven" and "a wok" both read naturally.
+const TOGGLE_ON = (thing, a) => [
+  new RegExp(`\\b${thing} on\\b`),
+  new RegExp(`\\byes ${thing}\\b`),
+  new RegExp(`\\bturn (?:the )?${thing} on\\b`),
+  new RegExp(`\\bturn on (?:the )?${thing}\\b`),
+  new RegExp(`\\b(?:add|enable) (?:${a} |the )?${thing}\\b`),
+  new RegExp(`\\bwith (?:${a} |the )?${thing}\\b`),
+];
+
+// Checked BEFORE the "on" list, so a phrase that contains both readings
+// resolves to off. "without an oven" is safe either way — "with" needs a
+// following space, which "without" does not have — but relying on that
+// coincidence for every future phrasing would be asking for trouble.
+const TOGGLE_OFF = (thing, a) => [
+  new RegExp(`\\b${thing} off\\b`),
+  new RegExp(`\\bno ${thing}\\b`),
+  new RegExp(`\\bturn (?:the )?${thing} off\\b`),
+  new RegExp(`\\bturn off (?:the )?${thing}\\b`),
+  new RegExp(`\\b(?:remove|drop|disable) (?:${a} |the )?${thing}\\b`),
+  new RegExp(`\\bwithout (?:${a} |the )?${thing}\\b`),
 ];
 
 // Add/edit a kitchen profile from Home. `profile` is null for "add",
@@ -103,18 +139,17 @@ export default function KitchenProfileFormModal({ profile, notice, error, onSave
         phrases: FIELD_PHRASES(LIMITS[field].label),
         run: (m) => setField(field, m[1]),
       })),
-      {
-        phrases: [/\b(?:add|one more) (?:a )?burner\b/],
-        run: () => nudge("burners", 1),
-      },
-      {
-        phrases: [/\b(?:remove|one less|drop) (?:a |the )?burner\b/],
-        run: () => nudge("burners", -1),
-      },
-      { phrases: [/\badd (?:a )?wok\b/, /\bturn on the wok\b/], run: () => toggle("hasWok", true, "Wok") },
-      { phrases: [/\bno wok\b/, /\bremove the wok\b/], run: () => toggle("hasWok", false, "Wok") },
-      { phrases: [/\badd (?:an )?oven\b/, /\bturn on the oven\b/], run: () => toggle("hasOven", true, "Oven") },
-      { phrases: [/\bno oven\b/, /\bremove the oven\b/], run: () => toggle("hasOven", false, "Oven") },
+      // Stepping one at a time, for every count — not just burners, which
+      // was the only one the first pass covered.
+      ...Object.keys(LIMITS).flatMap((field) => [
+        { phrases: NUDGE_DOWN(LIMITS[field].one), run: () => nudge(field, -1) },
+        { phrases: NUDGE_UP(LIMITS[field].one), run: () => nudge(field, 1) },
+      ]),
+      // Off before on, so anything that reads both ways reads as off.
+      { phrases: TOGGLE_OFF("wok", "a"), run: () => toggle("hasWok", false, "Wok") },
+      { phrases: TOGGLE_ON("wok", "a"), run: () => toggle("hasWok", true, "Wok") },
+      { phrases: TOGGLE_OFF("oven", "an"), run: () => toggle("hasOven", false, "Oven") },
+      { phrases: TOGGLE_ON("oven", "an"), run: () => toggle("hasOven", true, "Oven") },
       {
         phrases: [/\bsave (?:the |this )?kitchen\b/, /\bsave it\b/, /\bthat's? it\b/],
         run: () => {
