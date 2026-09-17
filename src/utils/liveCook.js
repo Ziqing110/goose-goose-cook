@@ -7,6 +7,7 @@
 // Everything that can be recomputed (scores, ready pools, elapsed time,
 // progress) is derived on read and never stored.
 import { scheduleSteps, computeTails, equipmentCapacity } from "./scheduleLayout.js";
+import { isAttended, hasDeadline, isOneShot, rewardsTimeliness, effectiveDifficulty } from "./tending.js";
 
 const TRANSCRIPT_LIMIT = 40;
 const UNDO_WINDOW_MS = 60_000;
@@ -45,6 +46,26 @@ export const DIFFICULTY_POINTS = { low: 10, medium: 20, high: 35 };
 export const UNATTENDED_START_SHARE = 0.25;
 
 /**
+ * The timeliness bonus, as a share of the step's points.
+ *
+ * Small on purpose. It rewards being there at the right moment, which is
+ * a real skill in a kitchen with three things going, but it must not
+ * become the main way to score — that would turn the run into a game of
+ * watching clocks rather than cooking.
+ */
+export const TIMELINESS_SHARE = 0.15;
+
+/**
+ * How close counts as on time.
+ *
+ * Proportional, because eight minutes and forty minutes do not deserve
+ * the same tolerance, with a one-minute floor so a short step is not
+ * impossible to hit. An ice bath wanting eight minutes accepts roughly
+ * seven to nine.
+ */
+export const timelinessWindowSec = (estSec) => Math.max(60, Math.round(estSec * 0.15));
+
+/**
  * Most the unblocking bonus can add. Set so that the best possible start
  * — an easy wait that gates the whole run, i.e. the congee — is worth
  * exactly one chop of scallions, and no more. Starting the most
@@ -62,8 +83,10 @@ export const UNATTENDED_UNBLOCK_BONUS = DIFFICULTY_POINTS.low - Math.round(DIFFI
  * to be wrong in.
  */
 export function unattendedStartPoints(node, ctx = {}) {
-  const full = DIFFICULTY_POINTS[node?.difficulty] ?? DIFFICULTY_POINTS.low;
-  const act = Math.max(1, Math.round(full * UNATTENDED_START_SHARE));
+  const full = DIFFICULTY_POINTS[effectiveDifficulty(node)] ?? DIFFICULTY_POINTS.low;
+  // Nothing is held back on a step that is finished the moment it is
+  // started, so the starter takes all of it.
+  const act = isOneShot(node) ? full : Math.max(1, Math.round(full * UNATTENDED_START_SHARE));
   const share = Number.isFinite(ctx.tailShare) ? Math.max(0, Math.min(1, ctx.tailShare)) : 0;
   return act + Math.round(UNATTENDED_UNBLOCK_BONUS * share);
 }
@@ -94,17 +117,43 @@ export function tailShares(nodes) {
  */
 export function scoreStep(node, ctx = {}) {
   if (!node || ctx.record?.status !== "done") return { points: 0, breakdown: [] };
-  const full = DIFFICULTY_POINTS[node.difficulty] ?? DIFFICULTY_POINTS.low;
+  const difficulty = effectiveDifficulty(node);
+  const full = DIFFICULTY_POINTS[difficulty] ?? DIFFICULTY_POINTS.low;
   // An unattended step already paid its starter; this is the rest of it,
   // and it goes to whoever actually came back and dealt with the pot.
-  const unattended = node.attended === false;
+  const unattended = !isAttended(node);
+  // Rice was paid for in full when it went on. Coming back to lift the
+  // lid is not work, and paying for it invents an achievement — the step
+  // is one task done once, which is what set-and-forget means.
+  if (isOneShot(node)) return { points: 0, breakdown: [] };
+
   const breakdown = [
     {
       key: "difficulty",
-      label: unattended ? `${node.difficulty} step, finished` : `${node.difficulty} step`,
+      label: unattended ? `${difficulty} step, finished` : `${difficulty} step`,
       points: unattended ? Math.max(0, full - unattendedStartPoints(node)) : full,
     },
   ];
+
+  // Being there when the pot wants you. Only for steps where the moment
+  // actually matters — a bare simmer that breaks, an ice bath that wants
+  // eight minutes and not fifteen. Scaled by difficulty, because hitting
+  // the end of a hard step is a harder thing to have done.
+  if (rewardsTimeliness(node) && ctx.record?.startedAt && ctx.record?.endedAt) {
+    const actual = Math.max(
+      0,
+      Math.round((Date.parse(ctx.record.endedAt) - Date.parse(ctx.record.startedAt)) / 1000) - (ctx.record.pausedSec || 0),
+    );
+    const est = node.estimated_duration_sec || 0;
+    if (est > 0 && Math.abs(actual - est) <= timelinessWindowSec(est)) {
+      breakdown.push({
+        key: "timeliness",
+        label: "on time",
+        points: Math.max(1, Math.round(full * TIMELINESS_SHARE)),
+      });
+    }
+  }
+
   return { points: breakdown.reduce((sum, b) => sum + b.points, 0), breakdown };
 }
 
@@ -257,7 +306,7 @@ export function activeStepFor(cookId, run, nodes) {
     const node = lookup(stepId);
     // Unmarked means attended. A step nobody classified is assumed to
     // need a cook, which is the safe way to be wrong.
-    return node ? node.attended !== false : true;
+    return node ? isAttended(node) : true;
   };
   const hit = Object.entries(run.steps).find(
     ([id, r]) => r.status === "active" && r.cookId === cookId && attended(id),
@@ -273,18 +322,18 @@ export function passiveStepsFor(cookId, run, nodes) {
     .filter(([id, r]) => {
       if (r.status !== "active" || r.cookId !== cookId) return false;
       const node = lookup(id);
-      return node ? node.attended === false : false;
+      return node ? !isAttended(node) : false;
     })
     .map(([id]) => id);
 }
 
 export function stepVariance(node, record, now = Date.now()) {
   const estSec = node?.estimated_duration_sec ?? 0;
-  // Running long only means someone was slow if someone was doing it.
-  // A simmer that takes 45 minutes against a 40-minute estimate is a
-  // simmer, not a cook falling behind, and telling them they are five
-  // minutes over is blaming them for a pot.
-  const blameable = node?.attended !== false;
+  // Running long is only a failure when the step had a deadline. A
+  // congee left twenty minutes too long IS burnt and the cook should see
+  // that in red; an ice bath sat in five minutes longer is not late, it
+  // is just when somebody got round to it.
+  const blameable = hasDeadline(node);
   if (!record?.startedAt) return { estSec, actualSec: 0, deltaSec: 0, over: false, running: false };
   const end = record.endedAt ? Date.parse(record.endedAt) : now;
   const actualSec = Math.max(0, Math.round((end - Date.parse(record.startedAt)) / 1000) - (record.pausedSec || 0));
@@ -314,11 +363,11 @@ export function runProgress(run, nodes, now = Date.now()) {
   // what they actually cost.
   const unfinished = nodes.filter((n) => !["done", "skipped"].includes(run.steps[n.id]?.status));
   const remainingHandsSec = unfinished
-    .filter((n) => n.attended !== false)
+    .filter(isAttended)
     .reduce((sum, n) => sum + n.estimated_duration_sec, 0);
   const remainingWaitSec = Math.max(
     0,
-    ...unfinished.filter((n) => n.attended === false).map((n) => n.estimated_duration_sec),
+    ...unfinished.filter((n) => !isAttended(n)).map((n) => n.estimated_duration_sec),
   );
   const remainingEstSec = Math.max(remainingHandsSec, remainingWaitSec);
 
@@ -372,7 +421,7 @@ export function startAwards(run, nodes) {
   const firstStarter = new Map();
   (run.events || []).forEach((e) => {
     if (e.type !== "start" || !e.stepId || !e.cookId) return;
-    if (byId[e.stepId]?.attended !== false) return;
+    if (isAttended(byId[e.stepId])) return;
     if (!firstStarter.has(e.stepId)) firstStarter.set(e.stepId, e.cookId);
   });
   const byCook = {};
@@ -431,7 +480,7 @@ export function runOutcome(run, nodes, cooks) {
       return nodes.map((n) => {
       const record = run.steps[n.id] || emptyRecord();
       const variance = stepVariance(n, record, run.endedAt ? Date.parse(run.endedAt) : Date.now());
-      const unattended = n.attended === false;
+      const unattended = !isAttended(n);
       return {
         id: n.id,
         label: n.label,

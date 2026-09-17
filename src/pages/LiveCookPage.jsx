@@ -12,6 +12,7 @@ import { useAppState } from "../state/AppStateContext.jsx";
 import { mergeRecipesForDisplay, formatDuration } from "../utils/graphLayout.js";
 import { EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
 import { cookColorKey } from "../utils/cooks.js";
+import { hasDeadline } from "../utils/tending.js";
 import {
   reconcileRun, isReady, readyStepIds, blockedStepIds, activeStepFor, stepVariance,
   runProgress, isRunComplete, scoreboard, runOutcome, resolveAssignments, replan,
@@ -499,17 +500,29 @@ function CookFocusCard({ cook, colorKey, run, byId, now, isCompetition, paused, 
             const v = stepVariance(wNode, run.steps[id], now);
             const leftSec = v.estSec - v.actualSec;
             const due = leftSec <= 0;
+            const nags = hasDeadline(wNode);
             return (
-              <li key={id} className={`focus-queue-item ${due ? "is-due" : ""}`}>
+              <li
+                // Only a pot with a deadline gets loud. An ice bath five
+                // minutes over is not late, it is just when somebody got
+                // round to it, and pulsing about it teaches people to
+                // ignore the one that matters.
+                className={`focus-queue-item ${due ? (nags ? "is-due" : "is-ready") : ""}`}
+                key={id}
+              >
                 <span className="focus-queue-main">
                   <span className="focus-queue-label">{wNode?.label}</span>
                   <span className="hint mono">
-                    {due ? "ready now" : `${clock(leftSec)} left · runs on its own`}
+                    {due
+                      ? nags
+                        ? "needs you now"
+                        : "ready when you are"
+                      : `${clock(leftSec)} left · ${nags ? "check on it" : "runs on its own"}`}
                   </span>
                 </span>
                 <button
                   type="button"
-                  className={`btn ${due ? "btn-success" : "btn-ghost"} focus-queue-done`}
+                  className={`btn ${due && nags ? "btn-success" : "btn-ghost"} focus-queue-done`}
                   disabled={paused}
                   onClick={() => onDone(id)}
                 >

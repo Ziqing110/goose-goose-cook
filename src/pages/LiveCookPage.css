@@ -194,3 +194,10 @@
   padding: 0 14px;
   flex: none;
 }
+
+/* Due, but nobody minds when you get to it. Present without pulsing —
+   if everything shouts, the pot that is actually burning gets ignored. */
+.focus-queue-item.is-ready {
+  border-style: solid;
+  border-color: var(--line-strong);
+}

@@ -20,6 +20,7 @@
 // occupies its EQUIPMENT and nobody. It still has an owner, because
 // somebody has to start it, but it never books their time.
 import { EQUIPMENT_OPTIONS } from "../data/dishes.js";
+import { isAttended } from "./tending.js";
 
 export const EQUIPMENT_LABELS = {
   cutting_board: "cutting board",
@@ -88,9 +89,9 @@ function resourceCapacities(cooks, kitchenProfile) {
   return caps;
 }
 
-/** A step nobody marked needs a cook — assuming otherwise would plan
- *  work for people who are not free to do it. */
-export const isAttended = (node) => node?.attended !== false;
+// Whether a step occupies a cook now lives in tending.js, alongside the
+// distinction between a pot that needs checking and one that does not.
+export { isAttended };
 
 /**
  * What a step occupies while it runs.

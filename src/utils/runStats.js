@@ -3,6 +3,7 @@
 // and run-log timings. Everything here is computed from data the
 // backend already returns (see AppStateContext.jsx) — no new fields.
 import { sessionStageStates } from "./sessionSteps.js";
+import { isAttended } from "./tending.js";
 
 const DIFFICULTY_FLAMES = { low: 1, medium: 2, high: 3 };
 
@@ -53,7 +54,7 @@ export function runTotalSeconds(session) {
   // Summing them would be wrong twice over, since concurrent waits do
   // not add up either.
   return allWorkingNodes(session)
-    .filter((n) => n.attended !== false)
+    .filter(isAttended)
     .reduce((sum, n) => sum + (Number(n.estimated_duration_sec) || 0), 0);
 }
 

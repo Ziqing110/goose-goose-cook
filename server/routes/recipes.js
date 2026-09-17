@@ -93,10 +93,16 @@ const nodeSchema = {
       items: { type: "string" },
       description: "ids of steps in THIS dish that must finish first. Empty for steps that can start immediately.",
     },
-    attended: {
-      type: "boolean",
+    tending: {
+      type: "string",
+      enum: ["hands_on", "tended", "timed", "set_and_forget"],
       description:
-        "Does this step occupy a cook for its whole duration? True for chopping, stir-frying, anything needing hands or eyes. FALSE for waiting: a simmer left alone, marinating, chilling, resting, water coming to the boil. An unattended step still takes wall-clock time but frees the cook to do something else.",
+        "How much of a cook this step needs while it runs. hands_on: occupies someone throughout — chopping, stir-frying, anything where they have to be there. tended: runs without a cook but must be CHECKED while it goes and finished on time — a congee that scorches if it is not stirred, a poach held at a bare simmer. timed: runs alone with nothing to do in between, but the END MOMENT matters — an ice bath the chicken comes out of at eight minutes, a blanch. set_and_forget: runs alone and nobody minds when you get back — rice soaking, dough proving, meat resting. Ask two questions: does somebody have to be there while it runs, and does it matter when it ends.",
+    },
+    check_every_sec: {
+      type: "integer",
+      description:
+        "For tending=tended only, how many seconds between checks; 0 otherwise. If the answer is under two minutes, the step is NOT tended — nobody can leave the kitchen in that gap. A risotto stirred every minute is a long hands_on step, not an unattended one. Be honest about the interval rather than defaulting.",
     },
     is_shareable: {
       type: "boolean",
@@ -114,7 +120,7 @@ const nodeSchema = {
   required: [
     "id", "label", "description", "estimated_duration_sec", "difficulty", "phase",
     "required_equipment", "required_materials", "material_usage", "depends_on",
-    "attended", "is_shareable", "share_key",
+    "tending", "check_every_sec", "is_shareable", "share_key",
   ],
   additionalProperties: false,
 };
@@ -210,7 +216,11 @@ Rules:
 - depends_on refers to step ids in the SAME dish. The graph must be acyclic and every id must exist.
 - Steps that could run at the same time must NOT depend on each other. ${cooks} cooks are working, so independent prep is what makes the target time reachable.
 - The critical path should fit ${targetTime} minutes with ${cooks} cooks. Say so in no step; just make the graph fit.
-- Mark attended false for any step that is just waiting: a simmer left alone, marinating, chilling, resting, water heating. This is what lets the other cook work during a 40-minute congee instead of standing over it, and it is also what lets one person hold several waits at once. Get it wrong and the plan says two people are busy when one of them is reading their phone.
+- Set the tending field on every step. hands_on is what lets the plan know somebody is occupied; the other two are what let the other cook work during a 40-minute congee instead of standing over it, and what let one person have several pots going.
+- Be careful between tended and set_and_forget, because they are treated very differently. Ask: if nobody comes back for ten extra minutes, is anything wrong? Congee scorching on the bottom, a pot boiling over, a poach breaking into a boil — tended. Rice soaking, chicken chilling, meat resting — set_and_forget. A tended step is scored as harder work than its hands-on part suggests, because having to keep coming back for forty minutes is the difficult part of it.
+- None of the unattended kinds mean "easy". They mean the cook STARTS it and walks away. Rinsing rice is two minutes of standing at a sink, so it is hands_on even though it is easy; soaking the rinsed rice for thirty minutes is set_and_forget. If the person has to be there while it happens, it is hands_on however little skill it takes.
+- Separate "does it need watching" from "does the end moment matter". A congee needs both, so it is tended. An ice bath needs nothing in between but has to come out at eight minutes, so it is timed. Rice soaking needs neither, so it is set_and_forget and is treated as a single task done the moment it is started.
+- If the cook cannot walk away at all — a risotto that wants constant stirring, a custard that splits the moment you stop — that is hands_on for its whole duration, however long. It is not a wait that needs a lot of checking. Getting this wrong tells the plan somebody is free when they are standing at the stove.
 - Scale every material_usage amount to ${servings} servings.
 - Respect the dietary constraint in ingredient choice. Do not add a note about it; just design around it.
 ${dishes.length > 1
@@ -288,11 +298,13 @@ export function toTemplates(plan, { diet, dishes }) {
       depends_on: n.depends_on,
       status: "pending",
       phase: n.phase,
-      // Defaults to true: a step nobody marked is assumed to need a cook,
-      // which is the safe way to be wrong. Claiming an unattended step
-      // does not make you busy (see arbitrateClaim), so guessing false
-      // would quietly let someone take on work they cannot do.
-      attended: n.attended !== false,
+      // Unrecognised or missing falls back to hands_on: assuming work
+      // needs a cook is the safe way to be wrong, since the opposite
+      // quietly lets someone take on more than they can actually do.
+      tending: ["hands_on", "tended", "timed", "set_and_forget"].includes(n.tending) ? n.tending : "hands_on",
+      ...(n.tending === "tended" && Number(n.check_every_sec) > 0
+        ? { check_every_sec: Number(n.check_every_sec) }
+        : {}),
       ...(n.is_shareable && n.share_key
         ? { is_shareable: true, share_key: n.share_key }
         : {}),
@@ -332,10 +344,14 @@ const SHAPE = `Reply with ONLY a JSON object, no prose and no markdown fence:
      "estimated_duration_sec":180,"difficulty":"low|medium|high","phase":"prep|cook|plate",
      "required_equipment":["cutting_board"],"required_materials":["tofu"],
      "material_usage":[{"material_id":"tofu","amount":400,"unit":"g"}],
-     "depends_on":[],"attended":true,"is_shareable":false,"share_key":""}]}]}
+     "depends_on":[],"tending":"hands_on","check_every_sec":0,"is_shareable":false,"share_key":""}]}]}
 
-attended is false when the step is only waiting — a simmer left alone,
-marinating, chilling, resting. True when it needs hands or eyes.
+tending is "hands_on" when the step needs hands or eyes throughout,
+"tended" when it runs alone but must be checked as it goes (a congee
+that scorches — give check_every_sec), "timed" when nothing is needed in
+between but it must end on the minute (an ice bath), and
+"set_and_forget" when nobody minds being ten minutes late (soaking,
+proving, resting).
 
 Every field is required on every node. depends_on holds ids of steps in
 this dish. Every material id used by a step must also appear once in the
