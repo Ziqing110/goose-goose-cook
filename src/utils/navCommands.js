@@ -80,6 +80,40 @@ const HAS_SUBJECT =
 // Acting on a guess is how you navigate somewhere nobody asked for.
 const MIN_BARE_CONFIDENCE = 0.6;
 
+// Between these two floors the transcript is plausible but not solid,
+// and the same applies just past the length cap. Rather than silently
+// dropping those — which loses real commands and looks like the app
+// ignoring you — they come back as `confirm`, and the bar asks.
+//
+// A subject is NOT ambiguous. "we should continue" is someone talking,
+// and asking "did you mean next?" every time two people discuss the
+// cooking would be worse than saying nothing.
+const CONFIRM_CONFIDENCE = 0.4;
+const CONFIRM_COMMAND_WORDS = 8;
+
+const YES = /^(?:yes|yeah|yep|yup|sure|ok|okay|do it|go ahead|confirm|please)\b|^(?:是|是的|对|好|好的|确认|可以|行)/;
+const NO = /^(?:no|nope|nah|don't|do not|cancel|never ?mind|stop|wait)\b|^(?:不|不是|不要|取消|算了|等)/;
+
+/**
+ * Answer to a pending confirmation.
+ * @returns {"yes"|"no"|null} null when it isn't an answer at all, which
+ *          the caller should treat as abandoning the question rather
+ *          than as a "no" — the person moved on to something else.
+ */
+export function matchConfirmation(text) {
+  const said = normalize(text);
+  if (!said) return null;
+  // Answers are short. "no, the other one next to the stock" is someone
+  // pointing at a jar, not declining a prompt.
+  const units =
+    said.replace(/[一-鿿]/g, " ").split(" ").filter(Boolean).length +
+    (said.match(/[一-鿿]/g) || []).length;
+  if (units > 4) return null;
+  if (YES.test(said)) return "yes";
+  if (NO.test(said)) return "no";
+  return null;
+}
+
 // Two kinds of pattern per action:
 //   explicit — unmistakably an instruction. Allowed at any length,
 //              because the phrasing itself is the evidence.
@@ -181,17 +215,32 @@ export function matchNavCommand(text, { route = "/", reachable, confidence } = {
   const hasSubject = HAS_SUBJECT.test(said);
   const unsure = typeof confidence === "number" && confidence < MIN_BARE_CONFIDENCE;
 
+  // Plausible but not solid: slightly over the length cap, or heard with
+  // middling confidence. Worth asking about rather than dropping.
+  const maybeLong = wordCount > MAX_BARE_COMMAND_WORDS && wordCount <= CONFIRM_COMMAND_WORDS;
+  const maybeUnsure =
+    typeof confidence === "number" &&
+    confidence < MIN_BARE_CONFIDENCE &&
+    confidence >= CONFIRM_CONFIDENCE;
+
   for (const { action, explicit, bare } of ACTIONS) {
     const isExplicit = explicit.some((p) => p.test(said));
     if (!isExplicit && !bare.some((p) => p.test(said))) continue;
     if (action === "help") return { action };
 
-    // Explicit phrasing buys a pass on LENGTH — that is what makes it
-    // explicit — but not on having a subject. "I think we go back" is
-    // someone thinking out loud; the phrase being unambiguous doesn't
-    // make the sentence an instruction.
-    if (hasSubject || unsure) return { action: "none" };
-    if (!isExplicit && tooLong) return { action: "none" };
+    // A subject means conversation, full stop. Not ambiguous, not worth
+    // a prompt — asking "did you mean next?" every time two people
+    // discuss the cooking would be worse than staying quiet.
+    //
+    // Explicit phrasing buys a pass on LENGTH, which is what makes it
+    // explicit, but not on having a subject.
+    if (hasSubject) return { action: "none" };
+    if (unsure && !maybeUnsure) return { action: "none" };
+    if (!isExplicit && tooLong && !maybeLong) return { action: "none" };
+
+    if (maybeUnsure || (!isExplicit && maybeLong)) {
+      return { action, confirm: true };
+    }
     return { action };
   }
 
@@ -210,4 +259,9 @@ export function navHintFor(route) {
 /** Destination names, for the "help" action. */
 export function navCommandList() {
   return DESTINATIONS.map((d) => d.names[0]);
+}
+
+/** Friendly name for a route, for confirmation prompts. */
+export function pathLabel(path) {
+  return DESTINATIONS.find((d) => d.path === path)?.names[0] ?? "that page";
 }

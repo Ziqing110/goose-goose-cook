@@ -16,7 +16,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { useStreamingTranscript } from "../hooks/useStreamingTranscript.js";
-import { matchNavCommand, navCommandList, navHintFor } from "../utils/navCommands.js";
+import {
+  matchConfirmation,
+  matchNavCommand,
+  navCommandList,
+  navHintFor,
+  pathLabel,
+} from "../utils/navCommands.js";
 import { sessionStageStates } from "../utils/sessionSteps.js";
 import "./VoiceBar.css";
 
@@ -28,6 +34,11 @@ const METER_BARS = 4;
 // Long enough to read, short enough that the bar goes back to being a
 // hint rather than a log of what you just did.
 const FEEDBACK_MS = 3500;
+
+// How long an unanswered question stays open. Long enough to think,
+// short enough that a later "next" isn't read as an answer to something
+// asked a minute ago.
+const CONFIRM_WINDOW_MS = 10_000;
 
 // The live-cook page has its own command grammar, where "next" and
 // "back" mean something else entirely. Navigation stands down there.
@@ -47,6 +58,9 @@ export default function VoiceBar() {
   const [error, setError] = useState(null);
   const [idled, setIdled] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [pending, setPending] = useState(null);
+  const pendingRef = useRef(null);
+  const pendingTimer = useRef(null);
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const feedbackTimer = useRef(null);
@@ -75,6 +89,49 @@ export default function VoiceBar() {
   }, []);
 
   useEffect(() => () => clearTimeout(feedbackTimer.current), []);
+
+  const run = useCallback(
+    (action, path) => {
+      // Browser history rather than a route table: "next" after a "back"
+      // should return you where you were, and the session guards already
+      // redirect anything unreachable.
+      if (action === "goto") navigate(path);
+      else navigate(action === "back" ? -1 : 1);
+    },
+    [navigate],
+  );
+
+  const clearPending = useCallback(() => {
+    clearTimeout(pendingTimer.current);
+    pendingRef.current = null;
+    setPending(null);
+  }, []);
+
+  const askToConfirm = useCallback(
+    (action, path) => {
+      const what =
+        action === "goto" ? `go to ${pathLabel(path)}` : action === "back" ? "go back" : "move on";
+      pendingRef.current = { action, path };
+      setPending(`Did you mean ${what}? Say yes or no.`);
+      clearTimeout(pendingTimer.current);
+      // Expires on its own. A question left hanging would make the next
+      // "next" get read as an answer to something said a minute ago.
+      pendingTimer.current = setTimeout(() => {
+        pendingRef.current = null;
+        setPending(null);
+      }, CONFIRM_WINDOW_MS);
+    },
+    [],
+  );
+
+  useEffect(() => () => clearTimeout(pendingTimer.current), []);
+
+  // A pending question must not survive a page change — whatever it was
+  // about is no longer what you're looking at.
+  useEffect(() => {
+    pendingRef.current = null;
+    setPending(null);
+  }, [pathname]);
 
   // Nobody has spoken for two minutes. Close the socket rather than keep
   // billing for a mic pointed at an empty kitchen, and say why — a mic
@@ -106,21 +163,38 @@ export default function VoiceBar() {
         (lowest, w) => Math.min(lowest, w.confidence ?? 1),
         1,
       );
-      const { action, path } = matchNavCommand(text, {
+      // A question is open: this turn is an answer, not a command.
+      // Anything that isn't yes or no abandons it — someone who moved on
+      // to another subject has answered by not answering, and leaving
+      // the prompt up would make the next "next" ambiguous all over
+      // again.
+      if (pendingRef.current) {
+        const answer = matchConfirmation(text);
+        const { action: pendingAction, path: pendingPath } = pendingRef.current;
+        clearPending();
+        if (answer === "yes") return run(pendingAction, pendingPath);
+        if (answer === "no") return say("Staying here.");
+        return;
+      }
+
+      const { action, path, confirm } = matchNavCommand(text, {
         route,
         confidence,
         reachable: reachableRef.current,
       });
+
+      // Plausible but not solid. Ask instead of guessing, and instead of
+      // dropping it — silence on a real command reads as the app
+      // ignoring you, which is its own kind of broken.
+      if (confirm && (action === "next" || action === "back" || action === "goto")) {
+        return askToConfirm(action, path);
+      }
+
       switch (action) {
         case "goto":
-          navigate(path);
-          break;
         case "next":
         case "back":
-          // Browser history rather than a route table: "next" after a
-          // "back" should return you where you were, and the session
-          // guards already redirect anything unreachable.
-          navigate(action === "back" ? -1 : 1);
+          run(action, path);
           break;
         case "already":
           say("You're already here.");
@@ -138,7 +212,7 @@ export default function VoiceBar() {
           console.info("[voice] not a command:", text);
       }
     },
-    [navigate, say],
+    [navigate, say, run, askToConfirm, clearPending],
   );
 
   const { status, partial, level } = useStreamingTranscript({
@@ -157,7 +231,7 @@ export default function VoiceBar() {
 
   // One source of truth for the three places that describe state, so
   // the pill, the label and the body copy can never disagree.
-  const view = describe({ muted, status, error, idled, feedback, partial, hint, pathname });
+  const view = describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname });
 
   // A peak of ~0.5 is already loud speech, so scale before splitting
   // across bars — otherwise normal talking barely lifts the first one.
@@ -210,7 +284,7 @@ export default function VoiceBar() {
 }
 
 /** Collapse mute + connection status + error into one view model. */
-function describe({ muted, status, error, idled, feedback, partial, hint, pathname }) {
+function describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname }) {
   if (error) {
     return {
       label: "MIC ERROR",
@@ -264,6 +338,18 @@ function describe({ muted, status, error, idled, feedback, partial, hint, pathna
   // Live. Priority: what's being said right now, then what just
   // happened, then what this page offers. The page's own hint wins over
   // the generic navigation one — it knows more about where you are.
+  // A pending question outranks a live partial: the question is what
+  // you need to see while you answer it.
+  if (pending) {
+    return {
+      label: "CONFIRM",
+      line: pending,
+      sub: null,
+      pill: "Listening",
+      pillClass: "is-listening",
+      isPartial: false,
+    };
+  }
   const navHint = navHintFor(pathname);
   return {
     label: partial ? "HEARING" : feedback ? "HEARD" : "LISTENING",
