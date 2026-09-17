@@ -110,7 +110,13 @@ function topoSort(nodes, byId) {
 
 /** Longest path from each node to a sink, including its own duration â€”
  *  the minimum time still needed once that node can start. */
-function computeTails(nodes, byId) {
+/**
+ * Longest path from each step to the end of the cook, its own duration
+ * included. The scheduler uses it as a search bound; the live pool uses
+ * it to rank what to claim, because a step with a long tail is a step
+ * everything else is waiting behind.
+ */
+export function computeTails(nodes, byId) {
   const dependents = new Map(nodes.map((n) => [n.id, []]));
   nodes.forEach((n) => {
     (n.depends_on || []).filter((d) => byId[d]).forEach((d) => dependents.get(d).push(n.id));

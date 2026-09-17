@@ -6,7 +6,7 @@
 // who owns it, when it started and ended, plus an append-only event log.
 // Everything that can be recomputed (scores, ready pools, elapsed time,
 // progress) is derived on read and never stored.
-import { scheduleSteps } from "./scheduleLayout.js";
+import { scheduleSteps, computeTails } from "./scheduleLayout.js";
 
 const TRANSCRIPT_LIMIT = 40;
 const UNDO_WINDOW_MS = 60_000;
@@ -482,19 +482,39 @@ export function arbitrateClaim({ run, nodes, cooks, stepId, cookId, at }) {
   return { ok: true };
 }
 
+/**
+ * What this cook should claim next, best first.
+ *
+ * Ranked by TAIL — how much of the cook is still waiting behind this
+ * step — not by points. Points-first was actively harmful here: a
+ * 40-minute congee simmer is one "medium" step worth the same as a
+ * two-minute chop, and sorting ties by shortest duration pushed it to
+ * the bottom of the pool. The app was steering people toward quick wins
+ * and burying the one step that gates dinner, so in competition mode
+ * everybody ended up waiting on a pot nobody had started.
+ *
+ * Tail ordering fixes that without any scoring change: the simmer has
+ * the longest chain behind it, so it surfaces first. Points still break
+ * ties, which is where they belong — between two steps that unblock the
+ * same amount of work, take the one worth more.
+ */
 export function claimSuggestions({ nodes, run, cookId, limit = 3 }) {
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
   const opening = new Set(run.openingSuggestions?.[cookId] || []);
+  const tails = computeTails(nodes, byId);
   return readyStepIds(nodes, run)
     .sort((a, b) => {
       const aOpen = opening.has(a) ? 0 : 1;
       const bOpen = opening.has(b) ? 0 : 1;
       if (aOpen !== bOpen) return aOpen - bOpen;
+      const tail = (id) => tails.get(id) ?? 0;
+      if (tail(a) !== tail(b)) return tail(b) - tail(a);
       const pts = (id) => DIFFICULTY_POINTS[byId[id]?.difficulty] ?? 0;
-      return pts(b) - pts(a) || byId[a].estimated_duration_sec - byId[b].estimated_duration_sec;
+      return pts(b) - pts(a);
     })
     .slice(0, limit);
 }
+
 
 // ---------------------------------------------------------------------
 // Transitions — all pure, all return a new run
