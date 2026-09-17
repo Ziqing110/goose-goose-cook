@@ -487,14 +487,37 @@ function CookFocusCard({ cook, colorKey, run, byId, now, isCompetition, paused, 
         {isCompetition && <span className="tag mono focus-points">{points} pts</span>}
       </div>
 
+      {/* Everything this cook has running that does not need them. It is a
+          queue, not a tag row, because an unattended step has a moment it
+          needs someone BACK — a simmer nobody returns to is a burnt pot.
+          Each one counts down, then goes loud and offers Done. */}
       {waiting.length > 0 && (
-        <div className="focus-passive">
-          {waiting.map((id) => (
-            <span key={id} className="tag mono" title="Running on its own — you are free to do something else">
-              {byId[id]?.label} · waiting
-            </span>
-          ))}
-        </div>
+        <ul className="focus-queue">
+          {waiting.map((id) => {
+            const wNode = byId[id];
+            const v = stepVariance(wNode, run.steps[id], now);
+            const leftSec = v.estSec - v.actualSec;
+            const due = leftSec <= 0;
+            return (
+              <li key={id} className={`focus-queue-item ${due ? "is-due" : ""}`}>
+                <span className="focus-queue-main">
+                  <span className="focus-queue-label">{wNode?.label}</span>
+                  <span className="hint mono">
+                    {due ? "ready now" : `${clock(leftSec)} left · runs on its own`}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  className={`btn ${due ? "btn-success" : "btn-ghost"} focus-queue-done`}
+                  disabled={paused}
+                  onClick={() => onDone(id)}
+                >
+                  Done
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       )}
 
       {/* Every branch renders the same skeleton â€” eyebrow, title, body,
