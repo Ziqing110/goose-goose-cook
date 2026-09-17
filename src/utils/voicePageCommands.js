@@ -28,9 +28,14 @@ let registered = [];
  * @returns {Function} unregister
  */
 export function registerVoiceCommands(commands) {
-  registered = commands || [];
+  const mine = commands || [];
+  registered = mine;
   return () => {
-    registered = [];
+    // Only clear what THIS registration put there. Without the identity
+    // check, a late cleanup from the page you just left wipes the
+    // commands the page you just arrived on has already registered, and
+    // the new page goes silent for no visible reason.
+    if (registered === mine) registered = [];
   };
 }
 
@@ -67,6 +72,7 @@ const notify = () => listeners.forEach((fn) => fn());
 
 /**
  * @param {object} handlers
+ *   route           the pathname this dictation belongs to. Required.
  *   onPartial       (text) => void, called as the words arrive
  *   onFinal         (text) => void, called once the turn ends
  *   turnDetection   optional {min_turn_silence, max_turn_silence, ...}
@@ -85,7 +91,22 @@ export function registerVoiceDictation(handlers) {
   };
 }
 
-export function getVoiceDictation() {
+/**
+ * The dictation handler for the page you are actually on, or null.
+ *
+ * The route argument is the point. Unregistering on unmount is not
+ * enough on its own: it depends on React tearing this down before the
+ * next page's effects run, and when that slipped, a registration made
+ * on the conversation page was still live on Home — so Home's own
+ * commands never got a turn and speaking there did nothing. Every
+ * utterance was being handed to an answer box that no longer existed.
+ *
+ * Scoping by route makes that failure impossible rather than unlikely.
+ * A registration that outlives its page is inert, whatever the cause.
+ */
+export function getVoiceDictation(route) {
+  if (!dictation) return null;
+  if (route !== undefined && dictation.route !== route) return null;
   return dictation;
 }
 

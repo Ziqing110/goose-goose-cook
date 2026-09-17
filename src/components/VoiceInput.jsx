@@ -8,6 +8,7 @@
 // (not submit) so they're a quick starting point, not a shortcut that
 // skips the input entirely.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { registerVoiceDictation } from "../utils/voicePageCommands.js";
 import "./VoiceInput.css";
@@ -31,6 +32,7 @@ const THINKING_PAUSE = { min_turn_silence: 700, max_turn_silence: 4000 };
 
 export default function VoiceInput({ question, onAnswer }) {
   const { state, dispatch } = useAppState();
+  const { pathname } = useLocation();
   const muted = state.voice.muted;
   const [text, setText] = useState("");
   const inputRef = useRef(null);
@@ -83,11 +85,15 @@ export default function VoiceInput({ question, onAnswer }) {
   useEffect(() => {
     if (muted) return undefined;
     return registerVoiceDictation({
+      // Tagged with the page it belongs to. A registration that somehow
+      // outlives this component is then inert rather than stealing the
+      // microphone from whatever page you moved to.
+      route: pathname,
       onPartial: (partial) => setText(partial || ""),
       onFinal: (final) => send(final),
       turnDetection: THINKING_PAUSE,
     });
-  }, [muted, send]);
+  }, [muted, send, pathname]);
 
   return (
     <div className="answer-bar">

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { ELICITATION_QUESTIONS } from "../data/dishes.js";
@@ -58,7 +58,12 @@ export default function ConversationPage() {
 
   // The transcript keeps the cook's words as said; `answers` gets the
   // agent's reading of them, which is what the rest of the session uses.
-  const handleAnswer = (text) => {
+  // Memoized deliberately. VoiceInput re-registers its dictation handler
+  // whenever this identity changes, and an unmemoized version changed on
+  // every render — including every partial transcript, since partials set
+  // state there. That meant unregister/re-register per partial, and with
+  // it an UpdateConfiguration sent over the live socket each time.
+  const handleAnswer = useCallback((text) => {
     const reading = interpretAnswer(currentQuestion, text);
     const nextAnswers = { ...answers, [currentQuestion.id]: reading.value };
     const nextUnderstanding = { ...understanding, [currentQuestion.id]: reading };
@@ -77,7 +82,7 @@ export default function ConversationPage() {
         ...(isLast ? { complete: true } : {}),
       },
     });
-  };
+  }, [answers, understanding, questionIndex, transcript, currentQuestion, dispatch]);
 
   const confirmReading = (id) => {
     const reading = understanding[id];

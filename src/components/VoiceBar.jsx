@@ -176,7 +176,7 @@ export default function VoiceBar() {
       // mode: only a named destination, said briefly and heard clearly.
       // Bare "back" and "previous" never count here — they're ordinary
       // words in an answer.
-      const dictating = getVoiceDictation();
+      const dictating = getVoiceDictation(route);
       if (dictating) {
         const nav = matchNavCommand(text, {
           route,
@@ -289,15 +289,15 @@ export default function VoiceBar() {
   useEffect(() => subscribeVoiceRegistry(() => setRegistryVersion((v) => v + 1)), []);
   useEffect(() => {
     if (status !== "live") return;
-    const wanted = getVoiceDictation()?.turnDetection;
+    const wanted = getVoiceDictation(pathname)?.turnDetection;
     updateConfig(wanted || { mode: STREAM_CONFIG.mode || "balanced" });
-  }, [status, registryVersion, updateConfig]);
+  }, [status, registryVersion, pathname, updateConfig]);
 
   // Forward partials to a page taking dictation, so its input fills as
   // you speak instead of jumping all at once when the turn ends.
   useEffect(() => {
-    getVoiceDictation()?.onPartial?.(partial);
-  }, [partial]);
+    getVoiceDictation(pathname)?.onPartial?.(partial);
+  }, [partial, pathname]);
 
   const toggleMuted = () => {
     setError(null);
