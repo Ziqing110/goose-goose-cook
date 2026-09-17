@@ -11,19 +11,33 @@
 // nodes: the graph is what an LLM will generate, and where someone
 // dragged a card isn't part of the recipe. Anything never dragged falls
 // back to its dependency-depth slot, so a fresh session opens tidy.
-import { useEffect, useMemo, useRef, useState } from "react";
-import { formatDuration } from "../utils/graphLayout.js";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { formatMinutes } from "../utils/inventory.js";
 import { autoPositions, boxOf, edgePath, resolvePositions, settle, CARD_W, CARD_H, PAD } from "../utils/boardLayout.js";
 import "./RecipeBoard.css";
 
+const STATUS_WORD = { atRisk: "at risk", blocked: "blocked" };
+// Spacing between arrowheads converging on one card.
+const LANDING_GAP = 16;
+const MARGIN = 16;
+
+// State lives in fill, border and ink — never opacity. Over the board's
+// warm ground a faded card dropped red ink under 3:1, so a card away
+// from the selection flattens its fill instead, and a blocked card
+// never recedes at all.
 export default function RecipeBoard({
   nodes,
   positions,
   selectedNodeId,
   dishLabelFor,
-  blockedIds,
+  statusOf,
+  numberOf,
   onSelect,
   onMove,
+  // Pixels on the right covered by an overlay (the board panel). The
+  // board pans the selection clear of it and grows so it can.
+  reserveRight = 0,
+  onOffscreen,
   readOnly = false,
 }) {
   const boardRef = useRef(null);
@@ -63,13 +77,16 @@ export default function RecipeBoard({
   const edges = useMemo(() => {
     const out = [];
     nodes.forEach((n) => {
-      (n.depends_on || []).forEach((depId) => {
-        if (!boxes[n.id] || !boxes[depId]) return;
+      // Incoming edges land top to bottom in the order of their sources,
+      // spread around the midline so each keeps its own arrowhead.
+      const deps = (n.depends_on || []).filter((d) => boxes[d] && boxes[n.id]).sort((a, b) => boxes[a].y - boxes[b].y);
+      const spread = Math.min(LANDING_GAP, (CARD_H - 24) / Math.max(1, deps.length - 1));
+      deps.forEach((depId, i) => {
         // Anything that isn't one of the two ends is something to avoid.
         const obstacles = Object.values(boxes).filter((b) => b.id !== n.id && b.id !== depId);
         out.push({
           key: `${depId}->${n.id}`,
-          d: edgePath(boxes[depId], boxes[n.id], obstacles),
+          d: edgePath(boxes[depId], boxes[n.id], obstacles, (i - (deps.length - 1) / 2) * spread),
           active: selectedNodeId === n.id || selectedNodeId === depId,
         });
       });
@@ -146,16 +163,76 @@ export default function RecipeBoard({
     window.addEventListener("pointercancel", up);
   };
 
-  const extent = nodes.reduce(
+  const content = nodes.reduce(
     (acc, n) => {
       const p = posOf(n.id);
       return { w: Math.max(acc.w, p.x + CARD_W + PAD), h: Math.max(acc.h, p.y + CARD_H + PAD) };
     },
     { w: 640, h: 320 }
   );
+  // Room to pan the rightmost cards out from under the overlay.
+  const extent = { w: content.w + reserveRight, h: content.h };
+
+  // Opening the panel pans rather than reflows: bring the selected card
+  // and its lit neighbours into the part of the viewport the panel
+  // doesn't cover.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !selectedNodeId || !boxes[selectedNodeId]) return;
+    const group = [...(related || [selectedNodeId])].map((id) => boxes[id]).filter(Boolean);
+    const sel = boxes[selectedNodeId];
+    const box = {
+      x1: Math.min(...group.map((b) => b.x)),
+      x2: Math.max(...group.map((b) => b.x + b.w)),
+      y1: Math.min(...group.map((b) => b.y)),
+      y2: Math.max(...group.map((b) => b.y + b.h)),
+    };
+    const fit = (lo, hi, from, span, selLo, selHi) => {
+      if (hi - lo + 2 * MARGIN > span) return selLo - (span - (selHi - selLo)) / 2; // too wide: centre the card
+      if (lo - MARGIN < from) return lo - MARGIN;
+      if (hi + MARGIN > from + span) return hi + MARGIN - span;
+      return from;
+    };
+    const width = el.clientWidth - reserveRight;
+    const left = fit(box.x1, box.x2, el.scrollLeft, width, sel.x, sel.x + sel.w);
+    const top = fit(box.y1, box.y2, el.scrollTop, el.clientHeight, sel.y, sel.y + sel.h);
+    if (Math.abs(left - el.scrollLeft) < 1 && Math.abs(top - el.scrollTop) < 1) return;
+    const smooth = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollTo({ left: Math.max(0, left), top: Math.max(0, top), behavior: smooth ? "smooth" : "auto" });
+    // Only when the selection or the overlay changes — not on every drag frame.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNodeId, reserveRight]);
+
+  // Which cards are scrolled out of view, for the caption under the board.
+  const offscreenKey = useRef("");
+  const reportOffscreen = () => {
+    const el = scrollRef.current;
+    if (!el || !onOffscreen) return;
+    const view = { x1: el.scrollLeft, x2: el.scrollLeft + el.clientWidth, y1: el.scrollTop, y2: el.scrollTop + el.clientHeight };
+    const out = { left: [], right: [], other: [] };
+    nodes.forEach((n) => {
+      const b = boxes[n.id];
+      if (!b) return;
+      if (b.x + b.w <= view.x1) out.left.push(n.id);
+      else if (b.x >= view.x2) out.right.push(n.id);
+      else if (b.y + b.h <= view.y1 || b.y >= view.y2) out.other.push(n.id);
+    });
+    const key = JSON.stringify(out);
+    if (key === offscreenKey.current) return;
+    offscreenKey.current = key;
+    onOffscreen(out);
+  };
+  useEffect(() => {
+    reportOffscreen();
+    const el = scrollRef.current;
+    if (!el) return undefined;
+    const ro = new ResizeObserver(reportOffscreen);
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
 
   return (
-    <div className={`board-scroll${panning ? " is-panning" : ""}`} ref={scrollRef}>
+    <div className={`board-scroll${panning ? " is-panning" : ""}`} ref={scrollRef} onScroll={reportOffscreen}>
       <div
         className="board"
         ref={boardRef}
@@ -177,7 +254,7 @@ export default function RecipeBoard({
             <path
               key={e.key}
               d={e.d}
-              className={`board-edge ${e.active ? "is-active" : ""}${selectedNodeId && !e.active ? " is-dimmed" : ""}`}
+              className={`board-edge${e.active ? " is-active" : ""}`}
               markerEnd={`url(#board-arrow${e.active ? "-active" : ""})`}
             />
           ))}
@@ -185,15 +262,19 @@ export default function RecipeBoard({
 
         {nodes.map((n) => {
           const p = posOf(n.id);
-          const dish = dishLabelFor?.(n);
+          const status = statusOf?.(n.id) || "craftable";
+          const tail = STATUS_WORD[status] || dishLabelFor?.(n);
+          const number = numberOf?.(n.id);
           return (
             <button
               type="button"
               key={n.id}
               title={n.label}
-              className={`board-card phase-${n.phase || "prep"}${selectedNodeId === n.id ? " is-selected" : ""}${
-                blockedIds?.has(n.id) ? " is-blocked" : ""
-              }${drag?.id === n.id ? " is-dragging" : ""}${related && !related.has(n.id) ? " is-dimmed" : ""}`}
+              aria-label={`${number ? `Step ${number}: ` : ""}${n.label}${STATUS_WORD[status] ? `, ${STATUS_WORD[status]}` : ""}`}
+              aria-pressed={selectedNodeId === n.id}
+              className={`board-card phase-${n.phase || "prep"} is-${status}${selectedNodeId === n.id ? " is-selected" : ""}${
+                drag?.id === n.id ? " is-dragging" : ""
+              }${related && !related.has(n.id) && status !== "blocked" ? " is-dimmed" : ""}`}
               style={{ left: p.x, top: p.y, width: CARD_W, height: CARD_H }}
               onPointerDown={(e) => startDrag(e, n.id)}
               onKeyDown={(e) => {
@@ -203,10 +284,11 @@ export default function RecipeBoard({
                 }
               }}
             >
+              {number && <span className="board-card-num">{number}</span>}
               <span className="board-card-label">{n.label}</span>
-              <span className="board-card-meta mono">
-                {formatDuration(n.estimated_duration_sec)}
-                {dish ? ` · ${dish}` : ""}
+              <span className="board-card-meta">
+                {formatMinutes(n.estimated_duration_sec)}
+                {tail ? ` · ${tail}` : ""}
               </span>
             </button>
           );

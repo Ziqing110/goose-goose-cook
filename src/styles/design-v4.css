@@ -24,7 +24,12 @@
    (and this page follows the theme exactly as Home does). The names
    below are the generic ones the rest of the app's CSS already
    references; this block only re-points them at the kp palette. */
-.app-shell.ds-v4 {
+/* `.ds-v4-layer` carries the same tokens onto content portaled to
+   <body> (Modal), which sits outside the app shell. Pair it
+   with `.ds-v4` on the portaled panel so the shared control rules
+   below reach inside too. */
+.app-shell.ds-v4,
+.ds-v4-layer {
   --bg: var(--kp-bg);
   --surface: var(--kp-bg);
   --surface-sunken: var(--kp-bg-secondary); /* panels */
@@ -45,10 +50,29 @@
   --crit-soft-ink: var(--kp-error-text);
   --warning-soft: var(--kp-warning-bg);
   --warning-soft-ink: var(--kp-warning-text);
+  --warning-graphic: var(--kp-warning-graphic);
+
+  --phase-prep: var(--kp-phase-prep);
+  --phase-cook: var(--kp-phase-cook);
+  --phase-plate: var(--kp-phase-plate);
+  --shadow-modal: var(--kp-shadow-modal);
+
+  /* Recipe-graph board. Cards away from the selection flatten toward
+     the wood (never fade: opacity drops red ink under 3:1 on it), and
+     edges need a heavier grey than ink-faint to survive the tint. */
+  --board: var(--kp-board);
+  --board-edge: var(--kp-board-edge);
+  --board-lip: var(--kp-board-lip);
+  --board-highlight: rgba(255, 255, 255, 0.6);
+  --board-groove: rgba(122, 74, 0, 0.12);
+  --board-card-dim: #f7f2ea;
+  --board-card-dim-edge: #d6cdbd;
+  --board-line: #8a8985;
 
   /* AI-authored content. Home only needs the on-dark lavender (voice
      bar); the agent's chat label is this page's own light-ground pair. */
   --ai: #6b5bd2;
+  --ai-soft: #efe9f8;
   --ai-on-dark: var(--kp-voice-ai);
 
   --ds-chip: var(--kp-bg-tertiary);

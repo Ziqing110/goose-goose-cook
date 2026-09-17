@@ -1,0 +1,95 @@
+/* ---------------------------------------------------------------
+   Impact list — design system v4. Blocked rows on crit-soft, at-risk
+   rows on warning-soft; the two are also told apart without hue: a
+   solid dot for blocked, a ring for at risk.
+----------------------------------------------------------------*/
+
+.impact-mark {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ai);
+  color: var(--accent-ink);
+}
+
+.impact-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.impact-list > li { animation: ds-reveal 240ms ease-out both; }
+
+.impact-row {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: none;
+  border-radius: var(--radius-card);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+}
+.impact-row:disabled { cursor: default; }
+.impact-row:active:not(:disabled) { transform: scale(0.99); }
+.impact-row.is-blocked { background: var(--crit-soft); color: var(--crit); }
+.impact-row.is-atRisk { background: var(--warning-soft); color: var(--warning-soft-ink); }
+.impact-row:hover:not(:disabled) { box-shadow: inset 0 0 0 1px currentColor; }
+
+.impact-row-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.impact-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+.impact-row.is-blocked .impact-dot { background: var(--crit); }
+.impact-row.is-atRisk .impact-dot { border: 2px solid var(--warning-graphic); }
+.impact-num,
+.impact-dur { flex: none; font-family: var(--font-mono); font-size: 12px; line-height: 16px; }
+.impact-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.impact-reason { padding-left: 16px; font-size: 13px; line-height: 18px; }
+
+.impact-more {
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.impact-more:hover { background: var(--ds-chip); color: var(--ink); }
+
+.impact-hint { margin: 4px 0 0; font-size: 13px; line-height: 18px; color: var(--ink-faint); }
+
+.impact-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 0;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--ink-soft);
+}
+.impact-empty svg { color: var(--success); }

@@ -1,46 +1,16 @@
-.editor-panel { display: flex; flex-direction: column; gap: 14px; }
-.editor-actions { display: flex; justify-content: space-between; gap: 10px; }
-/* auto-fit (not a fixed 3-column grid) so this wraps based on the
-   drawer's actual width, not the browser viewport — a 520px media
-   query never fires inside a 380px-wide drawer on a wide screen. */
-.field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 12px; }
+/* Step editor — panel content (BoardPanel supplies the field and chip
+   styles). Only the add-material pieces are local. */
 
-.checkbox-grid { display: flex; flex-wrap: wrap; gap: 6px; }
-.checkbox-grid-col { flex-direction: column; align-items: flex-start; }
-.checkbox-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.78rem;
-  padding: 5px 9px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface-sunken);
-}
-.checkbox-pill input { accent-color: var(--accent); }
-
-.add-material-toggle { margin-top: 8px; border-style: dashed; }
+.node-editor-add-material { color: var(--ink-soft); font-weight: 500; }
 
 .add-material-form {
-  margin-top: 8px;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 8px;
-  align-items: center;
+  padding: 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-control);
 }
-.add-material-form input[type="text"],
-.add-material-form select {
-  font: inherit;
-  padding: 7px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--line-strong);
-  background: var(--surface-sunken);
-  color: var(--ink);
-}
-.add-material-form input[type="text"] { flex: 1 1 140px; min-width: 100px; }
-.add-material-amount { width: 64px; }
-.add-material-unit { width: 72px; }
-
-/* A dependency that would close a loop: shown, but not selectable. */
-.checkbox-pill.is-locked { opacity: 0.45; cursor: not-allowed; }
-.checkbox-pill.is-locked input { cursor: not-allowed; }
+.add-material-qty { display: flex; gap: 8px; }
+.add-material-qty .panel-input:first-child { width: 88px; flex: none; }
+.add-material-actions { display: flex; justify-content: flex-end; gap: 8px; }

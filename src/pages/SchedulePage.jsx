@@ -345,10 +345,10 @@ export default function SchedulePage() {
             <div className="sch-notice is-error" role="alert">
               <span>
                 <Mono>{schedule.unscheduledIds.length}</Mono> steps depend on each other in a loop — there&rsquo;s no order that works. Break the
-                loop on the main line: {schedule.unscheduledIds.map((id) => byId[id]?.label || id).join(", ")}.
+                loop on the recipe graph: {schedule.unscheduledIds.map((id) => byId[id]?.label || id).join(", ")}.
               </span>
-              <button type="button" className="btn sch-notice-btn" onClick={() => navigate("/session/recipe-graph")}>
-                Back to the main line
+              <button type="button" className="btn sch-notice-btn" onClick={() => navigate("/session/inventory")}>
+                Back to the recipe graph
               </button>
             </div>
           )}
