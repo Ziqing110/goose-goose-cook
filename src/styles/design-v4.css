@@ -57,6 +57,20 @@
   --ds-waiting: var(--kp-status-waiting);
   --ds-live: var(--kp-status-live);
 
+  /* Player colors — by index in cooks[] (player 1 = a, player 2 = b),
+     never stored. The Schedule page is where they first appear; Live
+     cook will reuse them. -ink is the readable text tone on white,
+     -bg the lane/rail tint. */
+  --cook-a: var(--kp-cook-a);
+  --cook-a-ink: #2664a7;
+  --cook-a-bg: #eaf2fb;
+  --cook-b: var(--kp-cook-b);
+  --cook-b-ink: #b76e19;
+  --cook-b-bg: #fdf3e8;
+  /* The one legitimate red on a planning page: the critical path.
+     Only ever an outline or a line of text, never a fill or a button. */
+  --critical: var(--kp-critical);
+
   --radius-card: 12px;
   --radius-control: 8px;
   --shadow-sm: none;

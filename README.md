@@ -71,10 +71,12 @@ and the seed shrinks back to the kitchen and the materials catalog.
   session-owned `shared_steps` row instead of duplicated per dish, with
   combined quantities and a per-dish breakdown.
 - **Schedule** (`src/pages/SchedulePage.jsx`, `src/utils/scheduleLayout.js`)
-  — a Gantt timeline from a greedy resource-constrained scheduler that
-  treats kitchen equipment as limited, contended resources, plus
-  cooperation/competition mode selection. Mode is persisted but has no
-  live behavior yet.
+  — the game plan before going live, on the v4 design system
+  (`design/claude-design-schedule-prompt.md`): Co-op / Versus mode
+  picker, a plan HUD, then either a two-lane timeline (critical path,
+  waits, task detail) or the Versus opening hand + "up for grabs" pool,
+  all computed by the resource-constrained scheduler. Mode is session
+  state; "Go live" writes the run and hands off to Live cook.
 - **Live cook / diary** — not built. `SessionProgress` has their step
   slots commented in for when they're ready, and the schedule page's
   "Start cooking" button is deliberately still disabled.

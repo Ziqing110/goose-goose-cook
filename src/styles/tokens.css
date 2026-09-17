@@ -402,6 +402,8 @@ button { font: inherit; cursor: pointer; }
 
   --kp-cook-a: #2f7dd1;
   --kp-cook-b: #e58a1f;
+  /* the one legitimate red on a planning page — outlines and text only */
+  --kp-critical: #c62828;
 
   --kp-voice-bg: #111111;
   --kp-voice-ai: #bdb6f0;

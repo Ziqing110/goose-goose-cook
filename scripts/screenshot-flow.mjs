@@ -36,6 +36,12 @@ const click = async (text, opts = {}) => {
   await page.waitForTimeout(250);
 };
 
+// The schedule page's mode cards are a radio group, not buttons.
+const pickMode = async (name) => {
+  await page.getByRole("radio", { name: new RegExp(`^${name}`) }).click();
+  await page.waitForTimeout(250);
+};
+
 await page.goto(BASE, { waitUntil: "networkidle" });
 await shot("home");
 
@@ -130,39 +136,38 @@ await shot("voice-binding-bound");
 
 await click(/Continue to scheduling/);
 await page.waitForTimeout(1500);
-await shot("schedule-default-zoom");
+await shot("schedule-no-mode");
 
-// Check the label thresholds at both extremes of the zoom slider.
-const zoom = page.locator(".zoom-slider");
-await zoom.fill("0");
+await pickMode("Co-op");
+await page.waitForTimeout(900);
+await shot("schedule-coop-fit");
+
+// Check the label thresholds at the other two zoom stops.
+const zoom = page.locator(".sch-zoom-slider");
+await zoom.fill("2");
 await page.waitForTimeout(250);
-await shot("schedule-zoomed-out");
+await shot("schedule-coop-zoom-2x");
 
-await zoom.fill("5");
-await page.waitForTimeout(250);
-await shot("schedule-zoomed-in");
-
-await zoom.fill("3");
+await zoom.fill("1");
 await page.waitForTimeout(250);
 
-// Open a task detail card.
-const firstTask = page.locator(".schedule-block-task").first();
+// Open a task detail panel.
+const firstTask = page.locator(".sch-block.is-task").first();
 if (await firstTask.isVisible().catch(() => false)) {
   await firstTask.click();
   await page.waitForTimeout(300);
   await shot("schedule-step-detail");
 }
 
-await click(/Competition/);
+await pickMode("Versus");
 await page.waitForTimeout(600);
-await shot("schedule-competition");
+await shot("schedule-versus");
 
-await click(/Cooperation/);
+await pickMode("Co-op");
 await page.waitForTimeout(600);
-await shot("schedule-cooperation");
 
 // --- live cooking, cooperation ---
-await click(/Start cooking/);
+await click(/Go live/);
 await page.waitForTimeout(1500);
 await shot("live-coop-start");
 
@@ -202,11 +207,15 @@ await shot("live-coop-after-reload");
 // --- live cooking, competition ---
 await page.goto(`${BASE}/session/schedule`, { waitUntil: "networkidle" });
 await page.waitForTimeout(800);
-await click(/Throw away this cook/);
+await shot("schedule-cook-in-progress");
+await click(/Abandon this cook/);
+await page.waitForTimeout(300);
+await shot("schedule-abandon-confirm");
+await click(/^Abandon$/);
 await page.waitForTimeout(800);
-await click(/Competition/);
+await pickMode("Versus");
 await page.waitForTimeout(400);
-await click(/Start cooking/);
+await click(/Go live/);
 await page.waitForTimeout(1500);
 await shot("live-comp-start");
 

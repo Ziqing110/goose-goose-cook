@@ -1,152 +1,564 @@
-﻿/* Lane geometry is shared between the fixed label column and the
-   scrolling track so the two stay row-aligned. */
-:root {
-  --lane-height: 60px;
-  --ruler-height: 22px;
-  --lane-label-width: 150px;
+/* ---------------------------------------------------------------
+   Schedule page — design system v4 ("Kitchen Path - Schedule").
+   Tokens, buttons, topbar and VoiceBar come from styles/design-v4.css
+   (route-scoped via AppShell). Layout: title → mode picker → plan HUD
+   → warnings → plan card (timeline | opening hand) → footer band.
+
+   Chromatic fills are the two player colors only (block outlines, lane
+   tints, avatars, bundle rails). Accent is the selected mode card, the
+   selected block and the primary button. --critical appears only as
+   the critical-path outline, its legend swatch and one line in the
+   task detail.
+----------------------------------------------------------------*/
+
+.schedule-page { gap: 20px; }
+
+@keyframes sch-reveal { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+@keyframes sch-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes sch-pop { 0% { opacity: 0; transform: scale(0.82); } 60% { transform: scale(1.06); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes sch-roll { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes sch-dots { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+@keyframes sch-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sch-sheet { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.sch-roll { animation: sch-roll 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.sch-dots { animation: sch-dots 1600ms ease-in-out infinite; }
+
+/* ---------------- shared bits ---------------- */
+.sch-meta { font-size: 13px; line-height: 18px; color: var(--ink-soft); }
+.sch-meta.is-tertiary { color: var(--ink-faint); }
+.sch-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
 }
 
-.schedule-card { display: flex; flex-direction: column; gap: 12px; }
+/* PlayerAvatar — the system's colored circle with the name's first letter. */
+.sch-avatar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 700;
+}
+.sch-avatar.is-a { background: var(--cook-a); }
+.sch-avatar.is-b { background: var(--cook-b); }
+.sch-avatar-20 { width: 20px; height: 20px; font-size: 11px; }
+.sch-avatar-24 { width: 24px; height: 24px; font-size: 12px; }
+.sch-avatar-32 { width: 32px; height: 32px; font-size: 14px; }
 
-.schedule-card-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.schedule-head-right { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+/* ---------------- title ---------------- */
+.sch-title-row { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; animation: sch-rise 240ms ease-out both; }
+.sch-title-row h1 { margin: 0; font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.01em; }
 
-.schedule-legend { display: flex; gap: 16px; }
-.legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--ink-soft); }
-.legend-swatch { width: 14px; height: 10px; border-radius: 3px; display: inline-block; }
-.legend-critical { border: 2px solid var(--crit); background: var(--crit-soft); }
-.legend-wait {
-  border: 1px dashed var(--line-strong);
-  background: repeating-linear-gradient(135deg, var(--surface-sunken), var(--surface-sunken) 4px, var(--line) 4px, var(--line) 8px);
+/* ---------------- mode picker ---------------- */
+.sch-modes-wrap { display: flex; flex-direction: column; gap: 8px; animation: sch-rise 240ms 40ms ease-out both; }
+.sch-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.sch-mode {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 18px 20px;
+  border: 2px solid var(--surface-sunken);
+  border-radius: var(--radius-card);
+  background: var(--surface-sunken);
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 120ms ease-out, border-color 120ms ease-out, background 120ms ease-out;
+}
+.sch-mode:hover:not(:disabled) { border-color: var(--line); }
+.sch-mode:active:not(:disabled) { transform: scale(0.97); }
+.sch-mode.is-selected { background: var(--surface); border-color: var(--accent); }
+.sch-mode.is-selected .sch-mode-glyph { color: var(--accent); }
+.sch-mode-glyph { color: var(--ink); }
+.sch-mode-title { font-size: 18px; line-height: 24px; font-weight: 700; }
+.sch-mode-body { font-size: 13px; line-height: 18px; color: var(--ink-soft); max-width: 440px; }
+.sch-mode-chip {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--success);
+  color: var(--success);
+  font-size: 13px;
+  font-weight: 500;
+  animation: sch-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+/* Locked (a cook is in progress): both cards fade, the selected one
+   keeps its chip but drops the accent — nothing here is a choice now. */
+.sch-mode.is-locked { opacity: 0.7; cursor: not-allowed; }
+.sch-mode.is-locked.is-selected { border-color: var(--line); }
+.sch-mode.is-locked .sch-mode-glyph, .sch-mode.is-locked .sch-mode-title { color: var(--ink-soft); }
+.sch-mode.is-locked .sch-mode-body { color: var(--ink-faint); }
+
+/* ---------------- plan HUD ---------------- */
+.sch-hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-card);
+  padding: 20px 24px;
+  animation: sch-rise 240ms 80ms ease-out both;
+}
+.sch-tiles { display: flex; align-items: flex-start; gap: 40px; }
+.sch-tile { display: flex; flex-direction: column; gap: 2px; }
+.sch-tile-value-row { display: flex; align-items: center; gap: 8px; }
+.sch-tile-value { font-size: 24px; line-height: 30px; font-weight: 500; }
+.sch-tile-label { font-size: 13px; color: var(--ink-soft); }
+.sch-player-chips { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.sch-player-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px 0 8px;
+  border-radius: 999px;
+  background: var(--surface);
+}
+.sch-player-chip-name { font-size: 15px; font-weight: 500; }
+.sch-player-chip-meta { font-size: 13px; color: var(--ink-soft); }
+
+/* ---------------- warning / error blocks ---------------- */
+.sch-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-radius: var(--radius-control);
+  padding: 14px 16px;
+  font-size: 15px;
+  line-height: 22px;
+  animation: sch-rise 240ms ease-out both;
+}
+.sch-notice.is-warning { background: var(--warning-soft); color: var(--warning-soft-ink); }
+.sch-notice.is-error { background: var(--crit-soft); color: var(--crit-soft-ink); }
+.sch-notice-inset { margin: 0 20px; }
+.ds-v4 .sch-notice-btn { flex: 0 0 auto; }
+.ds-v4 .sch-notice.is-warning .btn-ghost { color: var(--warning-soft-ink); }
+.ds-v4 .sch-notice.is-warning .btn-ghost:hover { background: rgba(122, 74, 0, 0.08); }
+
+/* ---------------- plan card ---------------- */
+.sch-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-card);
+  animation: sch-rise 240ms 120ms ease-out both;
+}
+.sch-card-head { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 20px; flex-wrap: wrap; }
+.sch-card-title { font-size: 18px; line-height: 24px; font-weight: 700; }
+.sch-card-meta { font-size: 14px; color: var(--ink-soft); }
+.sch-card-tools { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.sch-card-foot { padding: 16px 20px; }
+.sch-card-foot .sch-detail { scroll-margin-bottom: calc(var(--voice-bar-height) + 110px); }
+
+.sch-legend { display: flex; align-items: center; gap: 20px; }
+.sch-legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-soft); }
+.sch-legend-swatch { width: 16px; height: 16px; border-radius: 4px; box-sizing: border-box; }
+.sch-legend-swatch.is-critical { background: var(--surface); border: 2px solid var(--critical); }
+.sch-legend-swatch.is-wait {
+  border: 1px dashed var(--ds-waiting);
+  background: repeating-linear-gradient(45deg, var(--ds-chip) 0 4px, var(--surface) 4px 8px);
 }
 
-.zoom-controls { display: inline-flex; align-items: center; gap: 10px; }
-.zoom-slider {
-  width: 130px;
-  accent-color: var(--accent);
+/* zoom — a three-stop slider with the stop labels around it; the
+   active stop reads in ink, the others in text-tertiary */
+.sch-zoom { display: inline-flex; align-items: center; gap: 10px; }
+.sch-zoom-stop { font-size: 12px; color: var(--ink-faint); transition: color 120ms ease-out; }
+.sch-zoom-stop.is-on { color: var(--ink); }
+.sch-zoom-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 96px;
+  height: 20px;
+  margin: 0;
+  background: transparent;
   cursor: pointer;
 }
-.zoom-slider:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.zoom-readout { min-width: 76px; text-align: right; }
+.sch-zoom-slider::-webkit-slider-runnable-track { height: 4px; border-radius: 999px; background: var(--line); }
+.sch-zoom-slider::-moz-range-track { height: 4px; border-radius: 999px; background: var(--line); }
+.sch-zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--accent);
+  transition: transform 120ms ease-out;
+}
+.sch-zoom-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.sch-zoom-slider:active::-webkit-slider-thumb { transform: scale(1.12); }
+.ds-v4 .sch-zoom-slider:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 
-.schedule-body { display: flex; align-items: flex-start; }
-
-.schedule-lane-labels { flex: none; width: var(--lane-label-width); }
-.schedule-lane-label-spacer { height: var(--ruler-height); }
-.schedule-lane-label {
-  height: var(--lane-height);
+/* ---------------- timeline ----------------
+   Lane geometry is shared between the fixed label column and the
+   scrolling track so the two stay row-aligned. */
+.sch-card {
+  --sch-lane-height: 60px;
+  --sch-ruler-height: 28px;
+  --sch-label-width: 200px;
+}
+.sch-track-wrap {
+  display: flex;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.sch-lane-labels { flex: 0 0 auto; width: var(--sch-label-width); border-right: 1px solid var(--line); }
+.sch-ruler-spacer { height: var(--sch-ruler-height); }
+.sch-lane-label {
+  height: var(--sch-lane-height);
   display: flex;
   align-items: center;
   gap: 10px;
-  padding-right: 12px;
-  border-bottom: 1px solid var(--line);
+  padding: 0 16px;
+  border-top: 1px solid var(--line);
 }
-.schedule-lane-label:last-child { border-bottom: none; }
-.schedule-lane-name { font-weight: 700; }
+.sch-lane-label.is-a, .sch-lane.is-a { background-color: var(--cook-a-bg); }
+.sch-lane-label.is-b, .sch-lane.is-b { background-color: var(--cook-b-bg); }
+.sch-lane-label-text { display: flex; flex-direction: column; min-width: 0; }
+.sch-lane-name { font-size: 16px; line-height: 22px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sch-lane-busy { font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
 
-.schedule-scroll { flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; padding-bottom: 6px; }
-.schedule-inner { position: relative; }
+.sch-scroll { flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; }
+.sch-track { position: relative; }
+.sch-ruler { position: relative; height: var(--sch-ruler-height); }
+.sch-tick { position: absolute; bottom: 4px; font-size: 12px; color: var(--ink-faint); white-space: nowrap; }
+.sch-tick.is-end { transform: translateX(-100%); color: var(--ink); }
 
-.schedule-ruler-track { position: relative; height: var(--ruler-height); border-bottom: 1px solid var(--line); }
-.schedule-tick { position: absolute; transform: translateX(-50%); font-size: 0.7rem; color: var(--ink-faint); white-space: nowrap; }
-.schedule-tick.is-first { transform: none; }
-
-.schedule-lane-track {
+/* every 5 minutes a faint gridline — --sch-grid is set inline from the zoom */
+.sch-lane {
   position: relative;
-  height: var(--lane-height);
-  border-bottom: 1px solid var(--line);
+  height: var(--sch-lane-height);
+  border-top: 1px solid var(--line);
+  background-image: repeating-linear-gradient(to right, rgba(26, 26, 26, 0.07) 0 1px, transparent 1px var(--sch-grid, 280px));
 }
-.schedule-lane-track:last-child { border-bottom: none; }
 
-.schedule-block {
+.sch-block {
   position: absolute;
-  top: 6px;
-  bottom: 6px;
-  border-radius: 10px;
-  padding: 5px 8px;
-  overflow: hidden;
+  top: 8px;
+  height: 44px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 2px;
+  align-items: stretch;
+  gap: 1px;
+  padding: 4px 8px;
+  border-radius: var(--radius-control);
+  overflow: hidden;
   text-align: left;
   font: inherit;
-  border: none;
+  color: var(--ink);
+  animation: sch-reveal 240ms ease-out both;
 }
-button.schedule-block { cursor: pointer; }
-button.schedule-block:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sch-block.is-narrow { text-align: center; }
+.sch-block.is-tight { padding: 4px 3px; }
+.sch-block-label { min-width: 0; font-size: 13px; line-height: 17px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sch-block-meta { min-width: 0; font-size: 12px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.schedule-block-label { font-size: 0.78rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.schedule-block-meta { font-size: 0.68rem; opacity: 0.85; white-space: nowrap; overflow: hidden; }
-
-.schedule-block-task.is-critical { box-shadow: inset 0 0 0 2px var(--crit); }
-.schedule-block-task.is-selected { box-shadow: 0 0 0 2px var(--accent); }
-.schedule-block-task.is-critical.is-selected { box-shadow: inset 0 0 0 2px var(--crit), 0 0 0 2px var(--accent); }
-
-.schedule-block-wait {
-  border: 1px dashed var(--line-strong);
-  background: repeating-linear-gradient(135deg, var(--surface-sunken), var(--surface-sunken) 4px, var(--line) 4px, var(--line) 8px);
-  color: var(--ink-faint);
-}
-.schedule-block-wait .schedule-block-label { font-size: 0.7rem; font-weight: 500; }
-
-.step-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px;
-  border-radius: var(--radius-card);
-  background: var(--surface-sunken);
-  border: 1px solid var(--line);
-}
-.step-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.step-detail-title { margin: 2px 0 0; font-size: 1.1rem; }
-.step-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
-.step-detail-grid > div { display: flex; flex-direction: column; gap: 2px; }
-.step-detail-wait { color: var(--crit-soft-ink); }
-.step-detail-critical { color: var(--crit); font-weight: 600; }
-
-.schedule-gap-note { padding-top: 2px; }
-
-.schedule-warning { border-color: var(--crit); background: var(--crit-soft); display: flex; flex-direction: column; gap: 6px; }
-.schedule-warning .mini-title { color: var(--crit-soft-ink); }
-
-/* --- competition mode --- */
-.opening-bundles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
-.opening-bundle { padding: 14px; border-radius: var(--radius-card); border: 1.5px solid transparent; }
-.opening-bundle-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.opening-bundle-head .cook-avatar-sm { background: rgba(255, 255, 255, 0.55); }
-.opening-bundle-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.opening-bundle-list li { display: flex; flex-direction: column; gap: 1px; }
-.opening-step-label { font-weight: 600; font-size: 0.9rem; }
-
-.task-pool { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
-.task-pool-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.task-chip-locked { opacity: 0.55; border-style: dashed; }
-
-.mode-select-card { padding: 20px; }
-.mode-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
-
-.mode-card {
-  text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px;
-  border-radius: var(--radius-card);
-  border: 1.5px solid var(--line);
+.sch-block.is-task {
   background: var(--surface);
-  font: inherit;
+  border: 2px solid;
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 120ms ease-out, border-color 120ms ease-out;
 }
-.mode-card:hover:not(:disabled) { border-color: var(--ink-faint); }
-.mode-card:disabled { opacity: 0.55; cursor: not-allowed; }
-.mode-card.is-selected { border: 2px solid var(--success); background: var(--success-soft); box-shadow: var(--shadow-sm); }
+.sch-block.is-task.is-a { border-color: var(--cook-a); }
+.sch-block.is-task.is-b { border-color: var(--cook-b); }
+.sch-block.is-task.is-critical { border-color: var(--critical); }
+/* Selected = inverted, so it reads apart from the red critical outline. */
+.sch-block.is-task.is-selected, .sch-block.is-task.is-selected.is-critical {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.sch-block.is-task.is-selected .sch-block-meta { color: inherit; }
+.sch-block.is-task:active { transform: scale(0.97); }
+.ds-v4 .sch-block.is-task:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
-.mode-card-head { display: flex; align-items: center; justify-content: space-between; }
+.sch-block.is-wait {
+  border: 1px dashed var(--ds-waiting);
+  background: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.65) 0 6px, transparent 6px 12px);
+  color: var(--ink-soft);
+  cursor: default;
+}
+.sch-block.is-wait .sch-block-label { font-weight: 400; }
 
+/* ---------------- task detail ---------------- */
+.sch-detail {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: 18px 20px;
+  animation: sch-fade 200ms ease-out both;
+}
+.sch-detail .sch-detail-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+}
+.sch-detail .sch-detail-close:hover { background: var(--accent-soft); color: var(--accent); }
+.sch-detail-head { display: flex; flex-direction: column; gap: 6px; padding-right: 80px; }
+.sch-detail-title { font-size: 18px; line-height: 24px; font-weight: 700; }
+.sch-detail-desc { font-size: 13px; line-height: 18px; color: var(--ink-soft); max-width: 720px; }
+.sch-detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 24px; max-width: 720px; }
+.sch-detail-grid > div { display: flex; flex-direction: column; gap: 4px; }
+.sch-detail-value { font-size: 14px; }
+.sch-detail-text { font-size: 15px; }
+.sch-detail-player { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.sch-difficulty {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.sch-detail-note { font-size: 13px; line-height: 18px; }
+.sch-detail-note.is-warning { color: var(--warning-soft-ink); }
+.sch-detail-note.is-critical { color: var(--critical); }
+
+/* Portaled surfaces (the bottom sheet, the abandon modal) render
+   outside the .ds-v4 shell, so they remap the tokens they use from the
+   root-level kp-* set — same trick as .kp-modal. */
+.sch-detail.is-sheet, .modal-panel.sch-modal {
+  --bg: var(--kp-bg);
+  --surface: var(--kp-bg);
+  --ink: var(--kp-text);
+  --ink-soft: var(--kp-text-secondary);
+  --ink-faint: var(--kp-text-tertiary);
+  --line: var(--kp-divider);
+  --accent: var(--kp-accent);
+  --accent-soft: var(--kp-accent-tint);
+  --warning-soft-ink: var(--kp-warning-text);
+  --critical: var(--kp-critical);
+  --cook-a: var(--kp-cook-a);
+  --cook-b: var(--kp-cook-b);
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --font-body: var(--kp-font);
+  --font-mono: var(--kp-mono);
+  font-family: var(--kp-font);
+  color: var(--ink);
+}
+.sch-detail.is-sheet .mono, .modal-panel.sch-modal .mono { font-family: var(--kp-mono); }
+
+/* mobile bottom sheet — portaled to body, sits on the VoiceBar behind
+   a scrim; capped at 60vh so the timeline you tapped stays in view */
+.sch-sheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+  background: rgba(26, 26, 26, 0.32);
+  animation: sch-fade 200ms ease-out both;
+}
+.sch-detail.is-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--voice-bar-height);
+  z-index: 41;
+  max-height: min(60vh, calc(100vh - var(--voice-bar-height) - 48px));
+  overflow-y: auto;
+  border: none;
+  border-top: 1px solid var(--line);
+  border-radius: 12px 12px 0 0;
+  padding: 12px 16px 16px;
+  box-shadow: 0 -12px 32px rgba(26, 26, 26, 0.14);
+  animation: sch-sheet 240ms ease-out both;
+}
+.sch-sheet-handle { align-self: center; width: 36px; height: 4px; border-radius: 999px; background: var(--line); }
+.sch-detail.is-sheet .sch-detail-grid { gap: 12px; }
+.sch-detail.is-sheet .sch-detail-close { top: 10px; }
+
+/* ---------------- opening hand (Versus) ---------------- */
+.sch-card-versus { gap: 16px; padding-bottom: 20px; }
+.sch-card-versus .sch-card-head { padding-bottom: 0; }
+.sch-intro { padding: 0 20px; max-width: 820px; }
+.sch-bundles { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 20px; }
+.sch-bundle { background: var(--surface); border-left: 3px solid; border-radius: var(--radius-control); overflow: hidden; }
+.sch-bundle.is-a { border-color: var(--cook-a); }
+.sch-bundle.is-b { border-color: var(--cook-b); }
+.sch-bundle-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+.sch-bundle-name { flex: 1 1 auto; min-width: 0; font-size: 16px; font-weight: 500; }
+.sch-bundle-total { font-size: 14px; color: var(--ink-soft); white-space: nowrap; }
+.sch-bundle-row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 16px; border-top: 1px solid var(--line); }
+.sch-bundle-row-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.sch-bundle-row-label { font-size: 16px; line-height: 22px; font-weight: 500; }
+.sch-bundle-row-dish { font-size: 13px; color: var(--ink-soft); }
+.sch-bundle-row-dur { font-size: 14px; color: var(--ink-soft); }
+
+.sch-grabs { display: flex; flex-direction: column; gap: 12px; margin: 0 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+.sch-grabs-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.sch-grabs-total { font-weight: 500; }
+.sch-grabs-group { display: flex; flex-direction: column; gap: 8px; }
+.sch-eyebrow.is-ready { color: var(--ink); }
+.sch-eyebrow.is-locked { color: var(--ink-faint); }
+.sch-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ds-waiting); }
+.sch-eyebrow.is-ready .sch-dot { background: var(--success); }
+.sch-chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.sch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.sch-chip.is-ready { background: var(--surface); border: 1px solid var(--ink); color: var(--ink); }
+.sch-chip-dur { color: var(--ink-soft); }
+.sch-chip.is-locked { height: 32px; padding: 0 12px; background: var(--ds-chip); border: 1px dashed var(--line); color: var(--ink-faint); font-weight: 400; }
+
+/* ---------------- footer band ----------------
+   Sticky above the fixed VoiceBar so "Go live" is always reachable. */
+.sch-footer {
+  position: sticky;
+  bottom: var(--voice-bar-height);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 4px;
+  padding: 16px 0;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+}
+.sch-footer-tag { font-size: 14px; color: var(--ink); }
+.sch-footer-hint { font-size: 15px; color: var(--ink-soft); }
+.sch-footer-actions { display: flex; align-items: center; gap: 12px; }
+.ds-v4 .sch-btn-abandon { color: var(--critical); }
+.ds-v4 .sch-btn-abandon:hover { background: var(--crit-soft); color: var(--critical); }
+
+/* ---------------- abandon modal ---------------- */
+.modal-panel.sch-modal {
+  max-width: 460px;
+  gap: 12px;
+  padding: 24px;
+  border: none;
+  border-radius: var(--radius-card);
+  box-shadow: var(--kp-shadow-modal);
+  background: var(--surface);
+}
+.sch-modal-title { font-size: 18px; line-height: 24px; font-weight: 700; }
+.sch-modal-body { margin: 0; font-size: 15px; line-height: 22px; color: var(--ink-soft); }
+.sch-modal-num { color: var(--ink); }
+.sch-modal-actions { display: flex; justify-content: flex-end; gap: 12px; padding-top: 4px; }
+.sch-modal .btn {
+  min-height: 44px;
+  padding: 0 16px;
+  border: none;
+  border-radius: var(--radius-control);
+  font-family: var(--kp-font);
+  font-size: 15px;
+  font-weight: 500;
+  box-shadow: none;
+}
+.sch-modal .sch-btn-keep, .sch-modal .sch-btn-keep:hover { background: transparent; color: var(--ink); }
+.sch-modal .sch-btn-danger { padding: 0 20px; background: var(--critical); color: #fff; }
+.sch-modal .sch-btn-danger:hover { background: #b12424; filter: none; }
+
+/* ---------------- mobile ---------------- */
+@media (max-width: 900px) {
+  .sch-hud { flex-direction: column; align-items: stretch; gap: 14px; }
+  .sch-player-chips { justify-content: flex-start; }
+}
 @media (max-width: 720px) {
-  .schedule-lane-labels { width: 110px; }
-  .schedule-head-right { width: 100%; justify-content: space-between; }
+  .schedule-page { gap: 16px; }
+  /* Cards stay side by side so the plan is still on the first screen;
+     the chip shrinks to its check mark. */
+  .sch-modes { gap: 8px; }
+  .sch-mode { padding: 14px 12px; min-height: 44px; gap: 6px; }
+  .sch-mode-title { font-size: 16px; line-height: 20px; }
+  .sch-mode-body { font-size: 12px; line-height: 16px; }
+  .sch-mode-chip { top: 10px; right: 10px; height: 28px; width: 28px; padding: 0; justify-content: center; }
+  .sch-mode-chip-text { display: none; }
+  .sch-hud { padding: 16px; }
+  .sch-tiles { justify-content: space-between; gap: 12px; }
+  .sch-long { display: none; }
+  .sch-notice { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .sch-card { --sch-label-width: 96px; }
+  .sch-card-head { flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px 16px; }
+  .sch-card-tools { gap: 14px; }
+  .sch-lane-label { gap: 8px; padding: 0 10px; }
+  .sch-lane-label .sch-avatar-32 { width: 24px; height: 24px; font-size: 12px; }
+  .sch-lane-name { font-size: 15px; line-height: 20px; }
+  .sch-lane-busy { font-size: 11px; }
+  .sch-card-foot { padding: 12px 16px; }
+  .sch-intro, .sch-bundles, .sch-notice-inset { padding-left: 16px; padding-right: 16px; }
+  .sch-notice-inset { margin: 0 16px; padding: 14px 16px; }
+  .sch-bundles { grid-template-columns: 1fr; gap: 12px; }
+  .sch-grabs { margin: 0 16px; }
+  /* One row, so the sticky footer plus the VoiceBar stay under a
+     quarter of a phone screen. */
+  .sch-footer { gap: 12px; padding: 10px 0; }
+  .sch-footer-actions { flex: 1 1 auto; justify-content: flex-end; gap: 8px; }
+  .sch-footer .btn-lg { flex: 1 1 auto; padding-inline: 14px; font-size: 15px; white-space: nowrap; }
+  .sch-footer .sch-btn-abandon { padding-inline: 10px; font-size: 14px; white-space: nowrap; }
+  .sch-detail-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+}
+@media (max-width: 480px) {
+  .sch-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* The tag repeats the HUD; on a phone the button takes the row. */
+  .sch-footer-tag, .sch-footer-hint { display: none; }
+}
+
+/* ---------------- reduced motion ---------------- */
+@media (prefers-reduced-motion: reduce) {
+  .schedule-page *, .schedule-page *::before, .schedule-page *::after, .sch-detail.is-sheet {
+    animation-duration: 200ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 200ms !important;
+  }
+  .sch-title-row, .sch-modes-wrap, .sch-hud, .sch-notice, .sch-card, .sch-block, .sch-roll, .sch-mode-chip, .sch-detail.is-sheet { animation-name: sch-fade; }
+  .sch-dots { animation: none; }
 }

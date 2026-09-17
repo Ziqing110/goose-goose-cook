@@ -23,7 +23,9 @@ export const SESSION_STEPS = [
     isDone: (s) => (s.recipes || []).length > 0 && isFullyApproved(s.recipes, s.sharedSteps || []),
   },
   { key: "voice-binding", label: "Cooks", path: "/session/voice-binding", isDone: (s) => areCooksBound(s.cooks || []) },
-  { key: "schedule", label: "Schedule", path: "/session/schedule", isDone: (s) => Boolean(s.mode) },
+  // Picking a mode isn't leaving the schedule — only "Go live" is, which
+  // is when the run gets created.
+  { key: "schedule", label: "Schedule", path: "/session/schedule", isDone: (s) => Boolean(s.run) },
   { key: "live-cook", label: "Live cook", path: "/session/live-cook", isDone: (s) => Boolean(s.run?.endedAt) },
 ];
 

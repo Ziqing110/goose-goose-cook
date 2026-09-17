@@ -1,69 +1,149 @@
-import { useMemo, useState } from "react";
+// Schedule — session step 6 of 7, the game plan before going live
+// (design/claude-design-schedule-prompt.md, "Kitchen Path - Schedule").
+// The player's job, in order: pick a mode, read the plan the agent made
+// for it, go live. Nothing here is authored by hand — the plan is
+// computed by utils/scheduleLayout.js from the approved main line, the
+// two players and the kitchen; this page only renders it. Mode is
+// session state (persisted through the debounced sync); the run is
+// written straight through saveRunNow.
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { createRun, runProgress } from "../utils/liveCook.js";
-import { mergeRecipesForDisplay, formatDuration } from "../utils/graphLayout.js";
+import { mergeRecipesForDisplay } from "../utils/graphLayout.js";
 import { computeSchedule, computeOpeningAssignment, missingEquipment, EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
-import { cookColorKey } from "../utils/cooks.js";
+import { formatClock } from "../utils/inventory.js";
+import KpIcon from "../components/KpIcon.jsx";
+import Modal from "../components/Modal.jsx";
+import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
 import "./SchedulePage.css";
 
-const ZOOM_LEVELS = [6, 10, 16, 24, 36, 54, 80];
-const DEFAULT_ZOOM_INDEX = 3;
+// Player colors come from the index in cooks[] — player 1 is "a",
+// player 2 is "b" — never stored, never chosen (design-v4.css tokens).
+const PLAYER_KEYS = ["a", "b"];
+const playerKey = (index) => PLAYER_KEYS[index % PLAYER_KEYS.length];
 
-// A block shows as much as it can without clipping words into nonsense
-// ("Cut tof…"): name plus equipment when there's room, then name alone,
-// then just the duration — which still says something useful — and only
-// a bare bar when even that won't fit. The name is always in the
-// tooltip and the detail card.
-const META_MIN_PX = 176;
-const LABEL_MIN_PX = 116;
-const DURATION_MIN_PX = 48;
+// Zoom is a three-stop slider (Fit · 1× · 2×), no pixel readout. "Fit"
+// is the real thing — measured from the track's width so the whole plan
+// is on screen — while 1× and 2× are the design's fixed densities.
+const ZOOM_STOPS = ["Fit", "1×", "2×"];
+const ZOOM_PX_PER_MIN = { "1×": 78, "2×": 108 };
+const FIT_FALLBACK_PX_PER_MIN = 56;
+// On a phone a true fit is ~7px/min — every block a bare sliver — so
+// "Fit" bottoms out here and scrolls a little instead.
+const FIT_MIN_PX_PER_MIN = 16;
+const TRACK_END_PADDING = 24;
 
-function formatMinutes(sec) {
-  return Math.round(sec / 60);
+// Whole-minute ruler ticks, stepped up until the labels can't collide.
+const TICK_STEPS_MIN = [1, 2, 5, 10, 15, 30];
+const TICK_MIN_PX = 56;
+
+// A block shows as much as it can without clipping a word into
+// nonsense ("Cut tof…"): name + meta → name → duration → bare bar.
+const RUNG_FULL_PX = 130;
+const RUNG_NAME_PX = 76;
+const RUNG_DURATION_PX = 48;
+const RUNG_WAIT_PX = 88;
+// Rough glyph width at the 13px block font, used to cut labels at a
+// word boundary instead of letting CSS leave "Dice oni…".
+const LABEL_PX_PER_CHAR = 6.6;
+const BLOCK_TEXT_INSET_PX = 18;
+
+// The longest run of whole words that fits `widthPx`; the first word
+// (ellipsized by CSS) if none do.
+function fitLabel(label, widthPx) {
+  const words = (label || "").split(" ");
+  const fits = (text) => text.length * LABEL_PX_PER_CHAR <= widthPx - BLOCK_TEXT_INSET_PX;
+  let out = words[0] || "";
+  for (let i = 1; i < words.length; i++) {
+    const next = `${out} ${words[i]}`;
+    if (!fits(next + "…") && !(i === words.length - 1 && fits(next))) break;
+    out = next;
+  }
+  return out === label ? label : `${out}…`;
 }
 
-function formatClock(sec) {
-  const m = Math.floor(sec / 60);
-  const s = Math.round(sec % 60);
-  return `${m}:${String(s).padStart(2, "0")}`;
+const DIFFICULTY_FLAMES = { low: 1, medium: 2, high: 3 };
+
+const capitalize = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+const equipmentLabel = (type) => capitalize(EQUIPMENT_LABELS[type] || type);
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+function Mono({ children, className = "" }) {
+  return <span className={`mono ${className}`}>{children}</span>;
 }
 
-// Keep tick labels from colliding: step up until they're far enough apart.
-function pickTickStepMinutes(pxPerMin) {
-  const steps = [1, 2, 5, 10, 15, 20, 30, 60];
-  return steps.find((s) => s * pxPerMin >= 56) || steps[steps.length - 1];
+function PlayerAvatar({ cook, index, size = 32 }) {
+  return (
+    <span className={`sch-avatar is-${playerKey(index)} sch-avatar-${size}`} aria-hidden="true">
+      {cook?.name?.[0]?.toUpperCase() || "?"}
+    </span>
+  );
+}
+
+function useMediaQuery(query) {
+  const [matches, setMatches] = useState(() => (typeof window !== "undefined" ? window.matchMedia(query).matches : false));
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = () => setMatches(mq.matches);
+    mq.addEventListener("change", onChange);
+    onChange();
+    return () => mq.removeEventListener("change", onChange);
+  }, [query]);
+  return matches;
 }
 
 export default function SchedulePage() {
-  const { state, dispatch, saveRunNow } = useAppState();
+  const { state, dispatch, saveRunNow, editKitchenProfile } = useAppState();
   const navigate = useNavigate();
   const { recipes, sharedSteps, cooks, mode, run } = state.session;
   const kitchenProfile = state.kitchenProfiles.find((p) => p.id === state.session.kitchenProfileId) || null;
-  const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
+
+  // 1× by default: "Fit" squeezes a 40-minute plan into bare slivers.
+  const [zoom, setZoom] = useState("1×");
   const [selectedStepId, setSelectedStepId] = useState(null);
+  const [confirmAbandon, setConfirmAbandon] = useState(false);
+  const [editingKitchen, setEditingKitchen] = useState(false);
+  const [kitchenError, setKitchenError] = useState(null);
 
   const approved = useMemo(() => mergeRecipesForDisplay(recipes, sharedSteps).approved, [recipes, sharedSteps]);
   const nodes = useMemo(() => approved?.nodes || [], [approved]);
   const schedule = useMemo(() => computeSchedule(nodes, cooks, kitchenProfile), [nodes, cooks, kitchenProfile]);
-  const opening = useMemo(
-    () => computeOpeningAssignment(nodes, cooks, kitchenProfile),
-    [nodes, cooks, kitchenProfile]
-  );
+  const opening = useMemo(() => computeOpeningAssignment(nodes, cooks, kitchenProfile), [nodes, cooks, kitchenProfile]);
+  const lacking = useMemo(() => missingEquipment(nodes, kitchenProfile), [nodes, kitchenProfile]);
 
-  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
-  const stepById = Object.fromEntries(schedule.steps.map((s) => [s.id, s]));
+  const byId = useMemo(() => Object.fromEntries(nodes.map((n) => [n.id, n])), [nodes]);
+  const stepById = useMemo(() => Object.fromEntries(schedule.steps.map((s) => [s.id, s])), [schedule]);
   const cookById = Object.fromEntries(cooks.map((c) => [c.id, c]));
   const cookIndexById = Object.fromEntries(cooks.map((c, i) => [c.id, i]));
-  const dishOf = (nodeId) =>
-    byId[nodeId]?._shared ? "Shared" : recipes.find((r) => r.id === byId[nodeId]?._recipeId)?.working.title || null;
+  const dishOf = (nodeId) => {
+    const node = byId[nodeId];
+    if (!node) return null;
+    if (node._shared) return "Shared";
+    return recipes.find((r) => r.id === node._recipeId)?.working.title || null;
+  };
 
-  const pxPerMin = ZOOM_LEVELS[zoomIndex];
-  const pxFor = (sec) => (sec / 60) * pxPerMin;
-  const trackWidth = Math.max(pxFor(schedule.makespanSec), 240);
-  const tickStep = pickTickStepMinutes(pxPerMin);
-  const ticks = [];
-  for (let m = 0; m * 60 <= schedule.makespanSec; m += tickStep) ticks.push(m);
+  const finish = formatClock(schedule.makespanSec);
+  const isCoop = mode === "cooperation";
+  const isVersus = mode === "competition";
+  const hasLoop = schedule.unscheduledIds.length > 0;
+  const canStart = Boolean(mode) && !hasLoop;
+
+  const grabsCount = opening.poolIds.length + opening.lockedIds.length;
+  useEffect(() => {
+    if (!approved) return undefined;
+    const sub = isCoop
+      ? `Plan's ready — ${finish} with ${cooks.length} players.`
+      : isVersus
+        ? `${grabsCount} steps up for grabs — first to claim wins.`
+        : "Pick a mode and I'll deal the plan.";
+    dispatch({
+      type: "voice/setHint",
+      payload: { hint: { line: "Say “co-op” or “versus”, then “go live”.", sub } },
+    });
+    return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
+  }, [dispatch, approved, finish, cooks.length, isCoop, isVersus, grabsCount]);
 
   // Mode is snapshotted into the run, so changing it mid-cook would
   // desync what's already happened — the cards lock once a run exists.
@@ -72,429 +152,660 @@ export default function SchedulePage() {
     dispatch({ type: "session/update", payload: { mode: nextMode } });
   };
 
-  const canStart = Boolean(mode) && schedule.unscheduledIds.length === 0;
-  const startCooking = () => {
+  const goLive = () => {
     // schedule/opening are already memoized above — no extra solver run.
     saveRunNow(createRun({ nodes, mode, schedule, opening, now: new Date() }));
     navigate("/session/live-cook");
   };
-  // Throwing away a run in progress is the most destructive thing on
-  // this page and it used to ask with one vague line. Name the cost:
-  // what's already been cooked is what's actually being lost.
-  const discardRun = () => {
-    const progress = runProgress(run, nodes, Date.now());
-    const done = `${progress.done} completed step${progress.done === 1 ? "" : "s"}`;
-    const elapsed = formatDuration(progress.elapsedSec);
-    if (!window.confirm(`Throw away this cook? You lose ${done} and ${elapsed} on the clock, and it can't be undone.`)) return;
+  const abandonRun = () => {
     saveRunNow(null);
+    setConfirmAbandon(false);
+  };
+  const saveKitchen = async (draft) => {
+    setKitchenError(null);
+    try {
+      await editKitchenProfile(kitchenProfile.id, draft);
+      setEditingKitchen(false);
+    } catch (err) {
+      setKitchenError(err.message);
+    }
   };
 
-  // Any gap between a cook's previous block and their next one is idle
-  // time — labeled from the next step's startCause (what actually
-  // constrained it), not just equipment-caused waits, so a step that's
-  // simply waiting on its own dependency chain shows an honest reason too.
+  // Any gap between a player's previous block and their next one is a
+  // wait — labeled from the next step's startCause (what actually held
+  // it), so a step waiting on its own dependency chain says so too.
   const waitLabelFor = (cause) => {
     if (cause.type === "equipment") {
       const holderStep = cause.refStepId ? stepById[cause.refStepId] : null;
       const holderCook = holderStep ? cookById[holderStep.cookId] : null;
-      return `Waiting for ${EQUIPMENT_LABELS[cause.equipmentType]}` + (holderCook ? ` — ${holderCook.name} has it` : "");
+      return `Waiting · ${EQUIPMENT_LABELS[cause.equipmentType] || cause.equipmentType}` + (holderCook ? ` — ${holderCook.name} has it` : "");
     }
     if (cause.type === "dependency" && cause.refStepId) {
-      return `Waiting on "${byId[cause.refStepId]?.label || cause.refStepId}"`;
+      return `Waiting on “${byId[cause.refStepId]?.label || cause.refStepId}”`;
     }
     return "Waiting";
   };
 
-  const lanes = cooks.map((cook) => {
+  const lanes = cooks.map((cook, index) => {
     const steps = schedule.steps.filter((s) => s.cookId === cook.id).sort((a, b) => a.startSec - b.startSec);
     const blocks = [];
     let prevEnd = 0;
     steps.forEach((s) => {
       if (s.startSec > prevEnd) {
-        blocks.push({ kind: "wait", startSec: prevEnd, endSec: s.startSec, label: waitLabelFor(s.startCause) });
+        blocks.push({ kind: "wait", id: `wait-${s.id}`, startSec: prevEnd, endSec: s.startSec, label: waitLabelFor(s.startCause) });
       }
-      blocks.push({ kind: "task", step: s, node: byId[s.id] });
+      blocks.push({ kind: "task", id: s.id, startSec: s.startSec, endSec: s.endSec, step: s, node: byId[s.id] });
       prevEnd = s.endSec;
     });
-    return { cook, steps, blocks, busySec: steps.reduce((sum, s) => sum + (s.endSec - s.startSec), 0) };
+    return { cook, index, steps, blocks, busySec: steps.reduce((sum, s) => sum + (s.endSec - s.startSec), 0) };
   });
+
+  const progress = run ? runProgress(run, nodes, Date.now()) : null;
 
   if (!approved) {
     return (
       <section className="page schedule-page">
-        <p className="hint">Loading your schedule&hellip;</p>
+        <header className="sch-title-row">
+          <h1>Schedule</h1>
+          <span className="sch-meta is-tertiary">
+            Building your plan<Mono className="sch-dots">…</Mono>
+          </span>
+        </header>
       </section>
     );
   }
 
-  const lacking = missingEquipment(nodes, kitchenProfile);
   const selectedStep = selectedStepId ? stepById[selectedStepId] : null;
   const selectedNode = selectedStepId ? byId[selectedStepId] : null;
-  const isCompetition = mode === "competition";
+  const selected =
+    selectedStep && selectedNode
+      ? {
+          step: selectedStep,
+          node: selectedNode,
+          dish: dishOf(selectedStep.id),
+          cook: cookById[selectedStep.cookId],
+          cookIndex: cookIndexById[selectedStep.cookId],
+          isCritical: schedule.criticalStepIds.has(selectedStep.id),
+          waitLabel: selectedStep.startSec > selectedStep.dependsReadySec ? waitLabelFor(selectedStep.startCause) : null,
+        }
+      : null;
+
+  const metaBits = [approved.title];
+  if (approved.servings != null) metaBits.push(<><Mono>{approved.servings}</Mono> servings</>);
+  metaBits.push(<><Mono>{nodes.length}</Mono> steps</>);
+  if (kitchenProfile?.name) metaBits.push(kitchenProfile.name);
 
   return (
     <section className="page schedule-page">
-      <div className="band-header">
-        <div className="band-header-left">
-          <div>
-            <p className="band-eyebrow">Kitchen Path Agent</p>
-            <h1>{approved.title} &middot; approved</h1>
-          </div>
+      <header className="sch-title-row">
+        <h1>Schedule</h1>
+        <span className="sch-meta">
+          {metaBits.map((bit, i) => (
+            <span key={i}>
+              {i > 0 && " · "}
+              {bit}
+            </span>
+          ))}
+        </span>
+      </header>
+
+      {/* ---- Mode picker — first, because everything below changes with it ---- */}
+      <div className="sch-modes-wrap">
+        <div className="sch-modes" role="radiogroup" aria-label="Mode">
+          <ModeCard
+            glyph="fork-branch"
+            title="Co-op"
+            body="Follow the agent's assignment. Every “done” re-plans the rest. Goal: fastest dinner."
+            selected={isCoop}
+            locked={Boolean(run)}
+            onSelect={() => setMode("cooperation")}
+          />
+          <ModeCard
+            glyph="trophy"
+            title="Versus"
+            body="Only the opening hand is dealt. Claim the rest by voice. Score on difficulty."
+            selected={isVersus}
+            locked={Boolean(run)}
+            onSelect={() => setMode("competition")}
+          />
         </div>
-        {/* The makespan and per-cook counts describe the cooperative
-            assignment, which competition mode deliberately doesn't use —
-            showing them there would promise an order that won't happen. */}
-        <div className="band-header-right">
-          {isCompetition ? (
-            <span className="tag mono">{nodes.length} steps to claim</span>
-          ) : (
-            <>
-              <span
-                className="tag mono"
-                title={
-                  schedule.optimal
-                    ? "No arrangement of these steps finishes sooner."
-                    : `Best found. Nothing can beat ${formatMinutes(schedule.lowerBoundSec)} min, so this is within ${formatMinutes(schedule.makespanSec - schedule.lowerBoundSec)} min of the best possible.`
-                }
-              >
-                Estimated {formatMinutes(schedule.makespanSec)} min
-                {schedule.optimal ? " · optimal" : ` · best of ≥${formatMinutes(schedule.lowerBoundSec)}`}
-              </span>
-              {schedule.savedSec > 0 && (
-                <span className="tag mono tag-difficulty-low">{formatMinutes(schedule.savedSec)} min faster than solo</span>
-              )}
-              {lanes.map(({ cook, steps }) => (
-                <span className={`tag mono cook-color-${cookColorKey(cookIndexById[cook.id])}`} key={cook.id}>
-                  {cook.name} &middot; {steps.length} steps
-                </span>
-              ))}
-            </>
-          )}
-        </div>
+        {run && <span className="sch-meta">Mode is locked while a cook is in progress.</span>}
       </div>
 
-      {lacking.length > 0 && (
-        <div className="card schedule-warning">
-          <span className="mini-title">
-            Planned with {lacking.map((e) => EQUIPMENT_LABELS[e] || e).join(" and ")} you don&rsquo;t have
-          </span>
-          <p className="hint">
-            {kitchenProfile?.name} has none configured, so these timings assume exactly one of each. Real contention
-            will be worse than this plan shows.
-          </p>
-        </div>
-      )}
-
-      {schedule.unscheduledIds.length > 0 && (
-        <div className="card schedule-warning">
-          <span className="mini-title">{schedule.unscheduledIds.length} steps couldn&rsquo;t be scheduled</span>
-          <p className="hint">
-            These steps depend on each other in a loop, so there&rsquo;s no order that satisfies them. Go back to the
-            recipe graph and break the cycle:{" "}
-            {schedule.unscheduledIds.map((id) => byId[id]?.label || id).join(", ")}.
-          </p>
-        </div>
-      )}
-
-      {isCompetition ? (
-        <CompetitionPanel
-          opening={opening}
-          cooks={cooks}
-          byId={byId}
-          cookIndexById={cookIndexById}
-          dishOf={dishOf}
-        />
-      ) : (
-        <div className="card schedule-card">
-          <div className="schedule-card-head">
-            <span className="mini-title">Who does what, when</span>
-            <div className="schedule-head-right">
-              <div className="schedule-legend">
-                <span className="legend-item"><span className="legend-swatch legend-critical" /> Critical path</span>
-                <span className="legend-item"><span className="legend-swatch legend-wait" /> Waiting</span>
-              </div>
-              <div className="zoom-controls">
-                <span className="mini-title">Zoom</span>
-                <input
-                  type="range"
-                  className="zoom-slider"
-                  min={0}
-                  max={ZOOM_LEVELS.length - 1}
-                  step={1}
-                  value={zoomIndex}
-                  onChange={(e) => setZoomIndex(Number(e.target.value))}
-                  aria-label="Timeline zoom"
-                />
-                <span className="hint mono zoom-readout">{pxPerMin}px / min</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="schedule-body">
-            <div className="schedule-lane-labels">
-              <div className="schedule-lane-label-spacer" />
-              {lanes.map(({ cook, busySec }) => (
-                <div className="schedule-lane-label" key={cook.id}>
-                  <span className={`cook-avatar cook-avatar-sm cook-color-${cookColorKey(cookIndexById[cook.id])}`}>
-                    {cook.name[0]?.toUpperCase()}
-                  </span>
-                  <div>
-                    <div className="schedule-lane-name">{cook.name}</div>
-                    <div className="hint mono">{formatMinutes(busySec)} min busy</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="schedule-scroll">
-              <div className="schedule-inner" style={{ width: trackWidth }}>
-                <div className="schedule-ruler-track">
-                  {ticks.map((m, i) => (
-                    // The first tick sits at x=0, where centring it would
-                    // push half the label out of the scroll area.
-                    <span className={`schedule-tick mono ${i === 0 ? "is-first" : ""}`} key={m} style={{ left: pxFor(m * 60) }}>
-                      {m}&prime;
+      {mode && (
+        <>
+          {/* ---- Plan HUD ---- */}
+          <div className="sch-hud">
+            <div className="sch-tiles">
+              {isCoop ? (
+                <>
+                  <div className="sch-tile sch-roll">
+                    <span className="sch-tile-value-row">
+                      <KpIcon glyph="timer" size={20} />
+                      <Mono className="sch-tile-value">{finish}</Mono>
                     </span>
-                  ))}
+                    <span className="sch-tile-label">finish in</span>
+                  </div>
+                  {schedule.savedSec > 0 && (
+                    <div className="sch-tile sch-roll" style={{ animationDelay: "60ms" }}>
+                      <Mono className="sch-tile-value">{formatClock(schedule.savedSec)}</Mono>
+                      <span className="sch-tile-label">faster than solo</span>
+                    </div>
+                  )}
+                  <div className="sch-tile sch-roll" style={{ animationDelay: "120ms" }}>
+                    <Mono className="sch-tile-value">{schedule.steps.length}</Mono>
+                    <span className="sch-tile-label">steps</span>
+                  </div>
+                </>
+              ) : (
+                <div className="sch-tile sch-roll">
+                  <Mono className="sch-tile-value">{opening.poolIds.length + opening.lockedIds.length}</Mono>
+                  <span className="sch-tile-label">steps up for grabs</span>
                 </div>
-
-                {lanes.map(({ cook, blocks }) => (
-                <div className="schedule-lane-track" key={cook.id}>
-                  {blocks.map((b, i) => {
-                    const startSec = b.kind === "wait" ? b.startSec : b.step.startSec;
-                    const endSec = b.kind === "wait" ? b.endSec : b.step.endSec;
-                    const widthPx = Math.max(pxFor(endSec - startSec), 3);
-                    const showLabel = widthPx >= LABEL_MIN_PX;
-                    const showMeta = widthPx >= META_MIN_PX;
-                    if (b.kind === "wait") {
-                      return (
-                        <div
-                          className="schedule-block schedule-block-wait"
-                          key={`wait-${i}`}
-                          style={{ left: pxFor(startSec), width: widthPx }}
-                          title={b.label}
-                        >
-                          {showLabel && <span className="schedule-block-label">{b.label}</span>}
-                        </div>
-                      );
-                    }
-                    const isCritical = schedule.criticalStepIds.has(b.step.id);
-                    return (
-                      <button
-                        type="button"
-                        className={`schedule-block schedule-block-task cook-color-${cookColorKey(cookIndexById[cook.id])} ${
-                          isCritical ? "is-critical" : ""
-                        } ${selectedStepId === b.step.id ? "is-selected" : ""}`}
-                        key={b.step.id}
-                        style={{ left: pxFor(startSec), width: widthPx }}
-                        title={`${b.node?.label} · ${formatDuration(endSec - startSec)}`}
-                        onClick={() => setSelectedStepId(selectedStepId === b.step.id ? null : b.step.id)}
-                      >
-                        {showLabel && <span className="schedule-block-label">{b.node?.label}</span>}
-                        {showMeta && (
-                          <span className="schedule-block-meta mono">
-                            {formatDuration(endSec - startSec)}
-                            {b.step.requiredEquipment.length > 0 && ` · ${EQUIPMENT_LABELS[b.step.requiredEquipment[0]]}`}
-                          </span>
-                        )}
-                        {!showLabel && widthPx >= DURATION_MIN_PX && (
-                          <span className="schedule-block-meta mono">{formatDuration(endSec - startSec)}</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-                ))}
-              </div>
+              )}
+            </div>
+            <div className="sch-player-chips">
+              {lanes.map(({ cook, index, steps, busySec }) => {
+                const bundle = opening.bundles.find((b) => b.cookId === cook.id);
+                return (
+                  <span className="sch-player-chip" key={cook.id}>
+                    <PlayerAvatar cook={cook} index={index} size={20} />
+                    <span className="sch-player-chip-name">{cook.name}</span>
+                    <Mono className="sch-player-chip-meta">
+                      {isCoop ? (
+                        <>
+                          {steps.length}
+                          <span className="sch-long"> steps</span> · {formatClock(busySec)}
+                        </>
+                      ) : (
+                        <>{formatClock(bundle?.totalSec || 0)} to open</>
+                      )}
+                    </Mono>
+                  </span>
+                );
+              })}
             </div>
           </div>
 
-          {selectedStep && selectedNode ? (
-            <StepDetail
-              step={selectedStep}
-              node={selectedNode}
-              dish={dishOf(selectedStep.id)}
-              cook={cookById[selectedStep.cookId]}
-              isCritical={schedule.criticalStepIds.has(selectedStep.id)}
-              waitLabel={selectedStep.startSec > selectedStep.dependsReadySec ? waitLabelFor(selectedStep.startCause) : null}
+          {/* ---- Warnings ---- */}
+          {lacking.length > 0 && (
+            <div className="sch-notice is-warning" role="status">
+              <span>
+                Planned with {lacking.map((e) => `a ${EQUIPMENT_LABELS[e] || e}`).join(" and ")} {kitchenProfile?.name || "this kitchen"} doesn&rsquo;t
+                have — timings assume you&rsquo;ll manage one. Real waits will be longer.
+              </span>
+              {kitchenProfile && (
+                <button type="button" className="btn btn-ghost sch-notice-btn" onClick={() => setEditingKitchen(true)}>
+                  Edit kitchen
+                </button>
+              )}
+            </div>
+          )}
+          {hasLoop && (
+            <div className="sch-notice is-error" role="alert">
+              <span>
+                <Mono>{schedule.unscheduledIds.length}</Mono> steps depend on each other in a loop — there&rsquo;s no order that works. Break the
+                loop on the main line: {schedule.unscheduledIds.map((id) => byId[id]?.label || id).join(", ")}.
+              </span>
+              <button type="button" className="btn sch-notice-btn" onClick={() => navigate("/session/recipe-graph")}>
+                Back to the main line
+              </button>
+            </div>
+          )}
+
+          {/* ---- The plan ---- */}
+          {isCoop ? (
+            <Timeline
+              lanes={lanes}
+              makespanSec={schedule.makespanSec}
+              criticalStepIds={schedule.criticalStepIds}
+              zoom={zoom}
+              onZoom={setZoom}
+              selectedStepId={selectedStepId}
+              onSelect={(id) => setSelectedStepId((cur) => (cur === id ? null : id))}
+              selected={selected}
               onClose={() => setSelectedStepId(null)}
             />
           ) : (
-            <p className="hint">Click any task for its exact timing.</p>
+            <OpeningHand opening={opening} cooks={cooks} byId={byId} dishOf={dishOf} />
           )}
-
-          <p className="hint schedule-gap-note">
-            Every step needs a cook&rsquo;s full attention in this version — hands-off steps like a rice cooker
-            aren&rsquo;t modeled yet.
-          </p>
-        </div>
+        </>
       )}
 
-      <div className="card mode-select-card">
-        <div className="mode-cards">
-          <button
-            type="button"
-            className={`mode-card ${mode === "cooperation" ? "is-selected" : ""}`}
-            disabled={Boolean(run)}
-            onClick={() => setMode("cooperation")}
-          >
-            <div className="mode-card-head">
-              <span className="mini-title">Cooperation</span>
-              {mode === "cooperation" && <span className="tag tag-difficulty-low">Selected</span>}
-            </div>
-            <p className="hint">Follow the optimal assignment. Every &ldquo;done&rdquo; re-schedules automatically. Goal: fastest dinner.</p>
-          </button>
-          <button
-            type="button"
-            className={`mode-card ${mode === "competition" ? "is-selected" : ""}`}
-            disabled={Boolean(run) || cooks.length < 2}
-            onClick={() => setMode("competition")}
-          >
-            <div className="mode-card-head">
-              <span className="mini-title">Competition</span>
-              {mode === "competition" && <span className="tag tag-difficulty-low">Selected</span>}
-            </div>
-            <p className="hint">
-              {cooks.length < 2
-                ? "Needs two cooks — a one-person contest has nobody to race."
-                : "No assignments past the opening. Claim tasks by voice. Score on difficulty and performance."}
-            </p>
-          </button>
+      {/* ---- Footer band ---- */}
+      <div className="sch-footer">
+        {mode ? (
+          <Mono className="sch-footer-tag">
+            {isCoop ? `Co-op · finish in ${finish}` : `Versus · ${opening.poolIds.length + opening.lockedIds.length} steps to claim`}
+          </Mono>
+        ) : (
+          <span className="sch-footer-hint">Pick Co-op or Versus to go live.</span>
+        )}
+        <div className="sch-footer-actions">
+          {run && (
+            <button type="button" className="btn btn-ghost sch-btn-abandon" onClick={() => setConfirmAbandon(true)}>
+              Abandon this cook
+            </button>
+          )}
+          {run ? (
+            <button type="button" className="btn btn-primary btn-lg" onClick={() => navigate("/session/live-cook")}>
+              Back to the cook &rarr;
+            </button>
+          ) : (
+            <button type="button" className="btn btn-primary btn-lg" disabled={!canStart} onClick={goLive}>
+              Go live &rarr;
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="band-footer">
-        <div className="band-footer-left">
-          <span className="hint">
-            {run
-              ? "A cook is already in progress — mode is locked until it's finished."
-              : mode
-              ? `Mode: ${mode}`
-              : "Pick a mode to continue"}
-          </span>
-        </div>
-        <div className="band-footer-right">
-          {run && (
-            <button className="btn btn-ghost btn-danger" onClick={discardRun}>
-              Throw away this cook
+      {confirmAbandon && progress && (
+        <Modal label="Abandon this cook?" onClose={() => setConfirmAbandon(false)} panelClassName="sch-modal">
+          <span className="sch-modal-title">Abandon this cook?</span>
+          <p className="sch-modal-body">
+            You lose <Mono className="sch-modal-num">{progress.done}</Mono> completed {progress.done === 1 ? "step" : "steps"} and{" "}
+            <Mono className="sch-modal-num">{formatClock(progress.elapsedSec)}</Mono> on the clock. This can&rsquo;t be undone.
+          </p>
+          <div className="sch-modal-actions">
+            <button type="button" className="btn btn-ghost sch-btn-keep" onClick={() => setConfirmAbandon(false)}>
+              Keep cooking
             </button>
-          )}
-          <button
-            className="btn btn-primary btn-lg"
-            disabled={!run && !canStart}
-            onClick={run ? () => navigate("/session/live-cook") : startCooking}
-          >
-            {run ? "Resume cooking" : "Start cooking"} &rarr;
-          </button>
-        </div>
-      </div>
+            <button type="button" className="btn sch-btn-danger" onClick={abandonRun}>
+              Abandon
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {editingKitchen && kitchenProfile && (
+        <KitchenProfileFormModal
+          profile={kitchenProfile}
+          error={kitchenError}
+          onSave={saveKitchen}
+          onClose={() => {
+            setEditingKitchen(false);
+            setKitchenError(null);
+          }}
+        />
+      )}
     </section>
   );
 }
 
-function StepDetail({ step, node, dish, cook, isCritical, waitLabel, onClose }) {
+function ModeCard({ glyph, title, body, selected, locked, onSelect }) {
+  // The radio is named by its title alone; the body is its description
+  // and the "Selected" chip is decorative (aria-checked already says so).
+  const bodyId = `sch-mode-body-${title.toLowerCase().replace(/[^a-z]/g, "")}`;
   return (
-    <div className="step-detail">
-      <div className="step-detail-head">
-        <div>
-          <span className="mini-title">{dish || "Step"}</span>
-          <h3 className="step-detail-title">{node.label}</h3>
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      aria-label={title}
+      aria-describedby={bodyId}
+      className={`sch-mode ${selected ? "is-selected" : ""} ${locked ? "is-locked" : ""}`}
+      disabled={locked}
+      onClick={onSelect}
+    >
+      {selected && (
+        <span className="sch-mode-chip" aria-hidden="true">
+          <KpIcon glyph="checkmark-burst" size={16} />
+          <span className="sch-mode-chip-text">Selected</span>
+        </span>
+      )}
+      <KpIcon glyph={glyph} size={24} className="sch-mode-glyph" />
+      <span className="sch-mode-title">{title}</span>
+      <span className="sch-mode-body" id={bodyId}>
+        {body}
+      </span>
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------
+// Co-op → timeline ("Who does what, when")
+// ---------------------------------------------------------------
+
+function pickTickStepMinutes(pxPerMin) {
+  return TICK_STEPS_MIN.find((s) => s * pxPerMin >= TICK_MIN_PX) || TICK_STEPS_MIN[TICK_STEPS_MIN.length - 1];
+}
+
+function Timeline({ lanes, makespanSec, criticalStepIds, zoom, onZoom, selectedStepId, onSelect, selected, onClose }) {
+  const scrollRef = useRef(null);
+  const [fitPxPerMin, setFitPxPerMin] = useState(FIT_FALLBACK_PX_PER_MIN);
+  const makespanMin = Math.max(makespanSec / 60, 1);
+
+  // "Fit" means the whole plan is visible: measure the scroll container
+  // and size the track to it (re-measured on resize).
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return undefined;
+    const measure = () => {
+      const width = el.clientWidth - TRACK_END_PADDING;
+      if (width > 0) setFitPxPerMin(Math.max(FIT_MIN_PX_PER_MIN, width / makespanMin));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [makespanMin]);
+
+  const pxPerMin = zoom === "Fit" ? fitPxPerMin : ZOOM_PX_PER_MIN[zoom];
+  const pxFor = (sec) => (sec / 60) * pxPerMin;
+  const trackWidth = Math.round(pxFor(makespanSec)) + TRACK_END_PADDING;
+  const tickStep = pickTickStepMinutes(pxPerMin);
+  const ticks = [];
+  // The last regular tick stays clear of the end label.
+  for (let m = 0; m * 60 <= makespanSec - tickStep * 30; m += tickStep) ticks.push(m);
+
+  const isMobile = useMediaQuery("(max-width: 720px)");
+
+  return (
+    <div className="sch-card">
+      <div className="sch-card-head">
+        <span className="sch-card-title">Who does what, when</span>
+        <div className="sch-card-tools">
+          <span className="sch-legend">
+            <span className="sch-legend-item">
+              <span className="sch-legend-swatch is-critical" /> Critical path
+            </span>
+            <span className="sch-legend-item">
+              <span className="sch-legend-swatch is-wait" /> Waiting
+            </span>
+          </span>
+          <span className="sch-zoom">
+            <span className={`mono sch-zoom-stop ${zoom === "Fit" ? "is-on" : ""}`}>Fit</span>
+            <input
+              type="range"
+              className="sch-zoom-slider"
+              min={0}
+              max={ZOOM_STOPS.length - 1}
+              step={1}
+              value={ZOOM_STOPS.indexOf(zoom)}
+              onChange={(e) => onZoom(ZOOM_STOPS[Number(e.target.value)])}
+              aria-label="Timeline zoom"
+              aria-valuetext={zoom}
+            />
+            <span className={`mono sch-zoom-stop ${zoom === "1×" ? "is-on" : ""}`}>1×</span>
+            <span className={`mono sch-zoom-stop ${zoom === "2×" ? "is-on" : ""}`}>2×</span>
+          </span>
         </div>
-        <button type="button" className="btn btn-ghost" onClick={onClose}>
-          Close
-        </button>
       </div>
-      {node.description && <p className="hint">{node.description}</p>}
-      <div className="step-detail-grid">
-        <div><span className="mini-title">Starts</span><span className="mono">{formatClock(step.startSec)}</span></div>
-        <div><span className="mini-title">Ends</span><span className="mono">{formatClock(step.endSec)}</span></div>
-        <div><span className="mini-title">Takes</span><span className="mono">{formatDuration(step.endSec - step.startSec)}</span></div>
-        <div><span className="mini-title">Cook</span><span>{cook?.name || "—"}</span></div>
-        <div>
-          <span className="mini-title">Equipment</span>
-          <span>{step.requiredEquipment.length ? step.requiredEquipment.map((e) => EQUIPMENT_LABELS[e]).join(", ") : "none"}</span>
+
+      <div className="sch-track-wrap">
+        <div className="sch-lane-labels">
+          <div className="sch-ruler-spacer" />
+          {lanes.map(({ cook, index, busySec }) => (
+            <div className={`sch-lane-label is-${playerKey(index)}`} key={cook.id}>
+              <PlayerAvatar cook={cook} index={index} size={32} />
+              <span className="sch-lane-label-text">
+                <span className="sch-lane-name">{cook.name}</span>
+                <Mono className="sch-lane-busy">
+                  {formatClock(busySec)}
+                  <span className="sch-long"> busy</span>
+                </Mono>
+              </span>
+            </div>
+          ))}
         </div>
-        <div><span className="mini-title">Difficulty</span><span>{node.difficulty}</span></div>
+
+        <div className="sch-scroll" ref={scrollRef}>
+          <div className="sch-track" style={{ minWidth: trackWidth, "--sch-grid": `${Math.round(5 * pxPerMin)}px` }}>
+            <div className="sch-ruler">
+              {ticks.map((m) => (
+                <span className="mono sch-tick" key={m} style={{ left: Math.round(pxFor(m * 60)) }}>
+                  {formatClock(m * 60)}
+                </span>
+              ))}
+              <span className="mono sch-tick is-end" style={{ left: Math.round(pxFor(makespanSec)) }}>
+                {formatClock(makespanSec)}
+              </span>
+            </div>
+
+            {lanes.map(({ cook, index, blocks }) => (
+              <div className={`sch-lane is-${playerKey(index)}`} key={cook.id}>
+                {blocks.map((b, i) => {
+                  const left = Math.round(pxFor(b.startSec));
+                  const width = Math.max(10, Math.round(pxFor(b.endSec - b.startSec)) - 3);
+                  const durationSec = b.endSec - b.startSec;
+                  const delay = `${i * 40}ms`;
+                  const style = { left, width, animationDelay: delay };
+                  if (b.kind === "wait") {
+                    return (
+                      <div
+                        className={`sch-block is-wait ${width < 96 ? "is-narrow" : ""}`}
+                        key={b.id}
+                        style={style}
+                        title={b.label}
+                        role="img"
+                        aria-label={`${b.label} · ${formatClock(durationSec)}`}
+                      >
+                        {width >= RUNG_WAIT_PX && <span className="sch-block-label">{b.label}</span>}
+                      </div>
+                    );
+                  }
+                  const rung = width >= RUNG_FULL_PX ? "full" : width >= RUNG_NAME_PX ? "name" : width >= RUNG_DURATION_PX ? "dur" : "bare";
+                  const isCritical = criticalStepIds.has(b.id);
+                  const equipment = b.step.requiredEquipment[0];
+                  return (
+                    <button
+                      type="button"
+                      className={`sch-block is-task is-${playerKey(index)} ${isCritical ? "is-critical" : ""} ${
+                        selectedStepId === b.id ? "is-selected" : ""
+                      } ${width < 96 ? "is-narrow" : ""} ${width < 64 ? "is-tight" : ""}`}
+                      key={b.id}
+                      style={style}
+                      title={`${b.node?.label} · ${formatClock(durationSec)}`}
+                      aria-label={`${b.node?.label} · ${formatClock(durationSec)}`}
+                      aria-pressed={selectedStepId === b.id}
+                      onClick={() => onSelect(b.id)}
+                    >
+                      {(rung === "full" || rung === "name") && <span className="sch-block-label">{fitLabel(b.node?.label, width)}</span>}
+                      {rung === "full" && (
+                        <Mono className="sch-block-meta">
+                          {formatClock(durationSec)}
+                          {equipment && ` · ${equipmentLabel(equipment)}`}
+                        </Mono>
+                      )}
+                      {rung === "dur" && <Mono className="sch-block-meta">{formatClock(durationSec)}</Mono>}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
-      {waitLabel && <p className="hint step-detail-wait">&#9888; {waitLabel}</p>}
-      {isCritical && <p className="hint step-detail-critical">On the critical path — if this runs late, dinner runs late.</p>}
+
+      <div className="sch-card-foot">
+        {selected && !isMobile ? (
+          <TaskDetail {...selected} onClose={onClose} scrollIntoView />
+        ) : (
+          <span className="sch-meta">Tap any task for its exact timing.</span>
+        )}
+        {/* On a phone the panel is a bottom sheet, portaled past .page's
+            transform so `position: fixed` is measured from the viewport. */}
+        {selected && isMobile && createPortal(<TaskDetail {...selected} sheet onClose={onClose} />, document.body)}
+      </div>
     </div>
   );
 }
 
-function CompetitionPanel({ opening, cooks, byId, cookIndexById, dishOf }) {
+function TaskDetail({ step, node, dish, cook, cookIndex, isCritical, waitLabel, sheet = false, scrollIntoView = false, onClose }) {
+  const flames = DIFFICULTY_FLAMES[node.difficulty] || 1;
+  const durationSec = step.endSec - step.startSec;
+  const rootRef = useRef(null);
+  const closeRef = useRef(null);
+
+  // Inline panel: it lives below the timeline, under the sticky footer
+  // at most viewport heights, so bring it up when the selection changes
+  // (scroll-margin-bottom in CSS clears the footer + VoiceBar).
+  useEffect(() => {
+    if (scrollIntoView) rootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [scrollIntoView, step.id]);
+
+  // Sheet: behaves like a dialog — focus lands on Close, Esc dismisses.
+  useEffect(() => {
+    if (!sheet) return undefined;
+    closeRef.current?.focus();
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sheet, onClose]);
+
+  const panel = (
+    <div ref={rootRef} className={`sch-detail ${sheet ? "is-sheet" : ""}`} role={sheet ? "dialog" : undefined} aria-modal={sheet || undefined} aria-label={node.label}>
+      {sheet && <span className="sch-sheet-handle" aria-hidden="true" />}
+      <button ref={closeRef} type="button" className="btn btn-ghost sch-detail-close" onClick={onClose}>
+        Close
+      </button>
+      <div className="sch-detail-head">
+        <span className="sch-eyebrow">{dish || "Step"}</span>
+        <span className="sch-detail-title">{node.label}</span>
+        {node.description && <span className="sch-detail-desc">{node.description}</span>}
+      </div>
+      <div className="sch-detail-grid">
+        <div>
+          <span className="sch-eyebrow">Starts</span>
+          <Mono className="sch-detail-value">{formatClock(step.startSec)}</Mono>
+        </div>
+        <div>
+          <span className="sch-eyebrow">Ends</span>
+          <Mono className="sch-detail-value">{formatClock(step.endSec)}</Mono>
+        </div>
+        <div>
+          <span className="sch-eyebrow">Takes</span>
+          <Mono className="sch-detail-value">{formatClock(durationSec)}</Mono>
+        </div>
+        <div>
+          <span className="sch-eyebrow">Player</span>
+          <span className="sch-detail-player">
+            <PlayerAvatar cook={cook} index={cookIndex} size={24} />
+            <span>{cook?.name || "—"}</span>
+          </span>
+        </div>
+        <div>
+          <span className="sch-eyebrow">Equipment</span>
+          <span className="sch-detail-text">
+            {step.requiredEquipment.length ? step.requiredEquipment.map(equipmentLabel).join(", ") : "None"}
+          </span>
+        </div>
+        <div>
+          <span className="sch-eyebrow">Difficulty</span>
+          <span className="sch-difficulty" aria-label={`${node.difficulty} difficulty`}>
+            {Array.from({ length: flames }, (_, i) => (
+              <KpIcon glyph="flame" size={16} key={i} />
+            ))}
+          </span>
+        </div>
+      </div>
+      {waitLabel && <span className="sch-detail-note is-warning">&#9888; {waitLabel}</span>}
+      {isCritical && <span className="sch-detail-note is-critical">On the critical path — if this runs late, dinner runs late.</span>}
+    </div>
+  );
+  if (!sheet) return panel;
+  return (
+    <>
+      <div className="sch-sheet-scrim" onClick={onClose} aria-hidden="true" />
+      {panel}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------
+// Versus → opening hand
+// ---------------------------------------------------------------
+
+function OpeningHand({ opening, cooks, byId, dishOf }) {
   const { bundles, poolIds, lockedIds, contested, skewSec } = opening;
+  const durationOf = (id) => byId[id]?.estimated_duration_sec || 0;
+  const grabsTotalSec = [...poolIds, ...lockedIds].reduce((sum, id) => sum + durationOf(id), 0);
 
   return (
-    <div className="card schedule-card">
-      <div className="schedule-card-head">
-        <span className="mini-title">Opening tasks</span>
-        {!contested && skewSec > 0 && (
-          <span className="hint mono">{formatDuration(skewSec)} apart at the start</span>
-        )}
+    <div className="sch-card sch-card-versus">
+      <div className="sch-card-head">
+        <span className="sch-card-title">Opening hand</span>
+        {!contested && skewSec > 0 && <Mono className="sch-card-meta">{formatClock(skewSec)} apart at the start</Mono>}
       </div>
 
       {contested ? (
-        <p className="hint">
-          Only {poolIds.length} task{poolIds.length === 1 ? "" : "s"} can start right now — not enough to give everyone
-          their own. It&rsquo;s open: first to claim it by voice gets it.
-        </p>
+        <div className="sch-notice is-warning sch-notice-inset" role="status">
+          <span>
+            Only {plural(poolIds.length, "task")} can start right now — not enough to deal everyone their own. First to claim it by voice
+            gets it.
+          </span>
+        </div>
       ) : (
-        <p className="hint">
-          Everyone starts with a roughly equal chunk of work, and no two opening tasks fight over the same equipment.
-          After that, nothing is assigned — claim what you want by voice.
-        </p>
-      )}
-
-      {!contested && (
-        <div className="opening-bundles">
-          {bundles.map((bundle) => {
-            const cook = cooks.find((c) => c.id === bundle.cookId);
-            return (
-              <div className={`opening-bundle cook-color-${cookColorKey(cookIndexById[bundle.cookId])}`} key={bundle.cookId}>
-                <div className="opening-bundle-head">
-                  <span className="cook-avatar cook-avatar-sm">{cook?.name[0]?.toUpperCase()}</span>
-                  <div>
-                    <div className="schedule-lane-name">{cook?.name}</div>
-                    <div className="hint mono">{formatDuration(bundle.totalSec)} to open</div>
+        <>
+          <span className="sch-meta sch-intro">
+            Everyone opens with a roughly equal chunk of work, and no two opening tasks fight over the same tool. After that, nothing is
+            assigned — claim by voice.
+          </span>
+          <div className="sch-bundles">
+            {bundles.map((bundle) => {
+              const index = cooks.findIndex((c) => c.id === bundle.cookId);
+              const cook = cooks[index];
+              return (
+                <div className={`sch-bundle is-${playerKey(index)}`} key={bundle.cookId}>
+                  <div className="sch-bundle-head">
+                    <PlayerAvatar cook={cook} index={index} size={32} />
+                    <span className="sch-bundle-name">{cook?.name}</span>
+                    <Mono className="sch-bundle-total">{formatClock(bundle.totalSec)} to open</Mono>
                   </div>
-                </div>
-                <ul className="opening-bundle-list">
                   {bundle.stepIds.map((id) => (
-                    <li key={id}>
-                      <span className="opening-step-label">{byId[id]?.label}</span>
-                      <span className="hint mono">
-                        {formatDuration(byId[id]?.estimated_duration_sec || 0)}
-                        {dishOf(id) ? ` · ${dishOf(id)}` : ""}
+                    <div className="sch-bundle-row" key={id}>
+                      <span className="sch-bundle-row-main">
+                        <span className="sch-bundle-row-label">{byId[id]?.label}</span>
+                        {dishOf(id) && <span className="sch-bundle-row-dish">{dishOf(id)}</span>}
                       </span>
-                    </li>
+                      <Mono className="sch-bundle-row-dur">{formatClock(durationOf(id))}</Mono>
+                    </div>
                   ))}
-                </ul>
-              </div>
-            );
-          })}
-        </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
-      <div className="task-pool">
-        <span className="mini-title">
-          Unclaimed &middot; {poolIds.length + lockedIds.length} steps
-        </span>
-        <p className="hint">
-          {poolIds.length} ready to claim now, {lockedIds.length} still blocked by other steps.
-        </p>
-        <div className="task-pool-chips">
-          {poolIds.map((id) => (
-            <span className="tag" key={id}>
-              {byId[id]?.label} &middot; {formatDuration(byId[id]?.estimated_duration_sec || 0)}
-            </span>
-          ))}
-          {lockedIds.map((id) => (
-            <span className="tag task-chip-locked" key={id}>
-              {byId[id]?.label}
-            </span>
-          ))}
+      <div className="sch-grabs">
+        <div className="sch-grabs-head">
+          <span className="sch-card-title">
+            Up for grabs · <Mono className="sch-grabs-total">{formatClock(grabsTotalSec)}</Mono>
+          </span>
+          <span className="sch-meta">
+            {poolIds.length} ready now · {lockedIds.length} not yet · claim by voice
+          </span>
         </div>
+        <div className="sch-grabs-group">
+          <span className="sch-eyebrow is-ready">
+            <span className="sch-dot" /> Ready now · {poolIds.length}
+          </span>
+          <div className="sch-chips">
+            {poolIds.map((id) => (
+              <span className="sch-chip is-ready" key={id}>
+                {byId[id]?.label}
+                <Mono className="sch-chip-dur">{formatClock(durationOf(id))}</Mono>
+              </span>
+            ))}
+          </div>
+        </div>
+        {lockedIds.length > 0 && (
+          <div className="sch-grabs-group">
+            <span className="sch-eyebrow is-locked">
+              <span className="sch-dot" /> Not yet · {lockedIds.length}
+            </span>
+            <div className="sch-chips">
+              {lockedIds.map((id) => (
+                <span className="sch-chip is-locked" key={id}>
+                  {byId[id]?.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
