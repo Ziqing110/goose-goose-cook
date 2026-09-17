@@ -13,10 +13,18 @@
 // back to its dependency-depth slot, so a fresh session opens tidy.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { formatMinutes } from "../utils/inventory.js";
-import { autoPositions, boxOf, edgePath, resolvePositions, settle, CARD_W, CARD_H, PAD } from "../utils/boardLayout.js";
+import { autoPositions, boxOf, cardSize, edgePath, resolvePositions, settle, CARD_W, CARD_H, PAD } from "../utils/boardLayout.js";
 import "./RecipeBoard.css";
 
 const STATUS_WORD = { atRisk: "at risk", blocked: "blocked" };
+// Must match .board-card-label in RecipeBoard.css — a card's size is
+// worked out from its text before anything is rendered.
+const LABEL_FONT = '600 13px "Inter", ui-sans-serif, system-ui, sans-serif';
+// The board scales to fit its frame, so the whole graph is visible
+// without panning — that fitted scale is also the zoom slider's floor
+// (see InventoryPage), which is why it varies with how many steps a
+// dish has. This is only a sanity stop for an enormous graph.
+const MIN_SCALE = 0.35;
 // Spacing between arrowheads converging on one card.
 const LANDING_GAP = 16;
 const MARGIN = 16;
@@ -38,6 +46,9 @@ export default function RecipeBoard({
   // board pans the selection clear of it and grows so it can.
   reserveRight = 0,
   onOffscreen,
+  // null = fit the frame; a number is the cook's own zoom.
+  zoom = null,
+  onFitScale,
   readOnly = false,
 }) {
   const boardRef = useRef(null);
@@ -45,22 +56,38 @@ export default function RecipeBoard({
   const [drag, setDrag] = useState(null);
   const [ghost, setGhost] = useState(null);
   const [panning, setPanning] = useState(false);
+  const [fitScale, setFitScale] = useState(1);
+  const scale = zoom ?? fitScale;
   const ghostRef = useRef(null);
   ghostRef.current = ghost;
 
-  const auto = useMemo(() => autoPositions(nodes), [nodes]);
+  // Every card is sized around its own label, so no step's name is cut
+  // off. Measured with a canvas rather than the DOM: the layout has to
+  // know the boxes before it can place them.
+  const sizes = useMemo(() => {
+    const ctx = typeof document !== "undefined" ? document.createElement("canvas").getContext("2d") : null;
+    const measure = (text) => {
+      if (!ctx) return text.length * 6.9; // rough fallback; never hit in a browser
+      ctx.font = LABEL_FONT;
+      return ctx.measureText(text).width;
+    };
+    return Object.fromEntries(nodes.map((n) => [n.id, cardSize(n.label, measure)]));
+  }, [nodes]);
+  const sizeOf = (node) => sizes[node.id] || { w: CARD_W, h: CARD_H };
+
+  const auto = useMemo(() => autoPositions(nodes, sizeOf), [nodes, sizes]);
   // What gets drawn: stored where it's usable, nudged where it isn't.
-  const resolved = useMemo(() => resolvePositions(nodes, positions, auto), [nodes, positions, auto]);
+  const resolved = useMemo(() => resolvePositions(nodes, positions, auto, sizeOf), [nodes, positions, auto, sizes]);
   const posOf = (id) => (drag?.id === id && ghost) || resolved[id] || { x: PAD, y: PAD };
 
   const boxes = useMemo(() => {
     const out = {};
     nodes.forEach((n) => {
-      out[n.id] = { id: n.id, ...boxOf(posOf(n.id)) };
+      out[n.id] = { id: n.id, ...boxOf(posOf(n.id), sizes[n.id]) };
     });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, positions, auto, ghost, drag]);
+  }, [nodes, positions, auto, ghost, drag, sizes]);
 
   // With a card selected, its immediate neighbourhood is what matters —
   // everything else dims so the connections can be followed.
@@ -80,7 +107,7 @@ export default function RecipeBoard({
       // Incoming edges land top to bottom in the order of their sources,
       // spread around the midline so each keeps its own arrowhead.
       const deps = (n.depends_on || []).filter((d) => boxes[d] && boxes[n.id]).sort((a, b) => boxes[a].y - boxes[b].y);
-      const spread = Math.min(LANDING_GAP, (CARD_H - 24) / Math.max(1, deps.length - 1));
+      const spread = Math.min(LANDING_GAP, (boxes[n.id].h - 24) / Math.max(1, deps.length - 1));
       deps.forEach((depId, i) => {
         // Anything that isn't one of the two ends is something to avoid.
         const obstacles = Object.values(boxes).filter((b) => b.id !== n.id && b.id !== depId);
@@ -101,7 +128,8 @@ export default function RecipeBoard({
     e.stopPropagation();
     const board = boardRef.current.getBoundingClientRect();
     const p = posOf(id);
-    setDrag({ id, dx: e.clientX - board.left - p.x, dy: e.clientY - board.top - p.y, from: p, moved: false });
+    // The rect is scaled; the positions aren't.
+    setDrag({ id, dx: (e.clientX - board.left) / scale - p.x, dy: (e.clientY - board.top) / scale - p.y, from: p, moved: false });
     setGhost(p);
   };
 
@@ -111,8 +139,8 @@ export default function RecipeBoard({
       const board = boardRef.current?.getBoundingClientRect();
       if (!board) return;
       const at = {
-        x: Math.max(0, e.clientX - board.left - drag.dx),
-        y: Math.max(0, e.clientY - board.top - drag.dy),
+        x: Math.max(0, (e.clientX - board.left) / scale - drag.dx),
+        y: Math.max(0, (e.clientY - board.top) / scale - drag.dy),
       };
       if (Math.abs(at.x - drag.from.x) > 3 || Math.abs(at.y - drag.from.y) > 3) drag.moved = true;
       setGhost(at);
@@ -120,8 +148,8 @@ export default function RecipeBoard({
     const up = () => {
       if (drag.moved && ghostRef.current) {
         // Land on the nearest spot that touches nothing.
-        const others = nodes.filter((n) => n.id !== drag.id).map((n) => boxOf(posOf(n.id)));
-        onMove(drag.id, settle(ghostRef.current, others));
+        const others = nodes.filter((n) => n.id !== drag.id).map((n) => boxOf(posOf(n.id), sizes[n.id]));
+        onMove(drag.id, settle(ghostRef.current, others, sizes[drag.id]));
       } else {
         onSelect(drag.id);
       }
@@ -137,7 +165,7 @@ export default function RecipeBoard({
       window.removeEventListener("pointercancel", up);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drag, onMove, onSelect, nodes, positions]);
+  }, [drag, onMove, onSelect, nodes, positions, scale, sizes]);
 
   // Grabbing the background scrolls the viewport under the board. Done
   // by moving the scroll container, not transforming the board, so the
@@ -166,12 +194,28 @@ export default function RecipeBoard({
   const content = nodes.reduce(
     (acc, n) => {
       const p = posOf(n.id);
-      return { w: Math.max(acc.w, p.x + CARD_W + PAD), h: Math.max(acc.h, p.y + CARD_H + PAD) };
+      const size = sizeOf(n);
+      return { w: Math.max(acc.w, p.x + size.w + PAD), h: Math.max(acc.h, p.y + size.h + PAD) };
     },
     { w: 640, h: 320 }
   );
-  // Room to pan the rightmost cards out from under the overlay.
-  const extent = { w: content.w + reserveRight, h: content.h };
+  // Fit the whole graph into the frame, so nothing needs panning to be
+  // found. The panel's strip is deliberately not subtracted: rescaling
+  // every time it opens would shrink the cards past readable. It gets
+  // scroll room instead (below), and the selection pans clear of it.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return undefined;
+    const fit = () => {
+      if (el.clientWidth <= 0 || el.clientHeight <= 0) return;
+      const k = Math.min(1, el.clientWidth / content.w, el.clientHeight / content.h);
+      setFitScale(Math.max(MIN_SCALE, Math.round(k * 1000) / 1000));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [content.w, content.h]);
 
   // Opening the panel pans rather than reflows: bring the selected card
   // and its lit neighbours into the part of the viewport the panel
@@ -193,22 +237,29 @@ export default function RecipeBoard({
       if (hi + MARGIN > from + span) return hi + MARGIN - span;
       return from;
     };
-    const width = el.clientWidth - reserveRight;
-    const left = fit(box.x1, box.x2, el.scrollLeft, width, sel.x, sel.x + sel.w);
-    const top = fit(box.y1, box.y2, el.scrollTop, el.clientHeight, sel.y, sel.y + sel.h);
+    const width = (el.clientWidth - reserveRight) / scale;
+    const left = fit(box.x1, box.x2, el.scrollLeft / scale, width, sel.x, sel.x + sel.w) * scale;
+    const top = fit(box.y1, box.y2, el.scrollTop / scale, el.clientHeight / scale, sel.y, sel.y + sel.h) * scale;
     if (Math.abs(left - el.scrollLeft) < 1 && Math.abs(top - el.scrollTop) < 1) return;
     const smooth = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     el.scrollTo({ left: Math.max(0, left), top: Math.max(0, top), behavior: smooth ? "smooth" : "auto" });
     // Only when the selection or the overlay changes — not on every drag frame.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedNodeId, reserveRight]);
+  }, [selectedNodeId, reserveRight, scale]);
+
+  useEffect(() => onFitScale?.(fitScale), [fitScale, onFitScale]);
 
   // Which cards are scrolled out of view, for the caption under the board.
   const offscreenKey = useRef("");
   const reportOffscreen = () => {
     const el = scrollRef.current;
     if (!el || !onOffscreen) return;
-    const view = { x1: el.scrollLeft, x2: el.scrollLeft + el.clientWidth, y1: el.scrollTop, y2: el.scrollTop + el.clientHeight };
+    const view = {
+      x1: el.scrollLeft / scale,
+      x2: (el.scrollLeft + el.clientWidth) / scale,
+      y1: el.scrollTop / scale,
+      y2: (el.scrollTop + el.clientHeight) / scale,
+    };
     const out = { left: [], right: [], other: [] };
     nodes.forEach((n) => {
       const b = boxes[n.id];
@@ -233,13 +284,14 @@ export default function RecipeBoard({
 
   return (
     <div className={`board-scroll${panning ? " is-panning" : ""}`} ref={scrollRef} onScroll={reportOffscreen}>
+      <div className="board-zoom" style={{ width: content.w * scale + reserveRight, height: content.h * scale }}>
       <div
         className="board"
         ref={boardRef}
-        style={{ width: extent.w, height: extent.h }}
+        style={{ width: content.w, height: content.h, transform: `scale(${scale})` }}
         onPointerDown={startPan}
       >
-        <svg className="board-edges" width={extent.w} height={extent.h} aria-hidden="true">
+        <svg className="board-edges" width={content.w} height={content.h} aria-hidden="true">
           <defs>
             {/* Two markers rather than context-stroke, which Safari
                 still doesn't support. */}
@@ -265,6 +317,7 @@ export default function RecipeBoard({
           const status = statusOf?.(n.id) || "craftable";
           const tail = STATUS_WORD[status] || dishLabelFor?.(n);
           const number = numberOf?.(n.id);
+          const size = sizeOf(n);
           return (
             <button
               type="button"
@@ -275,7 +328,7 @@ export default function RecipeBoard({
               className={`board-card phase-${n.phase || "prep"} is-${status}${selectedNodeId === n.id ? " is-selected" : ""}${
                 drag?.id === n.id ? " is-dragging" : ""
               }${related && !related.has(n.id) && status !== "blocked" ? " is-dimmed" : ""}`}
-              style={{ left: p.x, top: p.y, width: CARD_W, height: CARD_H }}
+              style={{ left: p.x, top: p.y, width: size.w, height: size.h }}
               onPointerDown={(e) => startDrag(e, n.id)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
@@ -293,6 +346,7 @@ export default function RecipeBoard({
             </button>
           );
         })}
+      </div>
       </div>
     </div>
   );

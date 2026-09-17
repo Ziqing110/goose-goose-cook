@@ -192,9 +192,9 @@ body:has(.home-v4) { background: var(--kp-bg); }
 .hp-phase-seg.is-plate { background: var(--kp-phase-plate); }
 /* Each entry takes its own phase's colour, so the legend is the key. */
 .hp-phase-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; }
-.hp-phase-key.is-prep { color: var(--kp-phase-prep); }
-.hp-phase-key.is-cook { color: var(--kp-phase-cook); }
-.hp-phase-key.is-plate { color: var(--kp-phase-plate); }
+.hp-phase-key.is-prep { color: var(--kp-phase-prep-ink); }
+.hp-phase-key.is-cook { color: var(--kp-phase-cook-ink); }
+.hp-phase-key.is-plate { color: var(--kp-phase-plate-ink); }
 .hp-phase-pct { opacity: 0.75; }
 
 /* stage path — the session's seven stages as 28px nodes on a 2px

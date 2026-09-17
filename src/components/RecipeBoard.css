@@ -12,9 +12,12 @@
   scrollbar-color: var(--board-edge) transparent;
 }
 
+.board-zoom { position: relative; }
+/* The board lays out at its natural size and is scaled to fit; the
+   wrapper above carries the scaled size so scrollbars stay honest. */
 .board {
   position: relative;
-  min-width: 100%;
+  transform-origin: 0 0;
   cursor: grab;
   touch-action: none; /* the background pans by pointer, not native scroll */
 }
@@ -44,11 +47,11 @@
   position: absolute;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   align-items: flex-start;
   justify-content: center;
   text-align: left;
-  padding: 10px 12px 10px 16px;
+  padding: 8px 10px 8px 12px;
   overflow: hidden; /* the box is fixed; text clamps rather than growing it */
   border: 1px solid var(--line-strong);
   border-radius: 10px;
@@ -87,7 +90,7 @@
   left: 0;
   top: 0;
   bottom: 0;
-  width: 4px;
+  width: 3px;
   border-radius: 10px 0 0 10px;
   background: var(--board-phase, var(--line-strong));
 }
@@ -102,32 +105,29 @@
 
 .board-card-num {
   position: absolute;
-  top: 8px;
-  right: 10px;
+  top: 6px;
+  right: 8px;
   font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 10px;
+  line-height: 13px;
   color: var(--line-strong);
 }
 
-/* Two lines of title, one of meta — a fixed box is what lets the layout
-   promise no overlap and lets edges route around known rectangles. The
-   full label is in the card's title attribute. */
+/* The label is never truncated: the card was sized around it (see
+   cardSize in utils/boardLayout.js), which is also what lets the layout
+   promise no overlap and lets edges route around known rectangles. */
 .board-card-label {
-  padding-right: 18px;
-  font-size: 14px;
+  padding-right: 16px;
+  font-size: 13px;
   font-weight: 600;
-  line-height: 1.25;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  line-height: 17px;
   width: 100%;
+  overflow-wrap: anywhere;
 }
 .board-card-meta {
   font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 11px;
+  line-height: 15px;
   color: var(--ink-soft);
   width: 100%;
   white-space: nowrap;

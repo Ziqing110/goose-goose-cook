@@ -55,6 +55,10 @@
   --phase-prep: var(--kp-phase-prep);
   --phase-cook: var(--kp-phase-cook);
   --phase-plate: var(--kp-phase-plate);
+  /* Text tones — the plain ones above are for graphic marks only. */
+  --phase-prep-ink: var(--kp-phase-prep-ink);
+  --phase-cook-ink: var(--kp-phase-cook-ink);
+  --phase-plate-ink: var(--kp-phase-plate-ink);
   --shadow-modal: var(--kp-shadow-modal);
 
   /* Recipe-graph board. Cards away from the selection flatten toward
