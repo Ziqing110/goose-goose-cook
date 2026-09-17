@@ -6,7 +6,8 @@
 //  1. WHEN each step runs â€” branch-and-bound over activity orderings,
 //     minimising the finish time. Cooks are modelled as a pooled
 //     resource of capacity N (they're interchangeable), alongside each
-//     equipment type at its kitchen capacity. With ~20 fixed steps the
+//     equipment type at its kitchen capacity. Unattended steps ask for
+//     equipment only. With ~20 fixed steps the
 //     search proves optimality rather than guessing, falling back to
 //     the best found so far if it hits its node budget.
 //  2. WHO does each step â€” the schedule above fixes the start times,
@@ -14,8 +15,10 @@
 //     fast, so that freedom is spent evening out each cook's workload
 //     (the greedy this replaced piled ~3x the work on one cook).
 //
-// Every step needs one cook's full attention for its whole duration â€”
-// no unattended/background steps (e.g. a hands-off rice cooker).
+// Steps carry `attended`. An attended step needs a cook for its whole
+// duration; an unattended one — a simmer left alone, a chill, a rest —
+// occupies its EQUIPMENT and nobody. It still has an owner, because
+// somebody has to start it, but it never books their time.
 import { EQUIPMENT_OPTIONS } from "../data/dishes.js";
 
 export const EQUIPMENT_LABELS = {
@@ -85,7 +88,23 @@ function resourceCapacities(cooks, kitchenProfile) {
   return caps;
 }
 
-const demandOf = (node) => [COOK_RESOURCE, ...new Set(node.required_equipment || [])];
+/** A step nobody marked needs a cook — assuming otherwise would plan
+ *  work for people who are not free to do it. */
+export const isAttended = (node) => node?.attended !== false;
+
+/**
+ * What a step occupies while it runs.
+ *
+ * An unattended step demands its EQUIPMENT and no cook. The pot is busy
+ * for forty minutes; the person who set it going is not. Charging a cook
+ * for it — which this did for every step — made the planner believe two
+ * people were flat out for 48 minutes on a congee run that contains 21
+ * minutes of actual hands-on work.
+ */
+const demandOf = (node) => [
+  ...(isAttended(node) ? [COOK_RESOURCE] : []),
+  ...new Set(node.required_equipment || []),
+];
 
 /** Topological order, ignoring references to nodes outside this set.
  *  Anything left over sits in a dependency cycle and can't be ordered. */
@@ -315,8 +334,15 @@ function assignCooks(placed, cooks, byId) {
     });
     const chosen = pool[0];
     assignment.set(task.id, chosen.id);
-    busy.set(chosen.id, busy.get(chosen.id) + (task.endSec - task.startSec));
-    intervals.get(chosen.id).push({ id: task.id, startSec: task.startSec, endSec: task.endSec });
+    // An unattended step still gets an owner — somebody has to put the
+    // pot on, and cooperation mode needs it in a queue — but it does NOT
+    // reserve their time or count toward how busy they are. Booking it
+    // would re-create the thing this whole change removes: a cook shown
+    // as occupied for forty minutes by a simmer.
+    if (isAttended(byId[task.id])) {
+      busy.set(chosen.id, busy.get(chosen.id) + (task.endSec - task.startSec));
+      intervals.get(chosen.id).push({ id: task.id, startSec: task.startSec, endSec: task.endSec });
+    }
   });
 
   // Local improvement: move a step off the busiest cook whenever some
@@ -326,6 +352,8 @@ function assignCooks(placed, cooks, byId) {
   for (let pass = 0; pass < 8; pass++) {
     let improved = false;
     for (const task of ordered) {
+      // Unattended steps carry no load, so moving them balances nothing.
+      if (!isAttended(byId[task.id])) continue;
       const from = assignment.get(task.id);
       const duration = task.endSec - task.startSec;
       for (const c of cooks) {
@@ -438,6 +466,60 @@ export function scheduleSteps(nodes, cooks, kitchenProfile, { nodeBudget, timeBu
   }
 
   return { steps, makespanSec, criticalStepIds, unscheduledIds: unordered, optimal, lowerBoundSec };
+}
+
+/**
+ * Which physical burner / pot / board each step uses.
+ *
+ * The scheduler enforces equipment as a COUNT — two burners means at
+ * most two things on a burner at once — and never says which. That was
+ * enough while every step also occupied a cook, because the cook lanes
+ * carried the picture. Once unattended steps stopped occupying anyone,
+ * a 40-minute simmer had no lane at all: it belongs to the pot, not the
+ * person, and the pot had nowhere to be drawn.
+ *
+ * Greedy by start time into the first free lane. That is optimal for
+ * interval partitioning, and the schedule is already fixed by the time
+ * this runs, so it cannot make the plan worse — it only names what the
+ * plan already implies.
+ *
+ * Returns [{ type, index, label, stepIds }], one entry per lane that has
+ * anything in it. A kitchen with three burners and two used shows two.
+ */
+export function equipmentLanes(steps, nodes) {
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const ordered = [...steps].sort((a, b) => a.startSec - b.startSec || a.endSec - b.endSec);
+  const lanesByType = new Map();
+
+  ordered.forEach((step) => {
+    const needs = [...new Set(byId[step.id]?.required_equipment || [])];
+    needs.forEach((type) => {
+      if (!lanesByType.has(type)) lanesByType.set(type, []);
+      const lanes = lanesByType.get(type);
+      const free = lanes.find((lane) => lane.endSec <= step.startSec);
+      if (free) {
+        free.stepIds.push(step.id);
+        free.endSec = step.endSec;
+      } else {
+        lanes.push({ stepIds: [step.id], endSec: step.endSec });
+      }
+    });
+  });
+
+  const out = [];
+  EQUIPMENT_OPTIONS.forEach((type) => {
+    (lanesByType.get(type) || []).forEach((lane, i) => {
+      const label = EQUIPMENT_LABELS[type] || type;
+      out.push({
+        type,
+        index: i + 1,
+        // Only number them when there is more than one to tell apart.
+        label: (lanesByType.get(type) || []).length > 1 ? `${label} ${i + 1}` : label,
+        stepIds: lane.stepIds,
+      });
+    });
+  });
+  return out;
 }
 
 // Solo comparison reuses scheduleSteps with one synthetic cook, same
