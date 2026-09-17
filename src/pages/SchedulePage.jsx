@@ -572,15 +572,19 @@ function CompetitionPanel({ opening, cooks, byId, cookIndexById, dishOf }) {
                   <span className="cook-avatar cook-avatar-sm">{cook?.name[0]?.toUpperCase()}</span>
                   <div>
                     <div className="schedule-lane-name">{cook?.name}</div>
-                    <div className="hint mono">{formatDuration(bundle.totalSec)} to open</div>
+                    <div className="hint mono">{formatDuration(bundle.totalSec)} hands-on to open</div>
                   </div>
                 </div>
                 <ul className="opening-bundle-list">
                   {bundle.stepIds.map((id) => (
-                    <li key={id}>
+                    // "5m to open" counts hands-on time only, so a
+                    // 40-minute simmer sitting in the same list has to say
+                    // what it is or the bundle simply looks wrong.
+                    <li key={id} className={isAttended(byId[id]) ? "" : "is-unattended"}>
                       <span className="opening-step-label">{byId[id]?.label}</span>
                       <span className="hint mono">
                         {formatDuration(byId[id]?.estimated_duration_sec || 0)}
+                        {isAttended(byId[id]) ? "" : " unattended"}
                         {dishOf(id) ? ` · ${dishOf(id)}` : ""}
                       </span>
                     </li>

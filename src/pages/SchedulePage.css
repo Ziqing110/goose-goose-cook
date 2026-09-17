@@ -181,3 +181,10 @@ button.schedule-block:focus-visible { outline: 2px solid var(--accent); outline-
 .schedule-block-task.is-equipment.is-unattended {
   border-style: dashed;
 }
+
+/* A wait inside an opening bundle. Listed because someone has to start
+   it, quieter because it costs them nothing. */
+.opening-bundle-list li.is-unattended .opening-step-label {
+  color: var(--ink-soft);
+  font-style: italic;
+}

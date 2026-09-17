@@ -599,15 +599,29 @@ function isReadyAtStart(node, byId) {
 export function computeOpeningAssignment(nodes, cooks, kitchenProfile) {
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
   const capacity = equipmentCapacity(kitchenProfile);
-  const ready = nodes.filter((n) => isReadyAtStart(n, byId));
+  const allReady = nodes.filter((n) => isReadyAtStart(n, byId));
   const lockedIds = nodes.filter((n) => !isReadyAtStart(n, byId)).map((n) => n.id);
   const emptyBundles = cooks.map((c) => ({ cookId: c.id, stepIds: [], totalSec: 0 }));
 
-  // Not enough startable work to give everyone their own opening â€”
-  // rather than inventing an assignment, throw it open and let the
-  // cooks race for it.
+  // Openings are balanced on ATTENDED time only.
+  //
+  // Balancing on total duration made a 40-minute simmer a full opening
+  // all by itself: on a congee run both cooks were handed nothing but
+  // pots to put on — zero hands-on work each, every real task left in
+  // the pool — and it reported a skew of zero. A perfectly balanced
+  // nothing. Two people start a simmer apiece and then race for the
+  // actual cooking.
+  const ready = allReady.filter(isAttended);
+  const readyWaits = allReady.filter((n) => !isAttended(n));
+
   if (ready.length < cooks.length) {
-    return { bundles: emptyBundles, poolIds: ready.map((n) => n.id), lockedIds, contested: true, skewSec: 0 };
+    return {
+      bundles: emptyBundles,
+      poolIds: allReady.map((n) => n.id),
+      lockedIds,
+      contested: true,
+      skewSec: 0,
+    };
   }
 
   const sorted = [...ready].sort(
@@ -624,15 +638,34 @@ export function computeOpeningAssignment(nodes, cooks, kitchenProfile) {
       return holders.size < (capacity[t] ?? 1);
     });
 
-  const take = (bundleIdx, node) => {
+  const take = (bundleIdx, node, charge = true) => {
     bundles[bundleIdx].stepIds.push(node.id);
-    bundles[bundleIdx].totalSec += node.estimated_duration_sec;
+    // An unattended step joins the bundle without adding to its load —
+    // the cook starts it and is immediately free again.
+    if (charge) bundles[bundleIdx].totalSec += node.estimated_duration_sec;
     used.add(node.id);
     (node.required_equipment || []).forEach((t) => {
       if (!toolHolders[t]) toolHolders[t] = new Set();
       toolHolders[t].add(bundleIdx);
     });
   };
+
+  // Deal the ready waits out first, round robin, subject to equipment.
+  // Getting them going is the most valuable opening move there is — the
+  // claim pool ranks them first for the same reason — but they cost the
+  // cook nothing, so `take` is told not to charge for them.
+  readyWaits
+    .sort((a, b) => b.estimated_duration_sec - a.estimated_duration_sec || a.id.localeCompare(b.id))
+    .forEach((node, i) => {
+      for (let n = 0; n < bundles.length; n++) {
+        const idx = (i + n) % bundles.length;
+        if (canTake(idx, node)) {
+          take(idx, node, false);
+          return;
+        }
+      }
+      // Every cook's equipment is spoken for; it stays in the pool.
+    });
 
   // The longest single ready task sets the bar every other cook tries
   // to match with one or more smaller tasks.
@@ -658,7 +691,7 @@ export function computeOpeningAssignment(nodes, cooks, kitchenProfile) {
   const totals = bundles.map((b) => b.totalSec);
   return {
     bundles,
-    poolIds: sorted.filter((n) => !used.has(n.id)).map((n) => n.id),
+    poolIds: allReady.filter((n) => !used.has(n.id)).map((n) => n.id),
     lockedIds,
     contested: false,
     skewSec: Math.max(...totals) - Math.min(...totals),
