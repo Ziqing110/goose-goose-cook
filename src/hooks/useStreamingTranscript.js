@@ -303,6 +303,14 @@ function buildParams(token, sampleRate, cfg) {
   if (keyterms.length) p.set("keyterms_prompt", JSON.stringify(keyterms));
   if (cfg.prompt) p.set("prompt", cfg.prompt);
 
+  // universal-3-5-pro is multilingual by default and code-switches
+  // mid-sentence with no configuration. Naming the languages we expect
+  // doesn't turn that off — it biases the model toward them, which is
+  // free accuracy when you already know the pair.
+  if (cfg.languageCodes?.length) {
+    p.set("language_codes", JSON.stringify(cfg.languageCodes));
+  }
+
   // Backstop only. This fires when the client stops sending entirely —
   // a crashed tab, a wedged worklet — not when someone is simply silent,
   // because silent PCM still counts as traffic. Idle-while-speaking-

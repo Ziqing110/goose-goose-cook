@@ -12,9 +12,11 @@
 // Muting also switches the conversation page's answer bar into typing
 // mode, and typing there mutes this. That contract predates the real
 // microphone and still holds.
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { useStreamingTranscript } from "../hooks/useStreamingTranscript.js";
+import { matchNavCommand, navCommandList, navHintFor } from "../utils/navCommands.js";
 import "./VoiceBar.css";
 
 // Four bars, lit proportionally to the current peak. The old markup
@@ -22,13 +24,45 @@ import "./VoiceBar.css";
 // these respond to the actual signal.
 const METER_BARS = 4;
 
+// Long enough to read, short enough that the bar goes back to being a
+// hint rather than a log of what you just did.
+const FEEDBACK_MS = 3500;
+
+// The live-cook page has its own command grammar, where "next" and
+// "back" mean something else entirely. Navigation stands down there.
+const NAV_OFF_ROUTES = ["/session/live-cook"];
+
+// Steer the model toward the two languages actually spoken here. It
+// still code-switches — universal-3-5-pro does that by default — but
+// naming the pair biases it and improves accuracy on both.
+const STREAM_CONFIG = {
+  speechModel: "universal-3-5-pro",
+  languageCodes: ["en", "zh"],
+};
+
 export default function VoiceBar() {
   const { state, dispatch } = useAppState();
   const { muted, hint } = state.voice;
   const [error, setError] = useState(null);
   const [idled, setIdled] = useState(false);
+  const [feedback, setFeedback] = useState(null);
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const feedbackTimer = useRef(null);
+  // Read inside the turn handler, which must not be rebuilt on every
+  // route change — that would churn the connection.
+  const routeRef = useRef(pathname);
+  routeRef.current = pathname;
 
   const onError = useCallback((message) => setError(message), []);
+
+  const say = useCallback((line) => {
+    clearTimeout(feedbackTimer.current);
+    setFeedback(line);
+    feedbackTimer.current = setTimeout(() => setFeedback(null), FEEDBACK_MS);
+  }, []);
+
+  useEffect(() => () => clearTimeout(feedbackTimer.current), []);
 
   // Nobody has spoken for two minutes. Close the socket rather than keep
   // billing for a mic pointed at an empty kitchen, and say why — a mic
@@ -37,15 +71,48 @@ export default function VoiceBar() {
     setIdled(true);
     dispatch({ type: "voice/setMuted", payload: { muted: true } });
   }, [dispatch]);
-  const onTurn = useCallback((turn) => {
-    // Nothing consumes turns yet — navigation commands land here next.
-    // Logged rather than dropped so the wiring is visible while the
-    // rest is still being built.
-    if (turn.transcript) console.info("[voice] turn:", turn.transcript);
-  }, []);
+
+  const onTurn = useCallback(
+    (turn) => {
+      const text = turn.transcript?.trim();
+      if (!text) return;
+      const route = routeRef.current;
+      if (NAV_OFF_ROUTES.includes(route)) return;
+
+      const { action, path } = matchNavCommand(text, { route });
+      switch (action) {
+        case "goto":
+          navigate(path);
+          break;
+        case "next":
+        case "back":
+          // Browser history rather than a route table: "next" after a
+          // "back" should return you where you were, and the session
+          // guards already redirect anything unreachable.
+          navigate(action === "back" ? -1 : 1);
+          break;
+        case "already":
+          say("You're already here.");
+          break;
+        case "blocked":
+          say("Not yet — finish this step first.");
+          break;
+        case "help":
+          say(`Try: next, back, or go to ${navCommandList().slice(0, 3).join(", ")}.`);
+          break;
+        default:
+          // Silence is the right response to ordinary conversation, and
+          // most of what gets said near this app is ordinary
+          // conversation. Logged, not announced.
+          console.info("[voice] not a command:", text);
+      }
+    },
+    [navigate, say],
+  );
 
   const { status, partial, level } = useStreamingTranscript({
     enabled: !muted,
+    config: STREAM_CONFIG,
     onTurn,
     onError,
     onIdle,
@@ -59,7 +126,7 @@ export default function VoiceBar() {
 
   // One source of truth for the three places that describe state, so
   // the pill, the label and the body copy can never disagree.
-  const view = describe({ muted, status, error, idled, partial, hint });
+  const view = describe({ muted, status, error, idled, feedback, partial, hint, pathname });
 
   // A peak of ~0.5 is already loud speech, so scale before splitting
   // across bars — otherwise normal talking barely lifts the first one.
@@ -112,7 +179,7 @@ export default function VoiceBar() {
 }
 
 /** Collapse mute + connection status + error into one view model. */
-function describe({ muted, status, error, idled, partial, hint }) {
+function describe({ muted, status, error, idled, feedback, partial, hint, pathname }) {
   if (error) {
     return {
       label: "MIC ERROR",
@@ -163,12 +230,14 @@ function describe({ muted, status, error, idled, partial, hint }) {
       isPartial: false,
     };
   }
-  // Live. Show what's being heard right now if anything, otherwise the
-  // page's hint — which is what `hint` was always for.
+  // Live. Priority: what's being said right now, then what just
+  // happened, then what this page offers. The page's own hint wins over
+  // the generic navigation one — it knows more about where you are.
+  const navHint = navHintFor(pathname);
   return {
-    label: partial ? "HEARING" : "LISTENING",
-    line: partial || hint?.line || "Say the word when you're ready for the next step.",
-    sub: partial ? null : hint?.sub || null,
+    label: partial ? "HEARING" : feedback ? "HEARD" : "LISTENING",
+    line: partial || feedback || hint?.line || navHint.line,
+    sub: partial || feedback ? null : hint?.sub || navHint.sub,
     pill: "Listening",
     pillClass: "is-listening",
     isPartial: Boolean(partial),
