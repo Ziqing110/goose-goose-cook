@@ -7,10 +7,15 @@
 export const ELICITATION_QUESTIONS = [
   {
     id: "dishIdea",
-    slotLabel: "Dish",
-    agentText: "What do you want to cook tonight?",
+    slotLabel: "Dishes",
+    // Plural on purpose. The whole shared-step machinery — is_shareable,
+    // share_key, extractSharedSteps — exists so two dishes cooked
+    // together fold their common prep into one step. Asking for a single
+    // dish made the app's most distinctive feature unreachable from its
+    // own setup flow.
+    agentText: "What are we cooking tonight? One dish or a few.",
     options: [],
-    freeTextPlaceholder: "e.g. mapo tofu",
+    freeTextPlaceholder: "e.g. mapo tofu, or mapo tofu and egg drop soup",
   },
   {
     id: "servings",
@@ -33,6 +38,22 @@ export const ELICITATION_QUESTIONS = [
       { label: "Vegan", value: "vegan" },
     ],
     freeTextPlaceholder: "e.g. nut allergy",
+  },
+  {
+    id: "skill",
+    slotLabel: "Step detail",
+    // Deliberately asked as "how much explanation do you want", not "how
+    // good are you". A beginner is allowed to attempt a hard dish — that
+    // is most of the appeal — so this must never read as a gate on what
+    // you can cook. It changes how much each step explains, nothing
+    // else, and the question says so out loud.
+    agentText: "How much should I explain each step? You can cook anything either way.",
+    options: [
+      { label: "Explain everything", value: "beginner" },
+      { label: "Normal detail", value: "regular" },
+      { label: "Just the essentials", value: "confident" },
+    ],
+    freeTextPlaceholder: "e.g. I'm new to this",
   },
   {
     id: "targetTime",

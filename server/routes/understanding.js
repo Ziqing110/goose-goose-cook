@@ -40,6 +40,7 @@ const TIMEOUT_MS = 5000;
 const MAX_TOKENS = 200;
 
 const STATUSES = new Set(["confirmed", "low-confidence", "needs-followup"]);
+const SKILL_LEVELS = new Set(["beginner", "regular", "confident"]);
 
 // Spelled out rather than schema-enforced, because this model has no
 // response_format. "none" is called out explicitly: the first version of
@@ -50,7 +51,7 @@ const SYSTEM = `You convert one answer from a cooking app's setup conversation i
 
 Reply with ONLY a JSON object. No prose, no markdown fence, no explanation.
 
-{"value": string|null, "display": string, "status": "confirmed"|"low-confidence"|"needs-followup", "followUp": string|null}
+{"value": string|string[]|null, "display": string, "status": "confirmed"|"low-confidence"|"needs-followup", "followUp": string|null}
 
 value      the answer in canonical form, or null if it cannot be determined.
            servings   -> a bare integer, e.g. "4"
@@ -60,8 +61,18 @@ value      the answer in canonical form, or null if it cannot be determined.
                          Otherwise the constraint itself, in their words
                          ("no pork", "nut allergy"). Never answer "none"
                          when they named a restriction.
-           dishIdea   -> the dish name alone
-display    short label for the UI, e.g. "4 servings", "90 minutes", "Vegan", "Mapo tofu"
+           dishIdea   -> an ARRAY of dish names, even for a single dish:
+                         ["mapo tofu"], or ["mapo tofu", "egg drop soup"].
+                         Names only, no quantities or method. Watch for
+                         dish names that contain "and" — "macaroni and
+                         cheese" is ONE dish, not two.
+           skill      -> how much each step should explain:
+                         "beginner", "regular", or "confident".
+                         This is about explanation, never about ability:
+                         a beginner may attempt any dish, however hard.
+                         Never use it to discourage or refuse a dish.
+display    short label for the UI, e.g. "4 servings", "90 minutes", "Vegan",
+           "Mapo tofu + Egg drop soup", "Explain everything"
 status     confirmed        the answer is clear
            low-confidence   you had to guess
            needs-followup   you cannot land on a value without asking again
@@ -75,6 +86,17 @@ Never invent a dish they did not name. The answer may be lightly garbled:
 it came from speech recognition in a kitchen.`;
 
 const clampText = (s, max) => String(s ?? "").slice(0, max);
+
+// Deliberately mirrors readSkill() in src/utils/understanding.js, so the
+// LLM path and the offline fallback land on the same level for the same
+// words. If you change one, change the other.
+function skillFromKeywords(said) {
+  const t = String(said || "").toLowerCase();
+  if (/\b(beginner|new|never|first time|learning|explain everything|no idea|novice)\b/.test(t)) return "beginner";
+  if (/\b(confident|experienced|expert|pro|chef|essentials|skip|brief|terse)\b/.test(t)) return "confident";
+  if (/\b(regular|normal|some|average|fine|okay|ok|decent|standard)\b/.test(t)) return "regular";
+  return null;
+}
 
 /**
  * Pull a JSON object out of a model reply.
@@ -110,9 +132,47 @@ function extractJson(raw) {
 function coerce(reading, slot, said) {
   if (!reading || typeof reading !== "object") return null;
 
-  let value = reading.value == null ? null : String(reading.value).trim();
+  let value = reading.value == null ? null : reading.value;
+
+  // The model sometimes nests the answer under the slot name:
+  //   {"value": {"dishIdea": ["mapo tofu", "egg drop soup"]}}
+  // Observed on every dishIdea call. Without unwrapping, the array
+  // handling below stringifies the wrapper and writes "[object Object]"
+  // into the session.
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const inner = value[slot] ?? Object.values(value)[0];
+    value = inner === undefined ? null : inner;
+  }
   let status = STATUSES.has(reading.status) ? reading.status : "low-confidence";
   let followUp = reading.followUp == null ? null : String(reading.followUp).trim();
+
+  // dishIdea is a list whatever the model felt like returning. A bare
+  // string here would reach matchTemplates as a single dish and quietly
+  // lose the second one.
+  if (slot === "dishIdea") {
+    const list = (Array.isArray(value) ? value : [value])
+      .filter((d) => d != null)
+      .map((d) => String(d).trim())
+      .filter(Boolean);
+    value = list.length ? list : null;
+  } else if (value !== null) {
+    value = String(value).trim();
+  }
+
+  // skill is a closed three-value set, and this model is measurably bad
+  // at it: "just the essentials thanks" came back "regular" when the
+  // prompt names "essentials" under confident. A keyword the person
+  // actually said beats a 4B model's guess, so an unambiguous word wins
+  // outright. Anything unrecognised becomes the middle setting, which is
+  // the safe miss — it neither buries an expert nor strands a beginner.
+  if (slot === "skill") {
+    const keyword = skillFromKeywords(said);
+    if (keyword) value = keyword;
+    else if (value === null || !SKILL_LEVELS.has(value)) {
+      value = "regular";
+      if (status === "confirmed") status = "low-confidence";
+    }
+  }
 
   // The numeric slots must end up numeric, whatever came back. A model
   // that answers "about 30" for targetTime would otherwise put the
@@ -135,9 +195,11 @@ function coerce(reading, slot, said) {
   }
   if (status !== "needs-followup") followUp = null;
 
+  // Always a string: `value` may now be an array, and an array landing in
+  // the sidecar would render as "mapo tofu,egg drop soup".
   const display =
     (reading.display == null ? "" : String(reading.display).trim()) ||
-    value ||
+    (Array.isArray(value) ? value.join(" + ") : value) ||
     clampText(said, 60);
 
   return { value, display, status, followUp, source: "llm" };

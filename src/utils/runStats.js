@@ -22,7 +22,12 @@ export function runTitle(session) {
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b))
     .join(" + ");
-  return fromRecipes || session.conversation?.answers?.dishIdea || "Untitled run";
+  // dishIdea is a list now. Older sessions stored a single string, and
+  // they still have to render, so both shapes are handled here rather
+  // than migrated.
+  const asked = session.conversation?.answers?.dishIdea;
+  const fromAnswer = Array.isArray(asked) ? asked.filter(Boolean).join(" + ") : asked;
+  return fromRecipes || fromAnswer || "Untitled run";
 }
 
 /** 0 when no steps exist yet, else 1–3 from the hardest step. */
