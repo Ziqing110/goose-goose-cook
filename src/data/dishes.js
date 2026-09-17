@@ -15,7 +15,10 @@ export const ELICITATION_QUESTIONS = [
     // own setup flow.
     agentText: "What are we cooking tonight? One dish or a few.",
     options: [],
-    freeTextPlaceholder: "e.g. mapo tofu, or mapo tofu and egg drop soup",
+    // One example, not the same dish twice. The question above already
+    // says "one dish or a few"; the placeholder only has to show what
+    // several look like, and a comma does that.
+    freeTextPlaceholder: "e.g. mapo tofu, egg drop soup",
   },
   {
     id: "servings",
