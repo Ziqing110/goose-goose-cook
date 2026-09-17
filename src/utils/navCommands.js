@@ -10,10 +10,18 @@
 // in Mandarin mid-sentence. A matcher that only knew English would fail
 // silently on half of what gets said in this kitchen.
 //
-// Every command here is reversible — the worst case is you're on a page
-// you didn't want and you say "back". Irreversible actions (approving a
-// recipe, starting a cook) are deliberately NOT here; each gets its own
-// confirmation built around what it actually risks.
+// There is deliberately NO generic "next". "Next page" is a developer's
+// model of this app; nobody standing in a kitchen thinks in pages. They
+// think "approve and schedule" or "start cooking" — the words already
+// printed on the button in front of them.
+//
+// So forward motion belongs to the pages, which register commands
+// mirroring their own primary buttons (see voicePageCommands.js). What
+// stays here is only what is unambiguous from anywhere: going back,
+// going home, and naming a destination outright.
+//
+// Everything here is reversible. Irreversible actions live on the pages
+// that own them and ask before acting.
 
 /** Routes reachable by name, with what people actually call them. */
 const DESTINATIONS = [
@@ -131,17 +139,6 @@ const ACTIONS = [
     bare: [/\bback\b/, /\bprevious\b/, /返回/, /后退/, /上一步/, /上一页/],
   },
   {
-    action: "next",
-    explicit: [
-      /\b(?:go|move|take me|skip|jump) (?:on |to )?(?:the )?next\b/,
-      /\bnext (?:page|step|screen)\b/,
-    ],
-    bare: [
-      /\bnext\b/, /\bcontinue\b/, /\bcarry on\b/, /\bkeep going\b/, /\bmove on\b/,
-      /下一步/, /下一页/, /继续/,
-    ],
-  },
-  {
     action: "help",
     // Asking a question moves nobody, so length never disqualifies it.
     explicit: [/\bwhat can i say\b/, /\bhelp\b/, /\bcommands?\b/, /帮助/, /能说什么/],
@@ -251,8 +248,8 @@ export function matchNavCommand(text, { route = "/", reachable, confidence } = {
 export function navHintFor(route) {
   const elsewhere = DESTINATIONS.find((d) => d.path !== route);
   return {
-    line: `Say “next”, “back”, or “go to ${elsewhere?.names[0] ?? "home"}”.`,
-    sub: "Voice navigation — say “help” for the full list.",
+    line: `Say “back”, “home”, or “go to ${elsewhere?.names[0] ?? "the schedule"}”.`,
+    sub: "Each page also takes the words on its own buttons.",
   };
 }
 

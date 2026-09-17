@@ -22,6 +22,7 @@ import { buildInventory, formatClock, formatStepDuration, PHASE_LABELS } from ".
 import dishMapoTofu from "../assets/dish-mapo-tofu.png";
 import dishNoodleSoup from "../assets/dish-noodle-soup.png";
 import "./InventoryPage.css";
+import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 
 // The system's two dish marks. Matched by title keyword; a dish with
 // no mark simply shows none (the title carries the meaning).
@@ -214,6 +215,27 @@ export default function InventoryPage() {
     );
     setSelectedId(null);
   };
+  // The voice equivalent of the "Approve and schedule" button, in the
+  // same words printed on it. Approving locks the graph, so it asks
+  // first — and it refuses while a step is blocked, exactly as the
+  // button does when disabled. A voice command that quietly does
+  // nothing because a button was greyed out is a bug report waiting to
+  // happen, so it says why.
+  useEffect(() => {
+    return registerVoiceCommands([
+      {
+        phrases: [/approve/, /批准/, /确认菜谱/],
+        confirm: "Approve the board and move to scheduling? Say yes or no.",
+        label: "Approved.",
+        run: () => {
+          if (dishIsUndoable) return;
+          approve();
+        },
+      },
+    ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dishIsUndoable]);
+
   const revise = () => {
     recipes.forEach((r) => dispatch({ type: "session/recipes/updateOne", payload: { recipeId: r.id, patch: { approved: null } } }));
     sharedSteps.forEach((st) => dispatch({ type: "session/sharedSteps/updateOne", payload: { sharedStepId: st.id, patch: { approved: null } } }));
@@ -241,7 +263,12 @@ export default function InventoryPage() {
   useEffect(() => {
     dispatch({
       type: "voice/setHint",
-      payload: { hint: { line: "Tell me what you're out of — say “no ginger”.", sub: "Everything's on hand until you say otherwise." } },
+      payload: {
+        hint: {
+          line: "Say “approve and schedule” when the board looks right.",
+          sub: "Or “back”, “home”, “help”.",
+        },
+      },
     });
     return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
   }, [dispatch]);

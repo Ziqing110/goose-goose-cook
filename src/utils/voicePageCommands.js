@@ -17,7 +17,14 @@
 let registered = [];
 
 /**
- * @param {Array<{phrases: RegExp[], run: Function, label?: string}>} commands
+ * @param {Array<object>} commands
+ *   phrases  RegExp[]  matched against the normalized utterance
+ *   run      Function  what the button does
+ *   label    string    optional confirmation shown after it runs
+ *   confirm  string    optional question to ask FIRST. Use it for
+ *                      anything irreversible: approving a recipe,
+ *                      starting a cook. Mishearing those costs more
+ *                      than one extra sentence.
  * @returns {Function} unregister
  */
 export function registerVoiceCommands(commands) {

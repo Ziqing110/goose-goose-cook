@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { createRun, runProgress } from "../utils/liveCook.js";
@@ -6,6 +6,7 @@ import { mergeRecipesForDisplay, formatDuration } from "../utils/graphLayout.js"
 import { computeSchedule, computeOpeningAssignment, missingEquipment, EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
 import { cookColorKey } from "../utils/cooks.js";
 import "./SchedulePage.css";
+import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 
 const ZOOM_LEVELS = [6, 10, 16, 24, 36, 54, 80];
 const DEFAULT_ZOOM_INDEX = 3;
@@ -78,6 +79,42 @@ export default function SchedulePage() {
     saveRunNow(createRun({ nodes, mode, schedule, opening, now: new Date() }));
     navigate("/session/live-cook");
   };
+  // Voice equivalents of this page's primary button, in the words
+  // printed on it. Starting a cook writes a run and leaves the page —
+  // it asks first. Resuming one only navigates, so it doesn't.
+  //
+  // Throwing away the run is deliberately absent: it destroys work, it
+  // already asks through a modal, and a voice path to it would be one
+  // mishearing away from losing a cook.
+  useEffect(() => {
+    return registerVoiceCommands(
+      run
+        ? [
+            {
+              phrases: [/resume cooking/, /back to the cook/, /继续做饭/],
+              label: "Back to the cook.",
+              run: () => navigate("/session/live-cook"),
+            },
+          ]
+        : [
+            {
+              phrases: [/start cooking/, /start the cook/, /开始做饭/],
+              confirm: "Start cooking? Say yes or no.",
+              label: "Starting.",
+              run: () => {
+                // Mirrors the button's disabled state rather than
+                // failing silently — a command that does nothing
+                // because a mode wasn't picked is indistinguishable
+                // from a broken microphone.
+                if (!canStart) return;
+                startCooking();
+              },
+            },
+          ],
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run, canStart, navigate]);
+
   // Throwing away a run in progress is the most destructive thing on
   // this page and it used to ask with one vague line. Name the cost:
   // what's already been cooked is what's actually being lost.

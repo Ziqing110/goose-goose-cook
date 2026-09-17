@@ -110,22 +110,18 @@ export default function VoiceBar() {
     setPending(null);
   }, []);
 
-  const askToConfirm = useCallback(
-    (action, path) => {
-      const what =
-        action === "goto" ? `go to ${pathLabel(path)}` : action === "back" ? "go back" : "move on";
-      pendingRef.current = { action, path };
-      setPending(`Did you mean ${what}? Say yes or no.`);
-      clearTimeout(pendingTimer.current);
-      // Expires on its own. A question left hanging would make the next
-      // "next" get read as an answer to something said a minute ago.
-      pendingTimer.current = setTimeout(() => {
-        pendingRef.current = null;
-        setPending(null);
-      }, CONFIRM_WINDOW_MS);
-    },
-    [],
-  );
+  /** Ask before doing something, then do it if the answer is yes. */
+  const askToConfirm = useCallback((question, perform) => {
+    pendingRef.current = { perform };
+    setPending(question);
+    clearTimeout(pendingTimer.current);
+    // Expires on its own. A question left hanging would make a later
+    // "yes" get read as an answer to something asked a minute ago.
+    pendingTimer.current = setTimeout(() => {
+      pendingRef.current = null;
+      setPending(null);
+    }, CONFIRM_WINDOW_MS);
+  }, []);
 
   useEffect(() => () => clearTimeout(pendingTimer.current), []);
 
@@ -173,10 +169,10 @@ export default function VoiceBar() {
       // again.
       if (pendingRef.current) {
         const answer = matchConfirmation(text);
-        const { action: pendingAction, path: pendingPath } = pendingRef.current;
+        const { perform } = pendingRef.current;
         clearPending();
-        if (answer === "yes") return run(pendingAction, pendingPath);
-        if (answer === "no") return say("Staying here.");
+        if (answer === "yes") return perform();
+        if (answer === "no") return say("Cancelled.");
         return;
       }
 
@@ -190,8 +186,18 @@ export default function VoiceBar() {
         // Page commands get the same guards as navigation. Without this
         // "resume" was protected but "we should resume later" fired.
         if (!isLikelyConversation(said, confidence)) {
-          pageCommand.run();
-          if (pageCommand.label) say(pageCommand.label);
+          // Irreversible commands ask first. You said "start cooking" —
+          // being misheard into starting a cook costs more than one
+          // extra sentence.
+          if (pageCommand.confirm) {
+            askToConfirm(pageCommand.confirm, () => {
+              pageCommand.run();
+              if (pageCommand.label) say(pageCommand.label);
+            });
+          } else {
+            pageCommand.run();
+            if (pageCommand.label) say(pageCommand.label);
+          }
         }
         return;
       }
@@ -205,13 +211,13 @@ export default function VoiceBar() {
       // Plausible but not solid. Ask instead of guessing, and instead of
       // dropping it — silence on a real command reads as the app
       // ignoring you, which is its own kind of broken.
-      if (confirm && (action === "next" || action === "back" || action === "goto")) {
-        return askToConfirm(action, path);
+      if (confirm && (action === "back" || action === "goto")) {
+        const what = action === "goto" ? `go to ${pathLabel(path)}` : "go back";
+        return askToConfirm(`Did you mean ${what}? Say yes or no.`, () => run(action, path));
       }
 
       switch (action) {
         case "goto":
-        case "next":
         case "back":
           run(action, path);
           break;
