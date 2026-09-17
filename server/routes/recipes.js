@@ -93,6 +93,11 @@ const nodeSchema = {
       items: { type: "string" },
       description: "ids of steps in THIS dish that must finish first. Empty for steps that can start immediately.",
     },
+    attended: {
+      type: "boolean",
+      description:
+        "Does this step occupy a cook for its whole duration? True for chopping, stir-frying, anything needing hands or eyes. FALSE for waiting: a simmer left alone, marinating, chilling, resting, water coming to the boil. An unattended step still takes wall-clock time but frees the cook to do something else.",
+    },
     is_shareable: {
       type: "boolean",
       description: "True only when another dish in this run needs the identical prep and it could be done once.",
@@ -109,7 +114,7 @@ const nodeSchema = {
   required: [
     "id", "label", "description", "estimated_duration_sec", "difficulty", "phase",
     "required_equipment", "required_materials", "material_usage", "depends_on",
-    "is_shareable", "share_key",
+    "attended", "is_shareable", "share_key",
   ],
   additionalProperties: false,
 };
@@ -205,6 +210,7 @@ Rules:
 - depends_on refers to step ids in the SAME dish. The graph must be acyclic and every id must exist.
 - Steps that could run at the same time must NOT depend on each other. ${cooks} cooks are working, so independent prep is what makes the target time reachable.
 - The critical path should fit ${targetTime} minutes with ${cooks} cooks. Say so in no step; just make the graph fit.
+- Mark attended false for any step that is just waiting: a simmer left alone, marinating, chilling, resting, water heating. This is what lets the other cook work during a 40-minute congee instead of standing over it, and it is also what lets one person hold several waits at once. Get it wrong and the plan says two people are busy when one of them is reading their phone.
 - Scale every material_usage amount to ${servings} servings.
 - Respect the dietary constraint in ingredient choice. Do not add a note about it; just design around it.
 ${dishes.length > 1
@@ -282,6 +288,11 @@ export function toTemplates(plan, { diet, dishes }) {
       depends_on: n.depends_on,
       status: "pending",
       phase: n.phase,
+      // Defaults to true: a step nobody marked is assumed to need a cook,
+      // which is the safe way to be wrong. Claiming an unattended step
+      // does not make you busy (see arbitrateClaim), so guessing false
+      // would quietly let someone take on work they cannot do.
+      attended: n.attended !== false,
       ...(n.is_shareable && n.share_key
         ? { is_shareable: true, share_key: n.share_key }
         : {}),
@@ -321,7 +332,10 @@ const SHAPE = `Reply with ONLY a JSON object, no prose and no markdown fence:
      "estimated_duration_sec":180,"difficulty":"low|medium|high","phase":"prep|cook|plate",
      "required_equipment":["cutting_board"],"required_materials":["tofu"],
      "material_usage":[{"material_id":"tofu","amount":400,"unit":"g"}],
-     "depends_on":[],"is_shareable":false,"share_key":""}]}]}
+     "depends_on":[],"attended":true,"is_shareable":false,"share_key":""}]}]}
+
+attended is false when the step is only waiting — a simmer left alone,
+marinating, chilling, resting. True when it needs hands or eyes.
 
 Every field is required on every node. depends_on holds ids of steps in
 this dish. Every material id used by a step must also appear once in the

@@ -135,3 +135,13 @@
 
 .paused-banner { border-style: dashed; }
 .paused-banner .mini-title { color: var(--crit); }
+
+/* Unattended steps a cook has running. Not the card's headline — they
+   occupy nobody — but a simmer nobody can see is a simmer nobody goes
+   back to. */
+.focus-passive {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}

@@ -167,9 +167,55 @@ export function blockedStepIds(nodes, run) {
   return nodes.filter((n) => run.steps[n.id]?.status === "pending" && !isReady(n.id, nodes, run)).map((n) => n.id);
 }
 
-export function activeStepFor(cookId, run) {
-  const hit = Object.entries(run.steps).find(([, r]) => r.status === "active" && r.cookId === cookId);
+/**
+ * Callers have nodes in two shapes — the array here in the utils, a byId
+ * map inside the components — and neither is worth converting at every
+ * call site just to answer "is this step attended".
+ */
+function nodeLookup(nodes) {
+  if (!nodes) return null;
+  if (Array.isArray(nodes)) return (id) => nodes.find((n) => n.id === id);
+  return (id) => nodes[id];
+}
+
+/**
+ * The step this cook is actually DOING — attended work only.
+ *
+ * A 40-minute congee simmer is "active" in the run log and occupies
+ * nobody: the pot does the work. Counting it here would lock whoever
+ * started it out of the kitchen for 40 minutes, and in competition mode
+ * that makes taking the congee a self-inflicted penalty — exactly the
+ * step you most want someone to start early.
+ *
+ * The nodes argument is optional so old callers still work; without it
+ * every active step counts, which is the pre-existing behaviour.
+ */
+export function activeStepFor(cookId, run, nodes) {
+  const lookup = nodeLookup(nodes);
+  const attended = (stepId) => {
+    if (!lookup) return true;
+    const node = lookup(stepId);
+    // Unmarked means attended. A step nobody classified is assumed to
+    // need a cook, which is the safe way to be wrong.
+    return node ? node.attended !== false : true;
+  };
+  const hit = Object.entries(run.steps).find(
+    ([id, r]) => r.status === "active" && r.cookId === cookId && attended(id),
+  );
   return hit ? hit[0] : null;
+}
+
+/** Everything this cook has running that does not occupy them. */
+export function passiveStepsFor(cookId, run, nodes) {
+  const lookup = nodeLookup(nodes);
+  if (!lookup) return [];
+  return Object.entries(run.steps)
+    .filter(([id, r]) => {
+      if (r.status !== "active" || r.cookId !== cookId) return false;
+      const node = lookup(id);
+      return node ? node.attended === false : false;
+    })
+    .map(([id]) => id);
 }
 
 export function stepVariance(node, record, now = Date.now()) {
@@ -248,7 +294,7 @@ export function scoreboard(run, nodes, cooks) {
         points,
         doneCount: doneEntries.length,
         skippedCount: mine.filter(([, r]) => r.status === "skipped").length,
-        activeStepId: activeStepFor(cook.id, run),
+        activeStepId: activeStepFor(cook.id, run, nodes),
         lastDoneAt,
       };
     })
@@ -294,9 +340,10 @@ export function resolveAssignments({ nodes, run, cooks, now = Date.now() }) {
   const byCook = {};
 
   cooks.forEach((cook) => {
-    // Holding something? That's the answer — and it's also what stops a
-    // busy cook ever being offered more work.
-    const active = activeStepFor(cook.id, run);
+    // Holding something ATTENDED? That's the answer — and it's what stops
+    // a busy cook being offered more work. A simmer they left running is
+    // not holding them, so they still get suggestions while it cooks.
+    const active = activeStepFor(cook.id, run, nodes);
     if (active) {
       byCook[cook.id] = { stepId: active, reason: "active", waitingOnStepId: null, waitingOnCookId: null, etaSec: null };
       return;
@@ -396,7 +443,10 @@ export function arbitrateClaim({ run, nodes, cooks, stepId, cookId, at }) {
   if (!record) return { ok: false, code: "unknown_step" };
   if (["done", "skipped"].includes(record.status)) return { ok: false, code: "already_done" };
 
-  const holding = activeStepFor(cookId, run);
+  // Only attended work makes you busy. Someone minding a simmer can pick
+  // up the next thing, and can hold several waits at once — which is the
+  // whole point of marking a step unattended.
+  const holding = activeStepFor(cookId, run, nodes);
   if (holding && holding !== stepId) return { ok: false, code: "busy", holdingStepId: holding };
 
   if (record.status === "active") {

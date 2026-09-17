@@ -15,7 +15,7 @@ import { cookColorKey } from "../utils/cooks.js";
 import {
   reconcileRun, isReady, readyStepIds, blockedStepIds, activeStepFor, stepVariance,
   runProgress, isRunComplete, scoreboard, runOutcome, resolveAssignments, replan,
-  arbitrateClaim, claimSuggestions, applyStart, applyDone, applySkip, applyDrop,
+  arbitrateClaim, claimSuggestions, applyStart, applyDone, applySkip, applyDrop, passiveStepsFor,
   applyUndo, endRun, appendTranscript, scoreStep, DIFFICULTY_POINTS,
   isPaused, applyPause, applyResume,
 } from "../utils/liveCook.js";
@@ -99,7 +99,7 @@ export default function LiveCookPage() {
 
   const doStart = (stepId, cookId, source = "tap") => {
     if (paused || !stepId || !isReady(stepId, nodes, run)) return;
-    if (activeStepFor(cookId, run)) return;
+    if (activeStepFor(cookId, run, nodes)) return;
     const at = new Date().toISOString();
     let next = applyStart({ run, stepId, cookId, at, source });
     next = say(next, `Timer running on ${byId[stepId].label}. Est ${formatDuration(byId[stepId].estimated_duration_sec)}.`);
@@ -235,7 +235,7 @@ export default function LiveCookPage() {
       return commit(say(appendTranscript(run, { at: new Date().toISOString(), speaker: cookId, text }), "We're paused — say \"resume\" when you're ready."));
     }
     if (paused) return togglePause();
-    const activeStepId = activeStepFor(cookId, run);
+    const activeStepId = activeStepFor(cookId, run, nodes);
     const ownQueue = isCompetition
       ? claimSuggestions({ nodes, run, cookId })
       : [assignments?.byCook[cookId]?.stepId].filter(Boolean);
@@ -273,7 +273,7 @@ export default function LiveCookPage() {
         return commit(say(heard, board.map((b) => `${b.name} ${b.points}`).join(", ") + `. ${progress.pending} left.`));
       case "status": {
         const lines = cooks.map((c) => {
-          const active = activeStepFor(c.id, run);
+          const active = activeStepFor(c.id, run, nodes);
           if (active) return `${c.name}: ${byId[active].label}, ${clock(stepVariance(byId[active], run.steps[active], now).actualSec)} in`;
           return `${c.name}: free`;
         });
@@ -468,11 +468,16 @@ export default function LiveCookPage() {
 }
 
 function CookFocusCard({ cook, colorKey, run, byId, now, isCompetition, paused, points, assignment, onStart, onDone, onSkip, onDrop }) {
-  const activeId = activeStepFor(cook.id, run);
+  const activeId = activeStepFor(cook.id, run, byId);
   const node = activeId ? byId[activeId] : null;
   const variance = node ? stepVariance(node, run.steps[activeId], now) : null;
   const suggestedId = !activeId ? assignment?.stepId : null;
   const suggested = suggestedId ? byId[suggestedId] : null;
+  // Unattended steps this cook has running. They do not occupy anyone, so
+  // they are deliberately not the card's headline — but they still have
+  // to be visible somewhere, or a 40-minute simmer someone started just
+  // vanishes and nobody remembers to go back to it.
+  const waiting = passiveStepsFor(cook.id, run, byId);
 
   return (
     <div className={`card focus-card cook-border-${colorKey}`}>
@@ -481,6 +486,16 @@ function CookFocusCard({ cook, colorKey, run, byId, now, isCompetition, paused, 
         <span className="focus-cook-name">{cook.name}</span>
         {isCompetition && <span className="tag mono focus-points">{points} pts</span>}
       </div>
+
+      {waiting.length > 0 && (
+        <div className="focus-passive">
+          {waiting.map((id) => (
+            <span key={id} className="tag mono" title="Running on its own — you are free to do something else">
+              {byId[id]?.label} · waiting
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Every branch renders the same skeleton â€” eyebrow, title, body,
           then an action block pinned to the bottom â€” so both cooks' cards
@@ -583,8 +598,8 @@ function TaskPoolBoard({ ready, blocked, run, byId, cooks, now, paused, onClaim 
                   type="button"
                   className={`btn pool-claim-btn cook-color-${cookColorKey(i)}`}
                   onClick={() => onClaim(id, cook.id)}
-                  disabled={paused || Boolean(activeStepFor(cook.id, run))}
-                  title={activeStepFor(cook.id, run) ? `${cook.name} is still on something` : `${cook.name} takes it`}
+                  disabled={paused || Boolean(activeStepFor(cook.id, run, byId))}
+                  title={activeStepFor(cook.id, run, byId) ? `${cook.name} is still on something` : `${cook.name} takes it`}
                 >
                   {cook.name}
                 </button>
