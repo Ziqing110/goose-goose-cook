@@ -29,6 +29,7 @@ import {
   getVoiceDictation,
   matchPageCommand,
   subscribeVoiceRegistry,
+  voiceCommandsAreExclusive,
 } from "../utils/voicePageCommands.js";
 import { sessionStageStates } from "../utils/sessionSteps.js";
 import "./VoiceBar.css";
@@ -258,8 +259,15 @@ export default function VoiceBar() {
           // being misheard into starting a cook costs more than one
           // extra sentence.
           const done = () => {
-            pageCommand.run();
-            if (pageCommand.label) say(pageCommand.label);
+            // `run` gets the match, so a command can act on what was
+            // captured rather than only on having fired. It may return a
+            // line to show instead of the command's static label — "four
+            // burners" and "eight burners, the most this allows" are the
+            // same command with different outcomes, and the bar should
+            // say which one happened.
+            const spoken = pageCommand.run(pageCommand.match);
+            const line = typeof spoken === "string" ? spoken : pageCommand.label;
+            if (line) say(line);
           };
           if (pageCommand.confirmPhrase) {
             askToConfirm(
@@ -273,6 +281,15 @@ export default function VoiceBar() {
             done();
           }
         }
+        return;
+      }
+
+      // A dialog is open and the words were not one of its commands.
+      // Navigating away now would abandon a half-filled form and read as
+      // the app throwing your work away, so nothing generic gets a look:
+      // the way out is the dialog's own "cancel".
+      if (voiceCommandsAreExclusive()) {
+        console.info("[voice] not a command for the open dialog:", text);
         return;
       }
 

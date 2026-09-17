@@ -26,6 +26,22 @@ function firstNumber(text) {
   return match ? toNumber(match[1]) : null;
 }
 
+/**
+ * "four" or "4" -> 4, anything else -> null.
+ *
+ * Exported so spoken form-filling reads numbers the same way spoken
+ * answers do. A second copy of the word list would drift, and then
+ * "four burners" and "four servings" would disagree about what four is.
+ */
+export function spokenNumber(token) {
+  if (token == null) return null;
+  const n = toNumber(String(token).trim());
+  return Number.isFinite(n) ? n : null;
+}
+
+/** The number-word alternation, for building command patterns. */
+export const NUMBER_TOKEN = NUMBER_PATTERN;
+
 const confirmed = (value, display) => ({ value, display, status: "confirmed" });
 const unsure = (value, display, heard) => ({ value, display, status: "low-confidence", heard });
 

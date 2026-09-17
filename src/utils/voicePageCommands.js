@@ -14,7 +14,21 @@
 // which have no business in a reducer, and there is exactly one page
 // mounted at a time.
 
-let registered = [];
+// A stack, not a slot. What you are allowed to say depends on what state
+// the page is in, and a page has states inside it: a modal open over
+// Home is a different set of valid inputs from Home itself, and while it
+// is open "resume the run" is not one of them.
+//
+// So every registration is a layer, and only the topmost one is live.
+// That is what makes a modal modal. `priority` exists because the page
+// underneath keeps re-registering as its own state changes — Home swaps
+// its command set when the hero state changes — and a later push from
+// the page must not end up shadowing the dialog sitting above it.
+// Layers register at a depth rather than in arrival order.
+let layers = [];
+
+const topLayer = () =>
+  layers.reduce((top, l) => (top === null || l.priority >= top.priority ? l : top), null);
 
 /**
  * @param {Array<object>} commands
@@ -27,15 +41,15 @@ let registered = [];
  *                      than one extra sentence.
  * @returns {Function} unregister
  */
-export function registerVoiceCommands(commands) {
-  const mine = commands || [];
-  registered = mine;
+export function registerVoiceCommands(commands, { priority = 0, exclusive = false } = {}) {
+  const layer = { commands: commands || [], priority, exclusive };
+  layers = [...layers, layer];
   return () => {
-    // Only clear what THIS registration put there. Without the identity
-    // check, a late cleanup from the page you just left wipes the
-    // commands the page you just arrived on has already registered, and
-    // the new page goes silent for no visible reason.
-    if (registered === mine) registered = [];
+    // Remove this layer specifically, wherever it now sits. A late
+    // cleanup from the page you just left therefore cannot wipe the
+    // commands the page you just arrived on has already registered —
+    // it only ever takes away its own.
+    layers = layers.filter((l) => l !== layer);
   };
 }
 
@@ -48,12 +62,34 @@ export function registerVoiceCommands(commands) {
  */
 export function matchPageCommand(said) {
   if (!said) return null;
-  return registered.find((c) => c.phrases.some((p) => p.test(said))) || null;
+  const top = topLayer();
+  if (!top) return null;
+  for (const c of top.commands) {
+    for (const p of c.phrases) {
+      const match = p.exec(said);
+      // The match comes back with the command so `run` can read what was
+      // captured — "set burners to four" has to tell the form *four*,
+      // and a command that can only fire or not fire cannot do that.
+      if (match) return { ...c, match };
+    }
+  }
+  return null;
+}
+
+/**
+ * Does the live layer claim the microphone outright?
+ *
+ * A dialog does. While one is open, navigating away by voice would leave
+ * a half-filled form behind and look like the app losing your work, so
+ * the only way out is a command the dialog itself offers.
+ */
+export function voiceCommandsAreExclusive() {
+  return Boolean(topLayer()?.exclusive);
 }
 
 /** For tests, and for making sure a stale page can't leave commands behind. */
 export function clearVoiceCommands() {
-  registered = [];
+  layers = [];
 }
 
 // --- dictation ----------------------------------------------------------
