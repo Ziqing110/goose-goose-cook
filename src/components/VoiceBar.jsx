@@ -61,6 +61,20 @@ const NAV_OFF_ROUTES = ["/session/live-cook"];
 // Steer the model toward the two languages actually spoken here. It
 // still code-switches — universal-3-5-pro does that by default — but
 // naming the pair biases it and improves accuracy on both.
+// Turn detection for the pages that take commands rather than dictation.
+//
+// The `balanced` preset ends a turn after 128ms of silence, which is
+// tuned for a voice agent interrupting a conversation, not for someone
+// naming a thing. A kitchen called "Flat 3 galley" has ordinary gaps
+// between its words, and at 128ms the first gap ends the turn — you say
+// three words and the app hears one.
+//
+// 400ms is the figure the docs give for balanced on Universal Streaming
+// and is still well inside "responsive": a finished command ends as soon
+// as it reads as finished, because the end-of-turn check is semantic.
+// This is only the floor before that check runs at all.
+const COMMAND_TURN = { min_turn_silence: 400, max_turn_silence: 1280 };
+
 const STREAM_CONFIG = {
   speechModel: "universal-3-5-pro",
   languageCodes: ["en", "zh"],
@@ -71,12 +85,14 @@ const STREAM_CONFIG = {
   // under it). universal-3-5-pro only, which is what we're on — on any
   // other model it would no-op silently, so buildParams throws instead.
   voiceFocus: "far-field",
-  // Above the default, deliberately. The default is tuned not to miss
-  // quiet speech; in a loud room that same sensitivity opens turns on
-  // noise, and a turn opened on noise never hears the silence that would
-  // close it. Raising this trades a little sensitivity for turns that
-  // actually end.
-  vadThreshold: 0.55,
+  // Above the default (0.2–0.3 depending on which doc table you read),
+  // so room noise is less likely to open a turn that then never closes.
+  // NOT as high as it was: 0.55 also classified the quiet gaps between
+  // words as silence, so "Flat 3 galley" finalized as "Flat". Suppressing
+  // noise is worth a little sensitivity; it is not worth losing every
+  // command longer than one word.
+  vadThreshold: 0.45,
+  turnDetection: COMMAND_TURN,
 };
 
 export default function VoiceBar() {
@@ -348,8 +364,13 @@ export default function VoiceBar() {
   useEffect(() => subscribeVoiceRegistry(() => setRegistryVersion((v) => v + 1)), []);
   useEffect(() => {
     if (status !== "live") return;
+    // Restoring means re-applying OUR command preset, not `mode:
+    // balanced`. Re-applying the mode is what the docs prescribe for
+    // undoing a mid-stream override, but it would reset min_turn_silence
+    // to the preset's 128ms and bring back the one-word truncation this
+    // page sets 400ms to avoid.
     const wanted = getVoiceDictation(pathname)?.turnDetection;
-    updateConfig(wanted || { mode: STREAM_CONFIG.mode || "balanced" });
+    updateConfig(wanted || COMMAND_TURN);
   }, [status, registryVersion, pathname, updateConfig]);
 
   // Forward partials to a page taking dictation, so its input fills as

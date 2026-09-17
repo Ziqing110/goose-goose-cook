@@ -24,6 +24,10 @@ import {
 } from "../utils/runStats.js";
 import "./HomePage.css";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+// The same normalizer VoiceBar runs over the utterance before matching —
+// kitchen names have to be folded exactly the same way or they will
+// never line up.
+import { normalizeUtterance } from "../utils/navCommands.js";
 
 const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight"];
 
@@ -127,6 +131,45 @@ function LoadoutChips({ profile, delayBase = 0 }) {
 // can never drift apart and leave you reading a phrase that won't match.
 const ABORT_PHRASE = "I want to abort this cooking session";
 
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * One command per kitchen on offer, matching what its button says.
+ *
+ * Kitchens are named by people, so the full name is the primary match —
+ * "flat 3 galley" has to work as three words, not just its first. But
+ * nobody says the whole name every time, so a single distinctive word
+ * counts too, as long as it belongs to exactly one kitchen on the list.
+ * Ambiguity is dropped rather than guessed: picking the wrong kitchen
+ * starts a whole run against the wrong equipment.
+ */
+function kitchenPickCommands(profiles, start) {
+  const norm = (s) => normalizeUtterance(s);
+
+  // Words that identify exactly one kitchen. Anything shared between two
+  // ("kitchen", "flat") identifies neither.
+  const counts = new Map();
+  profiles.forEach((p) => {
+    new Set(norm(p.name).split(" ").filter((w) => w.length > 3)).forEach((w) => {
+      counts.set(w, (counts.get(w) || 0) + 1);
+    });
+  });
+
+  return profiles.map((p) => {
+    const full = norm(p.name);
+    const phrases = [new RegExp(`\\b${escapeRe(full)}\\b`)];
+    norm(p.name)
+      .split(" ")
+      .filter((w) => w.length > 3 && counts.get(w) === 1)
+      .forEach((w) => phrases.push(new RegExp(`\\b${escapeRe(w)}\\b`)));
+    return {
+      phrases,
+      label: `Starting in ${p.name}.`,
+      run: () => start(p.id),
+    };
+  });
+}
+
 export default function HomePage() {
   const {
     state,
@@ -198,7 +241,15 @@ export default function HomePage() {
         line: "Say “resume the run”, “add a kitchen”, or “abandon the run”.",
         sub,
       };
-    } else if (heroState === "ready" || heroState === "picker") {
+    } else if (heroState === "picker") {
+      // Name them, because the answer to "which kitchen?" is a word only
+      // this cook knows. A bar offering generic commands while the screen
+      // asks a specific question is the bar ignoring the question.
+      hint = {
+        line: "Say the kitchen's name to start there.",
+        sub: profiles.map((p) => p.name).join(" · ") || null,
+      };
+    } else if (heroState === "ready") {
       hint = {
         line: "Say “start the run” or “add a kitchen”.",
         sub: profiles.length === 1 ? profiles[0].name : null,
@@ -250,7 +301,21 @@ export default function HomePage() {
         addKitchen,
       ]);
     }
-    if (heroState === "ready" || heroState === "picker") {
+    if (heroState === "picker") {
+      // The picker asks "Which kitchen?" and draws a button per kitchen,
+      // and until now none of them could be said out loud — the one
+      // question on this page that expects an answer had no voice answer.
+      return registerVoiceCommands([
+        ...kitchenPickCommands(profiles, handleStartSession),
+        {
+          phrases: [/\bcancel\b/, /\bnever ?mind\b/, /\bgo back\b/],
+          label: "Cancelled.",
+          run: () => setPickerOpen(false),
+        },
+        addKitchen,
+      ]);
+    }
+    if (heroState === "ready") {
       return registerVoiceCommands([
         {
           // Only when there's no ambiguity about which kitchen. With
