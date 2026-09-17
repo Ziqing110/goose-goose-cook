@@ -120,6 +120,13 @@ function LoadoutChips({ profile, delayBase = 0 }) {
 
 /* ---------------- page ---------------- */
 
+// What you have to say out loud to abandon a run by voice. Deliberately
+// a whole sentence and deliberately specific: it names the thing being
+// destroyed, so it cannot fall out of agreeing with something else. One
+// constant, used by both the command and the on-screen copy, so the two
+// can never drift apart and leave you reading a phrase that won't match.
+const ABORT_PHRASE = "I want to abort this cooking session";
+
 export default function HomePage() {
   const {
     state,
@@ -183,16 +190,26 @@ export default function HomePage() {
           : current?.id === "conversation"
             ? `You're ${current.count} into the conversation; I'll pick it up from there.`
             : "I'm your kitchen agent — we'll pick up right where you paused.";
-      hint = { line: "Ready when you are — say “resume the run”.", sub };
+      // Name all three things this page can do, not just the one it
+      // wants most. Advertising only "resume the run" made the Add
+      // kitchen and Abandon run buttons look unavailable while a run was
+      // in progress — they are not, they sit right there on screen.
+      hint = {
+        line: "Say “resume the run”, “add a kitchen”, or “abandon the run”.",
+        sub,
+      };
     } else if (heroState === "ready" || heroState === "picker") {
       hint = {
-        line: "Say “start the run” and I'll set the main line.",
+        line: "Say “start the run” or “add a kitchen”.",
         sub: profiles.length === 1 ? profiles[0].name : null,
       };
     } else if (heroState === "sessionError") {
       hint = { line: "I can't read the run log right now.", sub: "The kitchen server didn't answer — try again." };
     } else if (heroState === "noKitchen") {
-      hint = { line: "Tell me about your kitchen and I'll build it.", sub: null };
+      hint = {
+        line: "Tell me about your kitchen and I'll build it.",
+        sub: "Say “add a kitchen” to open the form.",
+      };
     }
     dispatch({ type: "voice/setHint", payload: { hint } });
     return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
@@ -203,6 +220,15 @@ export default function HomePage() {
   // which is worse than a bar that promises nothing — the copy predates
   // the microphone being real.
   useEffect(() => {
+    // The Add kitchen button is on screen in every hero state, so it is
+    // a command in every hero state. Same rule as everywhere else: what
+    // you can press, you can say.
+    const addKitchen = {
+      phrases: [/\badd (?:a |another )?kitchen\b/, /\bnew kitchen\b/],
+      label: "Opening the kitchen form.",
+      run: () => openAddProfileModal(false),
+    };
+
     if (heroState === "resumable") {
       return registerVoiceCommands([
         {
@@ -210,6 +236,18 @@ export default function HomePage() {
           label: "Resuming.",
           run: () => navigate("/session"),
         },
+        {
+          // The only command here that destroys something: the run moves
+          // to the log and cannot be resumed. Yes/no is not enough for
+          // that — a stray "yeah" from the other side of the kitchen
+          // would be sufficient, which is exactly the accident worth
+          // ruling out. Reading the sentence back IS the authorisation.
+          phrases: [/\b(?:abandon|abort|discard|cancel) (?:the |this )?(?:cooking )?(?:run|session|cook)\b/],
+          confirmPhrase: ABORT_PHRASE,
+          label: "Run abandoned.",
+          run: discardSession,
+        },
+        addKitchen,
       ]);
     }
     if (heroState === "ready" || heroState === "picker") {
@@ -223,11 +261,14 @@ export default function HomePage() {
           label: profiles.length > 1 ? "Which kitchen?" : "Starting.",
           run: handleStartClick,
         },
+        addKitchen,
       ]);
     }
-    return undefined;
+    // Loading, error, no-kitchen: no run to act on, but you can still
+    // add a kitchen, so that one stays registered.
+    return registerVoiceCommands([addKitchen]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [heroState, profiles.length, navigate]);
+  }, [heroState, profiles.length, navigate, session]);
 
   /* ---- actions ---- */
 

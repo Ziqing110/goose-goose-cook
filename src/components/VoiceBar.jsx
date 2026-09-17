@@ -47,6 +47,12 @@ const FEEDBACK_MS = 3500;
 // asked a minute ago.
 const CONFIRM_WINDOW_MS = 10_000;
 
+// Reading a sentence back takes longer than saying "yes", and being cut
+// off mid-phrase on the one command that destroys a run would be its own
+// small cruelty. Generous on purpose: the window expiring is harmless,
+// since expiring means nothing happens.
+const PHRASE_WINDOW_MS = 25_000;
+
 // The live-cook page has its own command grammar, where "next" and
 // "back" mean something else entirely. Navigation stands down there.
 const NAV_OFF_ROUTES = ["/session/live-cook"];
@@ -114,9 +120,17 @@ export default function VoiceBar() {
     setPending(null);
   }, []);
 
-  /** Ask before doing something, then do it if the answer is yes. */
-  const askToConfirm = useCallback((question, perform) => {
-    pendingRef.current = { perform };
+  /**
+   * Ask before doing something, then do it if the answer is yes.
+   *
+   * `phrase` upgrades that to a passphrase: the normalized sentence the
+   * person has to read back, word for word, instead of answering yes.
+   * For actions where a misheard "yeah" from across the kitchen would
+   * destroy something — the words themselves become the authorisation,
+   * and nobody says them by accident.
+   */
+  const askToConfirm = useCallback((question, perform, phrase) => {
+    pendingRef.current = { perform, phrase };
     setPending(question);
     clearTimeout(pendingTimer.current);
     // Expires on its own. A question left hanging would make a later
@@ -124,7 +138,7 @@ export default function VoiceBar() {
     pendingTimer.current = setTimeout(() => {
       pendingRef.current = null;
       setPending(null);
-    }, CONFIRM_WINDOW_MS);
+    }, phrase ? PHRASE_WINDOW_MS : CONFIRM_WINDOW_MS);
   }, []);
 
   useEffect(() => () => clearTimeout(pendingTimer.current), []);
@@ -200,8 +214,17 @@ export default function VoiceBar() {
       // the prompt up would make the next "next" ambiguous all over
       // again.
       if (pendingRef.current) {
+        const { perform, phrase } = pendingRef.current;
+        // A passphrase is not a yes/no question. Anything that isn't the
+        // phrase leaves the run alone — including "yes", which is the
+        // whole point: saying yes is exactly what a passphrase is meant
+        // to stop being sufficient.
+        if (phrase) {
+          clearPending();
+          if (normalizeUtterance(text) === phrase) return perform();
+          return say("That didn't match, so nothing changed.");
+        }
         const answer = matchConfirmation(text);
-        const { perform } = pendingRef.current;
         clearPending();
         if (answer === "yes") return perform();
         if (answer === "no") return say("Cancelled.");
@@ -221,14 +244,20 @@ export default function VoiceBar() {
           // Irreversible commands ask first. You said "start cooking" —
           // being misheard into starting a cook costs more than one
           // extra sentence.
-          if (pageCommand.confirm) {
-            askToConfirm(pageCommand.confirm, () => {
-              pageCommand.run();
-              if (pageCommand.label) say(pageCommand.label);
-            });
-          } else {
+          const done = () => {
             pageCommand.run();
             if (pageCommand.label) say(pageCommand.label);
+          };
+          if (pageCommand.confirmPhrase) {
+            askToConfirm(
+              `To confirm, say: “${pageCommand.confirmPhrase}”`,
+              done,
+              normalizeUtterance(pageCommand.confirmPhrase),
+            );
+          } else if (pageCommand.confirm) {
+            askToConfirm(pageCommand.confirm, done);
+          } else {
+            done();
           }
         }
         return;
