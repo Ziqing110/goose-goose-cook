@@ -185,7 +185,7 @@ export default function HomePage() {
       hint = { line: "Ready when you are — say “resume the run”.", sub };
     } else if (heroState === "ready" || heroState === "picker") {
       hint = {
-        line: "Say “start the run” and I'll set the main line.",
+        line: "Say “start the run” and I'll draft your recipe graph.",
         sub: profiles.length === 1 ? profiles[0].name : null,
       };
     } else if (heroState === "sessionError") {

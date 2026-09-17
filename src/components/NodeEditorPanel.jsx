@@ -1,19 +1,43 @@
 import { useEffect, useState } from "react";
 import { EQUIPMENT_OPTIONS, DIFFICULTY_OPTIONS, PHASE_OPTIONS, MATERIAL_CATEGORY_ORDER, MATERIAL_CATEGORY_LABELS, equipmentLabel } from "../data/dishes.js";
+import BoardPanel, { ChoiceChip, PanelField, Segmented } from "./BoardPanel.jsx";
 import "./NodeEditorPanel.css";
 
+export const DIFFICULTY_SEGMENTS = DIFFICULTY_OPTIONS.map((d) => ({
+  value: d,
+  label: { low: "Low", medium: "Med", high: "High" }[d] || d,
+}));
+
+const ADD_NEW = "__new__";
+
 // Edits are staged locally and only committed to the graph when Save
-// is clicked — closing without saving (the drawer's own close/backdrop)
-// just discards the draft. Adding a brand-new material is the one
-// exception: it registers immediately on the recipe (via
-// onRegisterMaterial) so it's available to every other step too, but
-// still only turns on for *this* step once Saved.
-export default function NodeEditorPanel({ node, allNodes, onSave, onDelete, materialsInfo, onRegisterMaterial, blockedDependencyIds }) {
+// is clicked — closing the panel just discards the draft. Adding a
+// brand-new material is the one exception: it registers immediately on
+// the recipe (via onRegisterMaterial) so it's available to every other
+// step too, but still only turns on for *this* step once Saved.
+export default function NodeEditorPanel({
+  node,
+  allNodes,
+  numberOf,
+  onSave,
+  onDelete,
+  onClose,
+  materialsInfo,
+  onRegisterMaterial,
+  blockedDependencyIds,
+}) {
   const [draft, setDraft] = useState(node);
+  const [addingMaterial, setAddingMaterial] = useState(false);
 
-  useEffect(() => setDraft(node), [node.id]);
+  useEffect(() => {
+    setDraft(node);
+    setAddingMaterial(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id]);
 
-  const others = allNodes.filter((n) => n.id !== node.id);
+  const others = allNodes
+    .filter((n) => n.id !== node.id)
+    .sort((a, b) => (numberOf?.(a.id) || "").localeCompare(numberOf?.(b.id) || ""));
 
   const patch = (patchFn) => {
     setDraft((d) => {
@@ -23,108 +47,143 @@ export default function NodeEditorPanel({ node, allNodes, onSave, onDelete, mate
     });
   };
 
-  const toggleSet = (list, value, checked) => {
-    const set = new Set(list);
-    checked ? set.add(value) : set.delete(value);
-    return [...set];
-  };
+  const toggleIn = (list, value) => (list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
 
   const handleAddMaterial = (materialDraft) => {
     const id = onRegisterMaterial?.(materialDraft);
-    if (id) patch((n) => (n.required_materials = toggleSet(n.required_materials, id, true)));
+    if (id) patch((n) => (n.required_materials = [...new Set([...n.required_materials, id])]));
+    setAddingMaterial(false);
   };
 
+  const materialIds = Object.keys(materialsInfo || {}).sort((a, b) =>
+    materialsInfo[a].label.localeCompare(materialsInfo[b].label)
+  );
+  const unselectedMaterials = materialIds.filter((m) => !draft.required_materials.includes(m));
+  const number = numberOf?.(node.id);
+
   return (
-    <div className="editor-panel">
-      <span className="mini-title">Edit step</span>
+    <BoardPanel
+      label="Edit step"
+      title={number ? `Editing step ${number}` : "Editing step"}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn panel-btn-danger" onClick={() => onDelete(node.id)}>
+            Delete
+          </button>
+          <button type="button" className="btn btn-primary" onClick={() => onSave(node.id, draft)}>
+            Save
+          </button>
+        </>
+      }
+    >
+      <PanelField as="label" label="Label">
+        <input className="panel-input" type="text" value={draft.label} onChange={(e) => patch((n) => (n.label = e.target.value))} />
+      </PanelField>
 
-      <div className="field">
-        <label htmlFor="f-label">Label</label>
-        <input id="f-label" type="text" value={draft.label} onChange={(e) => patch((n) => (n.label = e.target.value))} />
-      </div>
+      <PanelField as="label" label="Description">
+        <textarea
+          className="panel-textarea"
+          rows={2}
+          value={draft.description}
+          onChange={(e) => patch((n) => (n.description = e.target.value))}
+        />
+      </PanelField>
 
-      <div className="field">
-        <label htmlFor="f-desc">Description</label>
-        <textarea id="f-desc" value={draft.description} onChange={(e) => patch((n) => (n.description = e.target.value))} />
-      </div>
+      <PanelField label="Phase">
+        <Segmented label="Phase" options={PHASE_OPTIONS} value={draft.phase || "prep"} onChange={(v) => patch((n) => (n.phase = v))} />
+      </PanelField>
 
-      <div className="field-row">
-        <div className="field">
-          <label htmlFor="f-phase">Phase</label>
-          <select id="f-phase" value={draft.phase || "prep"} onChange={(e) => patch((n) => (n.phase = e.target.value))}>
-            {PHASE_OPTIONS.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="f-duration">Duration (minutes)</label>
-          <input
-            id="f-duration"
-            type="number"
-            min="0.25"
-            step="0.25"
-            value={Number((draft.estimated_duration_sec / 60).toFixed(2))}
-            onChange={(e) => {
-              const minutes = Math.max(0.25, Number(e.target.value) || 0);
-              patch((n) => (n.estimated_duration_sec = Math.round(minutes * 60)));
-            }}
+      <div className="panel-field-row">
+        <PanelField as="label" label="Takes">
+          <span className="panel-minutes">
+            <input
+              className="panel-input"
+              type="number"
+              min="0.25"
+              step="0.25"
+              value={Number((draft.estimated_duration_sec / 60).toFixed(2))}
+              onChange={(e) => {
+                const minutes = Math.max(0.25, Number(e.target.value) || 0);
+                patch((n) => (n.estimated_duration_sec = Math.round(minutes * 60)));
+              }}
+            />
+            <span className="panel-minutes-unit">min</span>
+          </span>
+        </PanelField>
+        <PanelField label="Difficulty">
+          <Segmented
+            label="Difficulty"
+            options={DIFFICULTY_SEGMENTS}
+            value={draft.difficulty}
+            onChange={(v) => patch((n) => (n.difficulty = v))}
           />
-        </div>
-        <div className="field">
-          <label htmlFor="f-difficulty">Difficulty</label>
-          <select id="f-difficulty" value={draft.difficulty} onChange={(e) => patch((n) => (n.difficulty = e.target.value))}>
-            {DIFFICULTY_OPTIONS.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
-        </div>
+        </PanelField>
       </div>
 
-      <div className="field">
-        <label>Required equipment</label>
-        <div className="checkbox-grid">
+      <PanelField label="Needs">
+        <div className="panel-chips">
           {EQUIPMENT_OPTIONS.map((eq) => (
-            <label className="checkbox-pill" key={eq}>
-              <input
-                type="checkbox"
-                checked={draft.required_equipment.includes(eq)}
-                onChange={(e) => patch((n) => (n.required_equipment = toggleSet(n.required_equipment, eq, e.target.checked)))}
-              />
-              <span>{equipmentLabel(eq)}</span>
-            </label>
+            <ChoiceChip
+              key={eq}
+              on={draft.required_equipment.includes(eq)}
+              onToggle={() => patch((n) => (n.required_equipment = toggleIn(n.required_equipment, eq)))}
+            >
+              {equipmentLabel(eq)}
+            </ChoiceChip>
           ))}
         </div>
-      </div>
+      </PanelField>
 
       {materialsInfo && (
-        <div className="field">
-          <label>Required materials</label>
-          <div className="checkbox-grid">
-            {Object.keys(materialsInfo)
-              .sort((a, b) => materialsInfo[a].label.localeCompare(materialsInfo[b].label))
-              .map((m) => (
-                <label className="checkbox-pill" key={m}>
-                  <input
-                    type="checkbox"
-                    checked={draft.required_materials.includes(m)}
-                    onChange={(e) => patch((n) => (n.required_materials = toggleSet(n.required_materials, m, e.target.checked)))}
-                  />
-                  <span>{materialsInfo[m].label}</span>
-                </label>
-              ))}
+        <PanelField label="Materials">
+          <div className="panel-chips">
+            {draft.required_materials.map((m) => (
+              <ChoiceChip
+                key={m}
+                on
+                title="Remove from this step"
+                onToggle={() => patch((n) => (n.required_materials = n.required_materials.filter((x) => x !== m)))}
+              >
+                {materialsInfo[m]?.label || m}
+                {materialsInfo[m]?.amount != null && (
+                  <span className="panel-chip-amount">
+                    {materialsInfo[m].amount} {materialsInfo[m].unit}
+                  </span>
+                )}
+              </ChoiceChip>
+            ))}
+            {draft.required_materials.length === 0 && <span className="panel-empty">No materials yet.</span>}
           </div>
-          {onRegisterMaterial && <AddMaterialForm onAdd={handleAddMaterial} />}
-        </div>
+          {addingMaterial ? (
+            <AddMaterialForm onAdd={handleAddMaterial} onCancel={() => setAddingMaterial(false)} />
+          ) : (
+            // Picking from the catalog keeps the chip row to what this
+            // step actually uses; the full list lives in the menu.
+            <select
+              className="panel-select node-editor-add-material"
+              value=""
+              aria-label="Add a material"
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === ADD_NEW) setAddingMaterial(true);
+                else if (v) patch((n) => (n.required_materials = [...n.required_materials, v]));
+              }}
+            >
+              <option value="">+ Add a material</option>
+              {unselectedMaterials.map((m) => (
+                <option key={m} value={m}>
+                  {materialsInfo[m].label}
+                </option>
+              ))}
+              {onRegisterMaterial && <option value={ADD_NEW}>New material…</option>}
+            </select>
+          )}
+        </PanelField>
       )}
 
-      <div className="field">
-        <label>Depends on</label>
-        <div className="checkbox-grid checkbox-grid-col">
+      <PanelField label="Runs after">
+        <div className="panel-chips">
           {others.length ? (
             others.map((o) => {
               // Ticking this would make the step wait on something that
@@ -132,101 +191,88 @@ export default function NodeEditorPanel({ node, allNodes, onSave, onDelete, mate
               // reason is visible rather than the option just missing.
               const wouldLoop = blockedDependencyIds?.has(o.id) && !draft.depends_on.includes(o.id);
               return (
-                <label
-                  className={`checkbox-pill ${wouldLoop ? "is-locked" : ""}`}
+                <ChoiceChip
                   key={o.id}
-                  title={wouldLoop ? `"${o.label}" already comes after this step` : undefined}
+                  on={draft.depends_on.includes(o.id)}
+                  disabled={wouldLoop}
+                  title={wouldLoop ? `Would create a cycle — "${o.label}" already comes after this step` : undefined}
+                  onToggle={() => patch((n) => (n.depends_on = toggleIn(n.depends_on, o.id)))}
                 >
-                  <input
-                    type="checkbox"
-                    disabled={wouldLoop}
-                    checked={draft.depends_on.includes(o.id)}
-                    onChange={(e) => patch((n) => (n.depends_on = toggleSet(n.depends_on, o.id, e.target.checked)))}
-                  />
-                  <span>
-                    {o.label}
-                    {wouldLoop && <span className="hint"> — comes after</span>}
-                  </span>
-                </label>
+                  {numberOf && <span className="panel-chip-num">{numberOf(o.id)}</span>}
+                  {o.label}
+                </ChoiceChip>
               );
             })
           ) : (
-            <p className="hint">No other steps yet.</p>
+            <span className="panel-empty">No other steps yet.</span>
           )}
         </div>
-      </div>
-
-      <div className="editor-actions">
-        <button type="button" className="btn btn-danger" onClick={() => onDelete(node.id)}>
-          Delete step
-        </button>
-        <button type="button" className="btn btn-primary" onClick={() => onSave(node.id, draft)}>
-          Save
-        </button>
-      </div>
-    </div>
+      </PanelField>
+    </BoardPanel>
   );
 }
 
 // Inline "add a material this step needs but isn't in the list yet" —
 // registers it on the graph (available to every other step too, not
 // just this one) and turns it on for this step's in-progress draft.
-function AddMaterialForm({ onAdd }) {
-  const [open, setOpen] = useState(false);
+function AddMaterialForm({ onAdd, onCancel }) {
   const [label, setLabel] = useState("");
   const [category, setCategory] = useState(MATERIAL_CATEGORY_ORDER[0]);
   const [amount, setAmount] = useState(1);
   const [unit, setUnit] = useState("");
 
-  if (!open) {
-    return (
-      <button type="button" className="btn btn-ghost add-material-toggle" onClick={() => setOpen(true)}>
-        + New material
-      </button>
-    );
-  }
-
-  const submit = (e) => {
-    e.preventDefault();
+  // Not a <form>: this sits inside the panel, and Enter should add the
+  // material rather than submit anything around it.
+  const submit = () => {
     if (!label.trim()) return;
     onAdd({ label, category, amount, unit });
-    setLabel("");
-    setAmount(1);
-    setUnit("");
-    setOpen(false);
   };
 
   return (
-    <form className="add-material-form" onSubmit={submit}>
-      <input type="text" placeholder="Material name" value={label} autoFocus onChange={(e) => setLabel(e.target.value)} />
-      <select value={category} onChange={(e) => setCategory(e.target.value)}>
+    <div
+      className="add-material-form"
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          submit();
+        }
+      }}
+    >
+      <input
+        className="panel-input add-material-name"
+        type="text"
+        placeholder="Material name"
+        value={label}
+        autoFocus
+        onChange={(e) => setLabel(e.target.value)}
+      />
+      <select className="panel-select" value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Category">
         {MATERIAL_CATEGORY_ORDER.map((cat) => (
           <option key={cat} value={cat}>
             {MATERIAL_CATEGORY_LABELS[cat] || cat}
           </option>
         ))}
       </select>
-      <input
-        type="number"
-        min="0"
-        step="any"
-        className="add-material-amount"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-      />
-      <input
-        type="text"
-        placeholder="unit"
-        className="add-material-unit"
-        value={unit}
-        onChange={(e) => setUnit(e.target.value)}
-      />
-      <button type="submit" className="btn btn-primary">
-        Add
-      </button>
-      <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>
-        Cancel
-      </button>
-    </form>
+      <div className="add-material-qty">
+        <input
+          className="panel-input"
+          type="number"
+          min="0"
+          step="any"
+          aria-label="Amount"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+        />
+        <input className="panel-input" type="text" placeholder="unit" aria-label="Unit" value={unit} onChange={(e) => setUnit(e.target.value)} />
+      </div>
+      <div className="add-material-actions">
+        <button type="button" className="btn btn-ghost" onClick={onCancel}>
+          Cancel
+        </button>
+        <button type="button" className="btn" onClick={submit} disabled={!label.trim()}>
+          Add material
+        </button>
+      </div>
+    </div>
   );
 }

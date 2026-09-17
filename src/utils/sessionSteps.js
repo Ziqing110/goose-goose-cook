@@ -12,13 +12,14 @@ export const CONVERSATION_QUESTION_COUNT = ELICITATION_QUESTIONS.length;
 export const SESSION_STEPS = [
   { key: "kitchen-setup", label: "Kitchen", path: "/session/kitchen-setup", isDone: (s) => Boolean(s.kitchenProfileId) },
   { key: "conversation", label: "Conversation", path: "/session/conversation", isDone: (s) => Boolean(s.conversation?.complete) },
-  // Inventory and the main line are one page: the ingredients and the
-  // step board live together, and you leave by approving. Approval is
+  // Inventory and the recipe graph are one page: the ingredients and
+  // the step board live together, and you leave by approving. Labelled
+  // with the agent's own word for it ("I'll draft your recipe graph"). Approval is
   // the completion signal — strictly stronger than the "did they look
   // at it" flag this stage used when they were two pages.
   {
     key: "inventory",
-    label: "Main line",
+    label: "Recipe graph",
     path: "/session/inventory",
     isDone: (s) => (s.recipes || []).length > 0 && isFullyApproved(s.recipes, s.sharedSteps || []),
   },

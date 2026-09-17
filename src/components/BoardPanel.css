@@ -1,0 +1,185 @@
+/* ---------------------------------------------------------------
+   Board panel — design system v4. Floats inside the board container
+   (position: relative there) over the board's right edge; the modal
+   shadow token is the one elevation on the page, because this is the
+   one thing that sits on top of something else.
+----------------------------------------------------------------*/
+
+.board-panel {
+  position: absolute;
+  z-index: 3;
+  top: 16px;
+  right: 16px;
+  /* Clears the board's 7px lip. */
+  bottom: 23px;
+  width: min(376px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-modal);
+  overflow: hidden;
+  animation: ds-reveal 240ms ease-out both;
+}
+
+.board-panel-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.board-panel-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.board-panel-head.is-ai .board-panel-title { color: var(--ai); }
+.board-panel-close {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin: -6px -8px -6px 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.board-panel-close:hover { background: var(--ds-chip); color: var(--ink); }
+
+.board-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 20px 20px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.board-panel-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--line);
+}
+.board-panel-foot-end { justify-content: flex-end; }
+
+/* ---------------- fields ---------------- */
+.panel-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.panel-field-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.panel-field-row { display: flex; gap: 16px; align-items: flex-start; }
+.panel-field-row > .panel-field { flex: 1 1 0; }
+
+.panel-input,
+.panel-textarea,
+.panel-select {
+  width: 100%;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+}
+.panel-input,
+.panel-select { height: 40px; }
+.panel-textarea { min-height: 58px; padding: 8px 10px; line-height: 20px; font-weight: 400; resize: vertical; }
+.panel-input::placeholder,
+.panel-textarea::placeholder { color: var(--ink-faint); font-weight: 400; }
+.app-shell.ds-v4 .panel-input:focus-visible,
+.app-shell.ds-v4 .panel-textarea:focus-visible,
+.app-shell.ds-v4 .panel-select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.panel-minutes { display: flex; align-items: center; gap: 8px; }
+.panel-minutes .panel-input { width: 64px; }
+.panel-minutes-unit { font-size: 14px; color: var(--ink-soft); }
+
+/* ---------------- segmented ---------------- */
+.panel-seg {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: var(--radius-control);
+  background: var(--ds-chip);
+}
+.panel-seg-btn {
+  flex: 1 1 0;
+  min-height: 34px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms ease-out, color 120ms ease-out;
+}
+.panel-seg-btn:hover { color: var(--ink); }
+.panel-seg-btn.is-on { background: var(--surface); color: var(--ink); font-weight: 600; }
+
+/* ---------------- chips ---------------- */
+.panel-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.panel-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 120ms ease-out, background 120ms ease-out, color 120ms ease-out;
+}
+.panel-chip:hover:not(:disabled) { background: var(--ds-chip); color: var(--ink); }
+.panel-chip:active:not(:disabled) { transform: scale(0.97); }
+.panel-chip.is-on,
+.panel-chip.is-on:hover { background: var(--accent); color: var(--accent-ink); }
+.panel-chip:disabled { background: var(--ds-chip); color: var(--line-strong); cursor: not-allowed; }
+.panel-chip-num { font-family: var(--font-mono); font-size: 12px; opacity: 0.75; }
+.panel-chip-amount { font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint); }
+.panel-chip.is-on .panel-chip-amount { color: inherit; opacity: 0.75; }
+.panel-chip-dashed { border: 1px dashed var(--line-strong); background: transparent; }
+.panel-empty { font-size: 13px; line-height: 18px; color: var(--ink-faint); }
+
+/* Primary/secondary actions in the footer use the shared .btn rules;
+   the destructive ghost is the one local variant. */
+.ds-v4 .btn.panel-btn-danger { background: transparent; color: var(--crit); }
+.ds-v4 .btn.panel-btn-danger:hover { background: var(--crit-soft); }

@@ -392,9 +392,19 @@ button { font: inherit; cursor: pointer; }
   --kp-status-live: #34c759;
 
   --kp-error-bg: #fdecec;
-  --kp-error-text: #8b1a1a;
+  /* #8b1a1a read as near-black at 12–13px; this holds 5.2:1 on
+     error-bg and bg-tertiary, about as bright as 13px text allows. */
+  --kp-error-text: #c0281c;
   --kp-warning-bg: #fff4e5;
   --kp-warning-text: #7a4a00;
+  /* Graphic marks only (bars, dots, borders) — next to the blocked red
+     the text ink is indistinguishable at 4px. Fails as text on cream. */
+  --kp-warning-graphic: #b06f00;
+
+  /* The recipe-graph board: a butcher-block ground, edge and lip. */
+  --kp-board: #f0e6d8;
+  --kp-board-edge: #ddc9ac;
+  --kp-board-lip: #dcc6a6;
 
   --kp-phase-prep: #8a8985;
   --kp-phase-cook: #d4552a;
@@ -429,6 +439,10 @@ button { font: inherit; cursor: pointer; }
     --kp-error-text: #f5b5b5;
     --kp-warning-bg: #3a2a10;
     --kp-warning-text: #f2cf8a;
+    --kp-warning-graphic: #d99a2b;
+    --kp-board: #2a241d;
+    --kp-board-edge: #3a3128;
+    --kp-board-lip: #40362b;
   }
 }
 
@@ -446,4 +460,8 @@ button { font: inherit; cursor: pointer; }
   --kp-error-text: #f5b5b5;
   --kp-warning-bg: #3a2a10;
   --kp-warning-text: #f2cf8a;
+  --kp-warning-graphic: #d99a2b;
+  --kp-board: #2a241d;
+  --kp-board-edge: #3a3128;
+  --kp-board-lip: #40362b;
 }

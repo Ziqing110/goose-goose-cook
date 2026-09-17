@@ -118,9 +118,11 @@ export function segmentHitsRect(a, b, r) {
  * below the cards in the way — whichever is the shorter deviation — so
  * the line stays visible instead of vanishing under a card.
  */
-export function edgePath(from, to, obstacles) {
+// `endDy` moves the landing point off the target's midline, so two
+// edges converging on one card keep separate arrowheads.
+export function edgePath(from, to, obstacles, endDy = 0) {
   const start = { x: from.x + CARD_W, y: from.y + CARD_H / 2 };
-  const end = { x: to.x, y: to.y + CARD_H / 2 };
+  const end = { x: to.x, y: to.y + CARD_H / 2 + endDy };
   const blockers = obstacles.filter((o) => segmentHitsRect(start, end, o));
 
   if (blockers.length === 0) {

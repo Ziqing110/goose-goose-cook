@@ -1,16 +1,17 @@
-// "Add a task", sitting above the board. A new step can't close a loop
-// — nothing depends on it yet — so every existing step is a legal
+// "Add a task" — the board panel in add mode. A new step can't close a
+// loop — nothing depends on it yet — so every existing step is a legal
 // "runs after". The cycle rule only bites when editing an existing
 // step's dependencies, which NodeEditorPanel handles.
 //
 // A step belongs to exactly one dish, so with more than one dish in the
 // run the target is picked explicitly rather than guessed.
 import { useState } from "react";
-import { PHASE_OPTIONS, DIFFICULTY_OPTIONS, EQUIPMENT_OPTIONS, equipmentLabel } from "../data/dishes.js";
+import { PHASE_OPTIONS, EQUIPMENT_OPTIONS, equipmentLabel } from "../data/dishes.js";
+import BoardPanel, { ChoiceChip, PanelField, Segmented } from "./BoardPanel.jsx";
+import { DIFFICULTY_SEGMENTS } from "./NodeEditorPanel.jsx";
 import "./AddStepPanel.css";
 
-export default function AddStepPanel({ recipes, nodes, onAdd }) {
-  const [open, setOpen] = useState(false);
+export default function AddStepPanel({ recipes, nodes, numberOf, onAdd, onClose }) {
   const [label, setLabel] = useState("");
   const [recipeId, setRecipeId] = useState(recipes[0]?.id || "");
   const [phase, setPhase] = useState("prep");
@@ -21,15 +22,8 @@ export default function AddStepPanel({ recipes, nodes, onAdd }) {
   const [equipment, setEquipment] = useState([]);
   const [dependsOn, setDependsOn] = useState([]);
 
-  const reset = () => {
-    setLabel("");
-    setPhase("prep");
-    setMinutes(2);
-    setDifficulty("low");
-    setEquipment([]);
-    setDependsOn([]);
-    setRecipeId(recipes[0]?.id || "");
-  };
+  const toggleIn = (list, value) => (list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
+  const sortedNodes = [...nodes].sort((a, b) => (numberOf?.(a.id) || "").localeCompare(numberOf?.(b.id) || ""));
 
   const submit = (e) => {
     e.preventDefault();
@@ -43,137 +37,96 @@ export default function AddStepPanel({ recipes, nodes, onAdd }) {
       equipment,
       durationSec: Math.max(15, Math.round(Number(minutes) * 60) || 0),
     });
-    reset();
-    setOpen(false);
   };
 
-  if (!open) {
-    return (
-      <div className="add-step-bar">
-        <button type="button" className="btn btn-primary" onClick={() => setOpen(true)}>
-          + Add a task
-        </button>
-        <span className="hint">{nodes.length} steps on the board</span>
-      </div>
-    );
-  }
-
   return (
-    <form className="add-step-bar add-step-form" onSubmit={submit}>
-      <div className="add-step-row">
-        <label className="add-step-field add-step-grow">
-          <span className="mini-title">Task</span>
+    <form className="add-step-form" onSubmit={submit}>
+      <BoardPanel
+        label="Add a task"
+        title="Add a task"
+        onClose={onClose}
+        footer={
+          <div className="add-step-actions">
+            <button type="button" className="btn btn-ghost" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={!label.trim()}>
+              Add to the board
+            </button>
+          </div>
+        }
+      >
+        <PanelField as="label" label="Task">
           <input
+            className="panel-input"
             type="text"
             value={label}
             autoFocus
             placeholder="e.g. Toast the sesame seeds"
             onChange={(e) => setLabel(e.target.value)}
           />
-        </label>
+        </PanelField>
 
         {recipes.length > 1 && (
-          <label className="add-step-field">
-            <span className="mini-title">Dish</span>
-            <select value={recipeId} onChange={(e) => setRecipeId(e.target.value)}>
+          <PanelField as="label" label="Dish">
+            <select className="panel-select" value={recipeId} onChange={(e) => setRecipeId(e.target.value)}>
               {recipes.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.working.title}
                 </option>
               ))}
             </select>
-          </label>
+          </PanelField>
         )}
 
-        <label className="add-step-field">
-          <span className="mini-title">Phase</span>
-          <select value={phase} onChange={(e) => setPhase(e.target.value)}>
-            {PHASE_OPTIONS.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+        <PanelField label="Phase">
+          <Segmented label="Phase" options={PHASE_OPTIONS} value={phase} onChange={setPhase} />
+        </PanelField>
 
-      <div className="add-step-row">
-        <label className="add-step-field">
-          <span className="mini-title">Takes (minutes)</span>
-          <input
-            type="number"
-            min="0.25"
-            step="0.25"
-            value={minutes}
-            onChange={(e) => setMinutes(e.target.value)}
-          />
-        </label>
-        <label className="add-step-field">
-          <span className="mini-title">Difficulty</span>
-          <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
-            {DIFFICULTY_OPTIONS.map((d) => (
-              <option key={d.value ?? d} value={d.value ?? d}>
-                {d.label ?? d}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="add-step-field add-step-grow">
-          <span className="mini-title">Needs</span>
-          <div className="add-step-deps">
+        <div className="panel-field-row">
+          <PanelField as="label" label="Takes">
+            <span className="panel-minutes">
+              <input
+                className="panel-input"
+                type="number"
+                min="0.25"
+                step="0.25"
+                value={minutes}
+                onChange={(e) => setMinutes(e.target.value)}
+              />
+              <span className="panel-minutes-unit">min</span>
+            </span>
+          </PanelField>
+          <PanelField label="Difficulty">
+            <Segmented label="Difficulty" options={DIFFICULTY_SEGMENTS} value={difficulty} onChange={setDifficulty} />
+          </PanelField>
+        </div>
+
+        <PanelField label="Needs">
+          <div className="panel-chips">
             {EQUIPMENT_OPTIONS.map((eq) => (
-              <label className="checkbox-pill" key={eq}>
-                <input
-                  type="checkbox"
-                  checked={equipment.includes(eq)}
-                  onChange={(e) =>
-                    setEquipment((cur) => (e.target.checked ? [...cur, eq] : cur.filter((x) => x !== eq)))
-                  }
-                />
-                <span>{equipmentLabel(eq)}</span>
-              </label>
+              <ChoiceChip key={eq} on={equipment.includes(eq)} onToggle={() => setEquipment((cur) => toggleIn(cur, eq))}>
+                {equipmentLabel(eq)}
+              </ChoiceChip>
             ))}
           </div>
-        </div>
-      </div>
+        </PanelField>
 
-      <div className="add-step-field">
-        <span className="mini-title">Runs after</span>
-        <div className="add-step-deps">
-          {nodes.length === 0 ? (
-            <span className="hint">Nothing to wait on yet.</span>
-          ) : (
-            nodes.map((n) => (
-              <label className="checkbox-pill" key={n.id}>
-                <input
-                  type="checkbox"
-                  checked={dependsOn.includes(n.id)}
-                  onChange={(e) =>
-                    setDependsOn((cur) => (e.target.checked ? [...cur, n.id] : cur.filter((d) => d !== n.id)))
-                  }
-                />
-                <span>{n.label}</span>
-              </label>
-            ))
-          )}
-        </div>
-      </div>
-
-      <div className="add-step-actions">
-        <button
-          type="button"
-          className="btn btn-ghost"
-          onClick={() => {
-            reset();
-            setOpen(false);
-          }}
-        >
-          Cancel
-        </button>
-        <button type="submit" className="btn btn-primary" disabled={!label.trim()}>
-          Add to the board
-        </button>
-      </div>
+        <PanelField label="Runs after">
+          <div className="panel-chips">
+            {sortedNodes.length === 0 ? (
+              <span className="panel-empty">Nothing to wait on yet.</span>
+            ) : (
+              sortedNodes.map((n) => (
+                <ChoiceChip key={n.id} on={dependsOn.includes(n.id)} onToggle={() => setDependsOn((cur) => toggleIn(cur, n.id))}>
+                  {numberOf && <span className="panel-chip-num">{numberOf(n.id)}</span>}
+                  {n.label}
+                </ChoiceChip>
+              ))
+            )}
+          </div>
+        </PanelField>
+      </BoardPanel>
     </form>
   );
 }
