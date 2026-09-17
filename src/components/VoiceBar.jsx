@@ -151,16 +151,6 @@ export default function VoiceBar() {
       const route = routeRef.current;
       if (NAV_OFF_ROUTES.includes(route)) return;
 
-      // A page taking dictation wants the words, not a command read of
-      // them. Checked before everything — including page commands — so
-      // that answering a question with "go back to basics" gets typed
-      // rather than navigating.
-      const dictating = getVoiceDictation();
-      if (dictating) {
-        dictating.onFinal(text);
-        return;
-      }
-
       // Two signals the matcher can't get from the words alone.
       //
       // confidence: the lowest word confidence in the turn. A garbled
@@ -176,6 +166,34 @@ export default function VoiceBar() {
         (lowest, w) => Math.min(lowest, w.confidence ?? 1),
         1,
       );
+
+      // A page taking dictation wants the words, not a command read of
+      // them — "go back to basics" is an answer, and typing it is right.
+      //
+      // But "go back to home" is not an answer to anything, and typing
+      // it strands you on a page you asked to leave with no way out but
+      // the mouse. So navigation still gets a look first, in strict
+      // mode: only a named destination, said briefly and heard clearly.
+      // Bare "back" and "previous" never count here — they're ordinary
+      // words in an answer.
+      const dictating = getVoiceDictation();
+      if (dictating) {
+        const nav = matchNavCommand(text, {
+          route,
+          confidence,
+          reachable: reachableRef.current,
+          strict: true,
+        });
+        if (nav.action === "goto") return run("goto", nav.path);
+        // Naming a page you can't reach yet, or are already on, is still
+        // navigation — it just doesn't move you. Saying so beats typing
+        // "go to the live cook" into the answer box.
+        if (nav.action === "already") return say("You're already here.");
+        if (nav.action === "blocked") return say("Not yet — finish this step first.");
+        dictating.onFinal(text);
+        return;
+      }
+
       // A question is open: this turn is an answer, not a command.
       // Anything that isn't yes or no abandons it — someone who moved on
       // to another subject has answered by not answering, and leaving

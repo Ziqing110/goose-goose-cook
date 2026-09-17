@@ -69,6 +69,11 @@ const DESTINATIONS = [
 // but the right shape — nobody navigates a wizard in a long sentence.
 const MAX_BARE_COMMAND_WORDS = 4;
 
+// While a page is dictating, even a named destination has to be said
+// briefly. "go back to home" is six words at most; anything longer that
+// merely mentions a page is almost certainly an answer about it.
+const STRICT_MAX_WORDS = 6;
+
 // Phrases where a movement word is doing ordinary work. A blocklist is
 // whack-a-mole by nature — it only knows the idioms someone thought of —
 // so it is the LAST line of defence here, not the first. The structural
@@ -186,7 +191,14 @@ const normalize = (s) =>
  *          matched — the common case, since most of what gets said near
  *          a kitchen is not a command.
  */
-export function matchNavCommand(text, { route = "/", reachable, confidence } = {}) {
+/**
+ * @param {boolean} [ctx.strict] For pages taking dictation. Only a named
+ *   destination said as a short, confident phrase counts; bare movement
+ *   words never do. "go back to home" is plainly navigation even while
+ *   answering questions; "go back to basics" is an answer that happens
+ *   to contain "back", and typing it is the right call.
+ */
+export function matchNavCommand(text, { route = "/", reachable, confidence, strict = false } = {}) {
   const said = normalize(text);
   if (!said) return { action: "none" };
 
@@ -198,6 +210,18 @@ export function matchNavCommand(text, { route = "/", reachable, confidence } = {
       // A name alone isn't a command — "the schedule looks tight" is
       // talking about it, not asking to go there. Require a verb.
       if (!/\b(go|open|show|take me|jump|switch|navigate)\b/.test(said)) continue;
+      // While a page is taking dictation, a destination only counts if
+      // the whole utterance is short and clearly heard. "go back to
+      // home" is plainly navigation; "I want to go back to the recipe
+      // my mum used to make" names a page inside an answer, and typing
+      // it is the right call.
+      if (
+        strict &&
+        (countUnits(said) > STRICT_MAX_WORDS ||
+          (typeof confidence === "number" && confidence < MIN_BARE_CONFIDENCE))
+      ) {
+        continue;
+      }
       if (dest.path === route) return { action: "already", path: dest.path };
       if (reachable && !reachable.includes(dest.path)) {
         return { action: "blocked", path: dest.path };
@@ -205,6 +229,11 @@ export function matchNavCommand(text, { route = "/", reachable, confidence } = {
       return { action: "goto", path: dest.path };
     }
   }
+
+  // Bare movement words are never commands on a dictation page: "back"
+  // is a perfectly ordinary word in an answer, and there is no way to
+  // tell it from an instruction without a destination attached.
+  if (strict) return { action: "none" };
 
   if (NOT_NAVIGATION.some((p) => p.test(said))) return { action: "none" };
 
