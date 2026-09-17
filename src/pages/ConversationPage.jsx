@@ -51,7 +51,9 @@ export default function ConversationPage() {
 
   useEffect(() => {
     if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
-  }, [transcript]);
+    // `reading` too: the thinking bubble is appended below the last
+    // message, so without this it can appear just off the bottom edge.
+  }, [transcript, reading]);
 
   // This page takes dictation, not commands, so the bar should say so —
   // and should stop advertising navigation you can't use here.
@@ -136,11 +138,11 @@ export default function ConversationPage() {
   );
 
   const confirmReading = (id) => {
-    const reading = understanding[id];
-    if (!reading) return;
+    const current = understanding[id];
+    if (!current) return;
     dispatch({
       type: "session/conversation/update",
-      payload: { understanding: { ...understanding, [id]: { ...reading, status: "confirmed", heard: undefined } } },
+      payload: { understanding: { ...understanding, [id]: { ...current, status: "confirmed", heard: undefined } } },
     });
   };
 
@@ -214,12 +216,25 @@ export default function ConversationPage() {
                 </div>
               </div>
             ))}
-            {!isComplete && (
-              <div className="chat-row chat-cook" aria-hidden="true">
-                <span className="chat-avatar" />
+            {/* Dots mean someone is composing a message. This used to sit
+                on the cook's side and render whenever the conversation
+                was unfinished, so it claimed YOU were talking the entire
+                time — including while the agent was the one thinking.
+                Back when nothing was actually thinking it was just decor;
+                now that a real read happens between turns, it was
+                pointing at the wrong speaker.
+
+                It belongs to the agent, and only while it is genuinely
+                reading. The answer bar already says what the cook's side
+                is doing ("Listening…", "Reading…"). */}
+            {reading && (
+              <div className="chat-row chat-agent" aria-live="polite" aria-label="Agent is thinking">
+                <span className="chat-avatar" aria-hidden="true">
+                  <Icon glyph="waveform" size={16} />
+                </span>
                 <div className="chat-msg">
-                  <span className="chat-who">You</span>
-                  <p className="chat-bubble typing-bubble">
+                  <span className="chat-who">Agent</span>
+                  <p className="chat-bubble typing-bubble" aria-hidden="true">
                     <span className="typing-dot" />
                     <span className="typing-dot" />
                     <span className="typing-dot" />
