@@ -25,7 +25,11 @@ import {
   normalizeUtterance,
   pathLabel,
 } from "../utils/navCommands.js";
-import { getVoiceDictation, matchPageCommand } from "../utils/voicePageCommands.js";
+import {
+  getVoiceDictation,
+  matchPageCommand,
+  subscribeVoiceRegistry,
+} from "../utils/voicePageCommands.js";
 import { sessionStageStates } from "../utils/sessionSteps.js";
 import "./VoiceBar.css";
 
@@ -250,13 +254,26 @@ export default function VoiceBar() {
     [navigate, say, run, askToConfirm, clearPending],
   );
 
-  const { status, partial, level } = useStreamingTranscript({
+  const { status, partial, level, updateConfig } = useStreamingTranscript({
     enabled: !muted,
     config: STREAM_CONFIG,
     onTurn,
     onError,
     onIdle,
   });
+
+  // A page can ask for different turn detection while it listens — the
+  // conversation page wants long thinking pauses, the live cook will
+  // want the opposite. Applied on connect and whenever a page starts or
+  // stops dictating; restoring means re-applying the mode preset, which
+  // is what the docs prescribe.
+  const [registryVersion, setRegistryVersion] = useState(0);
+  useEffect(() => subscribeVoiceRegistry(() => setRegistryVersion((v) => v + 1)), []);
+  useEffect(() => {
+    if (status !== "live") return;
+    const wanted = getVoiceDictation()?.turnDetection;
+    updateConfig(wanted || { mode: STREAM_CONFIG.mode || "balanced" });
+  }, [status, registryVersion, updateConfig]);
 
   // Forward partials to a page taking dictation, so its input fills as
   // you speak instead of jumping all at once when the turn ends.

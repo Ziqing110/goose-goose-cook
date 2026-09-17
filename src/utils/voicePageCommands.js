@@ -62,18 +62,39 @@ export function clearVoiceCommands() {
 // rather than appearing all at once when the turn ends.
 
 let dictation = null;
+const listeners = new Set();
+const notify = () => listeners.forEach((fn) => fn());
 
 /**
- * @param {{onPartial?: Function, onFinal: Function}} handlers
+ * @param {object} handlers
+ *   onPartial       (text) => void, called as the words arrive
+ *   onFinal         (text) => void, called once the turn ends
+ *   turnDetection   optional {min_turn_silence, max_turn_silence, ...}
+ *                   applied to the live connection while this page is
+ *                   listening, and restored when it stops.
  * @returns {Function} unregister
  */
 export function registerVoiceDictation(handlers) {
   dictation = handlers;
+  notify();
   return () => {
-    if (dictation === handlers) dictation = null;
+    if (dictation === handlers) {
+      dictation = null;
+      notify();
+    }
   };
 }
 
 export function getVoiceDictation() {
   return dictation;
+}
+
+/**
+ * VoiceBar subscribes so it can react to a page starting or stopping
+ * dictation — the registry is a plain module variable, so without this
+ * nothing would tell React that turn detection needs reconfiguring.
+ */
+export function subscribeVoiceRegistry(fn) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
 }

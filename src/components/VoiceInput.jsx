@@ -12,6 +12,23 @@ import { useAppState } from "../state/AppStateContext.jsx";
 import { registerVoiceDictation } from "../utils/voicePageCommands.js";
 import "./VoiceInput.css";
 
+// Someone answering "how many servings?" says "uh... four, I think" with
+// a real gap in the middle. The `balanced` preset ends a turn after
+// 128ms of silence and force-ends at 1280ms, which turns one answer into
+// two and submits the first half.
+//
+//   min_turn_silence  how long to wait before even CHECKING whether the
+//                     turn is over. Below this, a pause is just a pause.
+//   max_turn_silence  the hard ceiling: end the turn regardless.
+//
+// A finished sentence still ends promptly, because the check runs at
+// 700ms and a complete thought reads as complete. It's the UNfinished
+// ones that now get room — up to 4s — instead of being cut off.
+//
+// The cost is honest: every answer takes ~600ms longer to submit than it
+// did. That is the trade being made deliberately.
+const THINKING_PAUSE = { min_turn_silence: 700, max_turn_silence: 4000 };
+
 export default function VoiceInput({ question, onAnswer }) {
   const { state, dispatch } = useAppState();
   const muted = state.voice.muted;
@@ -67,6 +84,7 @@ export default function VoiceInput({ question, onAnswer }) {
     return registerVoiceDictation({
       onPartial: (partial) => setText(partial || ""),
       onFinal: (final) => send(final),
+      turnDetection: THINKING_PAUSE,
     });
   }, [muted, send]);
 
