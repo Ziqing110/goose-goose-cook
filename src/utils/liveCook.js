@@ -21,28 +21,59 @@ const LIVE_REPLAN_TIME_BUDGET_MS = 80;
 export const DIFFICULTY_POINTS = { low: 10, medium: 20, high: 35 };
 
 /**
- * Starting an unattended step is itself a small hands-on task, and is
- * scored like one: by difficulty. Getting a hard braise going is worth
- * more than putting rice on, because it is a harder thing to get right.
+ * Starting an unattended step pays for two different things.
  *
- * The rest is held back until the step is finished, so one unattended
- * step pays out twice — once for starting it, once for coming back. That
- * second half is what makes anyone return to the pot.
+ * THE ACT. Putting rice on is a one-minute job whatever the rice goes on
+ * to do for the next forty, so the physical part is scored as what it
+ * is: a small hands-on task, sized by difficulty. A braise that has to
+ * be browned and deglazed before it is left alone is worth more to start
+ * than a rice cooker, because it is a harder minute.
  *
- * A quarter is the split. It has to be small enough that a 40-minute
- * simmer cannot out-earn real cooking — before this it scored 20 against
- * 10 for actually chopping something, so the strongest competition
- * strategy was to grab every wait and collect points for standing still
- * — and large enough that starting the congee early is still rewarded,
- * because the claim pool ranks it first and an incentive that
- * contradicts the advice is worse than no incentive at all.
+ * WHAT IT UNBLOCKS. The rest is the real reason to reward starting: the
+ * congee gates the entire evening, and getting it on is the single most
+ * valuable move in the run. That is not a property of how hard it is —
+ * rice is easy and still decides when everyone eats — so it cannot come
+ * from difficulty. It comes from the step's tail, the same measure the
+ * claim pool already ranks on, scaled against the longest tail in the
+ * run. The step everything waits behind earns the full bonus; a wait
+ * that blocks nothing earns none of it.
+ *
+ * The bonus is ADDED rather than carved out of the step's points, so
+ * finishing is always worth the same and there is always a reason to
+ * come back to the pot.
  */
 export const UNATTENDED_START_SHARE = 0.25;
 
-/** What starting an unattended step of this difficulty pays. */
-export function unattendedStartPoints(node) {
+/**
+ * Most the unblocking bonus can add. Set so that the best possible start
+ * — an easy wait that gates the whole run, i.e. the congee — is worth
+ * exactly one chop of scallions, and no more. Starting the most
+ * important thing in the evening should feel worth doing; it should
+ * never beat doing actual work.
+ */
+export const UNATTENDED_UNBLOCK_BONUS = DIFFICULTY_POINTS.low - Math.round(DIFFICULTY_POINTS.low * 0.25);
+
+/**
+ * What starting this unattended step pays.
+ *
+ * `ctx.tailShare` is this step's tail as a fraction of the longest tail
+ * in the run, 0 to 1. Omit it and only the act is paid — which is what
+ * happens anywhere the graph is not to hand, and is the safe direction
+ * to be wrong in.
+ */
+export function unattendedStartPoints(node, ctx = {}) {
   const full = DIFFICULTY_POINTS[node?.difficulty] ?? DIFFICULTY_POINTS.low;
-  return Math.max(1, Math.round(full * UNATTENDED_START_SHARE));
+  const act = Math.max(1, Math.round(full * UNATTENDED_START_SHARE));
+  const share = Number.isFinite(ctx.tailShare) ? Math.max(0, Math.min(1, ctx.tailShare)) : 0;
+  return act + Math.round(UNATTENDED_UNBLOCK_BONUS * share);
+}
+
+/** Every step's tail as a fraction of the longest tail in the run. */
+export function tailShares(nodes) {
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const tails = computeTails(nodes, byId);
+  const longest = Math.max(1, ...tails.values());
+  return new Map([...tails].map(([id, tail]) => [id, tail / longest]));
 }
 
 /**
@@ -337,6 +368,7 @@ export function runProgress(run, nodes, now = Date.now()) {
  */
 export function startAwards(run, nodes) {
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const shares = tailShares(nodes);
   const firstStarter = new Map();
   (run.events || []).forEach((e) => {
     if (e.type !== "start" || !e.stepId || !e.cookId) return;
@@ -347,7 +379,8 @@ export function startAwards(run, nodes) {
   firstStarter.forEach((cookId, stepId) => {
     const status = run.steps[stepId]?.status;
     if (status !== "active" && status !== "done") return;
-    byCook[cookId] = (byCook[cookId] || 0) + unattendedStartPoints(byId[stepId]);
+    byCook[cookId] =
+      (byCook[cookId] || 0) + unattendedStartPoints(byId[stepId], { tailShare: shares.get(stepId) });
   });
   return byCook;
 }
@@ -393,7 +426,9 @@ export function runOutcome(run, nodes, cooks) {
     winnerCookIds: board.filter((b) => b.points === top && top > 0).map((b) => b.cookId),
     doneCount: progress.done,
     skippedCount: progress.skipped,
-    perStep: nodes.map((n) => {
+    perStep: (() => {
+      const shares = tailShares(nodes);
+      return nodes.map((n) => {
       const record = run.steps[n.id] || emptyRecord();
       const variance = stepVariance(n, record, run.endedAt ? Date.parse(run.endedAt) : Date.now());
       const unattended = n.attended === false;
@@ -411,12 +446,13 @@ export function runOutcome(run, nodes, cooks) {
         // applyDone overwrites cookId with whoever finished.
         ...(unattended
           ? {
-              startPoints: unattendedStartPoints(n),
+              startPoints: unattendedStartPoints(n, { tailShare: shares.get(n.id) }),
               startedByCookId: (run.events || []).find((e) => e.type === "start" && e.stepId === n.id)?.cookId ?? null,
             }
           : {}),
       };
-    }),
+      });
+    })(),
   };
 }
 
