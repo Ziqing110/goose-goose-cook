@@ -58,9 +58,6 @@ const PHRASE_WINDOW_MS = 25_000;
 // "back" mean something else entirely. Navigation stands down there.
 const NAV_OFF_ROUTES = ["/session/live-cook"];
 
-// Steer the model toward the two languages actually spoken here. It
-// still code-switches — universal-3-5-pro does that by default — but
-// naming the pair biases it and improves accuracy on both.
 // Turn detection for the pages that take commands rather than dictation.
 //
 // The `balanced` preset ends a turn after 128ms of silence, which is
@@ -77,6 +74,9 @@ const COMMAND_TURN = { min_turn_silence: 400, max_turn_silence: 1280 };
 
 const STREAM_CONFIG = {
   speechModel: "universal-3-5-pro",
+  // Steer the model toward the two languages actually spoken here. It
+  // still code-switches — universal-3-5-pro does that by default — but
+  // naming the pair biases it and improves accuracy on both.
   languageCodes: ["en", "zh"],
   // This runs in a kitchen: extractor fans, running water, a second
   // person talking, a laptop mic across the counter. Voice Focus strips
@@ -344,7 +344,9 @@ export default function VoiceBar() {
           console.info("[voice] not a command:", text);
       }
     },
-    [navigate, say, run, askToConfirm, clearPending],
+    // navigate is not listed: run() already closes over it, and
+    // including it would rebuild this handler on every route change.
+    [say, run, askToConfirm, clearPending],
   );
 
   const { status, partial, level, updateConfig } = useStreamingTranscript({

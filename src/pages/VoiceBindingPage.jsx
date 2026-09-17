@@ -60,7 +60,7 @@ export default function VoiceBindingPage() {
   useEffect(() => {
     return registerVoiceCommands([
       {
-        phrases: [/continue to scheduling/, /go to scheduling/],
+        phrases: [/\bcontinue to scheduling\b/, /\bgo to scheduling\b/],
         run: () => {
           if (!areCooksBound(cooks)) return;
           navigate("/session/schedule");

@@ -9,7 +9,7 @@
     "dev:full": "concurrently -n web,api -c blue,green \"npm:dev\" \"npm:server\"",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint . --ext .js,.jsx --max-warnings 0"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

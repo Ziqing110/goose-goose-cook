@@ -137,12 +137,36 @@ function readTargetTime(raw) {
     return confirmed(String(n), `${n} minutes`);
   }
   if (text === "half an hour") return confirmed("30", "30 minutes");
+
+  // Halves and quarters, which people say constantly and no amount of
+  // number-word matching catches: "an hour and a half", "two and a half
+  // hours". Without this they fell through to the raw-text branch below
+  // and put a sentence where the scheduler expects minutes.
+  // Both word orders, because people use both and they are not
+  // interchangeable to a regex: "two and a half hours" puts the half
+  // before the unit, "an hour and a half" puts it after.
+  const halfBefore = new RegExp(`^(${NUMBER_PATTERN}|an?)\\s*(?:and\\s*)?(?:a\\s*)?half\\s*(?:h|hrs?|hours?)$`, "i");
+  const halfAfter = new RegExp(`^(${NUMBER_PATTERN}|an?)\\s*(?:h|hrs?|hours?)\\s*(?:and\\s*)?(?:a\\s*)?half$`, "i");
+  const half = halfBefore.exec(text) || halfAfter.exec(text);
+  if (half) {
+    const base = /^an?$/i.test(half[1]) ? 1 : toNumber(half[1]);
+    const n = Math.round((base + 0.5) * 60);
+    return confirmed(String(n), `${n} minutes`);
+  }
+
   const n = firstNumber(text);
   if (n) {
-    const total = Math.round(/\b(h|hrs?|hours?)\b/.test(text) ? n * 60 : n);
+    const isHours = /\b(h|hrs?|hours?)\b/.test(text);
+    const total = Math.round((isHours ? n * 60 : n) + (/\bhalf\b/.test(text) ? (isHours ? 30 : 0) : 0));
     return unsure(String(total), `${total} minutes`, raw.trim());
   }
-  return unsure(raw.trim(), capitalize(raw.trim()), raw.trim());
+
+  // Nothing numeric at all. This slot MUST end up a number — the
+  // scheduler does arithmetic on it — so returning the raw sentence
+  // would put a string where minutes belong and fail somewhere far from
+  // here. Fall back to the middle option and flag it, so the sidecar
+  // shows it as a guess and the cook can correct it in one click.
+  return unsure("60", "1 hour", raw.trim());
 }
 
 const READERS = {

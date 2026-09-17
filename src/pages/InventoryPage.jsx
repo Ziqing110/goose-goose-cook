@@ -6,7 +6,6 @@
 // uses. The "out" set is session state (session.outMaterialIds) so the
 // main line reads the same thing.
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { useSessionRecipes } from "../state/useSessionRecipes.js";
 import { mergeRecipesForDisplay, computeStepAvailability, cyclicDependencyIds, cloneGraph } from "../utils/graphLayout.js";
@@ -169,7 +168,6 @@ function IngredientRow({ item, onToggle, delay }) {
 
 export default function InventoryPage() {
   const { state, dispatch } = useAppState();
-  const navigate = useNavigate();
   const session = state.session;
   const { recipes, sharedSteps = [], outMaterialIds = [] } = session;
   const { catalog, catalogError, retryCatalog } = useSessionRecipes();
@@ -182,7 +180,9 @@ export default function InventoryPage() {
 
   // The same steps the ingredients above are folded under, as a board.
   const { working, draft, approved } = useMemo(() => mergeRecipesForDisplay(recipes, sharedSteps), [recipes, sharedSteps]);
-  const boardNodes = working.nodes || [];
+  // `|| []` makes a new array whenever nodes is absent, which would
+  // re-run the memo below on every render and defeat the point of it.
+  const boardNodes = useMemo(() => working.nodes || [], [working.nodes]);
   const blockedIds = useMemo(
     () => computeStepAvailability(boardNodes, new Set(outMaterialIds)).impossible,
     [boardNodes, outMaterialIds]
@@ -224,7 +224,7 @@ export default function InventoryPage() {
   useEffect(() => {
     return registerVoiceCommands([
       {
-        phrases: [/approve/],
+        phrases: [/\bapprove\b/],
         confirm: "Approve the board and move to scheduling? Say yes or no.",
         label: "Approved.",
         run: () => {

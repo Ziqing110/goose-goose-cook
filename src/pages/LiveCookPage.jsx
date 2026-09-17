@@ -231,7 +231,7 @@ export default function LiveCookPage() {
     setInput("");
     setPending(null);
     const cookId = speaker;
-    if (paused && !/(resume|unpause|back on|go)/i.test(text)) {
+    if (paused && !/\b(resume|unpause|back on|go)\b/i.test(text)) {
       return commit(say(appendTranscript(run, { at: new Date().toISOString(), speaker: cookId, text }), "We're paused — say \"resume\" when you're ready."));
     }
     if (paused) return togglePause();

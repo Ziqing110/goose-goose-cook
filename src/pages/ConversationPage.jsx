@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { ELICITATION_QUESTIONS } from "../data/dishes.js";
@@ -17,7 +17,12 @@ export default function ConversationPage() {
   const navigate = useNavigate();
   const { conversation } = state.session;
   const { transcript, answers, questionIndex, complete } = conversation;
-  const understanding = conversation.understanding || {};
+  // Memoized because `|| {}` builds a NEW object whenever understanding
+  // is absent, which changes handleAnswer's identity every render — and
+  // VoiceInput re-registers its dictation handler, and the live socket
+  // gets an UpdateConfiguration, each time. Exactly the bug already
+  // fixed for handleAnswer; this was the other half of it.
+  const understanding = useMemo(() => conversation.understanding || {}, [conversation.understanding]);
   const transcriptRef = useRef(null);
   // The follow-up currently outstanding, if any. Held here rather than in
   // session state because it is about this turn, not about the run — a

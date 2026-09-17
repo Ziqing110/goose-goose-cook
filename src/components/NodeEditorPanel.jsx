@@ -11,6 +11,11 @@ import "./NodeEditorPanel.css";
 export default function NodeEditorPanel({ node, allNodes, onSave, onDelete, materialsInfo, onRegisterMaterial, blockedDependencyIds }) {
   const [draft, setDraft] = useState(node);
 
+  // Keyed on node.id deliberately, NOT on node. Re-seeding the draft
+  // whenever the node object changes identity would discard whatever the
+  // person has typed the moment anything upstream re-renders. Switching
+  // to a different step is the only time the draft should be replaced.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => setDraft(node), [node.id]);
 
   const others = allNodes.filter((n) => n.id !== node.id);

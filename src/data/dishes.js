@@ -59,12 +59,24 @@ export const ELICITATION_QUESTIONS = [
     id: "targetTime",
     slotLabel: "Target time",
     agentText: "What's the target finish time, start to plated?",
+    // Measured, not guessed. Generating these three dishes across six
+    // models gave median critical paths of 22 minutes for mapo tofu,
+    // 41 for mouth-watering chicken (poach, then it has to CHILL), and
+    // 52 for century egg congee (a simmer that cannot be hurried).
+    //
+    // The old options were 20 / 30 / 45, and 20 was a promise the app
+    // could not keep: the fastest dish in that set takes 22 minutes on
+    // its own, before anyone adds a second one. 45 was the ceiling, which
+    // made every multi-dish run look late before it started.
+    //
+    // These three answer the question people are actually asking: is this
+    // a quick weeknight thing, an evening, or a project?
     options: [
-      { label: "20 minutes", value: "20" },
       { label: "30 minutes", value: "30" },
-      { label: "45 minutes", value: "45" },
+      { label: "1 hour", value: "60" },
+      { label: "1½ hours", value: "90" },
     ],
-    freeTextPlaceholder: "e.g. 35 minutes",
+    freeTextPlaceholder: "e.g. 40 minutes, or a couple of hours",
   },
 ];
 
