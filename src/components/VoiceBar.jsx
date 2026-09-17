@@ -20,9 +20,12 @@ import {
   matchConfirmation,
   matchNavCommand,
   navCommandList,
+  isLikelyConversation,
   navHintFor,
+  normalizeUtterance,
   pathLabel,
 } from "../utils/navCommands.js";
+import { matchPageCommand } from "../utils/voicePageCommands.js";
 import { sessionStageStates } from "../utils/sessionSteps.js";
 import "./VoiceBar.css";
 
@@ -174,6 +177,22 @@ export default function VoiceBar() {
         clearPending();
         if (answer === "yes") return run(pendingAction, pendingPath);
         if (answer === "no") return say("Staying here.");
+        return;
+      }
+
+      // The page gets first refusal. Home can "resume the run", Inventory
+      // can mark an ingredient out, and neither is navigation — but both
+      // are things those pages already advertise in the hint, so they
+      // have to be heard before anything generic looks at the words.
+      const said = normalizeUtterance(text);
+      const pageCommand = matchPageCommand(said);
+      if (pageCommand) {
+        // Page commands get the same guards as navigation. Without this
+        // "resume" was protected but "we should resume later" fired.
+        if (!isLikelyConversation(said, confidence)) {
+          pageCommand.run();
+          if (pageCommand.label) say(pageCommand.label);
+        }
         return;
       }
 

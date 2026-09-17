@@ -265,3 +265,22 @@ export function navCommandList() {
 export function pathLabel(path) {
   return DESTINATIONS.find((d) => d.path === path)?.names[0] ?? "that page";
 }
+
+/** The shared text normalizer, so page commands match the same way. */
+export function normalizeUtterance(text) {
+  return normalize(text);
+}
+
+/**
+ * Does this utterance look like conversation rather than an instruction?
+ *
+ * Exported so page-registered commands get the same treatment as
+ * navigation. Without it, "resume" was guarded three ways but
+ * "we should resume later" — registered by Home — fired immediately,
+ * which is the exact bug the guards exist to prevent.
+ */
+export function isLikelyConversation(said, confidence) {
+  if (HAS_SUBJECT.test(said)) return true;
+  if (typeof confidence === "number" && confidence < CONFIRM_CONFIDENCE) return true;
+  return false;
+}

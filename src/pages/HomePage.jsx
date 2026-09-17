@@ -23,6 +23,7 @@ import {
   summarizeRun,
 } from "../utils/runStats.js";
 import "./HomePage.css";
+import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 
 const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight"];
 
@@ -196,6 +197,37 @@ export default function HomePage() {
     dispatch({ type: "voice/setHint", payload: { hint } });
     return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
   }, [heroState, session, profiles, dispatch]);
+
+  // Register the commands the hint above advertises. Without this the
+  // bar says "say 'resume the run'" and then ignores you when you do,
+  // which is worse than a bar that promises nothing — the copy predates
+  // the microphone being real.
+  useEffect(() => {
+    if (heroState === "resumable") {
+      return registerVoiceCommands([
+        {
+          phrases: [/\bresume\b/, /\bcarry on with the run\b/, /继续做饭/, /恢复/],
+          label: "Resuming.",
+          run: () => navigate("/session"),
+        },
+      ]);
+    }
+    if (heroState === "ready" || heroState === "picker") {
+      return registerVoiceCommands([
+        {
+          // Only when there's no ambiguity about which kitchen. With
+          // several profiles this opens a picker, and a voice command
+          // that opens a dialog you then have to click is no better
+          // than clicking the button.
+          phrases: [/\bstart (?:the )?(?:run|cooking|session)\b/, /开始做饭/, /开始/],
+          label: profiles.length > 1 ? "Which kitchen?" : "Starting.",
+          run: handleStartClick,
+        },
+      ]);
+    }
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heroState, profiles.length, navigate]);
 
   /* ---- actions ---- */
 
