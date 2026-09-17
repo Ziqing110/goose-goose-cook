@@ -13,6 +13,10 @@ const STOP_WORDS = new Set([
 // Order matters: "we're done" must not fire a step completion, and
 // "drop it" must not be read as "done".
 const INTENTS = [
+  // Pause/resume first: "resume" and "back on" would otherwise read as
+  // "start", and "hold on" mustn't fire "on it".
+  { intent: "resume", patterns: [/\bresume\b/, /\bunpause\b/, /\bback on\b/, /\bkeep going\b/] },
+  { intent: "pause", patterns: [/\bpause\b/, /\bhold on\b/, /\btake (?:a )?(?:break|five)\b/, /\btime ?out\b/] },
   { intent: "finish_run", patterns: [/\bwe(?:'re| are)? done\b/, /\ball done\b/, /\bfinish(?: the)? cook/, /\bend the cook/, /\bdinner'?s up\b/] },
   { intent: "help", patterns: [/\bhelp\b/, /what can i say/, /\bcommands?\b/, /what can you do/] },
   { intent: "undo", patterns: [/\bundo\b/, /never ?mind/, /\boops\b/, /wait,? no\b/, /i didn'?t\b/] },
