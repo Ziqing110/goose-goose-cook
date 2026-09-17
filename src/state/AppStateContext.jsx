@@ -17,7 +17,9 @@ import { DEFAULT_COOK_COUNT } from "../data/dishes.js";
 function emptySessionConversation() {
   // cooks isn't asked about any more, so it starts at the default that
   // the rest of the flow (voice binding, schedule, run stats) reads.
-  return { complete: false, transcript: [], answers: { cooks: DEFAULT_COOK_COUNT }, questionIndex: 0 };
+  // `understanding` holds the agent's reading of each answer, keyed by
+  // question id (see utils/understanding.js).
+  return { complete: false, transcript: [], answers: { cooks: DEFAULT_COOK_COUNT }, understanding: {}, questionIndex: 0 };
 }
 
 function makeSession(id, kitchenProfileId) {

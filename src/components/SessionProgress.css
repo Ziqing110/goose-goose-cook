@@ -34,20 +34,19 @@
 .stage-path {
   display: flex;
   align-items: flex-start;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+/* Equal flexible columns; each connector runs from the previous node's
+   right edge to this node's left edge — Home's geometry (.hp-stage-link
+   in HomePage.css), so the line never has gaps whatever the width. */
 .stage {
   position: relative;
-  /* Fixed width (not just a flex-basis) so the <ol>'s intrinsic size
-     is 7 × 96 + gaps rather than the sum of the label widths — 840px,
-     which leaves room for the Exit button beside it at 1120. */
-  flex: none;
-  width: 96px;
+  flex: 1 1 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -58,18 +57,19 @@
   line-height: 18px;
   color: var(--ink-soft);
 }
-.stage + .stage { margin-left: 28px; }
 .stage + .stage::before {
   content: "";
   position: absolute;
   top: 13px;
-  left: -28px;
-  width: 28px;
+  right: calc(50% + 14px);
+  width: calc(100% - 28px);
   height: 2px;
   background: var(--line);
 }
 
 .stage-node {
+  position: relative;
+  z-index: 1;
   width: 28px;
   height: 28px;
   flex: none;
@@ -86,27 +86,12 @@
 .stage-current .stage-label { font-weight: 500; }
 .stage-current .stage-node {
   background: var(--accent);
+  border: 2px solid var(--accent);
   animation: ds-ring 1600ms ease-in-out infinite;
 }
 
 .stage-waiting .stage-node { background: var(--bg); border: 2px solid var(--ds-waiting); }
 .stage-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ds-waiting); }
-
-/* Wide screens: centre the path over the page's reading column and pin
-   Exit to the right edge (1fr gutters each fit the button from here up). */
-@media (min-width: 1120px) {
-  .stage-progress { display: grid; grid-template-columns: 1fr auto 1fr; }
-  .stage-path { grid-column: 2; }
-  .stage-progress .session-exit-btn { grid-column: 3; justify-self: end; }
-}
-
-/* Below that, compact flexible nodes so Exit stays on the same row. */
-@media (max-width: 1119px) {
-  .stage-path { flex: 1 1 auto; }
-  .stage { flex: 1 1 0; width: auto; }
-  .stage + .stage { margin-left: 20px; }
-  .stage + .stage::before { left: -20px; width: 20px; }
-}
 
 @media (max-width: 860px) {
   .stage-path { flex: 1 1 100%; }

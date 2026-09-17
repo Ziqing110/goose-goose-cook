@@ -36,11 +36,9 @@ export default function VoiceInput({ question, onAnswer }) {
     e.preventDefault();
     const val = text.trim();
     if (!val) return;
-    // If the text is exactly one of the demo templates (used as-is),
-    // submit its real value/label pair; otherwise treat it as free text.
-    const match = question.options.find((o) => o.label === val);
-    if (match) onAnswer(match.value, match.label);
-    else onAnswer(val, val);
+    // The page reads the answer (utils/understanding.js), including
+    // mapping a template used as-is back to its option value.
+    onAnswer(val);
     setText("");
   };
 

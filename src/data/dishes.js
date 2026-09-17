@@ -7,12 +7,14 @@
 export const ELICITATION_QUESTIONS = [
   {
     id: "dishIdea",
+    slotLabel: "Dish",
     agentText: "What do you want to cook tonight?",
     options: [],
     freeTextPlaceholder: "e.g. mapo tofu",
   },
   {
     id: "servings",
+    slotLabel: "Servings",
     agentText: "How many people are we cooking for?",
     options: [
       { label: "2 servings", value: "2" },
@@ -23,6 +25,7 @@ export const ELICITATION_QUESTIONS = [
   },
   {
     id: "diet",
+    slotLabel: "Dietary",
     agentText: "Any dietary constraints I should design around?",
     options: [
       { label: "No restrictions", value: "none" },
@@ -33,6 +36,7 @@ export const ELICITATION_QUESTIONS = [
   },
   {
     id: "targetTime",
+    slotLabel: "Target time",
     agentText: "What's the target finish time, start to plated?",
     options: [
       { label: "20 minutes", value: "20" },

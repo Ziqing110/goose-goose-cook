@@ -1,0 +1,183 @@
+/* ---------------------------------------------------------------
+   Understanding sidecar — design system v4 (conversation page only).
+   Sunken ground like the transcript panel; white cards for what the
+   agent is sure of, the warning pair for what it wants checked, dashed
+   outlines for what hasn't been answered. Flat: no shadows.
+----------------------------------------------------------------*/
+
+.us-sidecar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+/* ---------------- header ---------------- */
+.us-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 20px 12px;
+}
+.us-head-mark {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ai);
+  color: #ffffff;
+}
+.us-head-title,
+.us-head-count,
+.us-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+}
+.us-head-title,
+.us-label {
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.us-head-title { flex: 1 1 auto; min-width: 0; color: var(--ai); }
+.us-head-count { flex: none; color: var(--ink-faint); }
+
+/* ---------------- rail ---------------- */
+.us-rail {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0 20px 20px;
+  list-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+.us-rail::-webkit-scrollbar { width: 6px; }
+.us-rail::-webkit-scrollbar-track { background: transparent; }
+.us-rail::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
+
+/* ---------------- cards ---------------- */
+.us-card {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border-radius: var(--radius-card);
+  animation: ds-reveal 240ms ease-out both;
+}
+.us-card.is-confirmed { background: var(--surface); }
+.us-card.is-low-confidence { gap: 6px; background: var(--warning-soft); }
+.us-card.is-asking,
+.us-card.is-pending { border: 1px dashed var(--line-strong); }
+
+.us-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Holds the Edit button's height, so a card doesn't jump when the
+     button hides for inline editing. */
+  min-height: 28px;
+}
+.us-card.is-asking .us-card-head,
+.us-card.is-pending .us-card-head { min-height: 0; }
+.us-label { flex: 1 1 auto; min-width: 0; color: var(--ink-faint); }
+.us-card.is-low-confidence .us-label { color: var(--warning-soft-ink); }
+
+.us-value {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 500;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.us-placeholder { font-size: 15px; line-height: 22px; color: var(--ink-soft); }
+.us-heard {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--warning-soft-ink);
+  overflow-wrap: anywhere;
+}
+
+.us-edit-btn {
+  flex: none;
+  min-height: 28px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms ease-out, color 120ms ease-out;
+}
+.us-edit-btn:hover { background: var(--ds-chip); color: var(--ink); }
+
+.us-check-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--warning-soft-ink);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.us-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+.us-action {
+  min-height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius-control);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 120ms ease-out, background 120ms ease-out;
+}
+.us-action:active { transform: scale(0.97); }
+.us-action-accept { background: var(--surface); color: var(--ink); }
+.us-action-accept:hover { background: var(--surface-sunken); }
+.us-action-fix { background: transparent; color: var(--warning-soft-ink); }
+.us-action-fix:hover { background: color-mix(in srgb, var(--warning-soft-ink) 8%, transparent); }
+
+/* Inline correction: sits where the value was, same type size. */
+.us-field {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+}
+.app-shell.ds-v4 .us-field:focus,
+.app-shell.ds-v4 .us-field:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .us-card { animation: none !important; }
+}
