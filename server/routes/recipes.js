@@ -25,6 +25,7 @@
 // per-answer reader in understanding.js, which is why it can afford a
 // large model and a 60s budget where that one gets 5s.
 import { Router } from "express";
+import { reviewPlan, applyFixes } from "./reviewPlan.js";
 
 export const recipesRouter = Router();
 
@@ -52,6 +53,20 @@ const FALLBACK_MODEL = process.env.AAI_RECIPE_FALLBACK_MODEL || "qwen3.5-4b-32k-
 // this model runs away when given room — asked for three dishes it once
 // emitted 226 materials and no recipes — and a truncated plan is worse
 // than a refused one.
+// The review pass is on unless turned off. It costs a second model call
+// on top of a generation the cook is already waiting through, and it
+// only ever improves the plan or leaves it alone — but a demo that needs
+// the fastest possible answer can switch it off without a code change.
+const REVIEW_ENABLED = process.env.AAI_RECIPE_REVIEW !== "off";
+// A DIFFERENT model from the generator, on purpose and by measurement.
+// Given a plan with four deliberate faults, Sonnet 4.6 found all four —
+// including the missing chill on mouth-watering chicken, which is the
+// exact mistake it makes when it is the one generating. Gemini 3.8 Flash
+// and Gemini 2.5 Pro each found one, the implausible duration. Writing a
+// plan and reading one back are not the same skill, and the model that
+// is best at the first is not automatically best at the second.
+const REVIEW_MODEL = process.env.AAI_RECIPE_REVIEW_MODEL || "claude-sonnet-4-6";
+
 const FALLBACK_TIMEOUT_MS = 60_000;
 const FALLBACK_MAX_TOKENS = 8000;
 
@@ -590,6 +605,27 @@ recipesRouter.post("/generate", async (req, res) => {
       return res.status(502).json({ error: `Could not generate a plan: ${result.detail || result.error}` });
     }
 
+    // Second pass: read it back before anyone cooks it. Only ever
+    // improves the plan or leaves it alone — reviewPlan returns [] on any
+    // failure, and applyFixes hands back the original if the patched
+    // plan does not validate. Never worth failing a good generation over.
+    let review = { applied: [], rejected: [] };
+    if (REVIEW_ENABLED) {
+      const fixes = await reviewPlan({
+        plan: result.plan,
+        params,
+        model: REVIEW_MODEL,
+        apiKey: API_KEY,
+        equipment: EQUIPMENT,
+      });
+      if (fixes.length) {
+        review = applyFixes(result.plan, fixes, validate);
+        result = { ...result, plan: review.plan };
+        review.applied.forEach((a) => console.info(`Recipe review fixed: ${a}`));
+        review.rejected.forEach((r) => console.warn(`Recipe review rejected: ${r}`));
+      }
+    }
+
     res.set("Cache-Control", "no-store");
     return res.json({
       templates: toTemplates(result.plan, { diet, dishes: list }),
@@ -598,6 +634,8 @@ recipesRouter.post("/generate", async (req, res) => {
       // unshared is worth being able to see when one looks wrong.
       generatedBy: result.model,
       sharedStepsPossible: result.shared,
+      reviewedBy: REVIEW_ENABLED ? REVIEW_MODEL : null,
+      reviewFixes: review.applied,
       // Named, not counted. If the fallback lost a dish the cook asked
       // for, the page has to be able to say WHICH one rather than
       // quietly returning a shorter plan than was requested.
