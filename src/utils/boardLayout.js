@@ -7,15 +7,67 @@ import { layoutLevels } from "./graphLayout.js";
 // Cards are a fixed size. Variable height was what made the board
 // unreadable: the auto-layout couldn't know how tall a row was, so long
 // labels overlapped their neighbours before anyone dragged anything.
-export const CARD_W = 200;
-export const CARD_H = 84;
-export const COL_GAP = 104;
-export const ROW_GAP = 26;
-export const PAD = 20;
+export const CARD_W = 168;  /* the narrowest card, and the default */
+export const CARD_H = 68;   /* a two-line card; taller ones are computed */
+export const COL_GAP = 60;
+export const ROW_GAP = 14;
+export const PAD = 16;
 const CLEAR = 10; // breathing room kept between cards when one is nudged
 const LANE = 16; // how far an edge detours clear of a card it would cross
 
-export const boxOf = (pos) => ({ x: pos.x, y: pos.y, w: CARD_W, h: CARD_H });
+/* Card geometry, in the same units the positions use. */
+export const CARD_WIDTHS = [168, 204, 240];
+export const CARD_PAD_X = 12 + 10; /* left spine padding + right padding */
+export const CARD_NUM_W = 16; /* the step number's corner */
+export const LABEL_LINE_H = 17;
+export const CARD_CHROME_H = 8 + 2 + 15 + 8; /* padding, gap, meta line, padding */
+export const MAX_LABEL_LINES = 4;
+/* The phase legend floats over the board's top-right corner; the last
+   column keeps clear of it rather than the board reserving a margin. */
+export const LEGEND_KEEPOUT = 34;
+
+/** Greedy word wrap against a text measurer; returns the line count. */
+export function wrapLines(text, maxWidth, measure) {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  if (!words.length) return 1;
+  let lines = 1;
+  let line = "";
+  words.forEach((word) => {
+    const next = line ? `${line} ${word}` : word;
+    if (line && measure(next) > maxWidth) {
+      lines += 1;
+      line = word;
+    } else {
+      line = next;
+    }
+  });
+  return lines;
+}
+
+/**
+ * The smallest card that shows a label in full: the narrowest width
+ * that keeps it to two lines, then extra lines (up to four) if even the
+ * widest card can't. `measure` returns the pixel width of a string in
+ * the card's label font.
+ */
+export function cardSize(label, measure) {
+  let best = null;
+  for (const w of CARD_WIDTHS) {
+    const lines = wrapLines(label, w - CARD_PAD_X - CARD_NUM_W, measure);
+    if (!best || lines < best.lines) best = { w, lines };
+    if (lines <= 2) break;
+  }
+  const lines = Math.min(best.lines, MAX_LABEL_LINES);
+  return { w: best.w, h: Math.max(CARD_H, CARD_CHROME_H + lines * LABEL_LINE_H) };
+}
+
+/** A card's box. `size` defaults to the fixed minimum. */
+export const boxOf = (pos, size) => ({
+  x: pos.x,
+  y: pos.y,
+  w: size?.w ?? CARD_W,
+  h: size?.h ?? CARD_H,
+});
 
 export function overlaps(a, b, pad = 0) {
   return (
@@ -23,13 +75,69 @@ export function overlaps(a, b, pad = 0) {
   );
 }
 
-/** Dependency-depth layout: one column per depth, no two cards touching. */
-export function autoPositions(nodes) {
-  const out = {};
-  layoutLevels(nodes).forEach((level, col) => {
-    level.forEach((node, row) => {
-      out[node.id] = { x: PAD + col * (CARD_W + COL_GAP), y: PAD + row * (CARD_H + ROW_GAP) };
+/**
+ * Orders each column so its edges cross as little as possible: the
+ * classic barycentre sweep — a card sits opposite the average position
+ * of what it connects to, repeated down and back up until it settles.
+ * Ordering only; which column a card is in is its dependency depth and
+ * never changes.
+ */
+function orderLevels(nodes) {
+  const levels = layoutLevels(nodes);
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const deps = (n) => (n.depends_on || []).filter((d) => byId[d]);
+  const dependents = new Map(nodes.map((n) => [n.id, []]));
+  nodes.forEach((n) => deps(n).forEach((d) => dependents.get(d).push(n.id)));
+
+  const rowOf = new Map();
+  const reindex = () => levels.forEach((col) => col.forEach((n, i) => rowOf.set(n.id, i)));
+  reindex();
+
+  // A card with nothing to line up against keeps where it was, so the
+  // sweep can't shuffle independent chains around for no reason.
+  const sortBy = (col, neighboursOf) => {
+    const keyed = col.map((n, i) => {
+      const ns = neighboursOf(n).map((id) => rowOf.get(id)).filter((v) => v !== undefined);
+      return { n, key: ns.length ? ns.reduce((a, b) => a + b, 0) / ns.length : rowOf.get(n.id) ?? i };
     });
+    keyed.sort((a, b) => a.key - b.key);
+    return keyed.map((k) => k.n);
+  };
+
+  for (let pass = 0; pass < 4; pass += 1) {
+    for (let c = 1; c < levels.length; c += 1) levels[c] = sortBy(levels[c], (n) => deps(n).map((d) => d));
+    reindex();
+    for (let c = levels.length - 2; c >= 0; c -= 1) levels[c] = sortBy(levels[c], (n) => dependents.get(n.id) || []);
+    reindex();
+  }
+  return levels;
+}
+
+/**
+ * Dependency-depth layout: one column per depth, no two cards touching.
+ * Columns are ordered to minimise crossings and centred against the
+ * tallest one, so edges run flat across the board instead of fanning
+ * out from a top-aligned stack.
+ */
+export function autoPositions(nodes, sizeOf = () => ({ w: CARD_W, h: CARD_H }), keepOutRight = LEGEND_KEEPOUT) {
+  const out = {};
+  const levels = orderLevels(nodes);
+  const colHeight = (level) =>
+    level.reduce((sum, n) => sum + sizeOf(n).h, 0) + Math.max(0, level.length - 1) * ROW_GAP;
+  const tallest = Math.max(0, ...levels.map(colHeight));
+  let x = PAD;
+  levels.forEach((level, col) => {
+    const width = Math.max(CARD_W, ...level.map((n) => sizeOf(n).w));
+    let y = PAD + (tallest - colHeight(level)) / 2;
+    if (col === levels.length - 1 && levels.length > 1) y = Math.max(y, PAD + keepOutRight);
+    level.forEach((node) => {
+      // Cards in a column are centred on it, so a narrow card between
+      // wide ones doesn't leave the edges kinked.
+      const size = sizeOf(node);
+      out[node.id] = { x: x + (width - size.w) / 2, y };
+      y += size.h + ROW_GAP;
+    });
+    x += width + COL_GAP;
   });
   return out;
 }
@@ -40,17 +148,17 @@ export function autoPositions(nodes) {
  * every other card — so a drop is predictable (it goes roughly where you
  * aimed) rather than springing somewhere else entirely.
  */
-export function settle(wanted, others) {
-  let box = boxOf(wanted);
+export function settle(wanted, others, size) {
+  let box = boxOf(wanted, size);
   for (let guard = 0; guard < 60; guard += 1) {
     const hit = others.find((o) => overlaps(box, o, CLEAR));
     if (!hit) return { x: Math.max(0, box.x), y: Math.max(0, box.y) };
     // Four ways out; take the cheapest that isn't off the top or left.
     const moves = [
       { x: hit.x + hit.w + CLEAR, y: box.y },
-      { x: hit.x - CARD_W - CLEAR, y: box.y },
+      { x: hit.x - box.w - CLEAR, y: box.y },
       { x: box.x, y: hit.y + hit.h + CLEAR },
-      { x: box.x, y: hit.y - CARD_H - CLEAR },
+      { x: box.x, y: hit.y - box.h - CLEAR },
     ]
       .filter((m) => m.x >= 0 && m.y >= 0)
       .sort(
@@ -58,7 +166,7 @@ export function settle(wanted, others) {
           Math.hypot(a.x - wanted.x, a.y - wanted.y) - Math.hypot(b.x - wanted.x, b.y - wanted.y)
       );
     if (moves.length === 0) return { x: Math.max(0, box.x), y: Math.max(0, box.y + hit.h + CLEAR) };
-    box = boxOf(moves[0]);
+    box = boxOf(moves[0], box);
   }
   return { x: Math.max(0, box.x), y: Math.max(0, box.y) };
 }
@@ -71,14 +179,15 @@ export function settle(wanted, others) {
  * against the ones already down. Render-time only — nothing is written
  * back, so a cook's own placement is never quietly rewritten on disk.
  */
-export function resolvePositions(nodes, stored, auto) {
+export function resolvePositions(nodes, stored, auto, sizeOf = () => undefined) {
   const placed = [];
   const out = {};
   nodes.forEach((n) => {
     const wanted = stored[n.id] || auto[n.id] || { x: PAD, y: PAD };
-    const at = settle(wanted, placed);
+    const size = sizeOf(n);
+    const at = settle(wanted, placed, size);
     out[n.id] = at;
-    placed.push({ id: n.id, ...boxOf(at) });
+    placed.push({ id: n.id, ...boxOf(at, size) });
   });
   return out;
 }
@@ -121,8 +230,8 @@ export function segmentHitsRect(a, b, r) {
 // `endDy` moves the landing point off the target's midline, so two
 // edges converging on one card keep separate arrowheads.
 export function edgePath(from, to, obstacles, endDy = 0) {
-  const start = { x: from.x + CARD_W, y: from.y + CARD_H / 2 };
-  const end = { x: to.x, y: to.y + CARD_H / 2 + endDy };
+  const start = { x: from.x + from.w, y: from.y + from.h / 2 };
+  const end = { x: to.x, y: to.y + to.h / 2 + endDy };
   const blockers = obstacles.filter((o) => segmentHitsRect(start, end, o));
 
   if (blockers.length === 0) {

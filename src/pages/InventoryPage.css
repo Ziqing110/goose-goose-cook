@@ -429,16 +429,78 @@
 
 .inv-board-caption {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px 16px;
 }
 .inv-board-count { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; font-size: 15px; line-height: 22px; font-weight: 600; }
 .inv-board-pan { font-size: 13px; line-height: 18px; font-weight: 400; color: var(--ink-soft); }
-.inv-phase-legend { display: flex; gap: 14px; font-size: 13px; line-height: 18px; color: var(--ink-soft); }
+.inv-zoom { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+.inv-board-caption { gap: 8px 20px; }
+.inv-zoom-step {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--ds-chip);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.inv-zoom-step:hover:not(:disabled) { background: var(--ds-chip-hover); }
+.inv-zoom-step:disabled { color: var(--ink-faint); cursor: not-allowed; }
+.inv-zoom-slider { width: 108px; accent-color: var(--accent); cursor: pointer; }
+.inv-zoom-pct { width: 46px; font-size: 12px; color: var(--ink-soft); text-align: right; }
+/* A round chip, one size down from the ± steppers beside it. */
+.inv-zoom-fit {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--ds-chip);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 120ms ease-out, background 120ms ease-out, color 120ms ease-out;
+}
+.inv-zoom-fit:hover:not(:disabled) { background: var(--ds-chip-hover); }
+.inv-zoom-fit:active:not(:disabled) { transform: scale(0.97); }
+/* Already fitted: still legible, just visibly not a thing to press. */
+.inv-zoom-fit:disabled { background: transparent; color: var(--ink-faint); cursor: default; }
+
+/* On the board itself, top-right — it labels the cards' spines, so it
+   belongs with them rather than in the caption below. Inset clear of
+   the groove line rather than sitting on it. */
+.inv-phase-legend {
+  position: absolute;
+  z-index: 2;
+  top: 16px;
+  right: 22px;
+  display: flex;
+  gap: 12px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 48%, transparent);
+  font-size: 12.5px;
+  line-height: 17px;
+  color: var(--ink-soft);
+  pointer-events: none;
+}
 .inv-phase-key { display: inline-flex; align-items: center; gap: 6px; }
-.inv-phase-swatch { width: 10px; height: 4px; border-radius: 2px; background: var(--phase-prep); }
+.inv-phase-swatch { width: 12px; height: 4px; border-radius: 2px; background: var(--phase-prep); }
 .inv-phase-key.is-cook .inv-phase-swatch { background: var(--phase-cook); }
 .inv-phase-key.is-plate .inv-phase-swatch { background: var(--phase-plate); }
 

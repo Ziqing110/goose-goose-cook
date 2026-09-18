@@ -42,6 +42,14 @@ function dishMarkFor(title) {
 // The overlay panel's width plus its inset — what the board keeps clear.
 const PANEL_RESERVE = 376 + 16;
 
+// The zoom slider reads 0% at "everything visible" and counts up from
+// there, so the number means how far past the fitted view you are —
+// the fitted scale itself is a different figure for every dish, and
+// showing it (69%, 84%…) only invited "why can't I go lower?".
+const ZOOM_STEP = 5;
+/** How far in the slider can go: half again over the fitted view. */
+const zoomCeiling = (fit) => Math.max(1.5, fit + 0.5);
+
 const EQUIPMENT_GLYPH = { wok: "wok", oven: "oven", pot: "pot", stove_burner: "burner", cutting_board: "cutting-board" };
 const withArticle = (label) => `${/^[aeiou]/i.test(label) ? "an" : "a"} ${label}`;
 
@@ -198,6 +206,10 @@ export default function InventoryPage() {
   const [pendingDelete, setPendingDelete] = useState(null);
   const [offscreen, setOffscreen] = useState({ left: [], right: [], other: [] });
   const [dismissedEquipment, setDismissedEquipment] = useState(null);
+  // null = let the board fit itself to the frame; a number is the
+  // cook's own zoom, from the slider under the board.
+  const [zoom, setZoom] = useState(null);
+  const [fitScale, setFitScale] = useState(1);
   const [editingKitchen, setEditingKitchen] = useState(false);
   const [kitchenError, setKitchenError] = useState(null);
   const tabRowRef = useRef(null);
@@ -266,7 +278,7 @@ export default function InventoryPage() {
 
   const dishLabelFor = (node) =>
     node._shared ? "Shared" : recipes.find((r) => r.id === node._recipeId)?.working.title || null;
-  const { addNode, saveNode, deleteNode, registerMaterial } = useStepEditing();
+  const { addNode, saveNode, deleteNode, deleteNodes, registerMaterial } = useStepEditing();
   // A step can carry materials the catalog doesn't know yet (added from
   // the editor), so the editor sees the catalog plus this run's own.
   const materialsInfo = { ...(catalog || {}), ...(working.custom_materials || {}) };
@@ -283,16 +295,23 @@ export default function InventoryPage() {
     if (selectedId === id) closePanel();
     else setPanel({ mode: "edit", id });
   };
-  // A consequence takes you to its cause: the rail's rows open the step
-  // on the board.
-  // The board sits below the HUD, so bring it up to meet the click.
-  const pickImpact = (id) => {
-    setTab("graph");
-    if (!approved) setPanel({ mode: "edit", id });
+  // The board is as tall as what's left of the viewport, so it only
+  // fits once the tab row is at the top — otherwise its last row ends
+  // up under the sticky footer.
+  const showTab = (key) => {
+    setTab(key);
+    if (key !== "graph") return;
     requestAnimationFrame(() => {
       const smooth = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
       tabRowRef.current?.scrollIntoView({ block: "start", behavior: smooth ? "smooth" : "auto" });
     });
+  };
+
+  // A consequence takes you to its cause: the rail's rows open the step
+  // on the board.
+  const pickImpact = (id) => {
+    showTab("graph");
+    if (!approved) setPanel({ mode: "edit", id });
   };
 
   // Approval is what the rest of the run reads: the schedule and the
@@ -324,7 +343,7 @@ export default function InventoryPage() {
   const dropBlockedSteps = () => {
     if (!blockedIds.length) return;
     if (!window.confirm(`Remove ${blockedIds.length} step${blockedIds.length === 1 ? "" : "s"} you can't do without those materials?`)) return;
-    blockedIds.forEach((id) => deleteNode(id, { confirm: false }));
+    deleteNodes(blockedIds);
     setPanel(null);
   };
 
@@ -398,6 +417,10 @@ export default function InventoryPage() {
   }
 
   const counterTone = coverage.blocked > 0 ? "critical" : "warning";
+  // 0% is the fitted view; 100% is the ceiling above.
+  const zoomTop = zoomCeiling(fitScale);
+  const zoomPct = Math.round((((zoom ?? fitScale) - fitScale) / (zoomTop - fitScale)) * 100);
+  const setZoomPct = (pct) => setZoom(pct <= 0 ? null : fitScale + (pct / 100) * (zoomTop - fitScale));
 
   return (
     <section className="page inventory-page">
@@ -508,7 +531,7 @@ export default function InventoryPage() {
                       aria-selected={tab === t.key}
                       aria-controls={`inv-tabpanel-${t.key}`}
                       className={`inv-tab${tab === t.key ? " is-active" : ""}`}
-                      onClick={() => setTab(t.key)}
+                      onClick={() => showTab(t.key)}
                     >
                       {t.label}
                       <span className="inv-tab-count mono">{t.count}</span>
@@ -616,6 +639,14 @@ export default function InventoryPage() {
               ) : (
                 <div className="inv-board-wrap" role="tabpanel" id="inv-tabpanel-graph" aria-labelledby="inv-tab-graph">
                   <div className="inv-board">
+                    <span className="inv-phase-legend" aria-label="Phase colours">
+                      {["prep", "cook", "plate"].map((ph) => (
+                        <span key={ph} className={`inv-phase-key is-${ph}`}>
+                          <span className="inv-phase-swatch" aria-hidden="true" />
+                          {PHASE_LABELS[ph]}
+                        </span>
+                      ))}
+                    </span>
                     <RecipeBoard
                       nodes={boardNodes}
                       positions={nodePositions}
@@ -627,6 +658,8 @@ export default function InventoryPage() {
                       onMove={moveNode}
                       reserveRight={panelOpen ? PANEL_RESERVE : 0}
                       onOffscreen={setOffscreen}
+                      zoom={zoom}
+                      onFitScale={setFitScale}
                     />
 
                     {!approved && panel?.mode === "impact" && (
@@ -688,13 +721,40 @@ export default function InventoryPage() {
                       </span>
                       {panHint && <span className="inv-board-pan">{panHint}</span>}
                     </span>
-                    <span className="inv-phase-legend" aria-label="Phase colours">
-                      {["prep", "cook", "plate"].map((p) => (
-                        <span key={p} className={`inv-phase-key is-${p}`}>
-                          <span className="inv-phase-swatch" aria-hidden="true" />
-                          {PHASE_LABELS[p]}
-                        </span>
-                      ))}
+                    <span className="inv-zoom">
+                      <button
+                        type="button"
+                        className="inv-zoom-step"
+                        aria-label="Zoom out"
+                        disabled={zoomPct <= 0}
+                        onClick={() => setZoomPct(Math.max(0, zoomPct - ZOOM_STEP))}
+                      >
+                        &minus;
+                      </button>
+                      <input
+                        className="inv-zoom-slider"
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={ZOOM_STEP}
+                        value={zoomPct}
+                        aria-label="Zoom"
+                        aria-valuetext={zoomPct === 0 ? "Fitted — every step visible" : `${zoomPct}% past the fitted view`}
+                        onChange={(e) => setZoomPct(Number(e.target.value))}
+                      />
+                      <button
+                        type="button"
+                        className="inv-zoom-step"
+                        aria-label="Zoom in"
+                        disabled={zoomPct >= 100}
+                        onClick={() => setZoomPct(Math.min(100, zoomPct + ZOOM_STEP))}
+                      >
+                        +
+                      </button>
+                      <span className="inv-zoom-pct mono">{zoomPct > 0 ? `+${zoomPct}%` : "0%"}</span>
+                      <button type="button" className="inv-zoom-fit" disabled={zoom === null} onClick={() => setZoom(null)}>
+                        Fit
+                      </button>
                     </span>
                   </div>
                 </div>

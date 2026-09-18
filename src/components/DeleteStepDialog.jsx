@@ -9,6 +9,7 @@
 import { useState } from "react";
 import Modal from "./Modal.jsx";
 import { ChoiceChip } from "./BoardPanel.jsx";
+import { cyclicDependencyIds } from "../utils/graphLayout.js";
 import "./BoardPanel.css";
 import "./DeleteStepDialog.css";
 
@@ -29,12 +30,23 @@ export default function DeleteStepDialog({ node, dependents, allNodes, onCancel,
   const labelOf = (id) => allNodes.find((n) => n.id === id)?.label || id;
   // What a dependent may attach to: anything except the step being
   // removed, itself, or anything that already waits on it.
-  const optionsFor = (dep) => allNodes.filter((n) => n.id !== node.id && n.id !== dep.id);
+  const optionsFor = (dep) => {
+    const blocked = cyclicDependencyIds(allNodes, dep.id);
+    return allNodes.filter((candidate) => candidate.id !== node.id && !blocked.has(candidate.id));
+  };
 
   const confirm = () => {
     if (mode === "inherit") onConfirm(Object.fromEntries(dependents.map((d) => [d.id, inheritFor(d)])));
     else if (mode === "drop") onConfirm(Object.fromEntries(dependents.map((d) => [d.id, withoutRemoved(d)])));
-    else onConfirm(picks);
+    else {
+      const safePicks = Object.fromEntries(
+        dependents.map((dep) => {
+          const allowed = new Set(optionsFor(dep).map((candidate) => candidate.id));
+          return [dep.id, (picks[dep.id] || []).filter((id) => allowed.has(id))];
+        })
+      );
+      onConfirm(safePicks);
+    }
   };
 
   return (
