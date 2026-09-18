@@ -24,6 +24,34 @@ export function useStepEditing() {
   const findRecipeForNode = (nodeId) => recipes.find((r) => r.working.nodes.some((n) => n.id === nodeId));
   const findSharedStep = (nodeId) => sharedSteps.find((s) => s.working.id === nodeId);
 
+  // A dependency can cross into another dish or a shared step, so
+  // rewiring one has to search everywhere, not just the recipe the new
+  // node is landing in.
+  const findAnyNode = (nodeId) => {
+    const recipe = findRecipeForNode(nodeId);
+    if (recipe) return { node: recipe.working.nodes.find((n) => n.id === nodeId), recipeId: recipe.id, shared: null };
+    const shared = findSharedStep(nodeId);
+    if (shared) return { node: shared.working, recipeId: null, shared };
+    return null;
+  };
+
+  const setNodeDeps = (nodeId, nextDeps) => {
+    const found = findAnyNode(nodeId);
+    if (!found) return;
+    const deps = [...new Set(nextDeps.filter((d) => d !== nodeId))];
+    if (found.shared) {
+      dispatch({
+        type: "session/sharedSteps/updateOne",
+        payload: { sharedStepId: found.shared.id, patch: { working: { ...found.shared.working, depends_on: deps } } },
+      });
+      return;
+    }
+    updateRecipeWorking(found.recipeId, (w) => {
+      const index = w.nodes.findIndex((n) => n.id === nodeId);
+      if (index !== -1) w.nodes[index] = { ...w.nodes[index], depends_on: deps };
+    });
+  };
+
   const updateRecipeWorking = (recipeId, mutateFn) => {
     const recipe = recipes.find((r) => r.id === recipeId);
     if (!recipe) return;
@@ -37,10 +65,27 @@ export function useStepEditing() {
    * So is the duration: the scheduler treats estimated_duration_sec as
    * fact, so a step that quietly defaulted to a minute would shorten
    * the plan by however long the task really takes.
+   *
+   * `dependsOn` alone only wires the new step's own predecessors — it
+   * says nothing about anything that already depended on those same
+   * steps. Inserting "before X" or "between X and Y" needs a SECOND
+   * edit: X (or Y) has to be repointed at the new step, or it keeps
+   * running exactly when it always did, oblivious to the thing that was
+   * supposed to land in front of it.
+   *
+   * `runsBefore` is that second edit, done in the same call so the
+   * insertion can't be left half-finished. For each id in it, any of
+   * ITS current dependencies that this new step also depends on are now
+   * redundant — X -> Y becomes X -> new -> Y, not X -> Y stacked next to
+   * X -> new -> Y — so those are dropped and the new step's id takes
+   * their place. Anything it depends on that this step does NOT share
+   * is left alone: "before X" without a specific predecessor just adds
+   * one more gate on X rather than guessing which of X's other
+   * dependencies it was meant to replace.
    */
   const addNode = (
     recipeId,
-    { phase = "prep", dependsOn = [], label = "New step", durationSec, difficulty = "low", equipment = [] } = {}
+    { phase = "prep", dependsOn = [], runsBefore = [], label = "New step", durationSec, difficulty = "low", equipment = [] } = {}
   ) => {
     const recipe = recipes.find((r) => r.id === recipeId);
     if (!recipe) return null;
@@ -59,6 +104,16 @@ export function useStepEditing() {
         phase,
       });
     });
+
+    runsBefore.forEach((targetId) => {
+      if (targetId === id) return;
+      const found = findAnyNode(targetId);
+      if (!found) return;
+      const current = found.node.depends_on || [];
+      const redundant = current.filter((d) => dependsOn.includes(d));
+      setNodeDeps(targetId, [...current.filter((d) => !redundant.includes(d)), id]);
+    });
+
     return id;
   };
 

@@ -4,11 +4,7 @@
 // scoping*: "take the garlic" is trivially unambiguous against the 3
 // steps you could actually claim, even though it'd be a coin-flip
 // against all 20.
-
-const STOP_WORDS = new Set([
-  "the", "a", "an", "my", "on", "to", "that", "one", "it", "i", "im", "ill", "ive",
-  "now", "please", "up", "of", "and", "is", "am", "next", "step", "task", "with",
-]);
+import { normalize, matchStepName } from "./stepNameMatch.js";
 
 // Order matters: "we're done" must not fire a step completion, and
 // "drop it" must not be read as "done".
@@ -29,13 +25,6 @@ const INTENTS = [
   { intent: "start", patterns: [/\bstart(?:ing)?\b/, /\bbegin\b/, /let'?s go\b/, /\bon it\b/, /\bgo\b/] },
 ];
 
-const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9\s']/g, " ").replace(/\s+/g, " ").trim();
-const contentTokens = (s) =>
-  normalize(s)
-    .split(" ")
-    .map((t) => t.replace(/s$/, ""))
-    .filter((t) => t && !STOP_WORDS.has(t));
-
 function detectIntent(text) {
   const norm = normalize(text);
   for (const { intent, patterns } of INTENTS) {
@@ -45,29 +34,14 @@ function detectIntent(text) {
   return { intent: "unknown", matched: "" };
 }
 
-/** Match the leftover words against a scoped candidate list. */
+/** Match the leftover words against a scoped candidate list. The
+ *  similarity metric itself (Dice over content-word sets, three
+ *  confidence tiers) lives in stepNameMatch.js, shared with the recipe
+ *  graph's "add a task before/between" voice command. */
 function resolveStepRef(text, matched, candidates, byId) {
   const rest = normalize(text).replace(matched, " ");
-  const tokens = contentTokens(rest);
-  if (tokens.length === 0 || candidates.length === 0) return { stepId: null, candidates: [], confidence: "none" };
-
-  const phrase = tokens.join(" ");
-  const exact = candidates.filter((id) => normalize(byId[id]?.label || "").includes(phrase));
-  if (exact.length === 1) return { stepId: exact[0], candidates: [], confidence: "exact" };
-
-  const scored = candidates
-    .map((id) => {
-      const labelTokens = new Set(contentTokens(byId[id]?.label || ""));
-      const hits = tokens.filter((t) => labelTokens.has(t)).length;
-      return { id, score: hits / tokens.length };
-    })
-    .sort((a, b) => b.score - a.score);
-
-  const [best, runnerUp] = scored;
-  if (best && best.score >= 0.5 && best.score - (runnerUp?.score ?? 0) >= 0.2) {
-    return { stepId: best.id, candidates: [], confidence: "fuzzy" };
-  }
-  return { stepId: null, candidates: scored.filter((s) => s.score > 0).slice(0, 3).map((s) => s.id), confidence: "none" };
+  const { stepId, candidates: alternates, confidence } = matchStepName(rest, candidates, (id) => byId[id]?.label);
+  return { stepId, candidates: alternates, confidence };
 }
 
 /**

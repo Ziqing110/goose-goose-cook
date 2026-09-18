@@ -30,6 +30,7 @@ import {
   isPaused, applyPause, applyResume,
 } from "../utils/liveCook.js";
 import { parseCommand, HELP_TEXT } from "../utils/voiceCommands.js";
+import { matchConfirmation } from "../utils/navCommands.js";
 import { buildSummary } from "../utils/summaryCard.js";
 import KpIcon from "../components/KpIcon.jsx";
 import Modal from "../components/Modal.jsx";
@@ -136,6 +137,11 @@ export default function LiveCookPage() {
   const speakerCook = cooks.find((c) => c.id === speaker);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(null); // inline disambiguation buttons
+  // A guessed step whose name came back close but not exact — "Cut the
+  // onion" against both "Cut the yellow onion" and "Cut the red onion",
+  // say. Firing on that guess is how a mishearing finishes the wrong
+  // step; asking first is the whole point of this state.
+  const [pendingConfirm, setPendingConfirm] = useState(null); // { intent, stepId, cookId, label, candidates }
   const [confirm, setConfirm] = useState(null); // { kind: "finish" } | { kind: "skip", stepId, cookId }
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
@@ -150,13 +156,15 @@ export default function LiveCookPage() {
         ? { line: "Paused — say “resume” to pick it back up.", sub: "Every clock is stopped; nothing else lands until then." }
         : {
             line: HELP_TEXT,
-            sub: pending
-              ? `${speakerCook?.name || "Someone"} is speaking — waiting on which step they mean.`
-              : `${speakerCook?.name || "Someone"} is speaking — everything said is logged under that name.`,
+            sub: pendingConfirm
+              ? `${speakerCook?.name || "Someone"} is speaking — waiting on “yes” or “no”.`
+              : pending
+                ? `${speakerCook?.name || "Someone"} is speaking — waiting on which step they mean.`
+                : `${speakerCook?.name || "Someone"} is speaking — everything said is logged under that name.`,
           };
     dispatch({ type: "voice/setHint", payload: { hint } });
     return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
-  }, [dispatch, run, finished, paused, speakerCook?.name, pending]);
+  }, [dispatch, run, finished, paused, speakerCook?.name, pending, pendingConfirm]);
 
   // Rice closes itself. Nobody finishes a set-and-forget step — the end
   // of it belongs to whatever plates it — so once its time is up it
@@ -372,10 +380,51 @@ export default function LiveCookPage() {
 
   // --- voice: parse, then call the exact same handlers ---
 
+  // The five intents "which one" and "did you mean" both eventually
+  // resolve to — factored out so a tap (runPending), a spoken "yes"
+  // (pendingConfirm below) and a clean first-try match all funnel
+  // through the exact same call.
+  const runIntentAction = (intent, stepId, cookId, base = run) => {
+    if (intent === "claim") return doClaim(stepId, cookId, "voice", base);
+    if (intent === "done") return doDone(stepId, cookId, "voice", base);
+    if (intent === "start") return doStart(stepId, cookId, "voice", base);
+    if (intent === "skip") return doSkip(stepId, cookId, "voice", base);
+    if (intent === "drop") return doDrop(stepId, cookId, "voice", base);
+    return commit(base);
+  };
+
+  // Both a tap on Yes/No and a spoken "yes"/"no" answer the same
+  // question the same way — one path, so the two can't drift apart.
+  const resolvePendingConfirm = (answer, base = run) => {
+    if (!pendingConfirm) return undefined;
+    const { intent, stepId, cookId, label, candidates } = pendingConfirm;
+    setPendingConfirm(null);
+    if (answer === "yes") return runIntentAction(intent, stepId, cookId, base);
+    const options = (candidates.length ? candidates : claimSuggestions({ nodes, run, cookId })).slice(0, 3);
+    setPending({ intent, options, cookId });
+    return commit(say(base, `Not “${label}” — which one did you mean?`));
+  };
+
   const submitUtterance = (text) => {
     if (!text) return;
-    setPending(null);
     const cookId = speaker;
+
+    // A question is pending: this utterance is the answer, not a new
+    // command. Anything that isn't clearly yes or no abandons the
+    // question rather than forcing a reading onto it — the cook moved
+    // on, they didn't mumble a confirmation.
+    if (pendingConfirm) {
+      const answer = matchConfirmation(text);
+      if (answer === "yes" || answer === "no") {
+        const heard = appendTranscript(run, { at: new Date().toISOString(), speaker: pendingConfirm.cookId, text });
+        return resolvePendingConfirm(answer, heard);
+      }
+      setPendingConfirm(null);
+      // Falls through: `text` gets parsed fresh below, same as any
+      // other utterance.
+    }
+
+    setPending(null);
     const activeStepId = activeStepFor(cookId, run, nodes);
     const ownQueue = isVersus
       ? claimSuggestions({ nodes, run, cookId })
@@ -396,6 +445,14 @@ export default function LiveCookPage() {
       setPending({ intent: result.intent, options, cookId });
       commit(say(heard, message));
     };
+
+    // A close-but-not-exact name match — a word dropped or swapped among
+    // steps that read alike — gets checked before it fires, instead of
+    // guessing which "cut the onion" was meant.
+    if (result.stepId && result.confidence === "confirm" && ["done", "start", "claim", "skip", "drop"].includes(result.intent)) {
+      setPendingConfirm({ intent: result.intent, stepId: result.stepId, cookId, label: byId[result.stepId]?.label, candidates: result.candidates });
+      return commit(say(heard, `Did you mean “${byId[result.stepId]?.label}”? Say yes or no.`));
+    }
 
     switch (result.intent) {
       case "done":
@@ -439,11 +496,7 @@ export default function LiveCookPage() {
   const runPending = (stepId) => {
     const { intent, cookId } = pending;
     setPending(null);
-    if (intent === "claim") return doClaim(stepId, cookId, "voice");
-    if (intent === "done") return doDone(stepId, cookId, "voice");
-    if (intent === "start") return doStart(stepId, cookId, "voice");
-    if (intent === "skip") return doSkip(stepId, cookId, "voice");
-    if (intent === "drop") return doDrop(stepId, cookId, "voice");
+    runIntentAction(intent, stepId, cookId);
   };
 
   const stepsLeft = progress.pending + progress.active;
@@ -536,9 +589,12 @@ export default function LiveCookPage() {
               speaker={speaker}
               onSpeaker={setSpeakerId}
               pending={pending}
+              pendingConfirm={pendingConfirm}
               byId={byId}
               onPick={runPending}
               onCancel={() => setPending(null)}
+              onConfirmYes={() => resolvePendingConfirm("yes")}
+              onConfirmNo={() => resolvePendingConfirm("no")}
               input={input}
               onInput={setInput}
               onSubmit={() => {
@@ -942,12 +998,27 @@ function TaskPoolBoard({ ready, blocked, run, byId, cooks, now, paused, onClaim 
 // The agent column: who's talking, what's been said, and the typed
 // fallback that drives the demo today. The mic itself is the shell's
 // VoiceBar; this panel is the record of the conversation.
-function AgentPanel({ cooks, transcript, speaker, onSpeaker, pending, byId, onPick, onCancel, input, onInput, onSubmit }) {
+function AgentPanel({
+  cooks,
+  transcript,
+  speaker,
+  onSpeaker,
+  pending,
+  pendingConfirm,
+  byId,
+  onPick,
+  onCancel,
+  onConfirmYes,
+  onConfirmNo,
+  input,
+  onInput,
+  onSubmit,
+}) {
   const logRef = useRef(null);
   const [expanded, setExpanded] = useState(false);
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
-  }, [transcript.length, pending, expanded]);
+  }, [transcript.length, pending, pendingConfirm, expanded]);
 
   const speakerCook = cooks.find((c) => c.id === speaker);
 
@@ -969,6 +1040,16 @@ function AgentPanel({ cooks, transcript, speaker, onSpeaker, pending, byId, onPi
             </div>
           );
         })}
+        {pendingConfirm && (
+          <div className="lc-pending">
+            <button type="button" className="btn lc-pending-option" onClick={onConfirmYes}>
+              Yes, {byId[pendingConfirm.stepId]?.label}
+            </button>
+            <button type="button" className="btn btn-ghost lc-btn-accent" onClick={onConfirmNo}>
+              No, someone else
+            </button>
+          </div>
+        )}
         {pending && (
           <div className="lc-pending">
             {pending.options.map((id) => (

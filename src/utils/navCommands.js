@@ -117,6 +117,12 @@ const CONFIRM_COMMAND_WORDS = 8;
 const YES = /^(?:yes|yeah|yep|yup|sure|ok|okay|do it|go ahead|confirm|please)\b/;
 const NO = /^(?:no|nope|nah|don't|do not|cancel|never ?mind|stop|wait)\b/;
 
+// Exported so a page that runs its own yes/no confirmation (rather than
+// VoiceBar's generic askToConfirm) can gate on the same wording as
+// matchConfirmation, instead of drifting from it with a second list.
+export const CONFIRM_YES_PATTERN = YES;
+export const CONFIRM_NO_PATTERN = NO;
+
 /**
  * Utterance length in units comparable across scripts: words for Latin,
  * characters for CJK. Commands are English now, but Mandarin still

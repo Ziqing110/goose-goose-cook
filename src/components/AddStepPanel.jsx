@@ -11,8 +11,17 @@ import BoardPanel, { ChoiceChip, PanelField, Segmented } from "./BoardPanel.jsx"
 import { DIFFICULTY_SEGMENTS } from "./NodeEditorPanel.jsx";
 import "./AddStepPanel.css";
 
-export default function AddStepPanel({ recipes, nodes, numberOf, onAdd, onClose }) {
-  const [label, setLabel] = useState("");
+export default function AddStepPanel({
+  recipes,
+  nodes,
+  numberOf,
+  onAdd,
+  onClose,
+  initialLabel = "",
+  initialDependsOn = [],
+  initialRunsBefore = [],
+}) {
+  const [label, setLabel] = useState(initialLabel);
   const [recipeId, setRecipeId] = useState(recipes[0]?.id || "");
   const [phase, setPhase] = useState("prep");
   // The scheduler reads duration and equipment as fact, so both are
@@ -20,10 +29,23 @@ export default function AddStepPanel({ recipes, nodes, numberOf, onAdd, onClose 
   const [minutes, setMinutes] = useState(2);
   const [difficulty, setDifficulty] = useState("low");
   const [equipment, setEquipment] = useState([]);
-  const [dependsOn, setDependsOn] = useState([]);
+  const [dependsOn, setDependsOn] = useState(initialDependsOn);
+  // A step can't be both what this waits on and what waits on it — that's
+  // a cycle through the very node being created — so picking one side
+  // clears the other rather than letting the two lists disagree.
+  const [runsBefore, setRunsBefore] = useState(initialRunsBefore);
 
   const toggleIn = (list, value) => (list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
   const sortedNodes = [...nodes].sort((a, b) => (numberOf?.(a.id) || "").localeCompare(numberOf?.(b.id) || ""));
+
+  const pickDependsOn = (id) => {
+    setDependsOn((cur) => toggleIn(cur, id));
+    setRunsBefore((cur) => cur.filter((x) => x !== id));
+  };
+  const pickRunsBefore = (id) => {
+    setRunsBefore((cur) => toggleIn(cur, id));
+    setDependsOn((cur) => cur.filter((x) => x !== id));
+  };
 
   const submit = (e) => {
     e.preventDefault();
@@ -33,6 +55,7 @@ export default function AddStepPanel({ recipes, nodes, numberOf, onAdd, onClose 
       label: name,
       phase,
       dependsOn,
+      runsBefore,
       difficulty,
       equipment,
       durationSec: Math.max(15, Math.round(Number(minutes) * 60) || 0),
@@ -118,13 +141,48 @@ export default function AddStepPanel({ recipes, nodes, numberOf, onAdd, onClose 
               <span className="panel-empty">Nothing to wait on yet.</span>
             ) : (
               sortedNodes.map((n) => (
-                <ChoiceChip key={n.id} on={dependsOn.includes(n.id)} onToggle={() => setDependsOn((cur) => toggleIn(cur, n.id))}>
+                <ChoiceChip
+                  key={n.id}
+                  on={dependsOn.includes(n.id)}
+                  disabled={runsBefore.includes(n.id)}
+                  onToggle={() => pickDependsOn(n.id)}
+                >
                   {numberOf && <span className="panel-chip-num">{numberOf(n.id)}</span>}
                   {n.label}
                 </ChoiceChip>
               ))
             )}
           </div>
+        </PanelField>
+
+        <PanelField label="Runs before">
+          <div className="panel-chips">
+            {sortedNodes.length === 0 ? (
+              <span className="panel-empty">Nothing to go in front of yet.</span>
+            ) : (
+              sortedNodes.map((n) => (
+                <ChoiceChip
+                  key={n.id}
+                  on={runsBefore.includes(n.id)}
+                  disabled={dependsOn.includes(n.id)}
+                  title={
+                    dependsOn.includes(n.id)
+                      ? "Already picked as something this waits on — a step can't wait on itself."
+                      : undefined
+                  }
+                  onToggle={() => pickRunsBefore(n.id)}
+                >
+                  {numberOf && <span className="panel-chip-num">{numberOf(n.id)}</span>}
+                  {n.label}
+                </ChoiceChip>
+              ))
+            )}
+          </div>
+          {/* Picking something here that already runs after one of THIS
+              step's own "Runs after" picks is exactly "insert between":
+              the redundant direct edge is dropped in favour of routing
+              through the new step — addNode (useStepEditing.js) does
+              that rewiring, not this form. */}
         </PanelField>
       </BoardPanel>
     </form>
