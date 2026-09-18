@@ -221,7 +221,7 @@ function searchBestOrder(nodes, byId, caps, seedOrder, nodeBudget = SEARCH_NODE_
   // queued on any single piece of equipment. Reaching the floor proves
   // optimality outright; otherwise it's how close the answer is known to be.
   const criticalPath = Math.max(0, ...nodes.map((n) => tails.get(n.id)));
-  // Only attended steps occupy a cook â€” an unattended step's duration
+  // Only attended steps occupy a cook — an unattended step's duration
   // belongs to its equipment, not the cook pool, so it must not inflate
   // this floor. Counting it here made the bound exceed schedules that
   // are provably achievable, which stops the search from ever declaring
