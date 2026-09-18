@@ -314,6 +314,31 @@ export function activeStepFor(cookId, run, nodes) {
   return hit ? hit[0] : null;
 }
 
+/**
+ * Set-and-forget steps whose time is up.
+ *
+ * Rice does not need finishing. Nobody stands up, walks over and
+ * completes it — the rice is simply there when you come to plate, and
+ * the end of it is really part of whatever uses it next. Leaving a Done
+ * button on the screen asks someone to perform a task that does not
+ * exist, and worse, holds everything downstream hostage until they
+ * notice it.
+ *
+ * So these close themselves once their time has run. Paused time does
+ * not count, because a pot is not cooking while the run is stopped.
+ */
+export function selfFinishingIds(run, nodes, now = Date.now()) {
+  return nodes
+    .filter((n) => {
+      if (!isOneShot(n)) return false;
+      const record = run.steps[n.id];
+      if (record?.status !== "active" || !record.startedAt) return false;
+      const elapsed = Math.round((now - Date.parse(record.startedAt)) / 1000) - (record.pausedSec || 0);
+      return elapsed >= (n.estimated_duration_sec || 0);
+    })
+    .map((n) => n.id);
+}
+
 /** Everything this cook has running that does not occupy them. */
 export function passiveStepsFor(cookId, run, nodes) {
   const lookup = nodeLookup(nodes);

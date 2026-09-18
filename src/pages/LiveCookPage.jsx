@@ -12,11 +12,12 @@ import { useAppState } from "../state/AppStateContext.jsx";
 import { mergeRecipesForDisplay, formatDuration } from "../utils/graphLayout.js";
 import { EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
 import { cookColorKey } from "../utils/cooks.js";
-import { hasDeadline } from "../utils/tending.js";
+import { hasDeadline, isOneShot } from "../utils/tending.js";
 import {
   reconcileRun, isReady, readyStepIds, blockedStepIds, activeStepFor, stepVariance,
   runProgress, isRunComplete, scoreboard, runOutcome, resolveAssignments, replan,
   arbitrateClaim, claimSuggestions, applyStart, applyDone, applySkip, applyDrop, passiveStepsFor,
+  selfFinishingIds,
   applyUndo, endRun, appendTranscript, scoreStep, DIFFICULTY_POINTS,
   isPaused, applyPause, applyResume,
 } from "../utils/liveCook.js";
@@ -69,6 +70,36 @@ export default function LiveCookPage() {
     if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
   }, [run?.transcript?.length]);
 
+  // Rice closes itself. Nobody finishes a set-and-forget step — the end
+  // of it belongs to whatever plates it — so once its time is up it
+  // completes without being asked, and its dependents become ready. The
+  // alternative is a Done button for a task that does not exist, holding
+  // the rest of the board hostage until somebody notices it.
+  useEffect(() => {
+    // Above the early return below, so it has to tolerate no run yet.
+    if (!run || paused || finished) return;
+    const ready = selfFinishingIds(run, nodes, now);
+    if (!ready.length) return;
+    let next = run;
+    ready.forEach((stepId) => {
+      next = applyDone({ run: next, stepId, cookId: run.steps[stepId]?.cookId ?? null, at: new Date().toISOString(), source: "auto" });
+    });
+    // Said once, plainly. It is not an achievement and should not read
+    // like one, but the board changing on its own needs explaining.
+    next = appendTranscript(next, {
+      at: new Date().toISOString(),
+      speaker: "agent",
+      text: `${ready.map((id) => byId[id]?.label).join(" and ")} — ready whenever you need it.`,
+    });
+    if (isRunComplete(next, nodes)) {
+      next = appendTranscript(next, { at: new Date().toISOString(), speaker: "agent", text: "That's everything. Dinner's up." });
+    }
+    saveRunNow(next);
+    // `now` ticks every second; the guard above is what stops this
+    // firing more than once per step.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now, paused, finished]);
+
   if (!run) {
     return (
       <section className="page live-cook-page">
@@ -95,6 +126,8 @@ export default function LiveCookPage() {
     appendTranscript(nextRun, { at: new Date().toISOString(), speaker: "agent", text, actions });
 
   const commit = (nextRun) => saveRunNow(nextRun);
+
+
 
   // --- the handlers every button AND every utterance routes through ---
 
@@ -517,17 +550,24 @@ function CookFocusCard({ cook, colorKey, run, byId, now, isCompetition, paused, 
                       ? nags
                         ? "needs you now"
                         : "ready when you are"
-                      : `${clock(leftSec)} left · ${nags ? "check on it" : "runs on its own"}`}
+                      : `${clock(leftSec)} left · ${
+                          nags ? "check on it" : isOneShot(wNode) ? "no need to come back" : "runs on its own"
+                        }`}
                   </span>
                 </span>
-                <button
-                  type="button"
-                  className={`btn ${due && nags ? "btn-success" : "btn-ghost"} focus-queue-done`}
-                  disabled={paused}
-                  onClick={() => onDone(id)}
-                >
-                  Done
-                </button>
+                {/* No button on a step nobody finishes — it closes
+                    itself, and offering Done would be asking for a task
+                    that does not exist. */}
+                {!isOneShot(wNode) && (
+                  <button
+                    type="button"
+                    className={`btn ${due && nags ? "btn-success" : "btn-ghost"} focus-queue-done`}
+                    disabled={paused}
+                    onClick={() => onDone(id)}
+                  >
+                    Done
+                  </button>
+                )}
               </li>
             );
           })}
