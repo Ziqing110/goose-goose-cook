@@ -221,8 +221,13 @@ function searchBestOrder(nodes, byId, caps, seedOrder, nodeBudget = SEARCH_NODE_
   // queued on any single piece of equipment. Reaching the floor proves
   // optimality outright; otherwise it's how close the answer is known to be.
   const criticalPath = Math.max(0, ...nodes.map((n) => tails.get(n.id)));
-  const totalWork = nodes.reduce((sum, n) => sum + n.estimated_duration_sec, 0);
-  let floor = Math.max(criticalPath, Math.ceil(totalWork / Math.max(1, caps[COOK_RESOURCE])));
+  // Only attended steps occupy a cook â€” an unattended step's duration
+  // belongs to its equipment, not the cook pool, so it must not inflate
+  // this floor. Counting it here made the bound exceed schedules that
+  // are provably achievable, which stops the search from ever declaring
+  // victory early on recipes with real unattended time in them.
+  const totalCookWork = nodes.filter(isAttended).reduce((sum, n) => sum + n.estimated_duration_sec, 0);
+  let floor = Math.max(criticalPath, Math.ceil(totalCookWork / Math.max(1, caps[COOK_RESOURCE])));
   EQUIPMENT_OPTIONS.forEach((type) => {
     const work = nodes
       .filter((n) => (n.required_equipment || []).includes(type))
