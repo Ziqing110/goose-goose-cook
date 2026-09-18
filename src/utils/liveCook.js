@@ -500,32 +500,42 @@ export function runOutcome(run, nodes, cooks) {
     winnerCookIds: board.filter((b) => b.points === top && top > 0).map((b) => b.cookId),
     doneCount: progress.done,
     skippedCount: progress.skipped,
+    // In the order the night actually went: started steps by start
+    // time, then whatever never started, in main-line order.
     perStep: (() => {
       const shares = tailShares(nodes);
-      return nodes.map((n) => {
-      const record = run.steps[n.id] || emptyRecord();
-      const variance = stepVariance(n, record, run.endedAt ? Date.parse(run.endedAt) : Date.now());
-      const unattended = !isAttended(n);
-      return {
-        id: n.id,
-        label: n.label,
-        cookId: record.cookId,
-        status: record.status,
-        attended: !unattended,
-        ...variance,
-        points: scoreStep(n, { record, run, nodes, cooks }).points,
-        // An unattended step paid twice, and the summary has to account
-        // for both halves or the start awards appear in the totals from
-        // nowhere. startedByCookId is read from the event log because
-        // applyDone overwrites cookId with whoever finished.
-        ...(unattended
-          ? {
-              startPoints: unattendedStartPoints(n, { tailShare: shares.get(n.id) }),
-              startedByCookId: (run.events || []).find((e) => e.type === "start" && e.stepId === n.id)?.cookId ?? null,
-            }
-          : {}),
-      };
-      });
+      return nodes
+        .map((n, order) => {
+          const record = run.steps[n.id] || emptyRecord();
+          const variance = stepVariance(n, record, run.endedAt ? Date.parse(run.endedAt) : Date.now());
+          const unattended = !isAttended(n);
+          return {
+            id: n.id,
+            label: n.label,
+            cookId: record.cookId,
+            status: record.status,
+            attended: !unattended,
+            ...variance,
+            points: scoreStep(n, { record, run, nodes, cooks }).points,
+            // An unattended step paid twice, and the summary has to account
+            // for both halves or the start awards appear in the totals from
+            // nowhere. startedByCookId is read from the event log because
+            // applyDone overwrites cookId with whoever finished.
+            ...(unattended
+              ? {
+                  startPoints: unattendedStartPoints(n, { tailShare: shares.get(n.id) }),
+                  startedByCookId: (run.events || []).find((e) => e.type === "start" && e.stepId === n.id)?.cookId ?? null,
+                }
+              : {}),
+            _startedAt: record.startedAt ? Date.parse(record.startedAt) : Infinity,
+            _order: order,
+          };
+        })
+        .sort((a, b) => a._startedAt - b._startedAt || a._order - b._order)
+        .map((s) => {
+          const { _startedAt: _s, _order: _o, ...rest } = s; // eslint-disable-line no-unused-vars
+          return rest;
+        });
     })(),
   };
 }
@@ -813,6 +823,12 @@ export function applyUndo({ run, nodes, cookId, at }) {
   };
 }
 
+/** Whether Undo would take right now — the card uses this to enable the
+ *  button only inside the window, so a dead tap never has to be explained. */
+export function canUndo({ run, nodes, cookId, at }) {
+  return !applyUndo({ run, nodes, cookId, at }).rejected;
+}
+
 /** Freeze the run. Anything still pending is swept to skipped so the
  *  summary accounts for every step. */
 export function isPaused(run) {
@@ -845,8 +861,11 @@ export function endRun({ run, nodes, at }) {
   // cooking time, so close the open pause first.
   const settled = isPaused(run) ? applyResume({ run, at }) : run;
   let next = { ...settled, steps: { ...settled.steps } };
+  // Anything not finished — untouched or mid-step — is skipped, so no
+  // step can outlive the run and the counts add up to the total.
   nodes.forEach((n) => {
-    if (next.steps[n.id]?.status === "pending") {
+    const status = next.steps[n.id]?.status;
+    if (status === "pending" || status === "active") {
       next.steps[n.id] = { ...next.steps[n.id], status: "skipped", endedAt: at, skipReason: "run_ended" };
     }
   });

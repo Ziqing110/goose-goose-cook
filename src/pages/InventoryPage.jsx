@@ -1,20 +1,28 @@
-// Inventory — the materials check between the conversation and the
-// main line (design/claude-design-materials-prompt.md, "Kitchen Path
-// Inventory v3"). One input: uncheck what you're out of. Everything
-// else — coverage, reach, blocked/at-risk steps — is derived in
-// utils/inventory.js from the same availability rules the main line
-// uses. The "out" set is session state (session.outMaterialIds) so the
-// main line reads the same thing.
-import { useEffect, useMemo, useState } from "react";
+// Inventory — stage "Recipe graph": the materials check and the step
+// board on one page, left by approving (Claude Design handoff "Recipe
+// graph page"). One input: uncheck what you're out of. Everything else
+// — coverage, reach, blocked/at-risk steps — is derived in
+// utils/inventory.js from the same availability rules the board uses.
+// The "out" set is session state (session.outMaterialIds).
+//
+// Layout: coverage HUD on top (it describes the plan, not a tab), then
+// two tabs — Ingredients and Recipe graph. The "What this changes" rail
+// stands beside the checklist; on the recipe graph the board takes the
+// full width and the rail comes back as a panel over it, which is also
+// where a step is edited or added.
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { useSessionRecipes } from "../state/useSessionRecipes.js";
-import { mergeRecipesForDisplay, computeStepAvailability, cyclicDependencyIds, cloneGraph } from "../utils/graphLayout.js";
+import { mergeRecipesForDisplay, cyclicDependencyIds, cloneGraph } from "../utils/graphLayout.js";
 import { missingEquipment, EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
 import RecipeBoard from "../components/RecipeBoard.jsx";
 import AddStepPanel from "../components/AddStepPanel.jsx";
 import ApprovedPanel from "../components/ApprovedPanel.jsx";
+import BoardPanel from "../components/BoardPanel.jsx";
 import DeleteStepDialog from "../components/DeleteStepDialog.jsx";
-import Drawer from "../components/Drawer.jsx";
+import ImpactList, { ImpactMark } from "../components/ImpactList.jsx";
+import Icon from "../components/Icon.jsx";
+import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
 import NodeEditorPanel from "../components/NodeEditorPanel.jsx";
 import { useStepEditing } from "../state/useStepEditing.js";
 import { buildInventory, formatClock, formatStepDuration, PHASE_LABELS } from "../utils/inventory.js";
@@ -30,6 +38,32 @@ function dishMarkFor(title) {
   if (t.includes("tofu")) return dishMapoTofu;
   if (t.includes("noodle") || t.includes("soup")) return dishNoodleSoup;
   return null;
+}
+
+// The overlay panel's width plus its inset — what the board keeps clear.
+const PANEL_RESERVE = 376 + 16;
+
+// The zoom slider reads 0% at "everything visible" and counts up from
+// there, so the number means how far past the fitted view you are —
+// the fitted scale itself is a different figure for every dish, and
+// showing it (69%, 84%…) only invited "why can't I go lower?".
+const ZOOM_STEP = 5;
+/** How far in the slider can go: half again over the fitted view. */
+const zoomCeiling = (fit) => Math.max(1.5, fit + 0.5);
+
+const EQUIPMENT_GLYPH = { wok: "wok", oven: "oven", pot: "pot", stove_burner: "burner", cutting_board: "cutting-board" };
+const withArticle = (label) => `${/^[aeiou]/i.test(label) ? "an" : "a"} ${label}`;
+
+const pad2 = (n) => String(n).padStart(2, "0");
+
+/** "01–03" for a run of consecutive step numbers, otherwise "01, 04". */
+function numberRange(numbers) {
+  const sorted = [...numbers].sort();
+  const ints = sorted.map(Number);
+  const consecutive = ints.every((n, i) => i === 0 || n === ints[i - 1] + 1);
+  if (sorted.length > 2 && consecutive) return `${sorted[0]}–${sorted[sorted.length - 1]}`;
+  if (sorted.length > 4) return `${sorted.slice(0, 3).join(", ")} +${sorted.length - 3}`;
+  return sorted.join(", ");
 }
 
 function Mono({ children }) {
@@ -48,7 +82,7 @@ function Checkbox({ checked, label, onChange }) {
     >
       <span className="inv-check-box" aria-hidden="true">
         {checked && (
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
             <path d="M7.4 12.4l3.2 3.2 6-6.6" />
           </svg>
         )}
@@ -57,16 +91,16 @@ function Checkbox({ checked, label, onChange }) {
   );
 }
 
-function StepLine({ step, delay }) {
+// One step inside an ingredient's detail: the step, then its status
+// (if it isn't craftable), then the per-dish split for a shared step.
+function StepLine({ step, statusLine, delay }) {
   return (
     <div className="inv-step" style={{ animationDelay: `${delay}ms` }}>
       <span className="inv-step-main">
-        <Mono>
-          <span className="inv-step-num">{step.number}</span>
-        </Mono>
+        <span className="inv-step-num mono">{step.number}</span>
         <span className={`inv-step-phase is-${step.phase}`}>
           <span className="inv-step-phase-dot" />
-          <Mono>{PHASE_LABELS[step.phase] || step.phase}</Mono>
+          {PHASE_LABELS[step.phase] || step.phase}
         </span>
         <span className="inv-step-label">{step.label}</span>
         <Mono>
@@ -76,6 +110,7 @@ function StepLine({ step, delay }) {
           </span>
         </Mono>
       </span>
+      {statusLine && <span className={`inv-step-sub inv-step-status is-${step.status}`}>{statusLine}</span>}
       {step.split.length > 0 && (
         <span className="inv-step-sub">
           {step.split.map((s, i) => (
@@ -89,25 +124,15 @@ function StepLine({ step, delay }) {
           ))}
         </span>
       )}
-      {step.dependsOn.length > 0 && (
-        <span className="inv-step-sub inv-step-deps">
-          after{" "}
-          {step.dependsOn.map((d, i) => (
-            <span key={d.number}>
-              {i > 0 && " · "}
-              <Mono>{d.number}</Mono> {d.label}
-            </span>
-          ))}
-        </span>
-      )}
     </div>
   );
 }
 
 // Step detail stays folded so the list reads as a checklist; a row
-// opens on its disclosure (or by clicking its text), and an "out" row
-// opens itself so the cook sees what they just affected.
-function IngredientRow({ item, onToggle, delay }) {
+// opens on its disclosure, its text or a dish pill, and an "out" row
+// opens itself (and lifts off the card) so the cook sees what they just
+// affected.
+function IngredientRow({ item, onToggle, statusLineFor, delay }) {
   const onHand = !item.out;
   const [opened, setOpened] = useState(false);
   const expanded = !onHand || opened;
@@ -118,27 +143,32 @@ function IngredientRow({ item, onToggle, delay }) {
     <li className={`inv-row ${onHand ? "" : "is-out"} ${expanded ? "is-open" : ""}`} style={{ animationDelay: `${delay}ms` }}>
       <div className="inv-row-head">
         <Checkbox checked={onHand} label={item.label} onChange={onToggle} />
-        <span className="inv-row-main" onClick={() => setOpened((v) => !v)}>
-          <span className="inv-row-title-line">
+        <span className="inv-row-main">
+          <span className="inv-row-title-line" onClick={() => setOpened((v) => !v)}>
             <span className="inv-row-title">{item.label}</span>
             {item.amount != null && (
-              <Mono>
-                <span className="inv-row-amount">
-                  {item.amount} {item.unit}
-                </span>
-              </Mono>
+              <span className="inv-row-amount mono">
+                {item.amount} {item.unit}
+              </span>
             )}
             {!onHand && <span className="inv-chip inv-chip-out">Out</span>}
             {item.isCustom && <span className="inv-chip inv-chip-added">Added by you</span>}
           </span>
           <span className="inv-row-meta">
-            <span>
-              used in <Mono>{item.usedIn.length}</Mono> {item.usedIn.length === 1 ? "step" : "steps"}
+            <span onClick={() => setOpened((v) => !v)}>
+              used in {item.usedIn.length} {item.usedIn.length === 1 ? "step" : "steps"}
             </span>
             {item.dishes.map((d) => (
-              <span key={d} className="inv-chip inv-chip-dish">
+              <button
+                key={d}
+                type="button"
+                className="inv-dish-pill"
+                aria-controls={detailId}
+                title={`Where ${item.label} goes in ${d}`}
+                onClick={() => setOpened(true)}
+              >
                 {d}
-              </span>
+              </button>
             ))}
           </span>
         </span>
@@ -153,7 +183,7 @@ function IngredientRow({ item, onToggle, delay }) {
           aria-label={`${expanded ? "Hide" : "Show"} the steps that use ${item.label}`}
           onClick={() => setOpened((v) => !v)}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M6 9l6 6 6-6" />
           </svg>
         </button>
@@ -161,7 +191,7 @@ function IngredientRow({ item, onToggle, delay }) {
       {expanded && (
         <div className="inv-row-detail" id={detailId}>
           {item.usedIn.map((step, i) => (
-            <StepLine key={step.id} step={step} delay={i * 60} />
+            <StepLine key={step.id} step={step} statusLine={statusLineFor(step)} delay={i * 60} />
           ))}
         </div>
       )}
@@ -170,44 +200,135 @@ function IngredientRow({ item, onToggle, delay }) {
 }
 
 export default function InventoryPage() {
-  const { state, dispatch } = useAppState();
+  const { state, dispatch, editKitchenProfile } = useAppState();
   const session = state.session;
   const { recipes, sharedSteps = [], outMaterialIds = [] } = session;
   const { catalog, catalogError, retryCatalog, generating } = useSessionRecipes();
-  const [showAllImpact, setShowAllImpact] = useState(false);
+  const [tab, setTab] = useState("ingredients");
+  // The board panel: null, { mode: "impact" }, { mode: "edit", id } or
+  // { mode: "add" }. Which card is open is view state — persisting it
+  // meant a reload re-opened the editor on a step nobody had clicked.
+  const [panel, setPanel] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [offscreen, setOffscreen] = useState({ left: [], right: [], other: [] });
+  const [dismissedEquipment, setDismissedEquipment] = useState(null);
+  // null = let the board fit itself to the frame; a number is the
+  // cook's own zoom, from the slider under the board.
+  const [zoom, setZoom] = useState(null);
+  const [fitScale, setFitScale] = useState(1);
+  const [editingKitchen, setEditingKitchen] = useState(false);
+  const [kitchenError, setKitchenError] = useState(null);
+  const tabRowRef = useRef(null);
 
   const inv = useMemo(
     () => buildInventory({ recipes, sharedSteps, catalog, outIds: outMaterialIds }),
     [recipes, sharedSteps, catalog, outMaterialIds]
   );
 
-  // The same steps the ingredients above are folded under, as a board.
+  // The same steps the ingredients are folded under, as a board.
   const { working, draft, approved } = useMemo(() => mergeRecipesForDisplay(recipes, sharedSteps), [recipes, sharedSteps]);
-  // `|| []` makes a new array whenever nodes is absent, which would
-  // re-run the memo below on every render and defeat the point of it.
-  const boardNodes = useMemo(() => working.nodes || [], [working.nodes]);
-  const blockedIds = useMemo(
-    () => computeStepAvailability(boardNodes, new Set(outMaterialIds)).impossible,
-    [boardNodes, outMaterialIds]
-  );
+  const boardNodes = working.nodes || [];
+  const nodeById = useMemo(() => Object.fromEntries(boardNodes.map((n) => [n.id, n])), [boardNodes]);
+
+  // One source for status and numbering, so the HUD, bar, rail, rows
+  // and board can't disagree.
+  const { statusById, numberById, statusByNumber } = useMemo(() => {
+    const statusMap = new Map(inv.steps.map((s) => [s.id, s.status]));
+    const numberMap = new Map(inv.steps.map((s, i) => [s.id, pad2(i + 1)]));
+    const byNumber = new Map(inv.steps.map((s, i) => [pad2(i + 1), s.status]));
+    return { statusById: statusMap, numberById: numberMap, statusByNumber: byNumber };
+  }, [inv.steps]);
+  const statusOf = (id) => statusById.get(id) || "craftable";
+  const numberOf = (id) => numberById.get(id) || "";
+  const blockedIds = useMemo(() => inv.steps.filter((s) => s.status === "blocked").map((s) => s.id), [inv.steps]);
+
+  const labelOfMaterial = useMemo(() => {
+    const labels = Object.fromEntries(inv.ingredients.map((i) => [i.id, i.label]));
+    return (id) => labels[id] || id;
+  }, [inv.ingredients]);
+
+  // "blocked — missing ginger, scallion" / "at risk — after 04 Bloom chili oil"
+  const statusLineFor = (step) => {
+    if (step.status === "craftable") return null;
+    const out = new Set(outMaterialIds);
+    const missing = (nodeById[step.id]?.required_materials || []).filter((m) => out.has(m)).map(labelOfMaterial);
+    const badDeps = step.dependsOn.filter((d) => (statusByNumber.get(d.number) || "craftable") !== "craftable");
+    const parts = [];
+    if (missing.length) parts.push(<span key="m">missing {missing.join(", ")}</span>);
+    if (badDeps.length) {
+      parts.push(
+        <span key="d">
+          after{" "}
+          {badDeps.map((d, i) => (
+            <span key={d.number}>
+              {i > 0 && ", "}
+              <Mono>{d.number}</Mono> {d.label}
+            </span>
+          ))}
+        </span>
+      );
+    }
+    return (
+      <>
+        {step.status === "blocked" ? "blocked" : "at risk"}
+        {parts.length > 0 && " — "}
+        {parts.map((p, i) => (
+          <span key={i}>
+            {i > 0 && "; "}
+            {p}
+          </span>
+        ))}
+      </>
+    );
+  };
+
   const dishLabelFor = (node) =>
     node._shared ? "Shared" : recipes.find((r) => r.id === node._recipeId)?.working.title || null;
-  const { addNode, saveNode, deleteNode, registerMaterial } = useStepEditing();
-  // Which card is open is view state: persisting it meant a reload
-  // re-opened the editor on a step nobody had just clicked.
-  const [selectedId, setSelectedId] = useState(null);
-  const [pendingDelete, setPendingDelete] = useState(null);
+  const { addNode, saveNode, deleteNode, deleteNodes, registerMaterial } = useStepEditing();
   // A step can carry materials the catalog doesn't know yet (added from
   // the editor), so the editor sees the catalog plus this run's own.
   const materialsInfo = { ...(catalog || {}), ...(working.custom_materials || {}) };
-  const selectedNode = selectedId ? boardNodes.find((n) => n.id === selectedId) || null : null;
+
+  const editingNode = !approved && panel?.mode === "edit" ? nodeById[panel.id] || null : null;
+  const selectedId = editingNode?.id || null;
+  const panelOpen = !approved && (panel?.mode === "impact" || panel?.mode === "add" || Boolean(editingNode));
+
+  // Closing a step or the add form goes back to the impact list, if
+  // there's anything on it; closing the list dismisses the panel.
+  const closePanel = () => setPanel(panel?.mode !== "impact" && inv.impact.length > 0 ? { mode: "impact" } : null);
+  const selectNode = (id) => {
+    if (approved) return;
+    if (selectedId === id) closePanel();
+    else setPanel({ mode: "edit", id });
+  };
+  // The board is as tall as what's left of the viewport, so it only
+  // fits once the tab row is at the top — otherwise its last row ends
+  // up under the sticky footer.
+  const showTab = (key) => {
+    setTab(key);
+    if (key !== "graph") return;
+    requestAnimationFrame(() => {
+      const smooth = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      tabRowRef.current?.scrollIntoView({ block: "start", behavior: smooth ? "smooth" : "auto" });
+    });
+  };
+
+  // A consequence takes you to its cause: the rail's rows open the step
+  // on the board.
+  const pickImpact = (id) => {
+    showTab("graph");
+    if (!approved) setPanel({ mode: "edit", id });
+  };
 
   // Approval is what the rest of the run reads: the schedule and the
   // live cook run off `approved`, never `working`, so editing a step
   // can't rewrite a plan someone is already cooking from.
   const kitchenProfile = state.kitchenProfiles.find((p) => p.id === session.kitchenProfileId) || null;
   const lacking = missingEquipment(boardNodes, kitchenProfile);
-  const dishIsUndoable = blockedIds.size > 0;
+  const lackingKey = lacking.join(",");
+  const showEquipment = lacking.length > 0 && dismissedEquipment !== lackingKey;
+  const stepsNeedingLacking = boardNodes.filter((n) => (n.required_equipment || []).some((e) => lacking.includes(e))).length;
+  const dishIsUndoable = blockedIds.length > 0;
 
   const approve = () => {
     recipes.forEach((r) =>
@@ -216,8 +337,9 @@ export default function InventoryPage() {
     sharedSteps.forEach((st) =>
       dispatch({ type: "session/sharedSteps/updateOne", payload: { sharedStepId: st.id, patch: { approved: cloneGraph(st.working) } } })
     );
-    setSelectedId(null);
+    setPanel(null);
   };
+
   // The voice equivalent of the "Approve and schedule" button, in the
   // same words printed on it. Approving locks the graph, so it asks
   // first — and it refuses while a step is blocked, exactly as the
@@ -245,19 +367,28 @@ export default function InventoryPage() {
   };
 
   // The escape hatch that makes the gate fair: drop what can't be done
-  // and cook the rest. blockedIds is already the full closure.
+  // and cook the rest. The blocked set is already the full closure.
   const dropBlockedSteps = () => {
-    const ids = [...blockedIds.keys()];
-    if (!ids.length) return;
-    if (!window.confirm(`Remove ${ids.length} step${ids.length === 1 ? "" : "s"} you can't do without those materials?`)) return;
-    ids.forEach((id) => deleteNode(id, { confirm: false }));
-    setSelectedId(null);
+    if (!blockedIds.length) return;
+    if (!window.confirm(`Remove ${blockedIds.length} step${blockedIds.length === 1 ? "" : "s"} you can't do without those materials?`)) return;
+    deleteNodes(blockedIds);
+    setPanel(null);
   };
 
   const nodePositions = session.nodePositions || {};
   const moveNode = (id, at) =>
     dispatch({ type: "session/update", payload: { nodePositions: { ...nodePositions, [id]: at } } });
-  const selectNode = (id) => setSelectedId((cur) => (cur === id ? null : id));
+
+  const saveKitchen = async (kitchenDraft) => {
+    setKitchenError(null);
+    try {
+      const { id, ...patch } = kitchenDraft;
+      await editKitchenProfile(id, patch);
+      setEditingKitchen(false);
+    } catch (err) {
+      setKitchenError(err.message);
+    }
+  };
 
   const hasDishes = recipes.length > 0;
   const hasOut = outMaterialIds.length > 0;
@@ -266,12 +397,7 @@ export default function InventoryPage() {
   useEffect(() => {
     dispatch({
       type: "voice/setHint",
-      payload: {
-        hint: {
-          line: "Say “approve and schedule” when the board looks right.",
-          sub: "Or “back”, “home”, “help”.",
-        },
-      },
+      payload: { hint: { line: "Tell me what you're out of — say “no ginger.”", sub: "Everything's on hand until you say otherwise." } },
     });
     return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
   }, [dispatch]);
@@ -287,7 +413,7 @@ export default function InventoryPage() {
   const { coverage } = inv;
   const metaBits = [];
   if (hasDishes) {
-    metaBits.push(inv.title);
+    metaBits.push(inv.dishTitles.join(" · ") || inv.title);
     if (inv.servings != null) metaBits.push(<><Mono>{inv.servings}</Mono> servings</>);
     if (catalog) metaBits.push(<><Mono>{inv.ingredients.length}</Mono> ingredients</>);
     metaBits.push(<><Mono>{inv.stepCount}</Mono> steps</>);
@@ -300,14 +426,35 @@ export default function InventoryPage() {
     }
   }
 
-  // Blocked entries and at-risk entries with their own missing
-  // ingredient always show; pure downstream cascades fold past the
-  // first few so the panel stays a summary, not a second step list.
-  const IMPACT_VISIBLE = 5;
-  const impactVisible = showAllImpact ? inv.impact : inv.impact.slice(0, IMPACT_VISIBLE);
-  const impactHidden = inv.impact.length - impactVisible.length;
+  const legend = [`${coverage.craftable} craftable`];
+  if (coverage.atRisk) legend.push(`${coverage.atRisk} at risk`);
+  if (coverage.blocked) legend.push(`${coverage.blocked} blocked`);
 
+  const allOnHand = inv.onHandCount === inv.ingredients.length;
   const dishMarks = inv.dishTitles.map((t) => ({ title: t, src: dishMarkFor(t) })).filter((d) => d.src);
+
+  // Caption under the board: where the cards you can't see are.
+  const hiddenCount = offscreen.left.length + offscreen.right.length + offscreen.other.length;
+  let panHint = null;
+  if (hiddenCount > 0) {
+    const side = offscreen.left.length === hiddenCount ? "left" : offscreen.right.length === hiddenCount ? "right" : null;
+    const ids = [...offscreen.left, ...offscreen.right, ...offscreen.other];
+    panHint = side ? (
+      <>
+        <Mono>{numberRange(ids.map(numberOf))}</Mono> {hiddenCount === 1 ? "is" : "are"} off to the {side} — drag the board to pan
+      </>
+    ) : (
+      <>
+        <Mono>{hiddenCount}</Mono> {hiddenCount === 1 ? "step is" : "steps are"} out of view — drag the board to pan
+      </>
+    );
+  }
+
+  const counterTone = coverage.blocked > 0 ? "critical" : "warning";
+  // 0% is the fitted view; 100% is the ceiling above.
+  const zoomTop = zoomCeiling(fitScale);
+  const zoomPct = Math.round((((zoom ?? fitScale) - fitScale) / (zoomTop - fitScale)) * 100);
+  const setZoomPct = (pct) => setZoom(pct <= 0 ? null : fitScale + (pct / 100) * (zoomTop - fitScale));
 
   return (
     <section className="page inventory-page">
@@ -316,11 +463,7 @@ export default function InventoryPage() {
           <h1>Inventory</h1>
           {!hasDishes ? (
             <span className="inv-meta is-tertiary">
-              {/* Generation is a real half-minute of model work, so say
-                  what is happening rather than leaving a bare ellipsis
-                  that reads as a hang. */}
-              {generating ? "Writing your recipes — this takes a moment" : "The agent is still setting your dishes"}{" "}
-              <span className="mono inv-dots">…</span>
+              {generating ? "Writing your recipes" : "Setting your dishes"} <span className="mono inv-dots">…</span>
             </span>
           ) : loading ? (
             <span className="inv-meta is-tertiary">Loading your ingredients…</span>
@@ -349,7 +492,7 @@ export default function InventoryPage() {
       {!hasDishes && (
         <div className="inv-hud" role="status" aria-live="polite">
           <span className="inv-meta">
-            {generating ? "Writing your recipes" : "Setting your dishes"}{' '}
+            {generating ? "Writing your recipes" : "Setting your dishes"}{" "}
             <span className="mono inv-dots">…</span>
           </span>
         </div>
@@ -366,19 +509,12 @@ export default function InventoryPage() {
 
       {hasDishes && catalog && (
         <>
-          {/* ---- Coverage HUD ---- */}
+          {/* ---- Coverage HUD: the whole plan, above both tabs ---- */}
           <div className="inv-hud">
-            <div className="inv-hud-head">
-              <span className={`inv-summary is-${coverage.tone}`}>{coverage.summary}</span>
-              {hasOut && (
-                <button type="button" className="btn btn-ghost inv-btn-accent" onClick={markAllOnHand}>
-                  Mark everything on hand
-                </button>
-              )}
-            </div>
+            <span className={`inv-summary is-${coverage.tone}`}>{coverage.summary}</span>
             <div className="inv-stats">
-              <div className="inv-stat inv-stat-wide">
-                <span className="inv-stat-value mono inv-roll" style={{ animationDelay: "300ms" }}>
+              <div className="inv-stat">
+                <span className={`inv-stat-value mono inv-roll${allOnHand ? " is-done" : ""}`} style={{ animationDelay: "300ms" }}>
                   {inv.onHandCount}
                   <span className="inv-stat-sep"> / </span>
                   {inv.ingredients.length}
@@ -388,7 +524,7 @@ export default function InventoryPage() {
                 </span>
               </div>
               <div className="inv-stat">
-                <span className="inv-stat-value mono inv-roll" style={{ animationDelay: "360ms" }}>
+                <span className={`inv-stat-value mono inv-roll ${coverage.atRisk > 0 ? "is-warning" : "is-zero"}`} style={{ animationDelay: "360ms" }}>
                   {coverage.atRisk}
                 </span>
                 <span className="inv-stat-label">
@@ -396,7 +532,7 @@ export default function InventoryPage() {
                 </span>
               </div>
               <div className="inv-stat">
-                <span className={`inv-stat-value mono inv-roll ${coverage.blocked > 0 ? "is-critical" : ""}`} style={{ animationDelay: "420ms" }}>
+                <span className={`inv-stat-value mono inv-roll ${coverage.blocked > 0 ? "is-critical" : "is-zero"}`} style={{ animationDelay: "420ms" }}>
                   {coverage.blocked}
                 </span>
                 <span className="inv-stat-label">
@@ -407,120 +543,287 @@ export default function InventoryPage() {
             <div className="inv-stepbar-wrap">
               <div
                 className="inv-stepbar"
-                role="img"
-                aria-label={`${coverage.craftable} craftable, ${coverage.atRisk} at risk, ${coverage.blocked} blocked`}
+                role="progressbar"
+                aria-label={`${coverage.craftable} of ${coverage.total} steps craftable, ${coverage.atRisk} at risk, ${coverage.blocked} blocked`}
+                aria-valuemin={0}
+                aria-valuemax={coverage.total}
+                aria-valuenow={coverage.craftable}
               >
                 {inv.steps.map((s) => (
                   <span key={s.id} className={`inv-stepbar-seg is-${s.status}`} />
                 ))}
               </div>
-              <span className="mono inv-stepbar-legend">
-                {coverage.craftable} craftable · {coverage.atRisk} at risk · {coverage.blocked} blocked
-              </span>
+              <span className="mono inv-stepbar-legend">{legend.join(" · ")}</span>
             </div>
           </div>
-
-          {/* ---- Groups + impact ---- */}
-          <div className="inv-columns">
-            <div className="inv-groups">
-              {inv.groups.map((g, gi) => (
-                <section key={g.key} className="inv-card" style={{ animationDelay: `${160 + gi * 60}ms` }} aria-labelledby={`inv-group-${g.key}`}>
-                  <div className="inv-card-head">
-                    <span id={`inv-group-${g.key}`} className="inv-card-title">
-                      {g.label}
-                    </span>
-                    <span className="mono inv-card-count">
-                      {g.items.length} · {g.items.filter((i) => !i.out).length} on hand
-                    </span>
-                  </div>
-                  <ul className="inv-list">
-                    {g.items.map((item, i) => (
-                      <IngredientRow key={item.id} item={item} onToggle={() => toggle(item.id)} delay={220 + gi * 60 + i * 60} />
-                    ))}
-                  </ul>
-                </section>
-              ))}
-            </div>
-
-            <aside className="inv-impact inv-card" aria-labelledby="inv-impact-title">
-              <div className="inv-card-head">
-                <span id="inv-impact-title" className="inv-card-title">
-                  What this changes
-                </span>
-              </div>
-              {inv.impact.length === 0 ? (
-                <div className="inv-impact-empty">Nothing — everything&rsquo;s craftable.</div>
-              ) : (
-                <ul className="inv-list">
-                  {impactVisible.map((e, i) => (
-                    <li key={e.id} className={`inv-impact-row is-${e.status}`} style={{ animationDelay: `${i * 60}ms` }}>
-                      <span className="inv-impact-dot" aria-hidden="true" />
-                      <span className="inv-impact-main">
-                        <span className="inv-impact-title-line">
-                          <span className="inv-impact-label">{e.label}</span>
-                          <Mono>
-                            <span className="inv-impact-dur">{formatStepDuration(e.durationSec)}</span>
-                          </Mono>
-                        </span>
-                        <span className="inv-impact-reason">{e.reason}</span>
-                      </span>
-                    </li>
-                  ))}
-                  {impactHidden > 0 && (
-                    <li>
-                      <button type="button" className="inv-impact-more" onClick={() => setShowAllImpact(true)}>
-                        + {impactHidden} more at risk downstream
-                      </button>
-                    </li>
-                  )}
-                </ul>
-              )}
-            </aside>
-          </div>
-
-          {/* ---- The steps themselves, as a board you can rearrange ---- */}
-          {boardNodes.length > 0 && (
-            <section className="inv-card inv-board-card" aria-labelledby="inv-board-title">
-              <div className="inv-card-head">
-                <span id="inv-board-title" className="inv-card-title">
-                  The main line
-                </span>
-                <span className="inv-meta is-tertiary">Drag a card to move it. Click one to edit.</span>
-              </div>
-              {!approved && (
-              <AddStepPanel
-                recipes={recipes}
-                nodes={boardNodes}
-                onAdd={(recipeId, spec) => {
-                  const id = addNode(recipeId, spec);
-                  if (id) setSelectedId(id); // open the new card for the details
-                }}
-              />
-              )}
-              <RecipeBoard
-                nodes={boardNodes}
-                positions={nodePositions}
-                selectedNodeId={selectedId}
-                dishLabelFor={dishLabelFor}
-                blockedIds={blockedIds}
-                onSelect={approved ? () => {} : selectNode}
-                onMove={moveNode}
-              />
-            </section>
-          )}
-
-          {lacking.length > 0 && (
-            <div className="inv-card inv-equipment-warning">
-              <span className="inv-card-title">
-                Planned with {lacking.map((e) => EQUIPMENT_LABELS[e] || e).join(" and ")} you don&rsquo;t have
-              </span>
-              <span className="inv-meta">
-                {kitchenProfile?.name} has none configured, so these timings assume exactly one of each.
-              </span>
-            </div>
-          )}
 
           {approved && <ApprovedPanel draft={draft} approved={approved} onRevise={revise} />}
+
+          <div className={`inv-split is-${tab}`}>
+            <div className="inv-main">
+              {/* ---- Tabs + the active tab's controls ---- */}
+              <div className="inv-tabrow" ref={tabRowRef}>
+                <div className="inv-tabs" role="tablist" aria-label="Inventory view">
+                  {[
+                    { key: "ingredients", label: "Ingredients", count: inv.ingredients.length },
+                    { key: "graph", label: "Recipe graph", count: inv.stepCount },
+                  ].map((t) => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      role="tab"
+                      id={`inv-tab-${t.key}`}
+                      aria-selected={tab === t.key}
+                      aria-controls={`inv-tabpanel-${t.key}`}
+                      className={`inv-tab${tab === t.key ? " is-active" : ""}`}
+                      onClick={() => showTab(t.key)}
+                    >
+                      {t.label}
+                      <span className="inv-tab-count mono">{t.count}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="inv-tabrow-end">
+                  {tab === "ingredients" ? (
+                    <span className="inv-hint">Uncheck whatever you&rsquo;re out of.</span>
+                  ) : approved ? (
+                    <span className="inv-hint">Approved &mdash; revise the plan to change a step.</span>
+                  ) : (
+                    <>
+                      <span className="inv-hint inv-hint-board">Drag a card to move it. Click one to edit.</span>
+                      {inv.impact.length > 0 && (
+                        <button
+                          type="button"
+                          className={`inv-status-counter is-${counterTone}`}
+                          aria-pressed={panel?.mode === "impact"}
+                          onClick={() => setPanel(panel?.mode === "impact" ? null : { mode: "impact" })}
+                        >
+                          {coverage.blocked > 0 && (
+                            <span className="inv-counter-part">
+                              <span className="inv-counter-dot is-blocked" aria-hidden="true" />
+                              {coverage.blocked} blocked
+                            </span>
+                          )}
+                          {coverage.atRisk > 0 && (
+                            <span className="inv-counter-part">
+                              <span className="inv-counter-dot is-atRisk" aria-hidden="true" />
+                              {coverage.atRisk} at risk
+                            </span>
+                          )}
+                        </button>
+                      )}
+                      <button type="button" className="btn inv-add-btn" aria-pressed={panel?.mode === "add"} onClick={() => setPanel({ mode: "add" })}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
+                          <path d="M12 5v14M5 12h14" />
+                        </svg>
+                        Add a task
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {showEquipment && (
+                <div className="inv-equip" role="note">
+                  <span className="inv-equip-glyph" aria-hidden="true">
+                    <Icon glyph={EQUIPMENT_GLYPH[lacking[0]] || "flame"} size={24} />
+                  </span>
+                  <div className="inv-equip-main">
+                    <span className="inv-equip-title">
+                      Planned with {lacking.map((e) => withArticle(EQUIPMENT_LABELS[e] || e)).join(" and ")} you don&rsquo;t have
+                    </span>
+                    <span className="inv-equip-body">
+                      {stepsNeedingLacking} {stepsNeedingLacking === 1 ? "step asks" : "steps ask"} for{" "}
+                      {lacking.length === 1 ? "it" : "them"}. {kitchenProfile?.name || "Your kitchen"} doesn&rsquo;t list{" "}
+                      {lacking.length === 1 ? "one" : "them"}, so the timings assume one anyway &mdash; those steps may run slower
+                      than the plan says.
+                    </span>
+                    <div className="inv-equip-actions">
+                      {kitchenProfile && (
+                        <button type="button" className="btn inv-equip-edit" onClick={() => setEditingKitchen(true)}>
+                          Edit kitchen profile
+                        </button>
+                      )}
+                      <button type="button" className="btn inv-equip-dismiss" onClick={() => setDismissedEquipment(lackingKey)}>
+                        Cook it anyway
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {tab === "ingredients" ? (
+                <div className="inv-groups" role="tabpanel" id="inv-tabpanel-ingredients" aria-labelledby="inv-tab-ingredients">
+                  {inv.groups.map((g, gi) => {
+                    const onHand = g.items.filter((i) => !i.out).length;
+                    return (
+                      <section key={g.key} className="inv-card" style={{ animationDelay: `${160 + gi * 60}ms` }} aria-labelledby={`inv-group-${g.key}`}>
+                        <div className="inv-card-head">
+                          <span id={`inv-group-${g.key}`} className="inv-card-title">
+                            {g.label}
+                          </span>
+                          <span className={`mono inv-card-count${onHand === g.items.length ? " is-done" : ""}`}>
+                            {g.items.length} · {onHand === g.items.length ? "all" : onHand} on hand
+                          </span>
+                        </div>
+                        <ul className="inv-list">
+                          {g.items.map((item, i) => (
+                            <IngredientRow
+                              key={item.id}
+                              item={item}
+                              onToggle={() => toggle(item.id)}
+                              statusLineFor={statusLineFor}
+                              delay={220 + gi * 60 + i * 60}
+                            />
+                          ))}
+                        </ul>
+                      </section>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="inv-board-wrap" role="tabpanel" id="inv-tabpanel-graph" aria-labelledby="inv-tab-graph">
+                  <div className="inv-board">
+                    <span className="inv-phase-legend" aria-label="Phase colours">
+                      {["prep", "cook", "plate"].map((ph) => (
+                        <span key={ph} className={`inv-phase-key is-${ph}`}>
+                          <span className="inv-phase-swatch" aria-hidden="true" />
+                          {PHASE_LABELS[ph]}
+                        </span>
+                      ))}
+                    </span>
+                    <RecipeBoard
+                      nodes={boardNodes}
+                      positions={nodePositions}
+                      selectedNodeId={selectedId}
+                      dishLabelFor={dishLabelFor}
+                      statusOf={statusOf}
+                      numberOf={numberOf}
+                      onSelect={selectNode}
+                      onMove={moveNode}
+                      reserveRight={panelOpen ? PANEL_RESERVE : 0}
+                      onOffscreen={setOffscreen}
+                      zoom={zoom}
+                      onFitScale={setFitScale}
+                    />
+
+                    {!approved && panel?.mode === "impact" && (
+                      <BoardPanel
+                        label="What this changes"
+                        title="What this changes"
+                        tone="ai"
+                        mark={<ImpactMark />}
+                        onClose={() => setPanel(null)}
+                      >
+                        <ImpactList entries={inv.impact} onPick={pickImpact} hint="Click a step to select it on the board." />
+                      </BoardPanel>
+                    )}
+
+                    {editingNode && (
+                      <NodeEditorPanel
+                        node={editingNode}
+                        allNodes={boardNodes}
+                        numberOf={numberOf}
+                        blockedDependencyIds={cyclicDependencyIds(boardNodes, editingNode.id)}
+                        onClose={closePanel}
+                        onSave={(id, nodeDraft) => {
+                          saveNode(id, nodeDraft);
+                          closePanel();
+                        }}
+                        onDelete={(id) => {
+                          // Removing a step other steps wait on changes the
+                          // plan's shape, so it asks where they go rather
+                          // than silently cutting the link.
+                          const dependents = boardNodes.filter((n) => (n.depends_on || []).includes(id));
+                          closePanel();
+                          if (dependents.length === 0) deleteNode(id);
+                          else setPendingDelete({ node: nodeById[id], dependents });
+                        }}
+                        materialsInfo={materialsInfo}
+                        onRegisterMaterial={(materialDraft) => registerMaterial(materialDraft, materialsInfo, editingNode.id)}
+                      />
+                    )}
+
+                    {!approved && panel?.mode === "add" && (
+                      <AddStepPanel
+                        recipes={recipes}
+                        nodes={boardNodes}
+                        numberOf={numberOf}
+                        onClose={closePanel}
+                        onAdd={(recipeId, spec) => {
+                          const id = addNode(recipeId, spec);
+                          // Open the new card for the rest of its details.
+                          if (id) setPanel({ mode: "edit", id });
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  <div className="inv-board-caption">
+                    <span className="inv-board-count">
+                      <span>
+                        <Mono>{boardNodes.length}</Mono> {boardNodes.length === 1 ? "step" : "steps"} on the board
+                      </span>
+                      {panHint && <span className="inv-board-pan">{panHint}</span>}
+                    </span>
+                    <span className="inv-zoom">
+                      <button
+                        type="button"
+                        className="inv-zoom-step"
+                        aria-label="Zoom out"
+                        disabled={zoomPct <= 0}
+                        onClick={() => setZoomPct(Math.max(0, zoomPct - ZOOM_STEP))}
+                      >
+                        &minus;
+                      </button>
+                      <input
+                        className="inv-zoom-slider"
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={ZOOM_STEP}
+                        value={zoomPct}
+                        aria-label="Zoom"
+                        aria-valuetext={zoomPct === 0 ? "Fitted — every step visible" : `${zoomPct}% past the fitted view`}
+                        onChange={(e) => setZoomPct(Number(e.target.value))}
+                      />
+                      <button
+                        type="button"
+                        className="inv-zoom-step"
+                        aria-label="Zoom in"
+                        disabled={zoomPct >= 100}
+                        onClick={() => setZoomPct(Math.min(100, zoomPct + ZOOM_STEP))}
+                      >
+                        +
+                      </button>
+                      <span className="inv-zoom-pct mono">{zoomPct > 0 ? `+${zoomPct}%` : "0%"}</span>
+                      <button type="button" className="inv-zoom-fit" disabled={zoom === null} onClick={() => setZoom(null)}>
+                        Fit
+                      </button>
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ---- The rail: stands beside the checklist only ---- */}
+            {tab === "ingredients" && (
+              <aside className="inv-rail" aria-labelledby="inv-rail-title">
+                <div className="inv-rail-inner">
+                  <header className="inv-rail-head">
+                    <ImpactMark />
+                    <span id="inv-rail-title" className="inv-rail-title">
+                      What this changes
+                    </span>
+                    <span className="inv-rail-count mono">{inv.impact.length}</span>
+                  </header>
+                  <div className="inv-rail-body">
+                    <ImpactList entries={inv.impact} onPick={pickImpact} hint="Click a step to find it on the recipe graph." />
+                  </div>
+                </div>
+              </aside>
+            )}
+          </div>
 
           {/* ---- Footer band ---- */}
           <div className="inv-footer">
@@ -528,14 +831,14 @@ export default function InventoryPage() {
               {coverage.craftable} of {coverage.total} steps craftable
             </span>
             <div className="inv-footer-actions">
-              {coverage.blocked > 0 && (
-                <button type="button" className="btn btn-ghost inv-btn-accent" onClick={markAllOnHand}>
+              {hasOut && (
+                <button type="button" className="btn inv-footer-secondary" onClick={markAllOnHand}>
                   Mark everything on hand
                 </button>
               )}
               {!approved && dishIsUndoable && (
-                <button type="button" className="btn btn-ghost" onClick={dropBlockedSteps}>
-                  Remove the blocked {blockedIds.size === 1 ? "step" : "steps"}
+                <button type="button" className="btn inv-footer-secondary inv-btn-remove" onClick={dropBlockedSteps}>
+                  Remove the blocked {blockedIds.length === 1 ? "step" : "steps"}
                 </button>
               )}
               {!approved && (
@@ -547,6 +850,7 @@ export default function InventoryPage() {
           </div>
         </>
       )}
+
       {pendingDelete && (
         <DeleteStepDialog
           node={pendingDelete.node}
@@ -560,29 +864,16 @@ export default function InventoryPage() {
         />
       )}
 
-      {selectedNode && (
-        <Drawer label="Edit step" onClose={() => setSelectedId(null)}>
-          <NodeEditorPanel
-            node={selectedNode}
-            allNodes={boardNodes}
-            blockedDependencyIds={cyclicDependencyIds(boardNodes, selectedId)}
-            onSave={(id, draft) => {
-              saveNode(id, draft);
-              setSelectedId(null);
-            }}
-            onDelete={(id) => {
-              // Removing a step other steps wait on changes the plan's
-              // shape, so it asks where they go rather than silently
-              // cutting the link.
-              const dependents = boardNodes.filter((n) => (n.depends_on || []).includes(id));
-              setSelectedId(null);
-              if (dependents.length === 0) deleteNode(id);
-              else setPendingDelete({ node: boardNodes.find((n) => n.id === id), dependents });
-            }}
-            materialsInfo={materialsInfo}
-            onRegisterMaterial={(draft) => registerMaterial(draft, materialsInfo, selectedId)}
-          />
-        </Drawer>
+      {editingKitchen && kitchenProfile && (
+        <KitchenProfileFormModal
+          profile={kitchenProfile}
+          error={kitchenError}
+          onSave={saveKitchen}
+          onClose={() => {
+            setEditingKitchen(false);
+            setKitchenError(null);
+          }}
+        />
       )}
     </section>
   );

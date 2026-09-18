@@ -61,19 +61,48 @@ function StatTile({ value, label, icon, delay }) {
   );
 }
 
+// What the run is made of — not how far along it is. The phase colours
+// are deliberately not the done/at-risk/blocked family, and the legend
+// carries each phase's share so the bar doesn't have to be measured by
+// eye.
 function PhaseBar({ counts }) {
   const total = counts.prep + counts.cook + counts.plate;
   if (total === 0) return null;
-  const pct = (n) => `${(n / total) * 100}%`;
+  const phases = [
+    { key: "prep", label: "prep", count: counts.prep },
+    { key: "cook", label: "cook", count: counts.cook },
+    { key: "plate", label: "plate", count: counts.plate },
+  ];
+  // Largest remainder, so the three shares always read as 100%.
+  const exact = phases.map((p) => (p.count / total) * 100);
+  const shares = exact.map(Math.floor);
+  let left = 100 - shares.reduce((a, b) => a + b, 0);
+  exact
+    .map((v, i) => [v - Math.floor(v), i])
+    .sort((a, b) => b[0] - a[0])
+    .forEach(([, i]) => {
+      if (left > 0) {
+        shares[i] += 1;
+        left -= 1;
+      }
+    });
   return (
     <div className="hp-phase">
-      <div className="hp-phase-bar" role="img" aria-label={`${counts.prep} prep, ${counts.cook} cook, ${counts.plate} plate steps`}>
-        <span className="hp-phase-prep" style={{ width: pct(counts.prep) }} />
-        <span className="hp-phase-cook" style={{ width: pct(counts.cook) }} />
-        <span className="hp-phase-plate" style={{ width: pct(counts.plate) }} />
+      <div
+        className="hp-phase-bar"
+        role="img"
+        aria-label={phases.map((p, i) => `${p.count} ${p.label}, ${shares[i]}%`).join("; ")}
+      >
+        {phases.map((p, i) => (
+          <span key={p.key} className={`hp-phase-seg is-${p.key}`} style={{ width: `${exact[i]}%` }} />
+        ))}
       </div>
       <span className="hp-phase-legend mono">
-        {counts.prep} prep · {counts.cook} cook · {counts.plate} plate
+        {phases.map((p, i) => (
+          <span key={p.key} className={`hp-phase-key is-${p.key}`}>
+            {p.count} {p.label} <span className="hp-phase-pct">{shares[i]}%</span>
+          </span>
+        ))}
       </span>
     </div>
   );

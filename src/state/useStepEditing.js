@@ -119,6 +119,31 @@ export function useStepEditing() {
     if (shared) deleteSharedStepFromSession(shared.id);
   };
 
+  /** Removes several steps from the same state snapshot. */
+  const deleteNodes = (nodeIds) => {
+    const ids = new Set(nodeIds);
+    if (!ids.size) return;
+
+    recipes.forEach((recipe) => {
+      const touched = recipe.working.nodes.some(
+        (node) => ids.has(node.id) || (node.depends_on || []).some((dependencyId) => ids.has(dependencyId))
+      );
+      if (!touched) return;
+      updateRecipeWorking(recipe.id, (working) => {
+        working.nodes = working.nodes
+          .filter((node) => !ids.has(node.id))
+          .map((node) => ({
+            ...node,
+            depends_on: (node.depends_on || []).filter((dependencyId) => !ids.has(dependencyId)),
+          }));
+      });
+    });
+
+    sharedSteps
+      .filter((step) => ids.has(step.working.id))
+      .forEach((step) => deleteSharedStepFromSession(step.id));
+  };
+
   /** Commits a step's staged edits (from the drawer) in one go and closes it. */
   const saveNode = (nodeId, draftNode) => {
     const shared = findSharedStep(nodeId);
@@ -162,5 +187,5 @@ export function useStepEditing() {
     return id;
   };
 
-  return { addNode, deleteNode, saveNode, registerMaterial, findRecipeForNode, findSharedStep, updateRecipeWorking };
+  return { addNode, deleteNode, deleteNodes, saveNode, registerMaterial, findRecipeForNode, findSharedStep, updateRecipeWorking };
 }

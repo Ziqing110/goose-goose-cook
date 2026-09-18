@@ -392,16 +392,41 @@ button { font: inherit; cursor: pointer; }
   --kp-status-live: #34c759;
 
   --kp-error-bg: #fdecec;
-  --kp-error-text: #8b1a1a;
+  /* #8b1a1a read as near-black at 12–13px; this holds 5.2:1 on
+     error-bg and bg-tertiary, about as bright as 13px text allows. */
+  --kp-error-text: #c0281c;
   --kp-warning-bg: #fff4e5;
   --kp-warning-text: #7a4a00;
+  /* Graphic marks only (bars, dots, borders) — next to the blocked red
+     the text ink is indistinguishable at 4px. Fails as text on cream. */
+  --kp-warning-graphic: #b06f00;
 
-  --kp-phase-prep: #8a8985;
-  --kp-phase-cook: #d4552a;
-  --kp-phase-plate: #5f9a2a;
+  /* The recipe-graph board: a butcher-block ground, edge and lip. */
+  --kp-board: #f0e6d8;
+  --kp-board-edge: #ddc9ac;
+  --kp-board-lip: #dcc6a6;
+
+  /* Prep / cook / plate — blue, yellow, green. Far apart from each
+     other (ΔE ≥ 75), but note the overlap this palette accepts: the
+     plate green sits near the done/craftable green and the cook yellow
+     near the at-risk amber. Phase never means status, so nothing
+     load-bearing rests on telling them apart; where both appear the
+     status one is always labelled.
+
+     Split like the warning pair: the -ink tones carry text (each
+     ≥4.5:1 on white), the plain ones are for bars, dots and spines,
+     where brightness matters more than contrast. */
+  --kp-phase-prep: #2563eb;
+  --kp-phase-cook: #e8a900;
+  --kp-phase-plate: #2f9e44;
+  --kp-phase-prep-ink: #1d4ed8;
+  --kp-phase-cook-ink: #8a6a00;
+  --kp-phase-plate-ink: #166534;
 
   --kp-cook-a: #2f7dd1;
   --kp-cook-b: #e58a1f;
+  /* the one legitimate red on a planning page — outlines and text only */
+  --kp-critical: #c62828;
 
   --kp-voice-bg: #111111;
   --kp-voice-ai: #bdb6f0;
@@ -427,6 +452,16 @@ button { font: inherit; cursor: pointer; }
     --kp-error-text: #f5b5b5;
     --kp-warning-bg: #3a2a10;
     --kp-warning-text: #f2cf8a;
+    --kp-warning-graphic: #d99a2b;
+    --kp-phase-prep: #6ea8ff;
+    --kp-phase-cook: #f5c451;
+    --kp-phase-plate: #62c67e;
+    --kp-phase-prep-ink: #9cc4ff;
+    --kp-phase-cook-ink: #f2cf8a;
+    --kp-phase-plate-ink: #8ed9a2;
+    --kp-board: #2a241d;
+    --kp-board-edge: #3a3128;
+    --kp-board-lip: #40362b;
   }
 }
 
@@ -444,4 +479,14 @@ button { font: inherit; cursor: pointer; }
   --kp-error-text: #f5b5b5;
   --kp-warning-bg: #3a2a10;
   --kp-warning-text: #f2cf8a;
+  --kp-warning-graphic: #d99a2b;
+  --kp-phase-prep: #6ea8ff;
+  --kp-phase-cook: #f5c451;
+  --kp-phase-plate: #62c67e;
+  --kp-phase-prep-ink: #9cc4ff;
+  --kp-phase-cook-ink: #f2cf8a;
+  --kp-phase-plate-ink: #8ed9a2;
+  --kp-board: #2a241d;
+  --kp-board-edge: #3a3128;
+  --kp-board-lip: #40362b;
 }

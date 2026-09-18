@@ -36,6 +36,12 @@ const click = async (text, opts = {}) => {
   await page.waitForTimeout(250);
 };
 
+// The schedule page's mode cards are a radio group, not buttons.
+const pickMode = async (name) => {
+  await page.getByRole("radio", { name: new RegExp(`^${name}`) }).click();
+  await page.waitForTimeout(250);
+};
+
 await page.goto(BASE, { waitUntil: "networkidle" });
 await shot("home");
 
@@ -130,39 +136,38 @@ await shot("voice-binding-bound");
 
 await click(/Continue to scheduling/);
 await page.waitForTimeout(1500);
-await shot("schedule-default-zoom");
+await shot("schedule-no-mode");
 
-// Check the label thresholds at both extremes of the zoom slider.
-const zoom = page.locator(".zoom-slider");
-await zoom.fill("0");
+await pickMode("Co-op");
+await page.waitForTimeout(900);
+await shot("schedule-coop-fit");
+
+// Check the label thresholds at the other two zoom stops.
+const zoom = page.locator(".sch-zoom-slider");
+await zoom.fill("2");
 await page.waitForTimeout(250);
-await shot("schedule-zoomed-out");
+await shot("schedule-coop-zoom-2x");
 
-await zoom.fill("5");
-await page.waitForTimeout(250);
-await shot("schedule-zoomed-in");
-
-await zoom.fill("3");
+await zoom.fill("1");
 await page.waitForTimeout(250);
 
-// Open a task detail card.
-const firstTask = page.locator(".schedule-block-task").first();
+// Open a task detail panel.
+const firstTask = page.locator(".sch-block.is-task").first();
 if (await firstTask.isVisible().catch(() => false)) {
   await firstTask.click();
   await page.waitForTimeout(300);
   await shot("schedule-step-detail");
 }
 
-await click(/Competition/);
+await pickMode("Versus");
 await page.waitForTimeout(600);
-await shot("schedule-competition");
+await shot("schedule-versus");
 
-await click(/Cooperation/);
+await pickMode("Co-op");
 await page.waitForTimeout(600);
-await shot("schedule-cooperation");
 
 // --- live cooking, cooperation ---
-await click(/Start cooking/);
+await click(/Go live/);
 await page.waitForTimeout(1500);
 await shot("live-coop-start");
 
@@ -178,18 +183,18 @@ if (await startBtn.isVisible().catch(() => false)) {
 }
 
 // Drive one step by voice instead of tapping.
-const cmd = page.locator(".voice-command-input");
+const cmd = page.locator(".lc-say-input");
 if (await cmd.isVisible().catch(() => false)) {
   await cmd.fill("start");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Say it" }).click();
   await page.waitForTimeout(700);
   await cmd.fill("done");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Say it" }).click();
   await page.waitForTimeout(1200);
   await shot("live-coop-voice");
 
   await cmd.fill("what's next");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Say it" }).click();
   await page.waitForTimeout(600);
   await shot("live-coop-status");
 }
@@ -202,23 +207,27 @@ await shot("live-coop-after-reload");
 // --- live cooking, competition ---
 await page.goto(`${BASE}/session/schedule`, { waitUntil: "networkidle" });
 await page.waitForTimeout(800);
-await click(/Throw away this cook/);
+await shot("schedule-cook-in-progress");
+await click(/Abandon this cook/);
+await page.waitForTimeout(300);
+await shot("schedule-abandon-confirm");
+await click(/^Abandon$/);
 await page.waitForTimeout(800);
-await click(/Competition/);
+await pickMode("Versus");
 await page.waitForTimeout(400);
-await click(/Start cooking/);
+await click(/Go live/);
 await page.waitForTimeout(1500);
 await shot("live-comp-start");
 
 // Each tile carries one claim button per cook; the first is cook 1.
-const claim = page.locator(".pool-tile.is-claimable .pool-claim-btn").first();
+const claim = page.locator(".lc-tile.is-claimable .lc-claim").first();
 if (await claim.isVisible().catch(() => false)) {
   await claim.click();
   await page.waitForTimeout(800);
   await shot("live-comp-claimed");
   // Same cook tries to grab a second task while still holding one —
   // their button is now disabled, which is the refusal made visible.
-  const second = page.locator(".pool-tile.is-claimable .pool-claim-btn").first();
+  const second = page.locator(".lc-tile.is-claimable .lc-claim").first();
   if (await second.isVisible().catch(() => false)) {
     await second.click({ force: true }).catch(() => {});
     await page.waitForTimeout(700);
@@ -229,12 +238,18 @@ if (await claim.isVisible().catch(() => false)) {
   await shot("live-comp-scored");
 }
 
-await click(/Finish early|Finish cooking/);
+// "Call it early" opens a confirm Modal (no browser dialog any more).
+await click(/Call it early|Dinner's up/);
+await page.waitForTimeout(400);
+if (await page.getByRole("button", { name: /^Call it$/ }).isVisible().catch(() => false)) {
+  await shot("live-call-it-early");
+  await click(/^Call it$/);
+}
 await page.waitForTimeout(1200);
 await shot("live-summary");
 
 // --- summary card ---
-await click(/Save & see the card/);
+await click(/See the cook card/);
 await page.waitForTimeout(1500);
 await shot("summary-empty");
 

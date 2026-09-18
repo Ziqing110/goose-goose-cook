@@ -8,6 +8,9 @@
 // leaves A -> C, which is what "remove this step" almost always means.
 import { useState } from "react";
 import Modal from "./Modal.jsx";
+import { ChoiceChip } from "./BoardPanel.jsx";
+import { cyclicDependencyIds } from "../utils/graphLayout.js";
+import "./BoardPanel.css";
 import "./DeleteStepDialog.css";
 
 export default function DeleteStepDialog({ node, dependents, allNodes, onCancel, onConfirm }) {
@@ -27,18 +30,31 @@ export default function DeleteStepDialog({ node, dependents, allNodes, onCancel,
   const labelOf = (id) => allNodes.find((n) => n.id === id)?.label || id;
   // What a dependent may attach to: anything except the step being
   // removed, itself, or anything that already waits on it.
-  const optionsFor = (dep) => allNodes.filter((n) => n.id !== node.id && n.id !== dep.id);
+  const optionsFor = (dep) => {
+    const blocked = cyclicDependencyIds(allNodes, dep.id);
+    return allNodes.filter((candidate) => candidate.id !== node.id && !blocked.has(candidate.id));
+  };
 
   const confirm = () => {
     if (mode === "inherit") onConfirm(Object.fromEntries(dependents.map((d) => [d.id, inheritFor(d)])));
     else if (mode === "drop") onConfirm(Object.fromEntries(dependents.map((d) => [d.id, withoutRemoved(d)])));
-    else onConfirm(picks);
+    else {
+      const safePicks = Object.fromEntries(
+        dependents.map((dep) => {
+          const allowed = new Set(optionsFor(dep).map((candidate) => candidate.id));
+          return [dep.id, (picks[dep.id] || []).filter((id) => allowed.has(id))];
+        })
+      );
+      onConfirm(safePicks);
+    }
   };
 
   return (
-    <Modal label="Remove step" onClose={onCancel} panelClassName="delete-step-panel">
-      <span className="mini-title">Remove &ldquo;{node.label}&rdquo;</span>
-      <p className="hint">
+    // Portaled to <body>, outside the app shell — the layer classes bring
+    // the v4 tokens and control styles along.
+    <Modal label="Remove step" onClose={onCancel} panelClassName="delete-step-panel ds-v4 ds-v4-layer">
+      <span className="delete-step-title">Remove &ldquo;{node.label}&rdquo;</span>
+      <p className="delete-step-copy">
         {dependents.length} step{dependents.length === 1 ? "" : "s"} wait{dependents.length === 1 ? "s" : ""} on this
         one. Tell me where {dependents.length === 1 ? "it" : "they"} should go instead, or the plan changes shape
         without anyone deciding to.
@@ -55,7 +71,7 @@ export default function DeleteStepDialog({ node, dependents, allNodes, onCancel,
           <input type="radio" name="reattach" checked={mode === "inherit"} onChange={() => setMode("inherit")} />
           <span>
             <strong>Move them to what this step was waiting on</strong>
-            <span className="hint">
+            <span className="delete-step-mode-hint">
               {inherited.length
                 ? `they'll wait on ${inherited.map(labelOf).join(", ")} instead, keeping everything else`
                 : "it waits on nothing, so they just lose this link"}
@@ -67,7 +83,7 @@ export default function DeleteStepDialog({ node, dependents, allNodes, onCancel,
           <input type="radio" name="reattach" checked={mode === "choose"} onChange={() => setMode("choose")} />
           <span>
             <strong>Choose for each</strong>
-            <span className="hint">Pick what each one should wait on.</span>
+            <span className="delete-step-mode-hint">Pick what each one should wait on.</span>
           </span>
         </label>
 
@@ -75,7 +91,7 @@ export default function DeleteStepDialog({ node, dependents, allNodes, onCancel,
           <input type="radio" name="reattach" checked={mode === "drop"} onChange={() => setMode("drop")} />
           <span>
             <strong>Just drop the link</strong>
-            <span className="hint">
+            <span className="delete-step-mode-hint">
               They keep every other step they wait on, and simply stop waiting on this one.
             </span>
           </span>
@@ -86,25 +102,25 @@ export default function DeleteStepDialog({ node, dependents, allNodes, onCancel,
         <div className="delete-step-picker">
           {dependents.map((dep) => (
             <div className="delete-step-pick" key={dep.id}>
-              <span className="mini-title">{dep.label} runs after</span>
-              <div className="checkbox-grid">
-                {optionsFor(dep).map((o) => (
-                  <label className="checkbox-pill" key={o.id}>
-                    <input
-                      type="checkbox"
-                      checked={(picks[dep.id] || []).includes(o.id)}
-                      onChange={(e) =>
+              <span className="panel-field-label">{dep.label} runs after</span>
+              <div className="panel-chips">
+                {optionsFor(dep).map((o) => {
+                  const on = (picks[dep.id] || []).includes(o.id);
+                  return (
+                    <ChoiceChip
+                      key={o.id}
+                      on={on}
+                      onToggle={() =>
                         setPicks((cur) => ({
                           ...cur,
-                          [dep.id]: e.target.checked
-                            ? [...(cur[dep.id] || []), o.id]
-                            : (cur[dep.id] || []).filter((x) => x !== o.id),
+                          [dep.id]: on ? (cur[dep.id] || []).filter((x) => x !== o.id) : [...(cur[dep.id] || []), o.id],
                         }))
                       }
-                    />
-                    <span>{o.label}</span>
-                  </label>
-                ))}
+                    >
+                      {o.label}
+                    </ChoiceChip>
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -115,7 +131,7 @@ export default function DeleteStepDialog({ node, dependents, allNodes, onCancel,
         <button type="button" className="btn btn-ghost" onClick={onCancel}>
           Keep it
         </button>
-        <button type="button" className="btn btn-primary btn-danger-solid" onClick={confirm}>
+        <button type="button" className="btn delete-step-confirm" onClick={confirm}>
           Remove the step
         </button>
       </div>

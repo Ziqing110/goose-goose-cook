@@ -1,18 +1,23 @@
 /* The draggable recipe board. Cards sit absolutely inside .board; the
-   SVG edge layer sits under them so a card always wins the click. */
+   SVG edge layer sits under them so a card always wins the click. The
+   butcher-block ground belongs to the container the page puts this in;
+   the scroller itself is transparent (the old dot grid fought the wood). */
 
 .board-scroll {
+  position: relative;
   overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background:
-    radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0) 0 0 / 24px 24px;
-  max-height: 680px;
+  border-radius: 8px;
+  height: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: var(--board-edge) transparent;
 }
 
+.board-zoom { position: relative; }
+/* The board lays out at its natural size and is scaled to fit; the
+   wrapper above carries the scaled size so scrollbars stay honest. */
 .board {
   position: relative;
-  min-width: 100%;
+  transform-origin: 0 0;
   cursor: grab;
   touch-action: none; /* the background pans by pointer, not native scroll */
 }
@@ -26,84 +31,106 @@
   inset: 0;
   pointer-events: none;
 }
+/* ink-faint vanishes into the wood; this grey at .55 is the lightest
+   that still reads. Touching the selection: accent, heavier. */
 .board-edge {
   fill: none;
-  stroke: var(--ink-faint);
+  stroke: var(--board-line);
   stroke-width: 1.5;
-  transition: opacity 120ms ease;
+  opacity: 0.55;
 }
-.board-edge.is-active { stroke: var(--accent); stroke-width: 2.25; }
-/* With something selected, everything else recedes rather than vanishes. */
-.board-edge.is-dimmed { opacity: 0.25; }
-.board-arrow-head { fill: var(--ink-faint); }
+.board-edge.is-active { stroke: var(--accent); stroke-width: 2.25; opacity: 1; }
+.board-arrow-head { fill: var(--board-line); }
 .board-arrow-head.is-active { fill: var(--accent); }
 
 .board-card {
   position: absolute;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   align-items: flex-start;
   justify-content: center;
   text-align: left;
-  padding: 10px 12px 10px 16px;
+  padding: 8px 10px 8px 12px;
   overflow: hidden; /* the box is fixed; text clamps rather than growing it */
   border: 1px solid var(--line-strong);
   border-radius: 10px;
-  background: var(--paper);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
   cursor: grab;
   touch-action: none; /* let pointermove drive the drag, not the scroller */
-  transition: box-shadow 120ms ease, border-color 120ms ease;
+  transition: box-shadow 120ms ease-out, border-color 120ms ease-out, background 120ms ease-out;
 }
-.board-card:hover { border-color: var(--ink); }
+.board-card:hover { border-color: var(--ink-soft); }
 .board-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.board-card.is-selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
-.board-card.is-blocked { border-style: dashed; opacity: 0.6; }
-.board-card.is-dimmed { opacity: 0.4; }
 
-/* Which part of the cook a step belongs to, in the same colours the
-   rest of the app uses for prep / cook / plate. */
+/* Status: border and ink. At risk vs blocked also differ without hue —
+   solid border on cream vs dashed border on pink. */
+.board-card.is-atRisk { background: var(--warning-soft); border-color: var(--warning-graphic); }
+.board-card.is-atRisk .board-card-meta { color: var(--warning-soft-ink); }
+.board-card.is-blocked { background: var(--crit-soft); border: 1px dashed var(--crit); }
+.board-card.is-blocked .board-card-label,
+.board-card.is-blocked .board-card-meta { color: var(--crit); }
+
+/* Away from the selection: the fill flattens toward the board, ink
+   stays at full strength. Blocked cards never get this class. */
+.board-card.is-dimmed { background: var(--board-card-dim); }
+.board-card.is-dimmed.is-craftable { border-color: var(--board-card-dim-edge); }
+.board-card.is-dimmed .board-card-label { color: var(--ink-soft); }
+
+/* Selected keeps its status fill. */
+.board-card.is-selected,
+.board-card.is-selected:hover { border-color: var(--accent); border-style: solid; box-shadow: 0 0 0 2px var(--accent-soft); }
+
+/* Which part of the cook a step belongs to. */
 .board-card::before {
   content: "";
   position: absolute;
   left: 0;
   top: 0;
   bottom: 0;
-  width: 4px;
+  width: 3px;
   border-radius: 10px 0 0 10px;
   background: var(--board-phase, var(--line-strong));
 }
-.board-card.phase-prep { --board-phase: var(--kp-phase-prep, #8a8985); }
-.board-card.phase-cook { --board-phase: var(--kp-phase-cook, #d4552a); }
-.board-card.phase-plate { --board-phase: var(--kp-phase-plate, #5f9a2a); }
+.board-card.phase-prep { --board-phase: var(--phase-prep); }
+.board-card.phase-cook { --board-phase: var(--phase-cook); }
+.board-card.phase-plate { --board-phase: var(--phase-plate); }
 .board-card.is-dragging {
   cursor: grabbing;
   z-index: 2;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.14);
+  box-shadow: var(--shadow-modal);
 }
 
-/* Two lines of title, one of meta — a fixed box is what lets the layout
-   promise no overlap and lets edges route around known rectangles. The
-   full label is in the card's title attribute. */
+.board-card-num {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 13px;
+  color: var(--line-strong);
+}
+
+/* The label is never truncated: the card was sized around it (see
+   cardSize in utils/boardLayout.js), which is also what lets the layout
+   promise no overlap and lets edges route around known rectangles. */
 .board-card-label {
-  font-size: 14px;
+  padding-right: 16px;
+  font-size: 13px;
   font-weight: 600;
-  line-height: 1.25;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  line-height: 17px;
   width: 100%;
+  overflow-wrap: anywhere;
 }
 .board-card-meta {
-  font-size: 12px;
-  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--ink-soft);
   width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .board-card { transition: none; }
 }

@@ -1,8 +1,9 @@
-// The draft-vs-approved diff, shown once a run's main line is locked in.
-// Moved out of RecipeGraphPage when approval followed the step list onto
-// the Inventory page.
+// The draft-vs-approved diff, shown once a run's recipe graph is locked
+// in. Moved out of RecipeGraphPage when approval followed the step list
+// onto the Inventory page.
 import { useNavigate } from "react-router-dom";
 import { diffGraphs } from "../utils/graphLayout.js";
+import Icon from "./Icon.jsx";
 import "./ApprovedPanel.css";
 
 export default function ApprovedPanel({ draft, approved, onRevise }) {
@@ -11,25 +12,29 @@ export default function ApprovedPanel({ draft, approved, onRevise }) {
   const hasChanges = diff.added.length || diff.removed.length || diff.edited.length;
 
   return (
-    <div className="card approved-panel">
-      <span className="mini-title">Approved &check;</span>
-
-      <div className="diff-block">
-        <DiffSection title="Added" items={diff.added} tone="success" />
-        <DiffSection title="Removed" items={diff.removed} tone="danger" />
-        <DiffSection title="Edited" items={diff.edited} tone="warning" />
-        {!hasChanges && <p className="hint">No changes — approved exactly as drafted.</p>}
+    <section className="approved-panel" aria-labelledby="approved-title">
+      <div className="approved-main">
+        <span id="approved-title" className="approved-title">
+          <Icon glyph="checkmark-burst" size={20} />
+          Approved
+        </span>
+        <div className="diff-block">
+          <DiffSection title="Added" items={diff.added} tone="success" />
+          <DiffSection title="Removed" items={diff.removed} tone="danger" />
+          <DiffSection title="Edited" items={diff.edited} tone="warning" />
+          {!hasChanges && <p className="diff-none">No changes &mdash; approved exactly as drafted.</p>}
+        </div>
       </div>
 
-      <div className="approve-row approve-row-split">
-        <button className="btn btn-ghost" onClick={onRevise}>
+      <div className="approved-actions">
+        <button type="button" className="btn btn-ghost" onClick={onRevise}>
           &larr; Revise
         </button>
-        <button className="btn btn-primary" onClick={() => navigate("/session/voice-binding")}>
+        <button type="button" className="btn btn-primary" onClick={() => navigate("/session/voice-binding")}>
           Continue to schedule &rarr;
         </button>
       </div>
-    </div>
+    </section>
   );
 }
 

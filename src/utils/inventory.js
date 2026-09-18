@@ -27,6 +27,14 @@ export function formatStepDuration(sec) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
+/** "4 min" (or "45 s" under a minute) — the glanceable format on board cards and the impact list. */
+export function formatMinutes(sec) {
+  const s = Math.max(0, Math.round(sec || 0));
+  if (s < 60) return `${s} s`;
+  const m = Math.round((s / 60) * 10) / 10;
+  return `${m} min`;
+}
+
 const pad2 = (n) => String(n).padStart(2, "0");
 
 /**

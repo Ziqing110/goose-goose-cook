@@ -30,6 +30,10 @@
   gap: 12px 24px;
   padding-top: 20px;
 }
+/* Live cook: one line of chrome instead of the whole path. */
+.stage-progress.is-compact { align-items: center; padding-top: 8px; }
+.stage-compact-label { font-size: 13px; color: var(--ink-soft); }
+.stage-progress.is-compact .session-exit-btn { min-height: 36px; padding: 0 12px; font-size: 14px; }
 
 .stage-path {
   display: flex;

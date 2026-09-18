@@ -12,18 +12,21 @@ export const CONVERSATION_QUESTION_COUNT = ELICITATION_QUESTIONS.length;
 export const SESSION_STEPS = [
   { key: "kitchen-setup", label: "Kitchen", path: "/session/kitchen-setup", isDone: (s) => Boolean(s.kitchenProfileId) },
   { key: "conversation", label: "Conversation", path: "/session/conversation", isDone: (s) => Boolean(s.conversation?.complete) },
-  // Inventory and the main line are one page: the ingredients and the
-  // step board live together, and you leave by approving. Approval is
+  // Inventory and the recipe graph are one page: the ingredients and
+  // the step board live together, and you leave by approving. Labelled
+  // with the agent's own word for it ("I'll draft your recipe graph"). Approval is
   // the completion signal — strictly stronger than the "did they look
   // at it" flag this stage used when they were two pages.
   {
     key: "inventory",
-    label: "Main line",
+    label: "Recipe graph",
     path: "/session/inventory",
     isDone: (s) => (s.recipes || []).length > 0 && isFullyApproved(s.recipes, s.sharedSteps || []),
   },
   { key: "voice-binding", label: "Cooks", path: "/session/voice-binding", isDone: (s) => areCooksBound(s.cooks || []) },
-  { key: "schedule", label: "Schedule", path: "/session/schedule", isDone: (s) => Boolean(s.mode) },
+  // Picking a mode isn't leaving the schedule — only "Go live" is, which
+  // is when the run gets created.
+  { key: "schedule", label: "Schedule", path: "/session/schedule", isDone: (s) => Boolean(s.run) },
   { key: "live-cook", label: "Live cook", path: "/session/live-cook", isDone: (s) => Boolean(s.run?.endedAt) },
 ];
 

@@ -1,11 +1,39 @@
-/* Moved from RecipeGraphPage.css with the panel itself. */
-.approve-row { margin-top: 4px; display: flex; }
-.approve-row-split { justify-content: space-between; }
-.approved-panel { display: flex; flex-direction: column; gap: 14px; }
-.diff-block { display: flex; flex-direction: column; gap: 12px; }
+/* Approved — design system v4. A sunken card like the HUD, with the
+   draft-vs-approved diff and the way on (or back). */
+.approved-panel {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  padding: 20px 24px;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-card);
+  animation: ds-reveal 240ms ease-out both;
+}
+.approved-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.approved-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 700;
+  color: var(--success);
+}
+.approved-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+
+.diff-block { display: flex; flex-wrap: wrap; gap: 12px 32px; }
 .diff-group { display: flex; flex-direction: column; gap: 4px; }
-.diff-group-title { font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.diff-group-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 .diff-success { color: var(--success); }
 .diff-danger { color: var(--crit); }
-.diff-warning { color: var(--warning); }
-.diff-list { margin: 0; padding-left: 18px; font-size: 0.85rem; color: var(--ink-soft); }
+.diff-warning { color: var(--warning-soft-ink); }
+.diff-list { margin: 0; padding-left: 18px; font-size: 14px; line-height: 20px; color: var(--ink-soft); }
+.diff-none { margin: 0; font-size: 14px; line-height: 20px; color: var(--ink-soft); }

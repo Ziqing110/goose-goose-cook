@@ -64,8 +64,10 @@ const TOGGLE_OFF = (thing, a) => [
   new RegExp(`\\bwithout (?:${a} |the )?${thing}\\b`),
 ];
 
-// Add/edit a kitchen profile from Home. `profile` is null for "add",
-// or an existing profile object for "edit" (adds a Delete action).
+// Add/edit a kitchen profile. `profile` is null for "add", or an
+// existing profile object for "edit" — which adds a Delete action when
+// `onDelete` is given (Home passes it; a mid-session edit doesn't, since
+// deleting the kitchen the run is planned on isn't a fix for anything).
 export default function KitchenProfileFormModal({ profile, notice, error, onSave, onDelete, onClose }) {
   const { dispatch } = useAppState();
   const [draft, setDraft] = useState(profile ? { ...profile } : emptyKitchenProfileDraft());
@@ -201,7 +203,7 @@ export default function KitchenProfileFormModal({ profile, notice, error, onSave
         <KitchenProfileForm value={draft} onChange={handleChange} nameError={nameError} />
 
         <div className="kitchen-profile-modal-actions">
-          {isEdit ? (
+          {isEdit && onDelete ? (
             <button type="button" className="btn btn-ghost btn-danger" onClick={onDelete}>
               Delete kitchen
             </button>
