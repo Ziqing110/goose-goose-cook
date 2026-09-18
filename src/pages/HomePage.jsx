@@ -256,8 +256,11 @@ export default function HomePage() {
     if (heroState === "resumable") {
       const stages = runStages(session);
       const current = stages.find((s) => s.state === "current");
+      // Kitchen picking isn't a stage anymore (see sessionSteps.js), but
+      // a session can still lose its kitchen profile mid-run if it gets
+      // deleted — check that directly rather than through the stage list.
       const sub =
-        current?.id === "kitchen-setup"
+        !session.kitchenProfileId
           ? "Pick a kitchen and I'll pick it up from there."
           : current?.id === "conversation"
             ? `You're ${current.count} into the conversation; I'll pick it up from there.`
