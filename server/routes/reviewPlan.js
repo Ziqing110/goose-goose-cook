@@ -39,9 +39,12 @@ const MAX_FIXES = 8;
 // equipment vocabulary — is either load-bearing for the graph or already
 // enforced, and letting a review rewrite it turns a correction into a
 // second generation with no validation behind it.
+// unattended's own breakdown (initial/checkpoints/ending) is not
+// patchable here — it is generation's own pass-3 output, reviewed by
+// re-running that pass if the plan changes shape, not by a single
+// field-level correction from a reviewer that never saw the breakdown.
 const PATCHABLE = new Set([
   "tending",
-  "check_every_sec",
   "difficulty",
   "estimated_duration_sec",
   "label",
@@ -58,6 +61,40 @@ const MAX_STEP_SEC = 4 * 60 * 60;
 const TENDING = ["hands_on", "tended", "timed", "set_and_forget"];
 const DIFFICULTIES = ["low", "medium", "high"];
 const PHASES = ["prep", "cook", "plate"];
+const MIN_CHECK_GAP_SEC = 120;
+
+/**
+ * A deterministic stand-in for the decomposition pass, used only for
+ * shapes this review invents on the spot: a step whose tending it just
+ * changed, or a brand-new step it is adding. Neither case has been
+ * through pass 3, and there is no sane way to ask the reviewer for a
+ * count-and-cadence breakdown through a single string field.
+ * Intentionally the same math as recipes.js's own fallback heuristic,
+ * duplicated rather than imported — see the note at the top of this
+ * file about the one-way dependency between the two.
+ */
+function synthesizeUnattended(node) {
+  if (!node.tending || node.tending === "hands_on") return null;
+  const total = Math.max(1, Math.round(Number(node.estimated_duration_sec)) || 60);
+  const edge = Math.min(120, Math.max(20, Math.round(total * 0.08)));
+  const initial = { duration_sec: edge, difficulty: node.difficulty || "low" };
+  const ending = node.tending === "set_and_forget" ? null : { duration_sec: edge, difficulty: node.difficulty || "low" };
+
+  let checkpoints = null;
+  if (node.tending === "tended") {
+    const remaining = Math.max(1, total - initial.duration_sec - (ending?.duration_sec || 0));
+    const targetInterval = Math.max(MIN_CHECK_GAP_SEC, Math.round(total / 8));
+    const count = Math.max(1, Math.round(remaining / targetInterval));
+    checkpoints = {
+      count,
+      interval_sec: Math.max(1, Math.round(remaining / count)),
+      duration_sec: Math.min(30, Math.max(5, Math.round(total * 0.01))),
+      difficulty: "low",
+    };
+  }
+
+  return { initial, checkpoints, ending };
+}
 
 /**
  * Built per call rather than at module load, because the equipment
@@ -80,7 +117,7 @@ export const buildReviewSchema = (equipment) => ({
               enum: ["set_field", "add_step", "add_dependency"],
             },
             step_id: { type: "string", description: "The step being corrected, or the step a new one must come before. Empty for none." },
-            field: { type: "string", description: "For set_field: tending, check_every_sec, difficulty, estimated_duration_sec, label, description or phase. Empty otherwise." },
+            field: { type: "string", description: "For set_field: tending, difficulty, estimated_duration_sec, label, description or phase. Empty otherwise." },
             value: { type: "string", description: "For set_field: the new value as a string; numbers as digits. Empty otherwise." },
             depends_on_id: { type: "string", description: "For add_dependency: the step that must finish first. Empty otherwise." },
             new_step: {
@@ -94,13 +131,26 @@ export const buildReviewSchema = (equipment) => ({
                 difficulty: { type: "string", enum: DIFFICULTIES },
                 phase: { type: "string", enum: PHASES },
                 tending: { type: "string", enum: TENDING },
-                check_every_sec: { type: "integer" },
+                // Same fields pass 3 fills in during generation, for the
+                // same reason: a new step this reviewer adds still has to
+                // satisfy validate()'s rule that anything not hands_on
+                // carries an initial/checkpoints/ending breakdown. 0 where
+                // a field does not apply, same convention as pass 3.
+                initial_duration_sec: { type: "integer", description: "0 when tending is hands_on." },
+                initial_difficulty: { type: "string", enum: DIFFICULTIES },
+                checkpoint_count: { type: "integer", description: "0 unless tending is tended." },
+                checkpoint_duration_sec: { type: "integer" },
+                checkpoint_difficulty: { type: "string", enum: DIFFICULTIES },
+                ending_duration_sec: { type: "integer", description: "0 when tending is hands_on or set_and_forget." },
+                ending_difficulty: { type: "string", enum: DIFFICULTIES },
                 required_equipment: { type: "array", items: { type: "string", enum: equipment } },
                 depends_on: { type: "array", items: { type: "string" } },
               },
               required: [
-                "id", "label", "description", "estimated_duration_sec", "difficulty",
-                "phase", "tending", "check_every_sec", "required_equipment", "depends_on",
+                "id", "label", "description", "estimated_duration_sec", "difficulty", "phase", "tending",
+                "initial_duration_sec", "initial_difficulty", "checkpoint_count", "checkpoint_duration_sec",
+                "checkpoint_difficulty", "ending_duration_sec", "ending_difficulty",
+                "required_equipment", "depends_on",
               ],
               additionalProperties: false,
             },
@@ -157,7 +207,7 @@ function compactPlan(plan) {
         .map(
           (n) =>
             `    ${n.id} | ${n.label} | ${Math.round(n.estimated_duration_sec / 60)}min | ${n.difficulty} | ${n.phase} | ${n.tending}${
-              n.check_every_sec ? ` every ${Math.round(n.check_every_sec / 60)}min` : ""
+              n.unattended?.checkpoints ? ` every ${Math.round(n.unattended.checkpoints.interval_sec / 60)}min` : ""
             } | after: ${(n.depends_on || []).join(",") || "-"}\n      ${n.description}`,
         )
         .join("\n");
@@ -237,25 +287,27 @@ export function applyFixes(plan, fixes, validate) {
       if (fix.field === "tending" && !TENDING.includes(raw)) { note(fix, "bad tending"); continue; }
       if (fix.field === "difficulty" && !DIFFICULTIES.includes(raw)) { note(fix, "bad difficulty"); continue; }
       if (fix.field === "phase" && !PHASES.includes(raw)) { note(fix, "bad phase"); continue; }
-      if (fix.field === "check_every_sec" || fix.field === "estimated_duration_sec") {
+      if (fix.field === "estimated_duration_sec") {
         const n = Number(raw);
         if (!Number.isFinite(n) || n < 0) { note(fix, "not a number"); continue; }
         // Nothing in a kitchen takes three seconds or eight hours. A
         // reviewer that says so has miscounted a unit, and letting it
         // through would quietly wreck the schedule the plan is built on.
-        if (fix.field === "estimated_duration_sec" && (n < MIN_STEP_SEC || n > MAX_STEP_SEC)) {
+        if (n < MIN_STEP_SEC || n > MAX_STEP_SEC) {
           note(fix, `${n}s is not a plausible step length`);
-          continue;
-        }
-        // check_every_sec means nothing on a step nobody is leaving.
-        if (fix.field === "check_every_sec" && hit.node.tending !== "tended") {
-          note(fix, `check_every_sec on a ${hit.node.tending} step`);
           continue;
         }
         hit.node[fix.field] = Math.round(n);
       } else {
         if (!String(raw).trim()) { note(fix, "empty value"); continue; }
         hit.node[fix.field] = String(raw);
+        // Changing tending invalidates whatever breakdown the step had —
+        // hands_on carries none, and anything else needs one shaped for
+        // its NEW kind (a set_and_forget step has no ending moment; a
+        // tended one needs checkpoints a timed step never had).
+        if (fix.field === "tending") {
+          hit.node.unattended = synthesizeUnattended(hit.node);
+        }
       }
       applied.push(`${fix.step_id}.${fix.field} = ${raw} (${fix.why})`);
       continue;
@@ -282,8 +334,12 @@ export function applyFixes(plan, fixes, validate) {
       // the chill goes between the poach and the chop.
       const known = new Set(anchor.recipe.nodes.map((n) => n.id));
       const deps = (step.depends_on || []).filter((d) => known.has(d));
+      const {
+        initial_duration_sec, initial_difficulty, checkpoint_count, checkpoint_duration_sec,
+        checkpoint_difficulty, ending_duration_sec, ending_difficulty, ...ownFields
+      } = step;
       const node = {
-        ...step,
+        ...ownFields,
         depends_on: deps,
         required_materials: [],
         material_usage: [],
@@ -291,6 +347,34 @@ export function applyFixes(plan, fixes, validate) {
         is_shareable: false,
         share_key: "",
       };
+      // Trust the reviewer's own breakdown when it gave one that fits
+      // its own tending kind; a step with a count but the wrong kind, or
+      // no usable numbers at all, gets the same deterministic fallback a
+      // tending change gets.
+      if (node.tending && node.tending !== "hands_on") {
+        const hasReal = Number(initial_duration_sec) > 0;
+        node.unattended = hasReal
+          ? {
+              initial: { duration_sec: Math.round(initial_duration_sec), difficulty: DIFFICULTIES.includes(initial_difficulty) ? initial_difficulty : node.difficulty },
+              checkpoints:
+                node.tending === "tended" && Number(checkpoint_count) > 0
+                  ? {
+                      count: Math.round(checkpoint_count),
+                      interval_sec: Math.max(
+                        1,
+                        Math.round((node.estimated_duration_sec - initial_duration_sec - (Number(ending_duration_sec) || 0)) / Math.round(checkpoint_count)),
+                      ),
+                      duration_sec: Math.max(1, Math.round(checkpoint_duration_sec) || 1),
+                      difficulty: DIFFICULTIES.includes(checkpoint_difficulty) ? checkpoint_difficulty : "low",
+                    }
+                  : null,
+              ending:
+                node.tending !== "set_and_forget" && Number(ending_duration_sec) > 0
+                  ? { duration_sec: Math.round(ending_duration_sec), difficulty: DIFFICULTIES.includes(ending_difficulty) ? ending_difficulty : node.difficulty }
+                  : null,
+            }
+          : synthesizeUnattended(node);
+      }
       anchor.recipe.nodes.push(node);
       anchor.node.depends_on = [...new Set([...(anchor.node.depends_on || []), node.id])];
       stepsById.set(node.id, { node, recipe: anchor.recipe });

@@ -470,6 +470,44 @@ export function scheduleSteps(nodes, cooks, kitchenProfile, { nodeBudget, timeBu
 }
 
 /**
+ * The hands-on moments inside ONE step, placed in absolute schedule time.
+ *
+ * `startSec` is that step's own scheduled start (`step.startSec` from
+ * `scheduleSteps`). Returns `[]` for a hands_on step — its whole span
+ * already IS the hands-on moment, so there is nothing further to place —
+ * and for a step that was never decomposed.
+ *
+ * Checkpoint N is placed `interval_sec` after the previous one, counting
+ * from the moment `initial` ends. That is the exact assumption
+ * `attachUnattended` (server/routes/recipes.js) used to DERIVE
+ * `interval_sec` from the step's own duration in the first place, so the
+ * schedule page and the generator can never disagree about where a tick
+ * falls.
+ */
+export function unattendedEvents(node, startSec) {
+  const u = node?.unattended;
+  if (!u) return [];
+  const events = [
+    { kind: "initial", index: 0, atSec: startSec, endSec: startSec + u.initial.duration_sec, difficulty: u.initial.difficulty },
+  ];
+
+  if (u.checkpoints) {
+    const { count, interval_sec, duration_sec, difficulty } = u.checkpoints;
+    for (let i = 0; i < count; i++) {
+      const atSec = startSec + u.initial.duration_sec + i * interval_sec;
+      events.push({ kind: "checkpoint", index: i, atSec, endSec: atSec + duration_sec, difficulty });
+    }
+  }
+
+  if (u.ending) {
+    const endSec = startSec + node.estimated_duration_sec;
+    events.push({ kind: "ending", index: 0, atSec: endSec - u.ending.duration_sec, endSec, difficulty: u.ending.difficulty });
+  }
+
+  return events;
+}
+
+/**
  * Which physical burner / pot / board each step uses.
  *
  * The scheduler enforces equipment as a COUNT — two burners means at

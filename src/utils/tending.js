@@ -63,11 +63,14 @@ export function tendingOf(node) {
   // between checks is too short to go and do something else in, the
   // label is simply wrong and is corrected here.
   if (declared === TENDING.TENDED) {
-    const every = Number(node?.check_every_sec);
+    const every = Number(node?.unattended?.checkpoints?.interval_sec);
     if (Number.isFinite(every) && every > 0 && every < LEAVABLE_GAP_SEC) return TENDING.HANDS_ON;
   }
   return declared;
 }
+
+/** The initial/checkpoints/ending breakdown, or null on a hands_on step (or one never decomposed). */
+export const unattendedOf = (node) => node?.unattended || null;
 
 /** Does this step occupy a cook for its whole duration? */
 export const isAttended = (node) => tendingOf(node) === TENDING.HANDS_ON;
@@ -114,16 +117,15 @@ const TIERS = ["low", "medium", "high"];
 /**
  * How many times somebody has to go and look at this step.
  *
- * From check_every_sec against the duration. When the model says
- * nothing, two is assumed — enough to count as tending, not enough to
- * pretend it is constant work.
+ * From the decomposition pass's own checkpoint count. When a step is
+ * tended but was never decomposed (a legacy run, or a seeded template
+ * that never went through generation), two is assumed — enough to count
+ * as tending, not enough to pretend it is constant work.
  */
 export function checkCount(node) {
   if (tendingOf(node) !== TENDING.TENDED) return 0;
-  const every = Number(node?.check_every_sec);
-  const duration = Number(node?.estimated_duration_sec) || 0;
-  if (!Number.isFinite(every) || every <= 0 || !duration) return 2;
-  return Math.max(1, Math.round(duration / every));
+  const count = Number(node?.unattended?.checkpoints?.count);
+  return Number.isFinite(count) && count > 0 ? Math.round(count) : 2;
 }
 
 /**

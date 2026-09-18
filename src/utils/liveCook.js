@@ -288,28 +288,79 @@ function nodeLookup(nodes) {
 }
 
 /**
- * The step this cook is actually DOING — attended work only.
+ * Which hands-on moment of an unattended step is happening RIGHT NOW,
+ * derived purely from elapsed time — nothing about this is stored,
+ * same as every other derivation in this file (see the header comment).
+ * A missed checkpoint simply passes; there is no separate "acknowledged"
+ * state to track, the same way a set-and-forget step has none.
+ *
+ * Returns one of "initial" | "checkpoint" | "waiting" | "ending" | "idle".
+ * "idle" covers both a hands_on step (nothing to derive — the whole
+ * active span already IS its hands-on moment) and a step that hasn't
+ * started or was never decomposed.
+ */
+export function unattendedPhaseNow(node, record, now = Date.now()) {
+  const u = node?.unattended;
+  if (!u || record?.status !== "active" || !record.startedAt) return { phase: "idle", index: null };
+
+  const elapsed = Math.round((now - Date.parse(record.startedAt)) / 1000) - (record.pausedSec || 0);
+
+  if (elapsed < u.initial.duration_sec) return { phase: "initial", index: 0 };
+
+  if (u.checkpoints) {
+    const { count, interval_sec, duration_sec } = u.checkpoints;
+    const sinceInitial = elapsed - u.initial.duration_sec;
+    const index = Math.floor(sinceInitial / interval_sec);
+    if (index < count && sinceInitial - index * interval_sec < duration_sec) {
+      return { phase: "checkpoint", index };
+    }
+  }
+
+  // The ending window stays open once reached — same "still due" logic as
+  // the whole-step deadline elsewhere in this file — rather than closing
+  // after ending.duration_sec and leaving a late finish with no phase at
+  // all to report.
+  if (u.ending && elapsed >= node.estimated_duration_sec - u.ending.duration_sec) {
+    return { phase: "ending", index: 0 };
+  }
+
+  return { phase: "waiting", index: null };
+}
+
+/** Does this phase put a cook's hands on the step right now? */
+const OCCUPYING_PHASES = new Set(["initial", "checkpoint", "ending"]);
+
+/**
+ * The step this cook is actually DOING — occupying them right now.
  *
  * A 40-minute congee simmer is "active" in the run log and occupies
- * nobody: the pot does the work. Counting it here would lock whoever
- * started it out of the kitchen for 40 minutes, and in competition mode
- * that makes taking the congee a self-inflicted penalty — exactly the
- * step you most want someone to start early.
+ * nobody for most of that span: the pot does the work. Counting the
+ * whole thing here would lock whoever started it out of the kitchen for
+ * 40 minutes, and in competition mode that makes taking the congee a
+ * self-inflicted penalty — exactly the step you most want someone to
+ * start early. But the moments IN that span where a cook actually has
+ * hands on it — putting it on, a checkpoint stir, taking it off — do
+ * occupy them, same as any hands_on step, for exactly as long as that
+ * moment lasts.
  *
  * The nodes argument is optional so old callers still work; without it
- * every active step counts, which is the pre-existing behaviour.
+ * every active step counts, which is the pre-existing behaviour. `now`
+ * defaults to the real clock; pass the caller's own ticked `now` when
+ * rendering, so a phase check agrees with everything else drawn that tick.
  */
-export function activeStepFor(cookId, run, nodes) {
+export function activeStepFor(cookId, run, nodes, now = Date.now()) {
   const lookup = nodeLookup(nodes);
-  const attended = (stepId) => {
+  const occupies = (stepId, record) => {
     if (!lookup) return true;
     const node = lookup(stepId);
     // Unmarked means attended. A step nobody classified is assumed to
     // need a cook, which is the safe way to be wrong.
-    return node ? isAttended(node) : true;
+    if (!node) return true;
+    if (isAttended(node)) return true;
+    return OCCUPYING_PHASES.has(unattendedPhaseNow(node, record, now).phase);
   };
   const hit = Object.entries(run.steps).find(
-    ([id, r]) => r.status === "active" && r.cookId === cookId && attended(id),
+    ([id, r]) => r.status === "active" && r.cookId === cookId && occupies(id, r),
   );
   return hit ? hit[0] : null;
 }
@@ -561,7 +612,7 @@ export function resolveAssignments({ nodes, run, cooks, now = Date.now() }) {
   // failure the comment on the fill branch below warns about.
   const queues = new Map();
   cooks.forEach((cook) => {
-    const active = activeStepFor(cook.id, run, nodes);
+    const active = activeStepFor(cook.id, run, nodes, now);
     if (active) {
       byCook[cook.id] = { stepId: active, reason: "active", waitingOnStepId: null, waitingOnCookId: null, etaSec: null };
       return;
@@ -688,10 +739,13 @@ export function arbitrateClaim({ run, nodes, cooks, stepId, cookId, at, kitchenP
   if (!record) return { ok: false, code: "unknown_step" };
   if (["done", "skipped"].includes(record.status)) return { ok: false, code: "already_done" };
 
-  // Only attended work makes you busy. Someone minding a simmer can pick
-  // up the next thing, and can hold several waits at once — which is the
-  // whole point of marking a step unattended.
-  const holding = activeStepFor(cookId, run, nodes);
+  // Only actually-occupied time makes you busy. Someone minding a simmer
+  // between its checkpoints can pick up the next thing, and can hold
+  // several waits at once — which is the whole point of marking a step
+  // unattended. Mid-checkpoint, mid-initial or mid-ending, though, they
+  // are exactly as busy as anyone doing hands_on work — see
+  // unattendedPhaseNow.
+  const holding = activeStepFor(cookId, run, nodes, Date.parse(at));
   if (holding && holding !== stepId) return { ok: false, code: "busy", holdingStepId: holding };
 
   // The kitchen has a finite number of burners, and until unattended

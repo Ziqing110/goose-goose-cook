@@ -423,7 +423,7 @@ export default function LiveCookPage() {
         return commit(say(heard, board.map((b) => `${b.name} ${b.points}`).join(", ") + `. ${progress.pending} left.`));
       case "status": {
         const lines = cooks.map((c) => {
-          const active = activeStepFor(c.id, run, nodes);
+          const active = activeStepFor(c.id, run, nodes, now);
           if (active) return `${c.name}: ${byId[active].label}, ${clock(stepVariance(byId[active], run.steps[active], now).actualSec)} in`;
           return `${c.name}: free`;
         });
@@ -629,7 +629,7 @@ export default function LiveCookPage() {
 
 function PlayerFocusCard({ cook, index, cooks, run, nodes, byId, now, isVersus, paused, points, assignment, onStart, onDone, onSkip, onDrop, onClaim, onUndo }) {
   const key = playerKey(index);
-  const activeId = activeStepFor(cook.id, run, byId);
+  const activeId = activeStepFor(cook.id, run, byId, now);
   const node = activeId ? byId[activeId] : null;
   const variance = node ? stepVariance(node, run.steps[activeId], now) : null;
   // Unattended steps this cook has running. They do not occupy anyone, so
@@ -894,7 +894,7 @@ function TaskPoolBoard({ ready, blocked, run, byId, cooks, now, paused, onClaim 
             </Mono>
             <div className="lc-tile-claims">
               {cooks.map((cook, i) => {
-                const busy = Boolean(activeStepFor(cook.id, run, byId));
+                const busy = Boolean(activeStepFor(cook.id, run, byId, now));
                 return (
                   <button
                     key={cook.id}

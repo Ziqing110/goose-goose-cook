@@ -11,6 +11,7 @@ import {
   layoutLevels,
   mergeRecipesForDisplay,
 } from "./graphLayout.js";
+import { isAttended } from "./tending.js";
 
 export const PHASE_LABELS = { prep: "Prep", cook: "Cook", plate: "Plate" };
 
@@ -62,7 +63,7 @@ export function buildInventory({ recipes, sharedSteps = [], catalog, outIds }) {
   // overlaps). Saying which is which is the only honest version, and it
   // tells the cook what kind of evening this is before they commit.
   const attendedSeconds = nodes
-    .filter((n) => n.attended !== false)
+    .filter(isAttended)
     .reduce((sum, n) => sum + (Number(n.estimated_duration_sec) || 0), 0);
   const unattendedSeconds = totalSeconds - attendedSeconds;
   const recipeTitle = (recipeId) => recipes.find((r) => r.id === recipeId)?.working.title || null;
@@ -129,7 +130,7 @@ export function buildInventory({ recipes, sharedSteps = [], catalog, outIds }) {
         durationSec: n.estimated_duration_sec,
         // So a 40-minute wait does not read like 40 minutes of standing
         // over a pot in the step list.
-        attended: n.attended !== false,
+        attended: isAttended(n),
         status: stepStatus(n.id),
         dependsOn: (n.depends_on || [])
           .map((d) => byId[d])
