@@ -7,6 +7,7 @@
   border-bottom: 1px solid var(--line);
 }
 .session-progress .progress-track { flex: 1; }
+.session-back-btn,
 .session-exit-btn { flex: none; white-space: nowrap; }
 
 @media (max-width: 600px) {
@@ -14,6 +15,7 @@
   .session-progress > .hint { flex: 1; }
   .session-progress .progress-track { order: 3; flex-basis: 100%; }
   /* Compact exit so "Step N of 3 · label" and the button share one line on phones. */
+  .session-back-btn,
   .session-exit-btn { min-height: 36px; padding: 4px 12px; font-size: 0.85rem; }
 }
 
@@ -85,6 +87,21 @@
 
 .stage-done { color: var(--success); }
 .stage-done .stage-node { background: var(--bg); border: 2px solid var(--success); }
+.stage-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.stage-link:hover .stage-label,
+.stage-link:focus-visible .stage-label { text-decoration: underline; }
 
 .stage-current { color: var(--accent); }
 .stage-current .stage-label { font-weight: 500; }

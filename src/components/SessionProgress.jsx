@@ -24,6 +24,17 @@ export default function SessionProgress() {
   // stage path folds to one line there — the count says where you are.
   const compact = SESSION_STEPS[stepIndex]?.key === "live-cook";
 
+  // Only steps already completed are worth stepping back to — the route
+  // guards would just bounce anywhere further ahead. Live cook is
+  // excluded by staying compact: a run in progress isn't something to
+  // back out of from this bar.
+  const prevPath = !compact && stepIndex > 0 ? SESSION_STEPS[stepIndex - 1].path : null;
+  const backButton = prevPath ? (
+    <button type="button" className="btn btn-ghost session-back-btn" onClick={() => navigate(prevPath)}>
+      Back
+    </button>
+  ) : null;
+
   const exitButton = (
     <button type="button" className="btn btn-ghost session-exit-btn" onClick={() => navigate("/")}>
       Exit to Home
@@ -47,21 +58,35 @@ export default function SessionProgress() {
         <ol className="stage-path" aria-label="Session progress">
           {SESSION_STEPS.map((step, i) => {
             const status = i < stepIndex ? "done" : i === stepIndex ? "current" : "waiting";
+            const node = (
+              <>
+                <span className="stage-node" aria-hidden="true">
+                  {status === "done" && <Icon glyph="checkmark-burst" size={16} />}
+                  {status === "waiting" && <span className="stage-dot" />}
+                </span>
+                <span className="stage-label">{step.label}</span>
+              </>
+            );
             return (
               <li
                 key={step.key}
                 className={`stage stage-${status}`}
                 aria-current={status === "current" ? "step" : undefined}
               >
-                <span className="stage-node" aria-hidden="true">
-                  {status === "done" && <Icon glyph="checkmark-burst" size={16} />}
-                  {status === "waiting" && <span className="stage-dot" />}
-                </span>
-                <span className="stage-label">{step.label}</span>
+                {/* Only completed stages are worth revisiting — the
+                    current and upcoming ones aren't a click target. */}
+                {status === "done" ? (
+                  <button type="button" className="stage-link" onClick={() => navigate(step.path)}>
+                    {node}
+                  </button>
+                ) : (
+                  node
+                )}
               </li>
             );
           })}
         </ol>
+        {backButton}
         {exitButton}
       </div>
     );
@@ -75,6 +100,7 @@ export default function SessionProgress() {
       <div className="progress-track">
         <div className="progress-fill" style={{ width: `${((stepIndex + 1) / SESSION_STEPS.length) * 100}%` }} />
       </div>
+      {backButton}
       {exitButton}
     </div>
   );
