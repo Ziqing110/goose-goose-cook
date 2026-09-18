@@ -278,7 +278,7 @@ export default function InventoryPage() {
 
   const dishLabelFor = (node) =>
     node._shared ? "Shared" : recipes.find((r) => r.id === node._recipeId)?.working.title || null;
-  const { addNode, saveNode, deleteNode, registerMaterial } = useStepEditing();
+  const { addNode, saveNode, deleteNode, deleteNodes, registerMaterial } = useStepEditing();
   // A step can carry materials the catalog doesn't know yet (added from
   // the editor), so the editor sees the catalog plus this run's own.
   const materialsInfo = { ...(catalog || {}), ...(working.custom_materials || {}) };
@@ -343,7 +343,7 @@ export default function InventoryPage() {
   const dropBlockedSteps = () => {
     if (!blockedIds.length) return;
     if (!window.confirm(`Remove ${blockedIds.length} step${blockedIds.length === 1 ? "" : "s"} you can't do without those materials?`)) return;
-    blockedIds.forEach((id) => deleteNode(id, { confirm: false }));
+    deleteNodes(blockedIds);
     setPanel(null);
   };
 

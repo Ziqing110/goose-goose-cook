@@ -128,6 +128,7 @@ export default function SchedulePage() {
   const isCoop = mode === "cooperation";
   const isVersus = mode === "competition";
   const hasLoop = schedule.unscheduledIds.length > 0;
+  const runEnded = Boolean(run?.endedAt);
   const canStart = Boolean(mode) && !hasLoop;
 
   const grabsCount = opening.poolIds.length + opening.lockedIds.length;
@@ -269,7 +270,7 @@ export default function SchedulePage() {
             onSelect={() => setMode("competition")}
           />
         </div>
-        {run && <span className="sch-meta">Mode is locked while a cook is in progress.</span>}
+        {run && <span className="sch-meta">{runEnded ? "This cook is finished — the mode is part of its record." : "Mode is locked while a cook is in progress."}</span>}
       </div>
 
       {mode && (
@@ -382,14 +383,14 @@ export default function SchedulePage() {
           <span className="sch-footer-hint">Pick Co-op or Versus to go live.</span>
         )}
         <div className="sch-footer-actions">
-          {run && (
+          {run && !runEnded && (
             <button type="button" className="btn btn-ghost sch-btn-abandon" onClick={() => setConfirmAbandon(true)}>
               Abandon this cook
             </button>
           )}
           {run ? (
             <button type="button" className="btn btn-primary btn-lg" onClick={() => navigate("/session/live-cook")}>
-              Back to the cook &rarr;
+              {runEnded ? "See the result" : "Back to the cook"} &rarr;
             </button>
           ) : (
             <button type="button" className="btn btn-primary btn-lg" disabled={!canStart} onClick={goLive}>

@@ -19,12 +19,27 @@ export default function SessionProgress() {
   const isDesignV4 = useDesignV4();
 
   const stepIndex = Math.max(0, SESSION_STEPS.findIndex((s) => s.path === location.pathname));
+  // Live cook is the play surface: it's shared from across the counter,
+  // and its two player cards must fit the screen with the VoiceBar. The
+  // stage path folds to one line there — the count says where you are.
+  const compact = SESSION_STEPS[stepIndex]?.key === "live-cook";
 
   const exitButton = (
     <button type="button" className="btn btn-ghost session-exit-btn" onClick={() => navigate("/")}>
       Exit to Home
     </button>
   );
+
+  if (isDesignV4 && compact) {
+    return (
+      <div className="stage-progress is-compact">
+        <span className="mono stage-compact-label">
+          Step {stepIndex + 1} of {SESSION_STEPS.length} &middot; {SESSION_STEPS[stepIndex].label}
+        </span>
+        {exitButton}
+      </div>
+    );
+  }
 
   if (isDesignV4) {
     return (

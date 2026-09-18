@@ -183,18 +183,18 @@ if (await startBtn.isVisible().catch(() => false)) {
 }
 
 // Drive one step by voice instead of tapping.
-const cmd = page.locator(".voice-command-input");
+const cmd = page.locator(".lc-say-input");
 if (await cmd.isVisible().catch(() => false)) {
   await cmd.fill("start");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Say it" }).click();
   await page.waitForTimeout(700);
   await cmd.fill("done");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Say it" }).click();
   await page.waitForTimeout(1200);
   await shot("live-coop-voice");
 
   await cmd.fill("what's next");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Say it" }).click();
   await page.waitForTimeout(600);
   await shot("live-coop-status");
 }
@@ -220,14 +220,14 @@ await page.waitForTimeout(1500);
 await shot("live-comp-start");
 
 // Each tile carries one claim button per cook; the first is cook 1.
-const claim = page.locator(".pool-tile.is-claimable .pool-claim-btn").first();
+const claim = page.locator(".lc-tile.is-claimable .lc-claim").first();
 if (await claim.isVisible().catch(() => false)) {
   await claim.click();
   await page.waitForTimeout(800);
   await shot("live-comp-claimed");
   // Same cook tries to grab a second task while still holding one —
   // their button is now disabled, which is the refusal made visible.
-  const second = page.locator(".pool-tile.is-claimable .pool-claim-btn").first();
+  const second = page.locator(".lc-tile.is-claimable .lc-claim").first();
   if (await second.isVisible().catch(() => false)) {
     await second.click({ force: true }).catch(() => {});
     await page.waitForTimeout(700);
@@ -238,12 +238,18 @@ if (await claim.isVisible().catch(() => false)) {
   await shot("live-comp-scored");
 }
 
-await click(/Finish early|Finish cooking/);
+// "Call it early" opens a confirm Modal (no browser dialog any more).
+await click(/Call it early|Dinner's up/);
+await page.waitForTimeout(400);
+if (await page.getByRole("button", { name: /^Call it$/ }).isVisible().catch(() => false)) {
+  await shot("live-call-it-early");
+  await click(/^Call it$/);
+}
 await page.waitForTimeout(1200);
 await shot("live-summary");
 
 // --- summary card ---
-await click(/Save & see the card/);
+await click(/See the cook card/);
 await page.waitForTimeout(1500);
 await shot("summary-empty");
 

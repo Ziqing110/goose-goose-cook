@@ -1,137 +1,534 @@
-/* Read from ~1.5m with wet hands: nothing below 16px, 64px targets for
-   anything hit mid-task, no hover-only affordances. */
-/* The global voice bar is fixed, so the page has to reserve room for it
-   or the last card ends up underneath. */
-.live-cook-page {
+/* ---------------------------------------------------------------
+   Live cook — design system v4 ("Kitchen Path Live Cook").
+   Tokens, buttons, topbar and the shared VoiceBar come from
+   styles/design-v4.css (route-scoped via AppShell). Layout: run header
+   → (paused banner) → (leaderboard) → play row [two PlayerFocusCards |
+   agent column] → (pool board) → footer band.
+
+   Same construction as Schedule: white surfaces, hairline dividers,
+   bg-secondary panels, flat controls. The play surface earns three
+   things — the two cards, the big mono numbers in play, and one
+   celebration. Player color stays in avatars, thin keys, the
+   leaderboard bars and the Versus claim buttons; the only other
+   chromatic fills are the accent CTA and the green Done.
+----------------------------------------------------------------*/
+
+.live-cook-page { gap: 20px; }
+
+@keyframes lc-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes lc-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lc-spring { 0% { opacity: 0; transform: scale(0.9); } 60% { transform: scale(1.03); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes lc-roll { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes lc-burst { 0% { transform: scale(0.6) rotate(-20deg); opacity: 0; } 60% { transform: scale(1.15) rotate(4deg); } 100% { transform: scale(1) rotate(0); opacity: 1; } }
+@keyframes lc-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+.lc-roll { animation: lc-roll 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* ---------------- shared bits ---------------- */
+.lc-meta { font-size: 13px; line-height: 18px; color: var(--ink-soft); }
+.lc-meta.is-tertiary { color: var(--ink-faint); }
+
+/* PlayerAvatar — the system's colored circle with the name's first letter. */
+.lc-avatar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 700;
+  font-family: var(--kp-font);
+}
+.lc-avatar.is-a { background: var(--cook-a); }
+.lc-avatar.is-b { background: var(--cook-b); }
+.lc-avatar-20 { width: 20px; height: 20px; font-size: 11px; }
+.lc-avatar-24 { width: 24px; height: 24px; font-size: 12px; }
+.lc-avatar-32 { width: 32px; height: 32px; font-size: 14px; }
+.lc-avatar-40 { width: 40px; height: 40px; font-size: 17px; }
+
+/* The agent — lavender, never a player color. */
+.lc-agent-avatar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ai) 14%, transparent);
+  color: var(--ai);
+}
+.lc-agent-avatar-20 { width: 20px; height: 20px; }
+
+/* Accent-text ghost buttons (Pause · The plan · Skip · Undo · Cancel). */
+.ds-v4 .lc-btn-accent { color: var(--accent); }
+.ds-v4 .lc-btn-accent:hover { color: var(--ds-accent-hover); }
+.ds-v4 .lc-btn-accent:disabled { background: transparent; color: var(--ink-faint); }
+
+/* The 64px primaries: Done / Start / Take it. */
+.ds-v4 .lc-btn-xl { width: 100%; min-height: 64px; padding: 0 24px; font-size: 20px; font-weight: 500; }
+.ds-v4 .lc-btn-done { background: var(--success); color: #fff; }
+.ds-v4 .lc-btn-done:hover { background: color-mix(in srgb, var(--success) 88%, #000); }
+.ds-v4 .lc-btn-done:disabled { background: var(--ds-chip); color: var(--ink-faint); }
+
+/* ---------------- run header ---------------- */
+/* Counter-screen budget (1280×800): topbar + compact chrome + this
+   header must leave ~500px for the cards above the VoiceBar, so the
+   title keeps to one line and the row stays 48px tall. */
+.lc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding-top: 4px;
+  animation: lc-rise 240ms ease-out both;
+}
+.lc-title { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1 1 auto; }
+.lc-title h1 {
+  margin: 0;
+  min-width: 0;
+  font-size: 26px;
+  line-height: 32px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lc-mode-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  font-size: 14px;
+  font-weight: 500;
+}
+.lc-hud { display: flex; align-items: center; gap: 16px; flex: none; }
+.lc-clock { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); }
+.lc-clock-value { font-size: 32px; line-height: 36px; font-weight: 500; letter-spacing: -0.01em; }
+.is-paused .lc-clock-value { color: var(--ink-faint); }
+.lc-count { font-size: 18px; color: var(--ink-soft); }
+.lc-drift {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: var(--warning-soft);
+  color: var(--warning-soft-ink);
+  font-size: 13px;
+}
+.lc-hud-divider { width: 1px; height: 28px; background: var(--line); }
+
+/* ---------------- paused banner ---------------- */
+.lc-paused {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-radius: var(--radius-card);
+  background: var(--warning-soft);
+  color: var(--warning-soft-ink);
+  font-size: 15px;
+  line-height: 22px;
+  animation: lc-rise 240ms ease-out both;
+}
+.lc-paused .kp-icon { flex: none; }
+
+/* ---------------- leaderboard (Versus) ---------------- */
+.lc-leaderboard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 24px;
+  border-radius: var(--radius-card);
+  background: var(--surface-sunken);
+  animation: lc-rise 240ms 40ms ease-out both;
+}
+.lc-leader-row { display: grid; grid-template-columns: 32px 140px 1fr auto; align-items: center; gap: 16px; }
+.lc-leader-name { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 500; }
+.lc-leader-trophy { color: var(--accent); }
+.lc-leader-bar { height: 8px; border-radius: 4px; background: var(--ds-chip-hover); overflow: hidden; }
+.lc-leader-fill { display: block; height: 100%; border-radius: 4px; transition: width 320ms ease-out; }
+.lc-leader-row.is-a .lc-leader-fill { background: var(--cook-a); }
+.lc-leader-row.is-b .lc-leader-fill { background: var(--cook-b); }
+.lc-leader-points { font-size: 24px; line-height: 30px; font-weight: 500; min-width: 2ch; text-align: right; }
+
+/* ---------------- play row ---------------- */
+.lc-play {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 300px;
+  gap: 24px;
+  align-items: stretch;
+}
+.lc-cards { display: contents; }
+
+/* PlayerFocusCard — white, hairline border, header row with the
+   status chip; the timer sits on a bg-secondary block. The player's
+   color lives in the avatar and the "On it" chip only. */
+.lc-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 380px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  animation: lc-rise 240ms 60ms ease-out both;
+}
+.lc-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.lc-card-name { flex: 1; min-width: 0; font-size: 18px; font-weight: 700; }
+.lc-card-pts { font-size: 14px; color: var(--ink-soft); }
+.lc-eyebrow {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--ds-chip);
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.lc-eyebrow-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.lc-eyebrow.is-active .lc-eyebrow-dot { animation: lc-dot 1.6s ease-in-out infinite; }
+.lc-eyebrow.is-active.is-a { background: var(--cook-a-bg); color: var(--cook-a-ink); }
+.lc-eyebrow.is-active.is-b { background: var(--cook-b-bg); color: var(--cook-b-ink); }
+.lc-eyebrow.is-offer { background: var(--warning-soft); color: var(--warning-soft-ink); }
+.lc-eyebrow.is-finished { background: transparent; border: 1px solid var(--success); color: var(--success); }
+.lc-eyebrow.is-paused { color: var(--ink-faint); }
+
+.lc-card-body { display: flex; flex-direction: column; gap: 12px; flex: 1; padding: 20px 24px 8px; }
+.lc-step-title { margin: 0; font-size: 24px; line-height: 30px; font-weight: 700; letter-spacing: -0.01em; }
+.lc-step-desc { margin: 0; font-size: 16px; line-height: 24px; color: var(--ink-soft); }
+.lc-timer {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 14px 20px;
+  border-radius: 12px;
+  background: var(--surface-sunken);
+}
+.lc-timer-value { font-size: 40px; line-height: 44px; font-weight: 500; letter-spacing: -0.01em; }
+.lc-timer-est { font-size: 13px; color: var(--ink-soft); }
+.lc-timer.is-over { background: var(--warning-soft); }
+.lc-timer.is-over .lc-timer-value, .lc-timer.is-over .lc-timer-est { color: var(--warning-soft-ink); }
+.lc-timer.is-countdown .lc-timer-value { font-size: 24px; line-height: 30px; }
+
+.lc-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.lc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--ds-chip);
+  font-size: 14px;
+  font-weight: 500;
+}
+.lc-chip.is-difficulty { gap: 2px; padding: 0 12px; background: var(--accent-soft); color: var(--accent); }
+.lc-chip.is-points { background: var(--accent-soft); color: var(--accent); font-size: 13px; }
+
+.lc-waiting-copy { margin: 0; font-size: 18px; line-height: 28px; }
+.lc-waiting-copy .lc-avatar { vertical-align: -3px; margin-left: 6px; }
+.lc-done-burst { color: var(--success); animation: lc-burst 480ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+.lc-card-actions { display: flex; flex-direction: column; gap: 4px; padding: 8px 24px 16px; min-height: 64px; margin-top: auto; }
+.lc-card-secondary { display: flex; align-items: center; gap: 4px; }
+.lc-btn-undo { margin-left: auto; }
+
+/* Paused: the whole card dims — the eyebrow, title and timer read as
+   frozen, and the disabled buttons say the rest. */
+.lc-card.is-paused .lc-step-title, .lc-card.is-paused .lc-card-name { color: var(--ink-soft); }
+.lc-card.is-paused .lc-timer-value, .lc-card.is-paused .lc-timer-est, .lc-card.is-paused .lc-step-desc { color: var(--ink-faint); }
+.lc-card.is-paused .lc-timer { background: var(--kp-bg-secondary); }
+.lc-card.is-paused .lc-chips, .lc-card.is-paused .lc-card-secondary { opacity: 0.5; }
+.lc-card.is-paused .lc-avatar { opacity: 0.6; }
+
+/* ---------------- agent column ---------------- */
+.lc-agent {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--radius-card);
+  background: var(--surface-sunken);
+  animation: lc-rise 240ms 100ms ease-out both;
+}
+.lc-agent-head { display: flex; align-items: center; justify-content: space-between; }
+.lc-agent-eyebrow { font-size: 13px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-soft); }
+.lc-agent-tag {
+  height: 22px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ai) 14%, transparent);
+  color: var(--ai);
+  font-size: 12px;
+  font-weight: 500;
+}
+.lc-log {
+  flex: 1;
+  min-height: 160px;
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 10px;
+  scroll-behavior: smooth;
+}
+.lc-log > :first-child { margin-top: auto; }
+.lc-line { display: flex; align-items: flex-start; gap: 10px; font-size: 15px; line-height: 22px; animation: lc-fade 200ms ease-out both; }
+.lc-line .lc-avatar, .lc-line .lc-agent-avatar { margin-top: 1px; }
+.lc-line.is-agent .lc-line-text { color: var(--ai); }
+.lc-line-text { min-width: 0; overflow-wrap: anywhere; }
+.lc-pending { display: flex; flex-direction: column; gap: 8px; padding-left: 30px; }
+.ds-v4 .lc-pending-option { justify-content: flex-start; text-align: left; background: var(--surface); }
+.ds-v4 .lc-pending-option:hover { background: var(--ds-chip-hover); }
+.lc-pending .lc-btn-accent { align-self: flex-start; }
+.ds-v4 .lc-agent-more { display: none; }
+
+/* Speaker toggle — two segments, the selected one filled in its color.
+   Temporary until voice ID lands. */
+.lc-speaker { display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--ds-chip); }
+.lc-speaker-seg {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px 0 8px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms ease-out, color 120ms ease-out;
+}
+.lc-speaker-seg.is-selected { color: #fff; }
+.lc-speaker-seg.is-selected.is-a { background: var(--cook-a); }
+.lc-speaker-seg.is-selected.is-b { background: var(--cook-b); }
+.lc-speaker-seg.is-selected .lc-avatar { background: rgba(255, 255, 255, 0.25); }
+
+.lc-say { display: flex; gap: 8px; }
+.lc-say-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+}
+.lc-say-input::placeholder { color: var(--ink-faint); }
+.lc-say-input:focus { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+/* ---------------- task pool (Versus) ---------------- */
+.lc-pool {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding-bottom: calc(var(--voice-bar-height) + 24px);
-}
-
-.live-clock { font-size: 1rem; padding: 6px 14px; }
-.live-drift { background: var(--crit-soft); color: var(--crit-soft-ink); border-color: transparent; }
-
-.focus-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
-
-.focus-card { display: flex; flex-direction: column; gap: 12px; border-width: 2px; }
-.cook-border-mia { border-color: var(--cook-mia); }
-.cook-border-leo { border-color: var(--cook-leo); }
-.cook-border-sage { border-color: var(--cook-sage); }
-
-.focus-head { display: flex; align-items: center; gap: 10px; }
-.focus-cook-name { font-weight: 700; font-size: 1.05rem; }
-.focus-points { margin-left: auto; font-size: 0.9rem; }
-
-.focus-step-title { margin: 0; font-size: 1.6rem; line-height: 1.25; }
-.focus-step-desc { margin: 0; font-size: 1rem; color: var(--ink-soft); }
-
-.focus-meta { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.focus-timer { font-size: 2.5rem; font-weight: 700; line-height: 1; }
-.focus-timer.is-over { color: var(--crit); }
-
-.focus-tags { display: flex; gap: 8px; flex-wrap: wrap; }
-
-/* Pinned to the bottom so both cooks' primary buttons sit on the same
-   line no matter how much text is above them. */
-.focus-actions { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
-.focus-primary { width: 100%; font-size: 1.05rem; }
-.focus-secondary { display: flex; gap: 8px; flex-wrap: wrap; }
-
-.focus-waiting-text { padding: 4px 0; }
-
-.live-progress { height: 8px; }
-
-/* --- competition --- */
-.leaderboard { display: flex; flex-direction: column; gap: 14px; background: var(--surface-sunken); border-width: 2px; }
-.leader-row { display: flex; align-items: center; gap: 14px; background: none; min-height: 64px; }
-.leader-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.leader-name { font-weight: 700; font-size: 1.1rem; }
-.leader-bar { height: 12px; border-radius: 999px; background: var(--surface); overflow: hidden; }
-.leader-fill { height: 100%; background: currentColor; transition: width 0.4s ease; }
-.leader-points { font-size: 2.6rem; font-weight: 700; line-height: 1.15; min-width: 3ch; text-align: right; flex: none; }
-@media (prefers-reduced-motion: reduce) { .leader-fill { transition: none; } }
-
-.pool-board { display: flex; flex-direction: column; gap: 12px; background: var(--surface-sunken); border-width: 2px; }
-.pool-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.pool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
-
-.pool-tile {
-  min-height: 64px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 3px;
-  padding: 10px 14px;
+  padding: 20px 24px;
   border-radius: var(--radius-card);
-  border: 2px solid var(--line-strong);
-  background: var(--surface);
-  text-align: left;
-  font: inherit;
-  color: var(--ink);
-}
-.pool-tile.is-claimable { cursor: default; }
-/* One button per cook, so a tap on a shared screen says who tapped. */
-.pool-claimers { display: flex; gap: 8px; margin-top: 4px; }
-.pool-claim-btn { flex: 1 1 0; min-height: 44px; font-weight: 600; }
-.pool-claim-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.pool-tile.is-taken { border-color: transparent; }
-.pool-tile.is-blocked { border-style: dashed; opacity: 0.6; }
-.pool-label { font-weight: 700; font-size: 1rem; }
-.pool-meta { font-size: 0.78rem; opacity: 0.85; }
-.pool-action { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
-
-/* --- voice console --- */
-.voice-console { display: flex; flex-direction: column; gap: 12px; }
-.voice-console-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.speaker-select { display: flex; gap: 8px; }
-.speaker-pill { min-height: 44px; border-color: transparent; font-weight: 600; }
-.speaker-pill.is-active { outline: 2px solid var(--ink); outline-offset: 1px; }
-
-.live-transcript { max-height: 190px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
-.live-line { display: flex; gap: 10px; align-items: baseline; }
-.live-who { font-size: 0.7rem; color: var(--ink-faint); flex: none; min-width: 5ch; }
-.live-bubble { margin: 0; font-size: 1rem; }
-.live-line.is-agent .live-bubble { color: var(--ai-soft-ink); font-weight: 600; }
-
-.pending-options { display: flex; gap: 8px; flex-wrap: wrap; }
-
-.voice-input-row { display: flex; gap: 10px; }
-.voice-command-input {
-  flex: 1;
-  min-width: 0;
-  font: inherit;
-  font-size: 1rem;
-  padding: 12px 16px;
-  border-radius: var(--radius-input);
-  border: 1px solid var(--line-strong);
   background: var(--surface-sunken);
-  color: var(--ink);
+  animation: lc-rise 240ms 120ms ease-out both;
 }
+.lc-pool-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.lc-pool-head h2 { margin: 0; font-size: 20px; line-height: 26px; font-weight: 700; }
+.lc-pool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+.lc-tile { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 12px; animation: lc-rise 240ms ease-out both; }
+.lc-tile.is-claimable { background: var(--surface); border: 1px solid var(--line); }
+.lc-tile-label { font-size: 16px; font-weight: 500; line-height: 22px; }
+.lc-tile-meta { font-size: 13px; color: var(--ink-soft); }
+.lc-tile-claims { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+.ds-v4 .lc-claim { min-height: 44px; padding: 0 8px; color: #fff; font-weight: 600; }
+.ds-v4 .lc-claim.is-a { background: var(--cook-a); }
+.ds-v4 .lc-claim.is-b { background: var(--cook-b); }
+.ds-v4 .lc-claim:hover:not(:disabled) { filter: brightness(0.94); }
+.ds-v4 .lc-claim:disabled { background: var(--ds-chip); color: var(--ink-faint); }
+.lc-tile.is-taken { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid; animation: lc-spring 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.lc-tile.is-taken.is-a { border-left-color: var(--cook-a); }
+.lc-tile.is-taken.is-b { border-left-color: var(--cook-b); }
+.lc-tile-holder { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; }
+.lc-tile-holder .mono { color: var(--ink-soft); }
+.lc-tile.is-blocked { padding-inline: 4px; }
+.lc-tile.is-blocked .lc-tile-label, .lc-tile.is-blocked .lc-tile-meta { color: var(--ink-faint); }
 
-/* Deliberately not sticky: on a tall competition page it ended up
-   floating over the middle of the task pool. */
-.live-footer { background: var(--bg); }
-
-/* --- summary --- */
-.run-summary { display: flex; flex-direction: column; gap: 14px; }
-.summary-headline { margin: 0; font-size: 1.8rem; }
-.summary-winner { margin: 0; font-size: 1.2rem; font-weight: 700; color: var(--success); }
-.summary-scores { display: flex; gap: 14px; flex-wrap: wrap; }
-.summary-score {
+/* ---------------- footer band ----------------
+   In flow, not sticky: the primaries live on the cards, and a sticky
+   band here would sit on top of them on an 800px counter screen.
+   "Call it early" is the one action that can wait for a scroll. Once
+   everything's done the footer is the primary, so it pins again. */
+.lc-footer {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 18px;
-  border-radius: var(--radius-card);
+  justify-content: space-between;
+  gap: 24px;
+  padding: 12px 0;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
 }
-.summary-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.summary-steps li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }
-.summary-steps li:last-child { border-bottom: none; }
-.summary-steps li.is-skipped .summary-step-label { text-decoration: line-through; color: var(--ink-faint); }
-.summary-step-label { font-weight: 600; }
+.lc-footer.is-final { position: sticky; bottom: var(--voice-bar-height); z-index: 5; }
+.lc-footer-meta { font-size: 14px; color: var(--ink-soft); }
+.ds-v4 .lc-btn-early { padding-inline: 12px; margin-left: -12px; }
 
-.summary-save-error { color: var(--crit); }
+/* ---------------- modals ---------------- */
+.modal-panel.lc-modal {
+  max-width: 460px;
+  gap: 12px;
+  padding: 24px;
+  border: none;
+  border-radius: var(--radius-card);
+  box-shadow: var(--kp-shadow-modal);
+  background: var(--surface);
+  font-family: var(--kp-font);
+}
+.lc-modal-title { font-size: 18px; line-height: 24px; font-weight: 700; }
+.lc-modal-body { margin: 0; font-size: 15px; line-height: 22px; color: var(--ink-soft); }
+.lc-modal-num { color: var(--ink); }
+.lc-modal-actions { display: flex; justify-content: flex-end; gap: 12px; padding-top: 4px; }
+.lc-modal .btn {
+  min-height: 44px;
+  padding: 0 16px;
+  border: none;
+  border-radius: var(--radius-control);
+  font-family: var(--kp-font);
+  font-size: 15px;
+  font-weight: 500;
+  box-shadow: none;
+}
+.lc-modal .lc-btn-keep, .lc-modal .lc-btn-keep:hover { background: transparent; color: var(--ink); }
+.lc-modal .lc-btn-danger { padding: 0 20px; background: var(--accent); color: #fff; }
+.lc-modal .lc-btn-danger:hover { background: var(--ds-accent-hover); filter: none; }
 
-.paused-banner { border-style: dashed; }
-.paused-banner .mini-title { color: var(--crit); }
+/* ---------------- Service done (finished) ---------------- */
+.lc-service {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 48px;
+  padding: 8px 0;
+  animation: lc-rise 240ms ease-out both;
+}
+.lc-service-main { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.lc-service-clock { font-size: 48px; line-height: 52px; font-weight: 500; letter-spacing: -0.02em; }
+.lc-service-scores { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; width: 100%; margin-top: 16px; }
+.lc-score-tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border-left: 4px solid;
+  background: var(--surface-sunken);
+}
+.lc-score-tile.is-a { border-left-color: var(--cook-a); }
+.lc-score-tile.is-b { border-left-color: var(--cook-b); }
+.lc-score-body { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.lc-score-name { font-size: 16px; font-weight: 500; }
+.lc-score-points { font-size: 28px; line-height: 32px; font-weight: 500; }
+.lc-service-winner { margin: 8px 0 0; font-size: 18px; font-weight: 500; }
+.lc-service-cta { margin-top: 16px; }
+.lc-service-error {
+  width: 100%;
+  margin: 8px 0 0;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: var(--crit-soft);
+  color: var(--crit-soft-ink);
+  font-size: 15px;
+  line-height: 22px;
+}
+.lc-service-steps { display: flex; flex-direction: column; gap: 4px; }
+.lc-service-steps .lc-pool-head { padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.lc-step-list { list-style: none; margin: 0; padding: 0; }
+.lc-step-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.lc-step-row-label { font-size: 16px; font-weight: 500; }
+.lc-step-row-meta { font-size: 13px; color: var(--ink-soft); text-align: right; }
+.lc-step-row.is-over .lc-step-row-meta { color: var(--warning-soft-ink); }
+.lc-step-row.is-skipped .lc-step-row-label, .lc-step-row.is-skipped .lc-step-row-meta { color: var(--ink-faint); }
+
+/* ---------------- no run ---------------- */
+.lc-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; padding: 24px 0; }
+
+/* ---------------- tablet ---------------- */
+@media (max-width: 1100px) {
+  .lc-play { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .lc-agent { grid-column: 1 / -1; }
+  .lc-log { min-height: 0; max-height: 200px; }
+  .lc-leader-row { grid-template-columns: 32px 110px 1fr auto; }
+}
+
+/* ---------------- mobile 390 ----------------
+   Single column, 16px gutters (the shell's), fixed player order, the
+   step timer drops to 32, primaries stay 64 full-width. */
+@media (max-width: 720px) {
+  .live-cook-page { gap: 16px; }
+  .lc-header { flex-direction: column; align-items: stretch; gap: 12px; }
+  .lc-title { justify-content: space-between; }
+  .lc-title h1 { font-size: 24px; line-height: 30px; }
+  .lc-hud { justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .lc-hud-divider { display: none; }
+  .lc-hud .btn { padding-inline: 10px; }
+  .lc-clock-value { font-size: 28px; line-height: 32px; }
+  .lc-count { font-size: 15px; }
+
+  .lc-play { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .lc-card { min-height: 0; }
+  .lc-card-head { padding: 12px 16px; }
+  .lc-card-body { padding: 16px 16px 4px; }
+  .lc-card-actions { padding: 8px 16px 16px; }
+  .lc-step-title { font-size: 22px; line-height: 28px; }
+  .lc-timer-value { font-size: 32px; line-height: 36px; }
+  .lc-step-desc { font-size: 15px; line-height: 22px; }
+
+  /* The transcript collapses to the last two lines with a "More". */
+  .lc-log { min-height: 0; max-height: 64px; overflow: hidden; }
+  .lc-agent.is-expanded .lc-log { max-height: 240px; overflow-y: auto; }
+  .lc-log:has(.lc-pending) { max-height: none; overflow: visible; }
+  .ds-v4 .lc-agent-more { display: inline-flex; align-self: flex-end; min-height: 36px; padding-inline: 10px; font-size: 14px; }
+
+  .lc-leaderboard { padding: 14px 16px; }
+  .lc-leader-row { grid-template-columns: 32px 1fr auto; grid-template-areas: "avatar name points" "bar bar bar"; row-gap: 8px; }
+  .lc-leader-row .lc-avatar { grid-area: avatar; }
+  .lc-leader-name { grid-area: name; }
+  .lc-leader-bar { grid-area: bar; }
+  .lc-leader-points { grid-area: points; }
+
+  .lc-pool { padding: 16px; }
+  .lc-pool-grid { grid-template-columns: 1fr; }
+
+  .lc-footer { gap: 12px; padding: 12px 0; }
+  .lc-footer .btn-lg { flex: 1 1 auto; min-width: 0; }
+  .lc-service { grid-template-columns: 1fr; gap: 28px; }
+  .lc-service-scores { grid-template-columns: 1fr; }
+  .lc-service-cta { width: 100%; min-width: 0; }
+}
+
+/* ---------------- reduced motion ----------------
+   Everything becomes a 200ms fade; the burst renders its final state
+   and the listening dot stops. */
+@media (prefers-reduced-motion: reduce) {
+  .lc-header, .lc-paused, .lc-leaderboard, .lc-card, .lc-agent, .lc-pool, .lc-tile, .lc-service, .lc-roll, .lc-done-burst, .lc-line { animation-name: lc-fade; }
+  .lc-eyebrow.is-active .lc-eyebrow-dot { animation: none; }
+  .lc-leader-fill { transition: none; }
+}
