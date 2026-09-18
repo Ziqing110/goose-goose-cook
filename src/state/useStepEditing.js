@@ -235,6 +235,9 @@ export function useStepEditing() {
           category: draft.category || "other",
           amount: Number(draft.amount) || 1,
           unit: draft.unit.trim() || "unit",
+          // Distinguishes this from an LLM-generated material that also
+          // has no catalog entry — see inventory.js's isCustom.
+          addedByUser: true,
         },
       };
       dispatch({ type: "session/recipes/updateOne", payload: { recipeId: recipe.id, patch: { custom_materials: nextCustom } } });

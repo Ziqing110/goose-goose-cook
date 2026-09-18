@@ -118,7 +118,12 @@ export function buildInventory({ recipes, sharedSteps = [], catalog, outIds }) {
       category: materialsInfo[id]?.category || "other",
       amount: totals[id]?.amount ?? materialsInfo[id]?.amount ?? null,
       unit: totals[id]?.unit ?? materialsInfo[id]?.unit ?? "",
-      isCustom: Boolean(working.custom_materials?.[id]) && !(catalog && catalog[id]),
+      // custom_materials also carries LLM-generated ingredients (see
+      // recipeInstances.js) so they resolve to a label/amount/category
+      // instead of a blank row — only a player-typed one is "added by
+      // you", flagged explicitly at the one place that creates those
+      // (useStepEditing.js's registerMaterial).
+      isCustom: Boolean(working.custom_materials?.[id]?.addedByUser),
       out: isOut,
       reach: reachSet.size,
       reachTone: !isOut ? "neutral" : blocksStep ? "critical" : "warning",
