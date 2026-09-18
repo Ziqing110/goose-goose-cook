@@ -46,3 +46,24 @@ const VOICE_PHRASES = [
 export function voicePhraseFor(index, name) {
   return VOICE_PHRASES[index % VOICE_PHRASES.length].replace("{name}", name);
 }
+
+// The chef birds a cook claims on the voice-binding page. `id` is what
+// the cook stores (cook.avatar); art lives in public/avatars/. `bg` is
+// the tile/circle tint behind the art, `ink` the matching text colour
+// (darkened to clear 4.5:1 on `bg`).
+export const CHEF_AVATARS = [
+  { id: "spoon", src: "/avatars/1115.png", name: "Spoon", bg: "#a9d4fb", ink: "#14456f", hue: "Blue" },
+  { id: "whisk", src: "/avatars/1116.png", name: "Whisk", bg: "#ffb866", ink: "#7a3a00", hue: "Orange" },
+  { id: "slurp", src: "/avatars/1131.png", name: "Slurp", bg: "#a8e6c4", ink: "#175232", hue: "Green" },
+  { id: "tomato", src: "/avatars/1117.png", name: "Tomato", bg: "#cfc4fb", ink: "#3b3183", hue: "Violet" },
+  { id: "booky", src: "/avatars/1123.png", name: "Booky", bg: "#ff9c8c", ink: "#8c1f14", hue: "Red" },
+  { id: "roller", src: "/avatars/1120.png", name: "Roller", bg: "#f6c9dd", ink: "#8a2f57", hue: "Rose" },
+  { id: "flip", src: "/avatars/1133.png", name: "Flip", bg: "#ffe08a", ink: "#6e4d00", hue: "Yellow" },
+  { id: "stir", src: "/avatars/1128.png", name: "Stir", bg: "#c9c3b4", ink: "#4d463a", hue: "Stone" },
+];
+
+export const UNCLAIMED_AVATAR = { id: null, src: "/avatars/unclaimed.png", name: "Unclaimed", bg: "#f2f1ee", ink: "#6e6e6b", hue: null };
+
+export function chefAvatar(id) {
+  return CHEF_AVATARS.find((a) => a.id === id) || UNCLAIMED_AVATAR;
+}

@@ -2,149 +2,185 @@
    Voice binding page — design system v4 (tokens in styles/design-v4.css).
 
    Same furniture as the conversation page: title row, one
-   bg-secondary panel, footer row. Cook slots are white tiles on that
-   panel; identity colours come from the shared kp palette, so a cook
-   is the same colour here as in Home's players chip.
+   bg-secondary panel, footer row. Cook slots are white cards on that
+   panel; each cook is represented by the chef bird they claim, and a
+   run in progress swaps the editable cards for a read-only line-up.
 ----------------------------------------------------------------*/
 
 .voice-binding-page { gap: 0; }
+
+.vb-eyebrow {
+  display: block;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
 
 /* ---------------- title row ---------------- */
 .vb-title-row {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 8px 40px;
+  gap: 8px 20px;
   flex-wrap: wrap;
-  padding: 24px 0 20px;
+  padding: 26px 0 18px;
 }
-.vb-title { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.vb-title h1 { font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.01em; }
-.vb-sub { margin: 0; max-width: 62ch; font-size: 15px; line-height: 22px; color: var(--ink-soft); }
-.vb-count { font-size: 14px; line-height: 20px; color: var(--ink-soft); }
+.vb-title { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.vb-title h1 { font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.015em; }
+.vb-sub { margin: 0; max-width: 62ch; font-size: 15px; line-height: 22px; color: var(--ink-soft); text-wrap: pretty; }
+.vb-count { font-size: 14px; line-height: 20px; white-space: nowrap; color: var(--accent); }
 .vb-count.is-done { color: var(--success); }
 
-/* ---------------- cook slots ---------------- */
+/* ---------------- chef avatar ---------------- */
+.vb-avatar {
+  display: block;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background-repeat: no-repeat;
+  background-position: center 52%;
+}
+.vb-avatar-lg { width: 104px; height: 104px; background-size: 98%; cursor: pointer; transition: border-color 120ms ease-out; }
+.vb-avatar-lg:hover { border-color: var(--ink-faint); }
+.vb-avatar-sm { width: 46px; height: 46px; background-size: 96%; }
+
+/* ---------------- editable panel ---------------- */
 .vb-panel { background: var(--surface-sunken); border-radius: var(--radius-card); padding: 24px; }
+
+.vb-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.vb-panel-note { font-size: 13px; line-height: 19px; color: var(--accent); }
+.vb-plus { font-size: 17px; line-height: 1; margin-top: -2px; }
+.vb-cap {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: var(--radius-control);
+  background: var(--ds-chip);
+  color: var(--ink-soft);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
 
 .cooks-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: stretch;
 }
 
 .cook-slot {
   position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 24px 20px;
-  border: none;
-  border-radius: var(--radius-control);
-  background: var(--bg);
-  text-align: center;
+  gap: 14px;
+  min-height: 340px;
+  padding: 24px;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  animation: ds-reveal 240ms ease-out both;
 }
 /* Recording is the one live state on the page, so it takes the accent
    ring — the same signal the current stage node uses. */
-.cook-slot.is-recording { box-shadow: 0 0 0 2px var(--accent); }
+.cook-slot.is-recording { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 .cook-slot-remove {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 14px;
+  right: 14px;
   width: 28px;
   height: 28px;
   border: none;
-  border-radius: 50%;
+  border-radius: 6px;
   background: transparent;
   color: var(--ink-faint);
-  font-size: 16px;
+  font-size: 17px;
   line-height: 1;
   cursor: pointer;
   transition: background 120ms ease-out, color 120ms ease-out;
 }
 .cook-slot-remove:hover { background: var(--ds-chip); color: var(--ink); }
 
-.cook-avatar {
-  position: relative;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  font-weight: 700;
-}
-/* Identity colours, scoped so the other (v1.0) pages keep theirs. */
-.ds-v4 .cook-color-mia { background: var(--kp-cook-a); color: #ffffff; }
-.ds-v4 .cook-color-leo { background: var(--kp-cook-b); color: #ffffff; }
-.ds-v4 .cook-color-sage { background: var(--ai); color: #ffffff; }
-
+.cook-avatar-wrap { position: relative; align-self: center; }
 .cook-avatar-badge {
   position: absolute;
-  right: -2px;
-  bottom: -2px;
-  width: 22px;
-  height: 22px;
+  right: 2px;
+  bottom: 2px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  border: 2px solid var(--bg);
+  border: 3px solid var(--surface);
   background: var(--success);
   color: #ffffff;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
+  animation: ds-reveal 240ms ease-out both;
 }
 
 .cook-name-input {
   width: 100%;
   height: 44px;
-  padding: 0 12px;
+  padding: 0 14px;
   font: inherit;
-  font-size: 15px;
-  font-weight: 500;
+  font-size: 16px;
+  font-weight: 600;
   text-align: center;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-control);
-  background: var(--bg);
+  background: var(--surface);
   color: var(--ink);
-  transition: border-color 120ms ease-out, box-shadow 120ms ease-out;
+  transition: border-color 120ms ease-out;
 }
 .cook-name-input::placeholder { color: var(--ink-faint); font-weight: 400; }
 .cook-name-input:hover { border-color: var(--ink-faint); }
-.app-shell.ds-v4 .cook-name-input:focus,
-.app-shell.ds-v4 .cook-name-input:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
+.app-shell.ds-v4 .cook-name-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cook-name-input.is-invalid { border-color: var(--crit); }
+.cook-name-error { display: block; margin-top: 6px; font-size: 13px; line-height: 18px; text-align: center; color: var(--crit); }
 
-.cook-phrase {
-  width: 100%;
+/* The line fills the card's spare height so both cards' action rows
+   sit on the same baseline whatever state each is in. */
+.cook-phrase-slot { flex: 1 1 auto; display: flex; min-height: 0; }
+.cook-phrase { flex: 1; padding: 12px 14px; border-radius: var(--radius-control); }
+.cook-phrase .vb-eyebrow { margin-bottom: 6px; }
+.cook-phrase-text { margin: 0; text-wrap: pretty; }
+.cook-phrase.is-empty {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 12px 14px;
-  border-radius: var(--radius-control);
-  background: var(--ds-chip);
-}
-.cook-phrase.is-active { background: var(--accent-soft); }
-.cook-phrase-label {
-  font-family: var(--font-mono);
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border: 1px dashed var(--line-strong);
   font-size: 13px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  line-height: 19px;
   color: var(--ink-faint);
 }
-.cook-phrase.is-active .cook-phrase-label { color: var(--accent); }
-.cook-phrase-text { margin: 0; font-size: 15px; line-height: 22px; font-weight: 500; text-wrap: pretty; }
+.cook-phrase.is-active { background: var(--accent-soft); }
+.cook-phrase.is-active .vb-eyebrow { color: var(--accent); }
+.cook-phrase.is-active .cook-phrase-text { font-size: 17px; line-height: 24px; font-weight: 500; color: var(--ink); }
+.cook-phrase.is-quiet { background: var(--ds-chip); }
+.cook-phrase.is-quiet .cook-phrase-text { font-size: 14px; line-height: 20px; color: var(--ink-soft); }
 
-.cook-status { font-size: 13px; line-height: 18px; color: var(--ink-soft); }
-.cook-progress { font-size: 14px; line-height: 20px; color: var(--ink-soft); }
+.cook-action-row { display: flex; align-items: center; gap: 12px; min-height: 44px; }
+.cook-action-row .btn { flex: 0 0 auto; white-space: nowrap; }
+.cook-status { flex: 1 1 auto; font-size: 13px; line-height: 18px; color: var(--ink-faint); }
+.cook-status.is-accent { color: var(--accent); }
+.cook-status.is-done { color: var(--success); }
+.cook-progress { flex: 1 1 auto; font-size: 13px; color: var(--ink-soft); }
 
-.cook-recording { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
-.cook-waveform { display: inline-flex; align-items: center; gap: 4px; height: 24px; }
+.cook-waveform { display: flex; align-items: flex-end; gap: 3px; height: 24px; flex: 0 0 auto; }
 .cook-waveform-bar {
   width: 4px;
   height: 8px;
@@ -160,16 +196,85 @@
   .cook-waveform-bar { animation: none; height: 14px; }
 }
 
-/* Empty slot: dashed outline, the one dashed shape on the page (same
-   role as the transcript's waiting bubble). */
-.ds-v4 .btn.cook-add-btn {
-  min-height: 180px;
+/* Empty slot: dashed outline, the one dashed card on the page. */
+.cook-invite {
+  min-height: 340px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px;
   border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-card);
   background: transparent;
+  font: inherit;
+  text-align: left;
   color: var(--ink-soft);
-  border-radius: var(--radius-control);
+  cursor: pointer;
+  transition: background 120ms ease-out, border-color 120ms ease-out;
 }
-.ds-v4 .btn.cook-add-btn:hover { background: var(--ds-chip); color: var(--ink); }
+.cook-invite:hover { background: var(--surface); border-color: var(--ink-faint); }
+.cook-invite-plus {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+.cook-invite-title { font-size: 15px; font-weight: 600; color: var(--ink); }
+.cook-invite-sub { max-width: 30ch; font-size: 13px; line-height: 19px; }
+
+/* ---------------- locked line-up ---------------- */
+.vb-locked {
+  border-radius: var(--radius-card);
+  background: var(--surface-sunken);
+  overflow: hidden;
+  animation: ds-reveal 240ms ease-out both;
+}
+.vb-locked-head {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  padding: 20px;
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--ds-chip);
+}
+.vb-locked-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.vb-locked-copy { flex: 1 1 280px; min-width: 0; }
+.vb-locked-copy .vb-eyebrow { color: var(--ink-soft); margin-bottom: 6px; }
+.vb-locked-copy p { margin: 0; max-width: 70ch; font-size: 15px; line-height: 22px; text-wrap: pretty; }
+.vb-locked-rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); }
+.vb-locked-row { display: flex; align-items: center; gap: 14px; padding: 18px 20px; background: var(--surface-sunken); }
+.vb-locked-who { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.vb-locked-name { font-size: 17px; font-weight: 600; line-height: 22px; }
+.vb-lane { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
+.vb-bound-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--success); white-space: nowrap; }
+.vb-check {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--success);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 
 /* ---------------- footer ---------------- */
 .vb-footer {
@@ -180,25 +285,115 @@
   flex-wrap: wrap;
   padding-top: 20px;
 }
-.vb-note { font-size: 13px; line-height: 18px; color: var(--ink-faint); }
+.vb-note { font-size: 14px; line-height: 20px; color: var(--ink-soft); }
+.vb-note.is-accent { color: var(--accent); }
+.vb-note.is-crit { color: var(--crit); }
+
+/* ---------------- chef picker (portaled — see Modal.jsx) ---------------- */
+.modal-panel.chef-picker {
+  max-width: 560px;
+  max-height: none;
+  padding: 24px;
+  gap: 0;
+  background: var(--surface);
+  color: var(--ink);
+  border: none;
+  border-radius: var(--radius-card);
+  box-shadow: 0 24px 64px rgba(26, 26, 26, 0.18);
+}
+.chef-picker-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.chef-picker-head .vb-eyebrow { margin-bottom: 6px; }
+.chef-picker-head h2 { margin: 0 0 6px; font-size: 24px; line-height: 30px; font-weight: 700; letter-spacing: -0.015em; }
+.chef-picker-head p { margin: 0; max-width: 48ch; font-size: 14px; line-height: 20px; color: var(--ink-soft); text-wrap: pretty; }
+.chef-picker-close {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+}
+.chef-picker-close:hover { background: var(--ds-chip); color: var(--ink); }
+
+.chef-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.chef-tile {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.chef-tile.is-selected { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 2px; }
+.chef-tile:disabled { opacity: 0.45; cursor: not-allowed; }
+.chef-tile-art { aspect-ratio: 1 / 1; border-radius: 11px; display: flex; align-items: center; justify-content: center; }
+.chef-tile-art > span {
+  width: 92%;
+  height: 92%;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.chef-tile-taken {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 1;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.chef-tile-check {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chef-picker-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 20px; }
+.chef-picked { display: flex; align-items: center; gap: 12px; min-width: 0; margin-right: auto; }
+.chef-picked-art {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background-size: 88%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.chef-picked-name { display: block; font-size: 15px; font-weight: 600; }
+.chef-random-btn { display: inline-flex; align-items: center; gap: 8px; }
 
 @media (max-width: 720px) {
   .vb-title-row { padding: 16px 0; }
   .vb-panel { padding: 16px; }
-  .cooks-grid { grid-template-columns: 1fr; }
-  .ds-v4 .btn.cook-add-btn { min-height: 88px; }
+  .cooks-grid,
+  .vb-locked-rows { grid-template-columns: 1fr; }
+  .cook-slot { min-height: 0; }
+  .cook-invite { min-height: 120px; }
+  .chef-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
-.cook-name-input.is-invalid { border-color: var(--crit); }
-.cook-name-error { font-size: 12px; color: var(--crit); text-align: center; }
-
-.cooks-locked-note {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--paper-2, transparent);
+@media (max-width: 480px) {
+  .vb-footer .btn-lg { width: 100%; min-width: 0; }
+  .cook-action-row { flex-wrap: wrap; }
 }
