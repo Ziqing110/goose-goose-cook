@@ -7,10 +7,18 @@
 export const ELICITATION_QUESTIONS = [
   {
     id: "dishIdea",
-    slotLabel: "Dish",
-    agentText: "What do you want to cook tonight?",
+    slotLabel: "Dishes",
+    // Plural on purpose. The whole shared-step machinery — is_shareable,
+    // share_key, extractSharedSteps — exists so two dishes cooked
+    // together fold their common prep into one step. Asking for a single
+    // dish made the app's most distinctive feature unreachable from its
+    // own setup flow.
+    agentText: "What are we cooking tonight? One dish or a few.",
     options: [],
-    freeTextPlaceholder: "e.g. mapo tofu",
+    // One example, not the same dish twice. The question above already
+    // says "one dish or a few"; the placeholder only has to show what
+    // several look like, and a comma does that.
+    freeTextPlaceholder: "e.g. mapo tofu, egg drop soup",
   },
   {
     id: "servings",
@@ -35,15 +43,43 @@ export const ELICITATION_QUESTIONS = [
     freeTextPlaceholder: "e.g. nut allergy",
   },
   {
+    id: "skill",
+    slotLabel: "Step detail",
+    // Deliberately asked as "how much explanation do you want", not "how
+    // good are you". A beginner is allowed to attempt a hard dish — that
+    // is most of the appeal — so this must never read as a gate on what
+    // you can cook. It changes how much each step explains, nothing
+    // else, and the question says so out loud.
+    agentText: "How much should I explain each step? You can cook anything either way.",
+    options: [
+      { label: "Explain everything", value: "beginner" },
+      { label: "Normal detail", value: "regular" },
+      { label: "Just the essentials", value: "confident" },
+    ],
+    freeTextPlaceholder: "e.g. I'm new to this",
+  },
+  {
     id: "targetTime",
     slotLabel: "Target time",
     agentText: "What's the target finish time, start to plated?",
+    // Measured, not guessed. Generating these three dishes across six
+    // models gave median critical paths of 22 minutes for mapo tofu,
+    // 41 for mouth-watering chicken (poach, then it has to CHILL), and
+    // 52 for century egg congee (a simmer that cannot be hurried).
+    //
+    // The old options were 20 / 30 / 45, and 20 was a promise the app
+    // could not keep: the fastest dish in that set takes 22 minutes on
+    // its own, before anyone adds a second one. 45 was the ceiling, which
+    // made every multi-dish run look late before it started.
+    //
+    // These three answer the question people are actually asking: is this
+    // a quick weeknight thing, an evening, or a project?
     options: [
-      { label: "20 minutes", value: "20" },
       { label: "30 minutes", value: "30" },
-      { label: "45 minutes", value: "45" },
+      { label: "1 hour", value: "60" },
+      { label: "1½ hours", value: "90" },
     ],
-    freeTextPlaceholder: "e.g. 35 minutes",
+    freeTextPlaceholder: "e.g. 40 minutes, or a couple of hours",
   },
 ];
 

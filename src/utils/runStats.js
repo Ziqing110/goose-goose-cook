@@ -3,6 +3,7 @@
 // and run-log timings. Everything here is computed from data the
 // backend already returns (see AppStateContext.jsx) — no new fields.
 import { sessionStageStates } from "./sessionSteps.js";
+import { isAttended } from "./tending.js";
 
 const DIFFICULTY_FLAMES = { low: 1, medium: 2, high: 3 };
 
@@ -22,7 +23,12 @@ export function runTitle(session) {
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b))
     .join(" + ");
-  return fromRecipes || session.conversation?.answers?.dishIdea || "Untitled run";
+  // dishIdea is a list now. Older sessions stored a single string, and
+  // they still have to render, so both shapes are handled here rather
+  // than migrated.
+  const asked = session.conversation?.answers?.dishIdea;
+  const fromAnswer = Array.isArray(asked) ? asked.filter(Boolean).join(" + ") : asked;
+  return fromRecipes || fromAnswer || "Untitled run";
 }
 
 /** 0 when no steps exist yet, else 1–3 from the hardest step. */
@@ -43,7 +49,13 @@ export function runServings(session) {
 }
 
 export function runTotalSeconds(session) {
-  return allWorkingNodes(session).reduce((sum, n) => sum + (Number(n.estimated_duration_sec) || 0), 0);
+  // Hands-on time. Waits are real minutes but nobody spends them, and
+  // lumping them in told the run card a 2-minute cook would take 67.
+  // Summing them would be wrong twice over, since concurrent waits do
+  // not add up either.
+  return allWorkingNodes(session)
+    .filter(isAttended)
+    .reduce((sum, n) => sum + (Number(n.estimated_duration_sec) || 0), 0);
 }
 
 export function runPhaseCounts(session) {

@@ -249,6 +249,14 @@
 .sch-lane-name { font-size: 16px; line-height: 22px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sch-lane-busy { font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
 
+/* The equipment lanes underneath the cooks: no player color, a quieter
+   ground, and a divider so they read as a distinct section rather than
+   more cooks. */
+.sch-lane-divider { height: 1px; background: var(--line); }
+.sch-lane-divider-track { border-top: 1px solid var(--line); }
+.sch-lane-label.is-equipment { background-color: var(--surface-sunken); }
+.sch-lane-label.is-equipment .sch-lane-name { font-weight: 500; color: var(--ink-soft); }
+
 .sch-scroll { flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; }
 .sch-track { position: relative; }
 .sch-ruler { position: relative; height: var(--sch-ruler-height); }
@@ -313,6 +321,18 @@
   cursor: default;
 }
 .sch-block.is-wait .sch-block-label { font-weight: 400; }
+
+/* Equipment lane blocks: a cross-reference, not new work, so hands-on
+   ones sit at reduced opacity — the step is already drawn above on its
+   cook's lane. Unattended ones are the one thing this lane exists for:
+   dashed and quiet, same as a wait, because that is what they are. */
+.sch-block.is-task.is-equipment { border-color: var(--line-strong); }
+.sch-block.is-task.is-equipment.is-hands-on { opacity: 0.55; }
+.sch-block.is-task.is-equipment.is-unattended {
+  border-style: dashed;
+  background: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.65) 0 6px, transparent 6px 12px);
+  color: var(--ink-soft);
+}
 
 /* ---------------- task detail ---------------- */
 .sch-detail {
@@ -433,6 +453,7 @@
 .sch-bundle-row-label { font-size: 16px; line-height: 22px; font-weight: 500; }
 .sch-bundle-row-dish { font-size: 13px; color: var(--ink-soft); }
 .sch-bundle-row-dur { font-size: 14px; color: var(--ink-soft); }
+.sch-bundle-row.is-unattended .sch-bundle-row-label { color: var(--ink-soft); font-style: italic; }
 
 .sch-grabs { display: flex; flex-direction: column; gap: 12px; margin: 0 20px; padding-top: 16px; border-top: 1px solid var(--line); }
 .sch-grabs-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
@@ -561,4 +582,42 @@
   }
   .sch-title-row, .sch-modes-wrap, .sch-hud, .sch-notice, .sch-card, .sch-block, .sch-roll, .sch-mode-chip, .sch-detail.is-sheet { animation-name: sch-fade; }
   .sch-dots { animation: none; }
+}
+
+/* --- equipment lanes -------------------------------------------------
+   Below the cooks: one track per burner, pot, board actually used. This
+   is where unattended work lives, since it occupies the equipment and
+   nobody. Quieter than the cook lanes on purpose — it is context for
+   the plan, not somebody's assignment. */
+.schedule-lane-divider,
+.schedule-lane-divider-track {
+  height: 1px;
+  background: var(--line);
+  margin: 6px 0;
+}
+.schedule-lane-label.is-equipment {
+  color: var(--ink-faint);
+}
+.schedule-lane-label.is-equipment .schedule-lane-name {
+  text-transform: lowercase;
+}
+.schedule-block-task.is-equipment {
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  color: var(--ink-soft);
+}
+/* Hands-on work shown on an equipment lane is the same step already drawn
+   on a cook lane, so it reads as a cross-reference rather than new work. */
+.schedule-block-task.is-equipment.is-hands-on {
+  opacity: 0.55;
+}
+.schedule-block-task.is-equipment.is-unattended {
+  border-style: dashed;
+}
+
+/* A wait inside an opening bundle. Listed because someone has to start
+   it, quieter because it costs them nothing. */
+.opening-bundle-list li.is-unattended .opening-step-label {
+  color: var(--ink-soft);
+  font-style: italic;
 }

@@ -9,8 +9,11 @@ import { ELICITATION_QUESTIONS } from "../data/dishes.js";
 
 export const CONVERSATION_QUESTION_COUNT = ELICITATION_QUESTIONS.length;
 
+// Kitchen picking happens on Home now, before a session exists, so it's
+// not a stage here. /session/kitchen-setup still exists as a fallback
+// route (session's kitchen profile deleted mid-session) but isn't part
+// of the normal step order — see App.jsx's nextRequiredPath.
 export const SESSION_STEPS = [
-  { key: "kitchen-setup", label: "Kitchen", path: "/session/kitchen-setup", isDone: (s) => Boolean(s.kitchenProfileId) },
   { key: "conversation", label: "Conversation", path: "/session/conversation", isDone: (s) => Boolean(s.conversation?.complete) },
   // Inventory and the recipe graph are one page: the ingredients and
   // the step board live together, and you leave by approving. Labelled

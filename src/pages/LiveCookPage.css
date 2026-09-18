@@ -421,6 +421,75 @@
 .lc-modal .lc-btn-danger { padding: 0 20px; background: var(--accent); color: #fff; }
 .lc-modal .lc-btn-danger:hover { background: var(--ds-accent-hover); filter: none; }
 
+.paused-banner { border-style: dashed; }
+.paused-banner .mini-title { color: var(--crit); }
+
+
+/* --- the unattended queue --------------------------------------------
+   Steps this cook set going that do not need them. Deliberately not the
+   card's headline: they occupy nobody. But each one has a moment it
+   needs someone back, so it counts down and then goes loud. */
+.focus-queue {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.focus-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-input);
+}
+.focus-queue-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.focus-queue-label {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Due: the pot wants you. Solid border and a slow pulse — loud enough
+   to catch an eye across a kitchen, slow enough not to nag. */
+.focus-queue-item.is-due {
+  border-style: solid;
+  border-color: var(--crit);
+  background: var(--crit-soft);
+  color: var(--crit-soft-ink);
+  animation: focus-queue-pulse 2s ease-in-out infinite;
+}
+@keyframes focus-queue-pulse {
+  0%, 100% { border-color: var(--crit); }
+  50% { border-color: var(--line-strong); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .focus-queue-item.is-due { animation: none; }
+}
+
+/* There is no .btn-sm in tokens.css — only the height token that
+   .btn-ghost uses — so the queue's Done button sizes itself. */
+.focus-queue-done {
+  min-height: var(--btn-height-sm);
+  padding: 0 14px;
+  flex: none;
+}
+
+/* Due, but nobody minds when you get to it. Present without pulsing —
+   if everything shouts, the pot that is actually burning gets ignored. */
+.focus-queue-item.is-ready {
+  border-style: solid;
+  border-color: var(--line-strong);
+}
+
 /* ---------------- Service done (finished) ---------------- */
 .lc-service {
   display: grid;

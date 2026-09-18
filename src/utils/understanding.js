@@ -26,14 +26,77 @@ function firstNumber(text) {
   return match ? toNumber(match[1]) : null;
 }
 
+/**
+ * "four" or "4" -> 4, anything else -> null.
+ *
+ * Exported so spoken form-filling reads numbers the same way spoken
+ * answers do. A second copy of the word list would drift, and then
+ * "four burners" and "four servings" would disagree about what four is.
+ */
+export function spokenNumber(token) {
+  if (token == null) return null;
+  const n = toNumber(String(token).trim());
+  return Number.isFinite(n) ? n : null;
+}
+
+/** The number-word alternation, for building command patterns. */
+export const NUMBER_TOKEN = NUMBER_PATTERN;
+
 const confirmed = (value, display) => ({ value, display, status: "confirmed" });
 const unsure = (value, display, heard) => ({ value, display, status: "low-confidence", heard });
 
-function readDish(raw) {
+/**
+ * One or more dish names. `value` is always an ARRAY, because the
+ * session can hold several recipes and shared steps only mean anything
+ * across more than one dish.
+ *
+ * Splitting on "and" is the weak point: "macaroni and cheese" is one
+ * dish, not two, and nothing here can tell it from "soup and salad". So
+ * a split on "and" is never reported as confident — the sidecar shows it
+ * as a guess and the cook can correct it. The LLM reader handles this
+ * properly; this is the fallback for when it can't be reached.
+ */
+function readDishes(raw) {
   const text = raw.trim();
-  const vague = /\?|\b(maybe|or|something|not sure|idk|either|whatever)\b/i.test(text);
-  const wordy = text.split(/\s+/).length > 5;
-  return vague || wordy ? unsure(text, capitalize(text), text) : confirmed(text, capitalize(text));
+  const vague = /\?|\b(maybe|or|something|not sure|idk|either|whatever|anything)\b/i.test(text);
+  const splitOnAnd = /\band\b/i.test(text) && !/[,+&]/.test(text);
+  const dishes = text
+    .split(/\s*(?:,|\band\b|\bplus\b|&|\+)\s*/i)
+    .map((d) => d.trim())
+    .filter(Boolean);
+
+  if (!dishes.length) return unsure([], capitalize(text), text);
+
+  // Matches how runTitle joins dish names, so the sidecar and the run log
+  // describe the same session the same way.
+  const display = dishes.map(capitalize).join(" + ");
+  const wordy = dishes.some((d) => d.split(/\s+/).length > 5);
+  const guessed = vague || wordy || (splitOnAnd && dishes.length > 1);
+  return guessed ? unsure(dishes, display, text) : confirmed(dishes, display);
+}
+
+// How much each step should explain. Never a gate on what can be cooked:
+// "beginner" means say more, not attempt less.
+const SKILL_LABELS = {
+  beginner: "Explain everything",
+  regular: "Normal detail",
+  confident: "Just the essentials",
+};
+
+function readSkill(raw) {
+  const text = normalize(raw);
+  if (/\b(beginner|new|never|first time|learning|explain everything|no idea|novice)\b/.test(text)) {
+    return confirmed("beginner", SKILL_LABELS.beginner);
+  }
+  if (/\b(confident|experienced|expert|pro|chef|essentials|skip|brief|terse)\b/.test(text)) {
+    return confirmed("confident", SKILL_LABELS.confident);
+  }
+  if (/\b(regular|normal|some|average|fine|okay|ok|decent|standard)\b/.test(text)) {
+    return confirmed("regular", SKILL_LABELS.regular);
+  }
+  // The middle setting is the safe miss: it neither buries an expert in
+  // detail nor leaves a beginner without any.
+  return unsure("regular", SKILL_LABELS.regular, raw.trim());
 }
 
 function readServings(raw) {
@@ -74,18 +137,43 @@ function readTargetTime(raw) {
     return confirmed(String(n), `${n} minutes`);
   }
   if (text === "half an hour") return confirmed("30", "30 minutes");
+
+  // Halves and quarters, which people say constantly and no amount of
+  // number-word matching catches: "an hour and a half", "two and a half
+  // hours". Without this they fell through to the raw-text branch below
+  // and put a sentence where the scheduler expects minutes.
+  // Both word orders, because people use both and they are not
+  // interchangeable to a regex: "two and a half hours" puts the half
+  // before the unit, "an hour and a half" puts it after.
+  const halfBefore = new RegExp(`^(${NUMBER_PATTERN}|an?)\\s*(?:and\\s*)?(?:a\\s*)?half\\s*(?:h|hrs?|hours?)$`, "i");
+  const halfAfter = new RegExp(`^(${NUMBER_PATTERN}|an?)\\s*(?:h|hrs?|hours?)\\s*(?:and\\s*)?(?:a\\s*)?half$`, "i");
+  const half = halfBefore.exec(text) || halfAfter.exec(text);
+  if (half) {
+    const base = /^an?$/i.test(half[1]) ? 1 : toNumber(half[1]);
+    const n = Math.round((base + 0.5) * 60);
+    return confirmed(String(n), `${n} minutes`);
+  }
+
   const n = firstNumber(text);
   if (n) {
-    const total = Math.round(/\b(h|hrs?|hours?)\b/.test(text) ? n * 60 : n);
+    const isHours = /\b(h|hrs?|hours?)\b/.test(text);
+    const total = Math.round((isHours ? n * 60 : n) + (/\bhalf\b/.test(text) ? (isHours ? 30 : 0) : 0));
     return unsure(String(total), `${total} minutes`, raw.trim());
   }
-  return unsure(raw.trim(), capitalize(raw.trim()), raw.trim());
+
+  // Nothing numeric at all. This slot MUST end up a number — the
+  // scheduler does arithmetic on it — so returning the raw sentence
+  // would put a string where minutes belong and fail somewhere far from
+  // here. Fall back to the middle option and flag it, so the sidecar
+  // shows it as a guess and the cook can correct it in one click.
+  return unsure("60", "1 hour", raw.trim());
 }
 
 const READERS = {
-  dishIdea: readDish,
+  dishIdea: readDishes,
   servings: readServings,
   diet: readDiet,
+  skill: readSkill,
   targetTime: readTargetTime,
 };
 
@@ -106,7 +194,7 @@ export function echoFor(reading) {
 /**
  * One slot per question, in question order:
  * [{ id, label, status, display, heard }] where status is
- * "confirmed" | "low-confidence" | "asking" | "pending".
+ * "confirmed" | "low-confidence" | "asking" | "asking-again" | "pending".
  */
 export function conversationSlots(conversation) {
   const { understanding = {}, answers = {}, questionIndex = 0, complete = false } = conversation;

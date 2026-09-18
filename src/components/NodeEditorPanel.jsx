@@ -29,6 +29,10 @@ export default function NodeEditorPanel({
   const [draft, setDraft] = useState(node);
   const [addingMaterial, setAddingMaterial] = useState(false);
 
+  // Keyed on node.id deliberately, NOT on node. Re-seeding the draft
+  // whenever the node object changes identity would discard whatever the
+  // person has typed the moment anything upstream re-renders. Switching
+  // to a different step is the only time the draft should be replaced.
   useEffect(() => {
     setDraft(node);
     setAddingMaterial(false);

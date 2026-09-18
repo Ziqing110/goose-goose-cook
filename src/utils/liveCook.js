@@ -6,7 +6,8 @@
 // who owns it, when it started and ended, plus an append-only event log.
 // Everything that can be recomputed (scores, ready pools, elapsed time,
 // progress) is derived on read and never stored.
-import { scheduleSteps } from "./scheduleLayout.js";
+import { scheduleSteps, computeTails, equipmentCapacity } from "./scheduleLayout.js";
+import { isAttended, hasDeadline, isOneShot, rewardsTimeliness, effectiveDifficulty } from "./tending.js";
 
 const TRANSCRIPT_LIMIT = 40;
 const UNDO_WINDOW_MS = 60_000;
@@ -19,6 +20,84 @@ const LIVE_REPLAN_NODE_BUDGET = 20_000;
 const LIVE_REPLAN_TIME_BUDGET_MS = 80;
 
 export const DIFFICULTY_POINTS = { low: 10, medium: 20, high: 35 };
+
+/**
+ * Starting an unattended step pays for two different things.
+ *
+ * THE ACT. Putting rice on is a one-minute job whatever the rice goes on
+ * to do for the next forty, so the physical part is scored as what it
+ * is: a small hands-on task, sized by difficulty. A braise that has to
+ * be browned and deglazed before it is left alone is worth more to start
+ * than a rice cooker, because it is a harder minute.
+ *
+ * WHAT IT UNBLOCKS. The rest is the real reason to reward starting: the
+ * congee gates the entire evening, and getting it on is the single most
+ * valuable move in the run. That is not a property of how hard it is —
+ * rice is easy and still decides when everyone eats — so it cannot come
+ * from difficulty. It comes from the step's tail, the same measure the
+ * claim pool already ranks on, scaled against the longest tail in the
+ * run. The step everything waits behind earns the full bonus; a wait
+ * that blocks nothing earns none of it.
+ *
+ * The bonus is ADDED rather than carved out of the step's points, so
+ * finishing is always worth the same and there is always a reason to
+ * come back to the pot.
+ */
+export const UNATTENDED_START_SHARE = 0.25;
+
+/**
+ * The timeliness bonus, as a share of the step's points.
+ *
+ * Small on purpose. It rewards being there at the right moment, which is
+ * a real skill in a kitchen with three things going, but it must not
+ * become the main way to score — that would turn the run into a game of
+ * watching clocks rather than cooking.
+ */
+export const TIMELINESS_SHARE = 0.15;
+
+/**
+ * How close counts as on time.
+ *
+ * Proportional, because eight minutes and forty minutes do not deserve
+ * the same tolerance, with a one-minute floor so a short step is not
+ * impossible to hit. An ice bath wanting eight minutes accepts roughly
+ * seven to nine.
+ */
+export const timelinessWindowSec = (estSec) => Math.max(60, Math.round(estSec * 0.15));
+
+/**
+ * Most the unblocking bonus can add. Set so that the best possible start
+ * — an easy wait that gates the whole run, i.e. the congee — is worth
+ * exactly one chop of scallions, and no more. Starting the most
+ * important thing in the evening should feel worth doing; it should
+ * never beat doing actual work.
+ */
+export const UNATTENDED_UNBLOCK_BONUS = DIFFICULTY_POINTS.low - Math.round(DIFFICULTY_POINTS.low * 0.25);
+
+/**
+ * What starting this unattended step pays.
+ *
+ * `ctx.tailShare` is this step's tail as a fraction of the longest tail
+ * in the run, 0 to 1. Omit it and only the act is paid — which is what
+ * happens anywhere the graph is not to hand, and is the safe direction
+ * to be wrong in.
+ */
+export function unattendedStartPoints(node, ctx = {}) {
+  const full = DIFFICULTY_POINTS[effectiveDifficulty(node)] ?? DIFFICULTY_POINTS.low;
+  // Nothing is held back on a step that is finished the moment it is
+  // started, so the starter takes all of it.
+  const act = isOneShot(node) ? full : Math.max(1, Math.round(full * UNATTENDED_START_SHARE));
+  const share = Number.isFinite(ctx.tailShare) ? Math.max(0, Math.min(1, ctx.tailShare)) : 0;
+  return act + Math.round(UNATTENDED_UNBLOCK_BONUS * share);
+}
+
+/** Every step's tail as a fraction of the longest tail in the run. */
+export function tailShares(nodes) {
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const tails = computeTails(nodes, byId);
+  const longest = Math.max(1, ...tails.values());
+  return new Map([...tails].map(([id, tail]) => [id, tail / longest]));
+}
 
 /**
  * SCORING SEAM — the single place points are decided.
@@ -38,13 +117,43 @@ export const DIFFICULTY_POINTS = { low: 10, medium: 20, high: 35 };
  */
 export function scoreStep(node, ctx = {}) {
   if (!node || ctx.record?.status !== "done") return { points: 0, breakdown: [] };
+  const difficulty = effectiveDifficulty(node);
+  const full = DIFFICULTY_POINTS[difficulty] ?? DIFFICULTY_POINTS.low;
+  // An unattended step already paid its starter; this is the rest of it,
+  // and it goes to whoever actually came back and dealt with the pot.
+  const unattended = !isAttended(node);
+  // Rice was paid for in full when it went on. Coming back to lift the
+  // lid is not work, and paying for it invents an achievement — the step
+  // is one task done once, which is what set-and-forget means.
+  if (isOneShot(node)) return { points: 0, breakdown: [] };
+
   const breakdown = [
     {
       key: "difficulty",
-      label: `${node.difficulty} step`,
-      points: DIFFICULTY_POINTS[node.difficulty] ?? DIFFICULTY_POINTS.low,
+      label: unattended ? `${difficulty} step, finished` : `${difficulty} step`,
+      points: unattended ? Math.max(0, full - unattendedStartPoints(node)) : full,
     },
   ];
+
+  // Being there when the pot wants you. Only for steps where the moment
+  // actually matters — a bare simmer that breaks, an ice bath that wants
+  // eight minutes and not fifteen. Scaled by difficulty, because hitting
+  // the end of a hard step is a harder thing to have done.
+  if (rewardsTimeliness(node) && ctx.record?.startedAt && ctx.record?.endedAt) {
+    const actual = Math.max(
+      0,
+      Math.round((Date.parse(ctx.record.endedAt) - Date.parse(ctx.record.startedAt)) / 1000) - (ctx.record.pausedSec || 0),
+    );
+    const est = node.estimated_duration_sec || 0;
+    if (est > 0 && Math.abs(actual - est) <= timelinessWindowSec(est)) {
+      breakdown.push({
+        key: "timeliness",
+        label: "on time",
+        points: Math.max(1, Math.round(full * TIMELINESS_SHARE)),
+      });
+    }
+  }
+
   return { points: breakdown.reduce((sum, b) => sum + b.points, 0), breakdown };
 }
 
@@ -167,18 +276,145 @@ export function blockedStepIds(nodes, run) {
   return nodes.filter((n) => run.steps[n.id]?.status === "pending" && !isReady(n.id, nodes, run)).map((n) => n.id);
 }
 
-export function activeStepFor(cookId, run) {
-  const hit = Object.entries(run.steps).find(([, r]) => r.status === "active" && r.cookId === cookId);
+/**
+ * Callers have nodes in two shapes — the array here in the utils, a byId
+ * map inside the components — and neither is worth converting at every
+ * call site just to answer "is this step attended".
+ */
+function nodeLookup(nodes) {
+  if (!nodes) return null;
+  if (Array.isArray(nodes)) return (id) => nodes.find((n) => n.id === id);
+  return (id) => nodes[id];
+}
+
+/**
+ * Which hands-on moment of an unattended step is happening RIGHT NOW,
+ * derived purely from elapsed time — nothing about this is stored,
+ * same as every other derivation in this file (see the header comment).
+ * A missed checkpoint simply passes; there is no separate "acknowledged"
+ * state to track, the same way a set-and-forget step has none.
+ *
+ * Returns one of "initial" | "checkpoint" | "waiting" | "ending" | "idle".
+ * "idle" covers both a hands_on step (nothing to derive — the whole
+ * active span already IS its hands-on moment) and a step that hasn't
+ * started or was never decomposed.
+ */
+export function unattendedPhaseNow(node, record, now = Date.now()) {
+  const u = node?.unattended;
+  if (!u || record?.status !== "active" || !record.startedAt) return { phase: "idle", index: null };
+
+  const elapsed = Math.round((now - Date.parse(record.startedAt)) / 1000) - (record.pausedSec || 0);
+
+  if (elapsed < u.initial.duration_sec) return { phase: "initial", index: 0 };
+
+  if (u.checkpoints) {
+    const { count, interval_sec, duration_sec } = u.checkpoints;
+    const sinceInitial = elapsed - u.initial.duration_sec;
+    const index = Math.floor(sinceInitial / interval_sec);
+    if (index < count && sinceInitial - index * interval_sec < duration_sec) {
+      return { phase: "checkpoint", index };
+    }
+  }
+
+  // The ending window stays open once reached — same "still due" logic as
+  // the whole-step deadline elsewhere in this file — rather than closing
+  // after ending.duration_sec and leaving a late finish with no phase at
+  // all to report.
+  if (u.ending && elapsed >= node.estimated_duration_sec - u.ending.duration_sec) {
+    return { phase: "ending", index: 0 };
+  }
+
+  return { phase: "waiting", index: null };
+}
+
+/** Does this phase put a cook's hands on the step right now? */
+const OCCUPYING_PHASES = new Set(["initial", "checkpoint", "ending"]);
+
+/**
+ * The step this cook is actually DOING — occupying them right now.
+ *
+ * A 40-minute congee simmer is "active" in the run log and occupies
+ * nobody for most of that span: the pot does the work. Counting the
+ * whole thing here would lock whoever started it out of the kitchen for
+ * 40 minutes, and in competition mode that makes taking the congee a
+ * self-inflicted penalty — exactly the step you most want someone to
+ * start early. But the moments IN that span where a cook actually has
+ * hands on it — putting it on, a checkpoint stir, taking it off — do
+ * occupy them, same as any hands_on step, for exactly as long as that
+ * moment lasts.
+ *
+ * The nodes argument is optional so old callers still work; without it
+ * every active step counts, which is the pre-existing behaviour. `now`
+ * defaults to the real clock; pass the caller's own ticked `now` when
+ * rendering, so a phase check agrees with everything else drawn that tick.
+ */
+export function activeStepFor(cookId, run, nodes, now = Date.now()) {
+  const lookup = nodeLookup(nodes);
+  const occupies = (stepId, record) => {
+    if (!lookup) return true;
+    const node = lookup(stepId);
+    // Unmarked means attended. A step nobody classified is assumed to
+    // need a cook, which is the safe way to be wrong.
+    if (!node) return true;
+    if (isAttended(node)) return true;
+    return OCCUPYING_PHASES.has(unattendedPhaseNow(node, record, now).phase);
+  };
+  const hit = Object.entries(run.steps).find(
+    ([id, r]) => r.status === "active" && r.cookId === cookId && occupies(id, r),
+  );
   return hit ? hit[0] : null;
+}
+
+/**
+ * Set-and-forget steps whose time is up.
+ *
+ * Rice does not need finishing. Nobody stands up, walks over and
+ * completes it — the rice is simply there when you come to plate, and
+ * the end of it is really part of whatever uses it next. Leaving a Done
+ * button on the screen asks someone to perform a task that does not
+ * exist, and worse, holds everything downstream hostage until they
+ * notice it.
+ *
+ * So these close themselves once their time has run. Paused time does
+ * not count, because a pot is not cooking while the run is stopped.
+ */
+export function selfFinishingIds(run, nodes, now = Date.now()) {
+  return nodes
+    .filter((n) => {
+      if (!isOneShot(n)) return false;
+      const record = run.steps[n.id];
+      if (record?.status !== "active" || !record.startedAt) return false;
+      const elapsed = Math.round((now - Date.parse(record.startedAt)) / 1000) - (record.pausedSec || 0);
+      return elapsed >= (n.estimated_duration_sec || 0);
+    })
+    .map((n) => n.id);
+}
+
+/** Everything this cook has running that does not occupy them. */
+export function passiveStepsFor(cookId, run, nodes) {
+  const lookup = nodeLookup(nodes);
+  if (!lookup) return [];
+  return Object.entries(run.steps)
+    .filter(([id, r]) => {
+      if (r.status !== "active" || r.cookId !== cookId) return false;
+      const node = lookup(id);
+      return node ? !isAttended(node) : false;
+    })
+    .map(([id]) => id);
 }
 
 export function stepVariance(node, record, now = Date.now()) {
   const estSec = node?.estimated_duration_sec ?? 0;
+  // Running long is only a failure when the step had a deadline. A
+  // congee left twenty minutes too long IS burnt and the cook should see
+  // that in red; an ice bath sat in five minutes longer is not late, it
+  // is just when somebody got round to it.
+  const blameable = hasDeadline(node);
   if (!record?.startedAt) return { estSec, actualSec: 0, deltaSec: 0, over: false, running: false };
   const end = record.endedAt ? Date.parse(record.endedAt) : now;
   const actualSec = Math.max(0, Math.round((end - Date.parse(record.startedAt)) / 1000) - (record.pausedSec || 0));
   const deltaSec = actualSec - estSec;
-  return { estSec, actualSec, deltaSec, over: deltaSec > 0, running: !record.endedAt };
+  return { estSec, actualSec, deltaSec, over: blameable && deltaSec > 0, running: !record.endedAt };
 }
 
 export function isRunComplete(run, nodes) {
@@ -195,9 +431,21 @@ export function runProgress(run, nodes, now = Date.now()) {
     0,
     Math.round(((run.endedAt ? Date.parse(run.endedAt) : now) - Date.parse(run.startedAt)) / 1000) - (run.pausedSec || 0)
   );
-  const remainingEstSec = nodes
-    .filter((n) => !["done", "skipped"].includes(run.steps[n.id]?.status))
+  // Hands-on work adds up, because one cook does one thing at a time.
+  // Waits do NOT: a 40-minute simmer and a 25-minute poach running
+  // together are 40 minutes, not 65. Summing them told people a run was
+  // half an hour longer than it was, and the longer the waits the worse
+  // the lie got. The remaining waits contribute their longest, which is
+  // what they actually cost.
+  const unfinished = nodes.filter((n) => !["done", "skipped"].includes(run.steps[n.id]?.status));
+  const remainingHandsSec = unfinished
+    .filter(isAttended)
     .reduce((sum, n) => sum + n.estimated_duration_sec, 0);
+  const remainingWaitSec = Math.max(
+    0,
+    ...unfinished.filter((n) => !isAttended(n)).map((n) => n.estimated_duration_sec),
+  );
+  const remainingEstSec = Math.max(remainingHandsSec, remainingWaitSec);
 
   // Drift against the plan: how late the most recently finished step
   // landed compared with when the plan expected it to finish.
@@ -225,20 +473,55 @@ export function runProgress(run, nodes, now = Date.now()) {
     elapsedSec,
     estimatedTotalSec: run.plan?.makespanSec ?? null,
     remainingEstSec,
+    remainingHandsSec,
+    remainingWaitSec,
     driftSec,
   };
 }
 
+/**
+ * Who first started each unattended step, and is therefore owed the
+ * starting award.
+ *
+ * Read from the event log, not from run.steps, because applyDone
+ * OVERWRITES cookId with whoever finished — so by the time a simmer is
+ * done the record no longer remembers who put it on. The log does.
+ *
+ * Only steps that are still active or finished count. Otherwise start,
+ * drop, start, drop would pay every time, which is the farming this
+ * split exists to stop.
+ */
+export function startAwards(run, nodes) {
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const shares = tailShares(nodes);
+  const firstStarter = new Map();
+  (run.events || []).forEach((e) => {
+    if (e.type !== "start" || !e.stepId || !e.cookId) return;
+    if (isAttended(byId[e.stepId])) return;
+    if (!firstStarter.has(e.stepId)) firstStarter.set(e.stepId, e.cookId);
+  });
+  const byCook = {};
+  firstStarter.forEach((cookId, stepId) => {
+    const status = run.steps[stepId]?.status;
+    if (status !== "active" && status !== "done") return;
+    byCook[cookId] =
+      (byCook[cookId] || 0) + unattendedStartPoints(byId[stepId], { tailShare: shares.get(stepId) });
+  });
+  return byCook;
+}
+
 export function scoreboard(run, nodes, cooks) {
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const started = startAwards(run, nodes);
   return cooks
     .map((cook) => {
       const mine = Object.entries(run.steps).filter(([, r]) => r.cookId === cook.id);
       const doneEntries = mine.filter(([, r]) => r.status === "done");
-      const points = doneEntries.reduce(
-        (sum, [id, record]) => sum + scoreStep(byId[id], { record, run, nodes, cooks }).points,
-        0
-      );
+      const points =
+        doneEntries.reduce(
+          (sum, [id, record]) => sum + scoreStep(byId[id], { record, run, nodes, cooks }).points,
+          0
+        ) + (started[cook.id] || 0);
       const lastDoneAt = doneEntries
         .map(([, r]) => (r.endedAt ? Date.parse(r.endedAt) : 0))
         .reduce((max, t) => Math.max(max, t), 0);
@@ -248,7 +531,7 @@ export function scoreboard(run, nodes, cooks) {
         points,
         doneCount: doneEntries.length,
         skippedCount: mine.filter(([, r]) => r.status === "skipped").length,
-        activeStepId: activeStepFor(cook.id, run),
+        activeStepId: activeStepFor(cook.id, run, nodes),
         lastDoneAt,
       };
     })
@@ -270,26 +553,41 @@ export function runOutcome(run, nodes, cooks) {
     skippedCount: progress.skipped,
     // In the order the night actually went: started steps by start
     // time, then whatever never started, in main-line order.
-    perStep: nodes
-      .map((n, order) => {
-        const record = run.steps[n.id] || emptyRecord();
-        const variance = stepVariance(n, record, run.endedAt ? Date.parse(run.endedAt) : Date.now());
-        return {
-          id: n.id,
-          label: n.label,
-          cookId: record.cookId,
-          status: record.status,
-          ...variance,
-          points: scoreStep(n, { record, run, nodes, cooks }).points,
-          _startedAt: record.startedAt ? Date.parse(record.startedAt) : Infinity,
-          _order: order,
-        };
-      })
-      .sort((a, b) => a._startedAt - b._startedAt || a._order - b._order)
-      .map((s) => {
-        const { _startedAt: _s, _order: _o, ...rest } = s; // eslint-disable-line no-unused-vars
-        return rest;
-      }),
+    perStep: (() => {
+      const shares = tailShares(nodes);
+      return nodes
+        .map((n, order) => {
+          const record = run.steps[n.id] || emptyRecord();
+          const variance = stepVariance(n, record, run.endedAt ? Date.parse(run.endedAt) : Date.now());
+          const unattended = !isAttended(n);
+          return {
+            id: n.id,
+            label: n.label,
+            cookId: record.cookId,
+            status: record.status,
+            attended: !unattended,
+            ...variance,
+            points: scoreStep(n, { record, run, nodes, cooks }).points,
+            // An unattended step paid twice, and the summary has to account
+            // for both halves or the start awards appear in the totals from
+            // nowhere. startedByCookId is read from the event log because
+            // applyDone overwrites cookId with whoever finished.
+            ...(unattended
+              ? {
+                  startPoints: unattendedStartPoints(n, { tailShare: shares.get(n.id) }),
+                  startedByCookId: (run.events || []).find((e) => e.type === "start" && e.stepId === n.id)?.cookId ?? null,
+                }
+              : {}),
+            _startedAt: record.startedAt ? Date.parse(record.startedAt) : Infinity,
+            _order: order,
+          };
+        })
+        .sort((a, b) => a._startedAt - b._startedAt || a._order - b._order)
+        .map((s) => {
+          const { _startedAt: _s, _order: _o, ...rest } = s; // eslint-disable-line no-unused-vars
+          return rest;
+        });
+    })(),
   };
 }
 
@@ -303,22 +601,34 @@ export function resolveAssignments({ nodes, run, cooks, now = Date.now() }) {
   const claimedFills = new Set();
   const byCook = {};
 
+  // TWO PASSES, and the order matters. Everyone's own queued work is
+  // reserved before anyone is offered somebody else's.
+  //
+  // One pass let a cook who was only minding a simmer fall through to
+  // the idle-fill branch and be handed a step that was about to be
+  // assigned to its actual owner — both cooks pointed at "make sauce".
+  // That was unreachable while holding anything made you busy; letting a
+  // cook hold a wait and stay free is what opened it. It is the exact
+  // failure the comment on the fill branch below warns about.
+  const queues = new Map();
   cooks.forEach((cook) => {
-    // Holding something? That's the answer — and it's also what stops a
-    // busy cook ever being offered more work.
-    const active = activeStepFor(cook.id, run);
+    const active = activeStepFor(cook.id, run, nodes, now);
     if (active) {
       byCook[cook.id] = { stepId: active, reason: "active", waitingOnStepId: null, waitingOnCookId: null, etaSec: null };
       return;
     }
-
     const queue = (run.plan?.order?.[cook.id] || []).filter((id) => run.steps[id]?.status === "pending");
-    const head = queue.find((id) => ready.has(id));
+    queues.set(cook.id, queue);
+    const head = queue.find((id) => ready.has(id) && !claimedFills.has(id));
     if (head) {
       byCook[cook.id] = { stepId: head, reason: "assigned", waitingOnStepId: null, waitingOnCookId: null, etaSec: null };
       claimedFills.add(head);
-      return;
     }
+  });
+
+  cooks.forEach((cook) => {
+    if (byCook[cook.id]) return;
+    const queue = queues.get(cook.id) || [];
 
     if (queue.length === 0) {
       const anythingLeft = nodes.some((n) => ["pending", "active"].includes(run.steps[n.id]?.status));
@@ -401,13 +711,50 @@ export function replan({ nodes, run, cooks, kitchenProfile }) {
  * and any future caller all hit the same wall — there is deliberately no
  * "drop this and take that" shortcut anywhere.
  */
-export function arbitrateClaim({ run, nodes, cooks, stepId, cookId, at }) {
+/**
+ * Is a piece of equipment this step needs already fully in use?
+ *
+ * Returns the equipment type that is short, or null. Counts only steps
+ * running RIGHT NOW — this is a live check against the actual kitchen,
+ * not the planner's model of it.
+ */
+export function equipmentShortage({ run, nodes, stepId, kitchenProfile }) {
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const needs = [...new Set(byId[stepId]?.required_equipment || [])];
+  if (!needs.length) return null;
+  const caps = equipmentCapacity(kitchenProfile);
+  const activeIds = Object.entries(run.steps)
+    .filter(([id, r]) => r.status === "active" && id !== stepId)
+    .map(([id]) => id);
+  for (const type of needs) {
+    const cap = caps[type] ?? 1;
+    const inUse = activeIds.filter((id) => (byId[id]?.required_equipment || []).includes(type)).length;
+    if (inUse >= cap) return type;
+  }
+  return null;
+}
+
+export function arbitrateClaim({ run, nodes, cooks, stepId, cookId, at, kitchenProfile }) {
   const record = run.steps[stepId];
   if (!record) return { ok: false, code: "unknown_step" };
   if (["done", "skipped"].includes(record.status)) return { ok: false, code: "already_done" };
 
-  const holding = activeStepFor(cookId, run);
+  // Only actually-occupied time makes you busy. Someone minding a simmer
+  // between its checkpoints can pick up the next thing, and can hold
+  // several waits at once — which is the whole point of marking a step
+  // unattended. Mid-checkpoint, mid-initial or mid-ending, though, they
+  // are exactly as busy as anyone doing hands_on work — see
+  // unattendedPhaseNow.
+  const holding = activeStepFor(cookId, run, nodes, Date.parse(at));
   if (holding && holding !== stepId) return { ok: false, code: "busy", holdingStepId: holding };
+
+  // The kitchen has a finite number of burners, and until unattended
+  // steps existed nothing had to say so here: one cook could hold one
+  // step, so two cooks could never run more than two things. Letting a
+  // cook hold several waits removed that accidental ceiling, and without
+  // this a single person can put three pots on two burners.
+  const shortage = equipmentShortage({ run, nodes, stepId, kitchenProfile });
+  if (shortage) return { ok: false, code: "no_equipment", equipmentType: shortage };
 
   if (record.status === "active") {
     if (record.cookId === cookId) return { ok: false, code: "noop" };
@@ -442,19 +789,39 @@ export function arbitrateClaim({ run, nodes, cooks, stepId, cookId, at }) {
   return { ok: true };
 }
 
+/**
+ * What this cook should claim next, best first.
+ *
+ * Ranked by TAIL — how much of the cook is still waiting behind this
+ * step — not by points. Points-first was actively harmful here: a
+ * 40-minute congee simmer is one "medium" step worth the same as a
+ * two-minute chop, and sorting ties by shortest duration pushed it to
+ * the bottom of the pool. The app was steering people toward quick wins
+ * and burying the one step that gates dinner, so in competition mode
+ * everybody ended up waiting on a pot nobody had started.
+ *
+ * Tail ordering fixes that without any scoring change: the simmer has
+ * the longest chain behind it, so it surfaces first. Points still break
+ * ties, which is where they belong — between two steps that unblock the
+ * same amount of work, take the one worth more.
+ */
 export function claimSuggestions({ nodes, run, cookId, limit = 3 }) {
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
   const opening = new Set(run.openingSuggestions?.[cookId] || []);
+  const tails = computeTails(nodes, byId);
   return readyStepIds(nodes, run)
     .sort((a, b) => {
       const aOpen = opening.has(a) ? 0 : 1;
       const bOpen = opening.has(b) ? 0 : 1;
       if (aOpen !== bOpen) return aOpen - bOpen;
+      const tail = (id) => tails.get(id) ?? 0;
+      if (tail(a) !== tail(b)) return tail(b) - tail(a);
       const pts = (id) => DIFFICULTY_POINTS[byId[id]?.difficulty] ?? 0;
-      return pts(b) - pts(a) || byId[a].estimated_duration_sec - byId[b].estimated_duration_sec;
+      return pts(b) - pts(a);
     })
     .slice(0, limit);
 }
+
 
 // ---------------------------------------------------------------------
 // Transitions — all pure, all return a new run

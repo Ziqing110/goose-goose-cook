@@ -29,6 +29,9 @@ import { buildInventory, formatClock, formatStepDuration, PHASE_LABELS } from ".
 import dishMapoTofu from "../assets/dish-mapo-tofu.png";
 import dishNoodleSoup from "../assets/dish-noodle-soup.png";
 import "./InventoryPage.css";
+import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { normalizeUtterance, CONFIRM_YES_PATTERN, CONFIRM_NO_PATTERN } from "../utils/navCommands.js";
+import { matchStepName } from "../utils/stepNameMatch.js";
 
 // The system's two dish marks. Matched by title keyword; a dish with
 // no mark simply shows none (the title carries the meaning).
@@ -54,6 +57,77 @@ const EQUIPMENT_GLYPH = { wok: "wok", oven: "oven", pot: "pot", stove_burner: "b
 const withArticle = (label) => `${/^[aeiou]/i.test(label) ? "an" : "a"} ${label}`;
 
 const pad2 = (n) => String(n).padStart(2, "0");
+
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Every way someone says an ingredient just ran out, or just turned up —
+// mirroring the checkboxes' own words ("out" / "on hand") plus how people
+// actually talk in a kitchen. Off is checked before on in the command
+// list below, same reasoning as the kitchen form's wok/oven toggle: a
+// phrase that could read either way should read as off.
+const OUT_PHRASES = (name) => [
+  new RegExp(`\\bno (?:more )?${name}\\b`),
+  new RegExp(`\\bout of ${name}\\b`),
+  new RegExp(`\\b${name} is out\\b`),
+  new RegExp(`\\b(?:don't|dont) have (?:any )?${name}\\b`),
+  new RegExp(`\\bmark ${name} out\\b`),
+];
+const ON_HAND_PHRASES = (name) => [
+  new RegExp(`\\bgot (?:the |some )?${name}\\b`),
+  new RegExp(`\\bhave (?:the |some )?${name}\\b`),
+  new RegExp(`\\bfound (?:the |some )?${name}\\b`),
+  new RegExp(`\\b${name} is (?:back|on hand)\\b`),
+  new RegExp(`\\bmark ${name} on hand\\b`),
+];
+
+/**
+ * One "out" and one "on hand" command per ingredient, matched against its
+ * full name. Unlike the kitchen picker's bare distinctive word, these
+ * always require a trigger phrase — this page isn't asking "which
+ * ingredient", so a bare mention of "ginger" in conversation must not
+ * flip anything.
+ */
+function ingredientVoiceCommands(items, { markOut, markOnHand }) {
+  return items.flatMap((item) => {
+    const name = escapeRe(normalizeUtterance(item.label));
+    if (!name) return [];
+    return [
+      { phrases: OUT_PHRASES(name), label: `${item.label} — marked out.`, run: () => markOut(item.id) },
+      { phrases: ON_HAND_PHRASES(name), label: `${item.label} — back on hand.`, run: () => markOnHand(item.id) },
+    ];
+  });
+}
+
+/**
+ * Pulls the task's own name and any position clause out of what follows
+ * "add a task" / "add a step" — "between X and Y" checked first since
+ * "before" alone would otherwise swallow it (`between mix the batter and
+ * pour it` contains no "before", so order only matters for a phrase
+ * that could plausibly satisfy both, which doesn't happen here, but
+ * "between" is the more specific claim and goes first on principle).
+ *
+ * The name itself is only recognised behind a connector word
+ * (to/called/named/for). Without one, "add a task toast the sesame
+ * seeds before plating" has no reliable way to tell the task's name
+ * apart from the position clause, so it's left for the form rather
+ * than guessed at.
+ */
+function parseAddTaskSpeech(rest) {
+  const empty = { name: "", before: null, between: null };
+  if (!rest) return empty;
+  const named = "(?:(?:to|called|named|for) (.+?) )?";
+
+  const between = new RegExp(`^${named}between (.+) and (.+)$`).exec(rest);
+  if (between) return { name: (between[1] || "").trim(), before: null, between: [between[2].trim(), between[3].trim()] };
+
+  const before = new RegExp(`^${named}before (.+)$`).exec(rest);
+  if (before) return { name: (before[1] || "").trim(), before: before[2].trim(), between: null };
+
+  const namedOnly = /^(?:to|called|named|for) (.+)$/.exec(rest);
+  if (namedOnly) return { name: namedOnly[1].trim(), before: null, between: null };
+
+  return empty;
+}
 
 /** "01–03" for a run of consecutive step numbers, otherwise "01, 04". */
 function numberRange(numbers) {
@@ -102,7 +176,12 @@ function StepLine({ step, statusLine, delay }) {
           {PHASE_LABELS[step.phase] || step.phase}
         </span>
         <span className="inv-step-label">{step.label}</span>
-        <span className="inv-step-dur mono">{formatStepDuration(step.durationSec)}</span>
+        <Mono>
+          <span className={`inv-step-dur ${step.attended === false ? "is-unattended" : ""}`}>
+            {formatStepDuration(step.durationSec)}
+            {step.attended === false && " unattended"}
+          </span>
+        </Mono>
       </span>
       {statusLine && <span className={`inv-step-sub inv-step-status is-${step.status}`}>{statusLine}</span>}
       {step.split.length > 0 && (
@@ -197,13 +276,16 @@ export default function InventoryPage() {
   const { state, dispatch, editKitchenProfile } = useAppState();
   const session = state.session;
   const { recipes, sharedSteps = [], outMaterialIds = [] } = session;
-  const { catalog, catalogError, retryCatalog } = useSessionRecipes();
+  const { catalog, catalogError, retryCatalog, generating } = useSessionRecipes();
   const [tab, setTab] = useState("ingredients");
   // The board panel: null, { mode: "impact" }, { mode: "edit", id } or
   // { mode: "add" }. Which card is open is view state — persisting it
   // meant a reload re-opened the editor on a step nobody had clicked.
   const [panel, setPanel] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
+  // A voice-guessed "before X" / "between X and Y" position waiting on
+  // yes/no — { question, onYes, onNo }, or null when nothing is pending.
+  const [addTaskConfirm, setAddTaskConfirm] = useState(null);
   const [offscreen, setOffscreen] = useState({ left: [], right: [], other: [] });
   const [dismissedEquipment, setDismissedEquipment] = useState(null);
   // null = let the board fit itself to the frame; a number is the
@@ -333,6 +415,28 @@ export default function InventoryPage() {
     );
     setPanel(null);
   };
+
+  // The voice equivalent of the "Approve and schedule" button, in the
+  // same words printed on it. Approving locks the graph, so it asks
+  // first — and it refuses while a step is blocked, exactly as the
+  // button does when disabled. A voice command that quietly does
+  // nothing because a button was greyed out is a bug report waiting to
+  // happen, so it says why.
+  useEffect(() => {
+    return registerVoiceCommands([
+      {
+        phrases: [/\bapprove\b/],
+        confirm: "Approve the board and move to scheduling? Say yes or no.",
+        label: "Approved.",
+        run: () => {
+          if (dishIsUndoable) return;
+          approve();
+        },
+      },
+    ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dishIsUndoable]);
+
   const revise = () => {
     recipes.forEach((r) => dispatch({ type: "session/recipes/updateOne", payload: { recipeId: r.id, patch: { approved: null } } }));
     sharedSteps.forEach((st) => dispatch({ type: "session/sharedSteps/updateOne", payload: { sharedStepId: st.id, patch: { approved: null } } }));
@@ -369,7 +473,12 @@ export default function InventoryPage() {
   useEffect(() => {
     dispatch({
       type: "voice/setHint",
-      payload: { hint: { line: "Tell me what you're out of — say “no ginger.”", sub: "Everything's on hand until you say otherwise." } },
+      payload: {
+        hint: {
+          line: "Tell me what you're out of — say “no ginger.”",
+          sub: "Everything's on hand until you say otherwise. You can also say “add a task.”",
+        },
+      },
     });
     return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
   }, [dispatch]);
@@ -380,7 +489,123 @@ export default function InventoryPage() {
     next.has(id) ? next.delete(id) : next.add(id);
     setOut([...next]);
   };
+  // Voice says which state it wants, not "flip whatever this is" — saying
+  // "got ginger" while it's already on hand should do nothing, not put
+  // it back out.
+  const markOut = (id) => {
+    if (!outMaterialIds.includes(id)) setOut([...outMaterialIds, id]);
+  };
+  const markOnHand = (id) => {
+    if (outMaterialIds.includes(id)) setOut(outMaterialIds.filter((x) => x !== id));
+  };
   const markAllOnHand = () => setOut([]);
+
+  // Mirrors the checkboxes and the "Add a task" button: everything voice
+  // can do here is something a click already does, said in the words the
+  // hint promises ("say 'no ginger'") instead of promising and ignoring.
+  useEffect(() => {
+    if (!hasDishes || !catalog) return undefined;
+    return registerVoiceCommands([
+      ...ingredientVoiceCommands(inv.ingredients, { markOut, markOnHand }),
+      {
+        phrases: [/\beverything(?:'s| is)? on hand\b/, /\bmark everything on hand\b/, /\ball on hand\b/],
+        label: "Everything's on hand.",
+        run: () => hasOut && markAllOnHand(),
+      },
+      {
+        // The button only shows on the recipe graph tab, but the command
+        // works from either — it switches tabs itself rather than
+        // silently doing nothing because you were looking at ingredients.
+        // Everything after "task"/"step" is captured whole and handed to
+        // parseAddTaskSpeech, rather than only recognising the name — a
+        // position clause ("before X", "between X and Y") lives out here
+        // too.
+        phrases: [/\badd (?:a |another )?task\b(.*)$/, /\badd (?:a |another )?step\b(.*)$/],
+        run: (m) => {
+          if (approved) return "The plan's approved — revise it to add a task.";
+          const { name, before, between } = parseAddTaskSpeech((m?.[1] || "").trim());
+          showTab("graph");
+
+          const openWith = (position) => setPanel({ mode: "add", initialLabel: name, ...position });
+
+          if (!before && !between) {
+            openWith({});
+            return name ? `Opening the task form for “${name}.”` : "Opening the task form.";
+          }
+
+          const ids = boardNodes.map((n) => n.id);
+          const labelOf = (id) => nodeById[id]?.label;
+
+          // "Cut the yellow onion" and "Cut the red onion" read alike —
+          // an exact match wires the position straight through; anything
+          // closer to a guess (a word dropped, one swapped for something
+          // similar) asks first instead of routing the new step to
+          // whichever one it happened to score higher.
+          if (between) {
+            const [mx, my] = between.map((text) => matchStepName(text, ids, labelOf));
+            if (mx.confidence === "none" || my.confidence === "none") {
+              openWith({});
+              return "Opening the task form — I couldn't tell which two steps “between” means, so pick them there.";
+            }
+            const position = { initialDependsOn: [mx.stepId], initialRunsBefore: [my.stepId] };
+            if (mx.confidence === "exact" && my.confidence === "exact") {
+              openWith(position);
+              return `Opening the task form, between “${mx.label}” and “${my.label}.”`;
+            }
+            const question = `Between “${mx.label}” and “${my.label}”? Say yes or no.`;
+            setAddTaskConfirm({ question, onYes: () => openWith(position), onNo: () => openWith({}) });
+            return question;
+          }
+
+          const mb = matchStepName(before, ids, labelOf);
+          if (mb.confidence === "none") {
+            openWith({});
+            return "Opening the task form — I couldn't tell which step “before” means, so pick it there.";
+          }
+          const position = { initialRunsBefore: [mb.stepId] };
+          if (mb.confidence === "exact") {
+            openWith(position);
+            return `Opening the task form, before “${mb.label}.”`;
+          }
+          const question = `Before “${mb.label}”? Say yes or no.`;
+          setAddTaskConfirm({ question, onYes: () => openWith(position), onNo: () => openWith({}) });
+          return question;
+        },
+      },
+    ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasDishes, catalog, inv.ingredients, outMaterialIds, hasOut, approved, boardNodes, nodeById]);
+
+  // A guessed position — "before X", "between X and Y" — whose name
+  // match came back close but not exact. Same reasoning as the live
+  // cook's step matching: firing on a guess among steps that read alike
+  // is how a new task ends up wired to the wrong one.
+  const resolveAddTaskConfirm = (answer) => {
+    if (!addTaskConfirm) return;
+    const { onYes, onNo } = addTaskConfirm;
+    setAddTaskConfirm(null);
+    if (answer === "yes") onYes();
+    else onNo();
+  };
+
+  useEffect(() => {
+    if (!addTaskConfirm) return undefined;
+    const unregister = registerVoiceCommands(
+      [
+        { phrases: [CONFIRM_YES_PATTERN], label: "Got it.", run: () => resolveAddTaskConfirm("yes") },
+        { phrases: [CONFIRM_NO_PATTERN], label: "Okay — pick it in the form.", run: () => resolveAddTaskConfirm("no") },
+      ],
+      { priority: 20, exclusive: true }
+    );
+    // Expires on its own so a stray "yes" a minute later can't be read
+    // as an answer to a question nobody remembers asking.
+    const timer = setTimeout(() => setAddTaskConfirm(null), 10_000);
+    return () => {
+      unregister();
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addTaskConfirm]);
 
   const { coverage } = inv;
   const metaBits = [];
@@ -389,7 +614,13 @@ export default function InventoryPage() {
     if (inv.servings != null) metaBits.push(<><Mono>{inv.servings}</Mono> servings</>);
     if (catalog) metaBits.push(<><Mono>{inv.ingredients.length}</Mono> ingredients</>);
     metaBits.push(<><Mono>{inv.stepCount}</Mono> steps</>);
-    metaBits.push(<Mono>{formatClock(inv.totalSeconds)}</Mono>);
+    // Hands-on time is the number that decides whether tonight is
+    // manageable. The waiting is real but it is not work, and lumping
+    // them together told people a 21-minute cook would take 96.
+    metaBits.push(<><Mono>{formatClock(inv.attendedSeconds)}</Mono> hands-on</>);
+    if (inv.unattendedSeconds > 0) {
+      metaBits.push(<><Mono>{formatClock(inv.unattendedSeconds)}</Mono> waiting</>);
+    }
   }
 
   const legend = [`${coverage.craftable} craftable`];
@@ -429,7 +660,7 @@ export default function InventoryPage() {
           <h1>Inventory</h1>
           {!hasDishes ? (
             <span className="inv-meta is-tertiary">
-              The agent is still setting your dishes <span className="mono inv-dots">…</span>
+              {generating ? "Writing your recipes" : "Setting your dishes"} <span className="mono inv-dots">…</span>
             </span>
           ) : loading ? (
             <span className="inv-meta is-tertiary">Loading your ingredients…</span>
@@ -452,6 +683,17 @@ export default function InventoryPage() {
           </span>
         )}
       </header>
+
+      {/* The board below only renders once the recipes exist, so without
+          this the page is blank for the half-minute generation takes. */}
+      {!hasDishes && (
+        <div className="inv-hud" role="status" aria-live="polite">
+          <span className="inv-meta">
+            {generating ? "Writing your recipes" : "Setting your dishes"}{" "}
+            <span className="mono inv-dots">…</span>
+          </span>
+        </div>
+      )}
 
       {hasDishes && catalogError && (
         <div className="inv-hud inv-hud-error">
@@ -577,6 +819,22 @@ export default function InventoryPage() {
                   )}
                 </div>
               </div>
+
+              {addTaskConfirm && (
+                <div className="inv-equip" role="status">
+                  <div className="inv-equip-main">
+                    <span className="inv-equip-title">{addTaskConfirm.question}</span>
+                    <div className="inv-equip-actions">
+                      <button type="button" className="btn inv-equip-edit" onClick={() => resolveAddTaskConfirm("yes")}>
+                        Yes
+                      </button>
+                      <button type="button" className="btn inv-equip-dismiss" onClick={() => resolveAddTaskConfirm("no")}>
+                        No — pick it myself
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {showEquipment && (
                 <div className="inv-equip" role="note">
@@ -705,6 +963,9 @@ export default function InventoryPage() {
                         nodes={boardNodes}
                         numberOf={numberOf}
                         onClose={closePanel}
+                        initialLabel={panel.initialLabel || ""}
+                        initialDependsOn={panel.initialDependsOn || []}
+                        initialRunsBefore={panel.initialRunsBefore || []}
                         onAdd={(recipeId, spec) => {
                           const id = addNode(recipeId, spec);
                           // Open the new card for the rest of its details.

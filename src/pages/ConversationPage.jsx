@@ -1,8 +1,12 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { ELICITATION_QUESTIONS } from "../data/dishes.js";
+// interpretAnswer is still used directly by correctReading below: a typed
+// correction in the sidecar is the cook's own word for the slot, so it is
+// taken as given rather than sent back to a model to be re-read.
 import { conversationSlots, echoFor, interpretAnswer } from "../utils/understanding.js";
+import { readAnswer } from "../api/understanding.js";
 import Icon from "../components/Icon.jsx";
 import VoiceInput from "../components/VoiceInput.jsx";
 import UnderstandingSidecar from "../components/UnderstandingSidecar.jsx";
@@ -13,8 +17,20 @@ export default function ConversationPage() {
   const navigate = useNavigate();
   const { conversation } = state.session;
   const { transcript, answers, questionIndex, complete } = conversation;
-  const understanding = conversation.understanding || {};
+  // Memoized because `|| {}` builds a NEW object whenever understanding
+  // is absent, which changes handleAnswer's identity every render — and
+  // VoiceInput re-registers its dictation handler, and the live socket
+  // gets an UpdateConfiguration, each time. Exactly the bug already
+  // fixed for handleAnswer; this was the other half of it.
+  const understanding = useMemo(() => conversation.understanding || {}, [conversation.understanding]);
   const transcriptRef = useRef(null);
+  // The follow-up currently outstanding, if any. Held here rather than in
+  // session state because it is about this turn, not about the run — a
+  // reload should re-ask the question, not resume half of it.
+  const [pendingFollowUp, setPendingFollowUp] = useState(null);
+  // True while the reader is thinking. The answer bar shows it, so a
+  // network round trip does not look like the app ignoring you.
+  const [reading, setReading] = useState(false);
   const currentQuestion = ELICITATION_QUESTIONS[questionIndex];
   // Recipes are drafted once, from the answers as they stand
   // (useSessionRecipes), so a correction after that would never reach
@@ -35,37 +51,98 @@ export default function ConversationPage() {
 
   useEffect(() => {
     if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
-  }, [transcript]);
+    // `reading` too: the thinking bubble is appended below the last
+    // message, so without this it can appear just off the bottom edge.
+  }, [transcript, reading]);
+
+  // This page takes dictation, not commands, so the bar should say so —
+  // and should stop advertising navigation you can't use here.
+  useEffect(() => {
+    dispatch({
+      type: "voice/setHint",
+      payload: {
+        hint: complete
+          ? { line: "Say “check the inventory” when you're ready.", sub: null }
+          : {
+              // Reads correctly in both states: an invitation while
+              // muted, a description of what's happening while live.
+              line: "Just answer out loud — I'll type it for you.",
+              sub: "Nothing to press; it sends when you stop talking.",
+            },
+      },
+    });
+    return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
+  }, [complete, dispatch]);
 
   // The transcript keeps the cook's words as said; `answers` gets the
   // agent's reading of them, which is what the rest of the session uses.
-  const handleAnswer = (text) => {
-    const reading = interpretAnswer(currentQuestion, text);
-    const nextAnswers = { ...answers, [currentQuestion.id]: reading.value };
-    const nextUnderstanding = { ...understanding, [currentQuestion.id]: reading };
-    const nextIndex = questionIndex + 1;
-    const isLast = nextIndex >= ELICITATION_QUESTIONS.length;
-    const nextLine = isLast ? "Got it — drafting your recipe graph now." : ELICITATION_QUESTIONS[nextIndex].agentText;
-    const agentText = reading.status === "low-confidence" ? `${echoFor(reading)} ${nextLine}` : nextLine;
+  // Memoized deliberately. VoiceInput re-registers its dictation handler
+  // whenever this identity changes, and an unmemoized version changed on
+  // every render — including every partial transcript, since partials set
+  // state there. That meant unregister/re-register per partial, and with
+  // it an UpdateConfiguration sent over the live socket each time.
+  const handleAnswer = useCallback(
+    async (text) => {
+      // The cook's words go up immediately, before the read comes back.
+      // A network round trip is long enough that waiting to echo them
+      // makes the app look like it did not hear.
+      const heardTranscript = [...transcript, { speaker: "cook", text }];
+      dispatch({ type: "session/conversation/update", payload: { transcript: heardTranscript } });
+      setReading(true);
 
-    dispatch({
-      type: "session/conversation/update",
-      payload: {
-        answers: nextAnswers,
-        understanding: nextUnderstanding,
-        transcript: [...transcript, { speaker: "cook", text }, { speaker: "agent", text: agentText }],
-        questionIndex: nextIndex,
-        ...(isLast ? { complete: true } : {}),
-      },
-    });
-  };
+      let result;
+      try {
+        result = await readAnswer(currentQuestion, text, pendingFollowUp);
+      } finally {
+        setReading(false);
+      }
+
+      // The answer was not enough to fill the slot, so the agent asks
+      // rather than guessing. The question index does NOT advance: we are
+      // still on this slot, and the next thing they say is an answer to
+      // the follow-up, which is passed back so a bare "three" is read as
+      // answering it.
+      if (result.status === "needs-followup" && result.followUp) {
+        setPendingFollowUp(result.followUp);
+        dispatch({
+          type: "session/conversation/update",
+          payload: {
+            transcript: [...heardTranscript, { speaker: "agent", text: result.followUp }],
+            understanding: {
+              ...understanding,
+              [currentQuestion.id]: { ...result, status: "asking-again" },
+            },
+          },
+        });
+        return;
+      }
+
+      setPendingFollowUp(null);
+      const nextIndex = questionIndex + 1;
+      const isLast = nextIndex >= ELICITATION_QUESTIONS.length;
+      const nextLine = isLast ? "Got it — drafting your recipe graph now." : ELICITATION_QUESTIONS[nextIndex].agentText;
+      const agentText = result.status === "low-confidence" ? `${echoFor(result)} ${nextLine}` : nextLine;
+
+      dispatch({
+        type: "session/conversation/update",
+        payload: {
+          answers: { ...answers, [currentQuestion.id]: result.value },
+          understanding: { ...understanding, [currentQuestion.id]: result },
+          transcript: [...heardTranscript, { speaker: "agent", text: agentText }],
+          questionIndex: nextIndex,
+          ...(isLast ? { complete: true } : {}),
+        },
+      });
+    },
+    [answers, understanding, questionIndex, transcript, currentQuestion, pendingFollowUp, dispatch],
+  );
 
   const confirmReading = (id) => {
-    const reading = understanding[id];
-    if (!reading) return;
+    const current = understanding[id];
+    if (!current) return;
     dispatch({
       type: "session/conversation/update",
-      payload: { understanding: { ...understanding, [id]: { ...reading, status: "confirmed", heard: undefined } } },
+      payload: { understanding: { ...understanding, [id]: { ...current, status: "confirmed", heard: undefined } } },
     });
   };
 
@@ -139,12 +216,25 @@ export default function ConversationPage() {
                 </div>
               </div>
             ))}
-            {!isComplete && (
-              <div className="chat-row chat-cook" aria-hidden="true">
-                <span className="chat-avatar" />
+            {/* Dots mean someone is composing a message. This used to sit
+                on the cook's side and render whenever the conversation
+                was unfinished, so it claimed YOU were talking the entire
+                time — including while the agent was the one thinking.
+                Back when nothing was actually thinking it was just decor;
+                now that a real read happens between turns, it was
+                pointing at the wrong speaker.
+
+                It belongs to the agent, and only while it is genuinely
+                reading. The answer bar already says what the cook's side
+                is doing ("Listening…", "Reading…"). */}
+            {reading && (
+              <div className="chat-row chat-agent" aria-live="polite" aria-label="Agent is thinking">
+                <span className="chat-avatar" aria-hidden="true">
+                  <Icon glyph="waveform" size={16} />
+                </span>
                 <div className="chat-msg">
-                  <span className="chat-who">You</span>
-                  <p className="chat-bubble typing-bubble">
+                  <span className="chat-who">Agent</span>
+                  <p className="chat-bubble typing-bubble" aria-hidden="true">
                     <span className="typing-dot" />
                     <span className="typing-dot" />
                     <span className="typing-dot" />
@@ -179,7 +269,7 @@ export default function ConversationPage() {
               </div>
             </>
           ) : (
-            <VoiceInput question={currentQuestion} onAnswer={handleAnswer} />
+            <VoiceInput question={currentQuestion} onAnswer={handleAnswer} busy={reading} />
           )}
         </div>
       </div>

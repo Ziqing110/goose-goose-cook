@@ -10,7 +10,7 @@ export default function SessionKitchenSetupPage() {
   const { state, dispatch } = useAppState();
   const navigate = useNavigate();
 
-  const useExisting = (id) => {
+  const pickExisting = (id) => {
     dispatch({ type: "session/update", payload: { kitchenProfileId: id } });
     navigate("/session/conversation");
   };
@@ -27,10 +27,10 @@ export default function SessionKitchenSetupPage() {
       </div>
 
       <div className="card existing-kitchens-card">
-        <p className="hint">This session's kitchen was removed. Pick another one to continue.</p>
+        <p className="hint">This session&rsquo;s kitchen was removed. Pick another one to continue.</p>
         <div className="existing-kitchens-list">
           {state.kitchenProfiles.map((p) => (
-            <button type="button" key={p.id} className="btn" onClick={() => useExisting(p.id)}>
+            <button type="button" key={p.id} className="btn" onClick={() => pickExisting(p.id)}>
               {p.name}
             </button>
           ))}

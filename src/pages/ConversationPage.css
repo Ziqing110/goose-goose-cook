@@ -179,10 +179,11 @@
 }
 .chat-cook .chat-bubble { background: var(--accent-soft); }
 
-/* Waiting-for-you placeholder in the cook's slot. Uses the loading
-   "dots" fade rather than a bounce — pulse loops are reserved for the
-   stage ring and the listening dot. */
-.chat-cook .typing-bubble {
+/* The agent composing its next turn. Uses the loading "dots" fade
+   rather than a bounce — pulse loops are reserved for the stage ring and
+   the listening dot. Lives on the agent's side because the agent is the
+   one thinking; the cook's side is described by the answer bar. */
+.typing-bubble {
   display: inline-flex;
   align-items: center;
   gap: 6px;

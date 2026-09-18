@@ -12,6 +12,7 @@ import {
 import Icon from "../components/Icon.jsx";
 import Modal from "../components/Modal.jsx";
 import "./VoiceBindingPage.css";
+import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 
 // No real audio anywhere in this app — voice binding is simulated the
 // same way VoiceInput.jsx simulates "voice" with a styled text input.
@@ -60,6 +61,23 @@ export default function VoiceBindingPage() {
       clearInterval(intervalRef.current);
     };
   }, []);
+
+  // Voice equivalent of "Continue to scheduling". Only navigation, so
+  // no confirmation — and gated on the same `bound` the button is, so
+  // saying it early tells you nothing happened rather than nothing
+  // happening silently.
+  useEffect(() => {
+    return registerVoiceCommands([
+      {
+        phrases: [/\bcontinue to scheduling\b/, /\bgo to scheduling\b/],
+        run: () => {
+          if (!areCooksBound(cooks)) return;
+          navigate("/session/schedule");
+        },
+      },
+    ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cooks, navigate]);
 
   useEffect(() => {
     if (!locked) return undefined;

@@ -12,7 +12,14 @@ import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { createRun, runProgress } from "../utils/liveCook.js";
 import { mergeRecipesForDisplay } from "../utils/graphLayout.js";
-import { computeSchedule, computeOpeningAssignment, missingEquipment, EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
+import {
+  computeSchedule,
+  computeOpeningAssignment,
+  missingEquipment,
+  equipmentLanes,
+  isAttended,
+  EQUIPMENT_LABELS,
+} from "../utils/scheduleLayout.js";
 import { formatClock } from "../utils/inventory.js";
 import KpIcon from "../components/KpIcon.jsx";
 import Modal from "../components/Modal.jsx";
@@ -187,8 +194,15 @@ export default function SchedulePage() {
     return "Waiting";
   };
 
+  // Cook lanes carry ATTENDED work only. An unattended step is owned by
+  // whoever starts it but does not occupy them, so putting it here would
+  // draw a person as busy for forty minutes of doing nothing — and would
+  // overlap their real work in a single-track lane. It goes on an
+  // equipment lane below instead, which is where it actually belongs.
   const lanes = cooks.map((cook, index) => {
-    const steps = schedule.steps.filter((s) => s.cookId === cook.id).sort((a, b) => a.startSec - b.startSec);
+    const steps = schedule.steps
+      .filter((s) => s.cookId === cook.id && isAttended(byId[s.id]))
+      .sort((a, b) => a.startSec - b.startSec);
     const blocks = [];
     let prevEnd = 0;
     steps.forEach((s) => {
@@ -200,6 +214,18 @@ export default function SchedulePage() {
     });
     return { cook, index, steps, blocks, busySec: steps.reduce((sum, s) => sum + (s.endSec - s.startSec), 0) };
   });
+
+  // One track per physical burner, pot, board, wok, oven actually used.
+  // This is where the long unattended work lives, and it also exposes
+  // equipment contention the scheduler has always enforced silently.
+  const gearLanes = equipmentLanes(schedule.steps, nodes).map((lane) => ({
+    ...lane,
+    steps: lane.stepIds
+      .map((id) => schedule.steps.find((s) => s.id === id))
+      .filter(Boolean)
+      .sort((a, b) => a.startSec - b.startSec)
+      .map((s) => ({ ...s, node: byId[s.id], attended: isAttended(byId[s.id]) })),
+  }));
 
   const progress = run ? runProgress(run, nodes, Date.now()) : null;
 
@@ -319,7 +345,7 @@ export default function SchedulePage() {
                           <span className="sch-long"> steps</span> · {formatClock(busySec)}
                         </>
                       ) : (
-                        <>{formatClock(bundle?.totalSec || 0)} to open</>
+                        <>{formatClock(bundle?.totalSec || 0)} hands-on to open</>
                       )}
                     </Mono>
                   </span>
@@ -358,6 +384,7 @@ export default function SchedulePage() {
           {isCoop ? (
             <Timeline
               lanes={lanes}
+              gearLanes={gearLanes}
               makespanSec={schedule.makespanSec}
               criticalStepIds={schedule.criticalStepIds}
               zoom={zoom}
@@ -471,7 +498,7 @@ function pickTickStepMinutes(pxPerMin) {
   return TICK_STEPS_MIN.find((s) => s * pxPerMin >= TICK_MIN_PX) || TICK_STEPS_MIN[TICK_STEPS_MIN.length - 1];
 }
 
-function Timeline({ lanes, makespanSec, criticalStepIds, zoom, onZoom, selectedStepId, onSelect, selected, onClose }) {
+function Timeline({ lanes, gearLanes, makespanSec, criticalStepIds, zoom, onZoom, selectedStepId, onSelect, selected, onClose }) {
   const scrollRef = useRef(null);
   const [fitPxPerMin, setFitPxPerMin] = useState(FIT_FALLBACK_PX_PER_MIN);
   const makespanMin = Math.max(makespanSec / 60, 1);
@@ -543,7 +570,20 @@ function Timeline({ lanes, makespanSec, criticalStepIds, zoom, onZoom, selectedS
                 <span className="sch-lane-name">{cook.name}</span>
                 <Mono className="sch-lane-busy">
                   {formatClock(busySec)}
-                  <span className="sch-long"> busy</span>
+                  <span className="sch-long"> hands-on</span>
+                </Mono>
+              </span>
+            </div>
+          ))}
+
+          {gearLanes.length > 0 && <div className="sch-lane-divider" aria-hidden="true" />}
+          {gearLanes.map((lane) => (
+            <div className="sch-lane-label is-equipment" key={`${lane.type}-${lane.index}`}>
+              <span className="sch-lane-label-text">
+                <span className="sch-lane-name">{lane.label}</span>
+                <Mono className="sch-lane-busy">
+                  {formatClock(lane.steps.reduce((sum, s) => sum + (s.endSec - s.startSec), 0))}
+                  <span className="sch-long"> in use</span>
                 </Mono>
               </span>
             </div>
@@ -609,6 +649,39 @@ function Timeline({ lanes, makespanSec, criticalStepIds, zoom, onZoom, selectedS
                         </Mono>
                       )}
                       {rung === "dur" && <Mono className="sch-block-meta">{formatClock(durationSec)}</Mono>}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+
+            {gearLanes.length > 0 && <div className="sch-lane-divider-track" aria-hidden="true" />}
+            {gearLanes.map((lane) => (
+              <div className="sch-lane is-equipment" key={`${lane.type}-${lane.index}`}>
+                {lane.steps.map((s, i) => {
+                  const left = Math.round(pxFor(s.startSec));
+                  const width = Math.max(10, Math.round(pxFor(s.endSec - s.startSec)) - 3);
+                  const durationSec = s.endSec - s.startSec;
+                  const delay = `${i * 40}ms`;
+                  return (
+                    // Unattended work is drawn quieter than hands-on work:
+                    // it is on the timeline because the pot is busy, not
+                    // because anyone has to be there. Still clickable —
+                    // it is the same step already drawn above, so
+                    // selecting it here opens the same detail.
+                    <button
+                      type="button"
+                      key={s.id}
+                      className={`sch-block is-task is-equipment ${s.attended ? "is-hands-on" : "is-unattended"} ${
+                        selectedStepId === s.id ? "is-selected" : ""
+                      } ${width < 96 ? "is-narrow" : ""}`}
+                      style={{ left, width, animationDelay: delay }}
+                      title={`${s.node?.label} · ${formatClock(durationSec)}${s.attended ? "" : " · runs on its own"}`}
+                      aria-label={`${s.node?.label} · ${formatClock(durationSec)}${s.attended ? "" : ", unattended"}`}
+                      aria-pressed={selectedStepId === s.id}
+                      onClick={() => onSelect(s.id)}
+                    >
+                      {width >= RUNG_NAME_PX && <span className="sch-block-label">{fitLabel(s.node?.label, width)}</span>}
                     </button>
                   );
                 })}
@@ -753,15 +826,21 @@ function OpeningHand({ opening, cooks, byId, dishOf }) {
                   <div className="sch-bundle-head">
                     <PlayerAvatar cook={cook} index={index} size={32} />
                     <span className="sch-bundle-name">{cook?.name}</span>
-                    <Mono className="sch-bundle-total">{formatClock(bundle.totalSec)} to open</Mono>
+                    <Mono className="sch-bundle-total">{formatClock(bundle.totalSec)} hands-on to open</Mono>
                   </div>
                   {bundle.stepIds.map((id) => (
-                    <div className="sch-bundle-row" key={id}>
+                    // "hands-on to open" counts attended time only, so a
+                    // long simmer sitting in the same list has to say
+                    // what it is or the bundle simply looks wrong.
+                    <div className={`sch-bundle-row ${isAttended(byId[id]) ? "" : "is-unattended"}`} key={id}>
                       <span className="sch-bundle-row-main">
                         <span className="sch-bundle-row-label">{byId[id]?.label}</span>
                         {dishOf(id) && <span className="sch-bundle-row-dish">{dishOf(id)}</span>}
                       </span>
-                      <Mono className="sch-bundle-row-dur">{formatClock(durationOf(id))}</Mono>
+                      <Mono className="sch-bundle-row-dur">
+                        {formatClock(durationOf(id))}
+                        {isAttended(byId[id]) ? "" : " unattended"}
+                      </Mono>
                     </div>
                   ))}
                 </div>

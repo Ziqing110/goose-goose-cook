@@ -68,7 +68,13 @@ const initialState = {
   // Shared mic state — VoiceBar and the conversation answer bar both
   // read/write `muted`. `hint` is the page-provided announcer copy
   // ({ line, sub } or null) the VoiceBar shows instead of its default.
-  voice: { muted: false, hint: null },
+  // Muted by default. Unmuting opens a billed streaming connection (the
+  // API charges for the time the socket is open, not the audio sent), so
+  // turning the mic on has to be a deliberate act rather than something
+  // that happens because someone loaded the page. It also means the
+  // conversation page starts in typing mode, which is the honest default
+  // while voice is opt-in.
+  voice: { muted: true, hint: null },
 };
 
 function reducer(state, action) {

@@ -20,14 +20,17 @@ import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { mergeRecipesForDisplay, formatDuration } from "../utils/graphLayout.js";
 import { EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
+import { hasDeadline, isOneShot } from "../utils/tending.js";
 import {
   reconcileRun, isReady, readyStepIds, blockedStepIds, activeStepFor, stepVariance,
   runProgress, isRunComplete, scoreboard, runOutcome, resolveAssignments, replan,
-  arbitrateClaim, claimSuggestions, applyStart, applyDone, applySkip, applyDrop,
+  arbitrateClaim, claimSuggestions, applyStart, applyDone, applySkip, applyDrop, passiveStepsFor,
+  selfFinishingIds,
   applyUndo, canUndo, endRun, appendTranscript, scoreStep, DIFFICULTY_POINTS,
   isPaused, applyPause, applyResume,
 } from "../utils/liveCook.js";
 import { parseCommand, HELP_TEXT } from "../utils/voiceCommands.js";
+import { matchConfirmation } from "../utils/navCommands.js";
 import { buildSummary } from "../utils/summaryCard.js";
 import KpIcon from "../components/KpIcon.jsx";
 import Modal from "../components/Modal.jsx";
@@ -134,6 +137,11 @@ export default function LiveCookPage() {
   const speakerCook = cooks.find((c) => c.id === speaker);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(null); // inline disambiguation buttons
+  // A guessed step whose name came back close but not exact — "Cut the
+  // onion" against both "Cut the yellow onion" and "Cut the red onion",
+  // say. Firing on that guess is how a mishearing finishes the wrong
+  // step; asking first is the whole point of this state.
+  const [pendingConfirm, setPendingConfirm] = useState(null); // { intent, stepId, cookId, label, candidates }
   const [confirm, setConfirm] = useState(null); // { kind: "finish" } | { kind: "skip", stepId, cookId }
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
@@ -148,13 +156,45 @@ export default function LiveCookPage() {
         ? { line: "Paused — say “resume” to pick it back up.", sub: "Every clock is stopped; nothing else lands until then." }
         : {
             line: HELP_TEXT,
-            sub: pending
-              ? `${speakerCook?.name || "Someone"} is speaking — waiting on which step they mean.`
-              : `${speakerCook?.name || "Someone"} is speaking — everything said is logged under that name.`,
+            sub: pendingConfirm
+              ? `${speakerCook?.name || "Someone"} is speaking — waiting on “yes” or “no”.`
+              : pending
+                ? `${speakerCook?.name || "Someone"} is speaking — waiting on which step they mean.`
+                : `${speakerCook?.name || "Someone"} is speaking — everything said is logged under that name.`,
           };
     dispatch({ type: "voice/setHint", payload: { hint } });
     return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
-  }, [dispatch, run, finished, paused, speakerCook?.name, pending]);
+  }, [dispatch, run, finished, paused, speakerCook?.name, pending, pendingConfirm]);
+
+  // Rice closes itself. Nobody finishes a set-and-forget step — the end
+  // of it belongs to whatever plates it — so once its time is up it
+  // completes without being asked, and its dependents become ready. The
+  // alternative is a Done button for a task that does not exist, holding
+  // the rest of the board hostage until somebody notices it.
+  useEffect(() => {
+    // Above the early return below, so it has to tolerate no run yet.
+    if (!run || paused || finished) return;
+    const ready = selfFinishingIds(run, nodes, now);
+    if (!ready.length) return;
+    let next = run;
+    ready.forEach((stepId) => {
+      next = applyDone({ run: next, stepId, cookId: run.steps[stepId]?.cookId ?? null, at: new Date().toISOString(), source: "auto" });
+    });
+    // Said once, plainly. It is not an achievement and should not read
+    // like one, but the board changing on its own needs explaining.
+    next = appendTranscript(next, {
+      at: new Date().toISOString(),
+      speaker: "agent",
+      text: `${ready.map((id) => byId[id]?.label).join(" and ")} — ready whenever you need it.`,
+    });
+    if (isRunComplete(next, nodes)) {
+      next = appendTranscript(next, { at: new Date().toISOString(), speaker: "agent", text: "That's everything. Dinner's up." });
+    }
+    saveRunNow(next);
+    // `now` ticks every second; the guard above is what stops this
+    // firing more than once per step.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now, paused, finished]);
 
   if (!run) {
     return (
@@ -186,6 +226,8 @@ export default function LiveCookPage() {
 
   const commit = (nextRun) => saveRunNow(nextRun);
 
+
+
   // --- the handlers every button AND every utterance routes through ---
   // `base` is the run to build on: the closure's `run` for a tap, or the
   // run with the player's utterance already appended for a voice path —
@@ -193,7 +235,7 @@ export default function LiveCookPage() {
 
   const doStart = (stepId, cookId, source = "tap", base = run) => {
     if (paused || !stepId || !isReady(stepId, nodes, base)) return;
-    if (activeStepFor(cookId, base)) return;
+    if (activeStepFor(cookId, base, nodes)) return;
     const at = new Date().toISOString();
     let next = applyStart({ run: base, stepId, cookId, at, source });
     next = say(next, `Timer running on ${byId[stepId].label}. Est ${formatDuration(byId[stepId].estimated_duration_sec)}.`);
@@ -253,7 +295,7 @@ export default function LiveCookPage() {
   const doClaim = (stepId, cookId, source = "tap", base = run) => {
     if (paused) return;
     const at = new Date().toISOString();
-    const verdict = arbitrateClaim({ run: base, nodes, cooks, stepId, cookId, at });
+    const verdict = arbitrateClaim({ run: base, nodes, cooks, stepId, cookId, at, kitchenProfile });
     if (!verdict.ok) {
       const text = {
         busy: `You're still on ${byId[verdict.holdingStepId]?.label}. Finish it first.`,
@@ -264,6 +306,7 @@ export default function LiveCookPage() {
         already_done: "That one's already finished.",
         noop: "You've already got that one.",
         unknown_step: "I don't know that step.",
+        no_equipment: `No ${EQUIPMENT_LABELS[verdict.equipmentType] || verdict.equipmentType} free — something else is on it.`,
       }[verdict.code];
       commit(say(base, text));
       return;
@@ -337,11 +380,52 @@ export default function LiveCookPage() {
 
   // --- voice: parse, then call the exact same handlers ---
 
+  // The five intents "which one" and "did you mean" both eventually
+  // resolve to — factored out so a tap (runPending), a spoken "yes"
+  // (pendingConfirm below) and a clean first-try match all funnel
+  // through the exact same call.
+  const runIntentAction = (intent, stepId, cookId, base = run) => {
+    if (intent === "claim") return doClaim(stepId, cookId, "voice", base);
+    if (intent === "done") return doDone(stepId, cookId, "voice", base);
+    if (intent === "start") return doStart(stepId, cookId, "voice", base);
+    if (intent === "skip") return doSkip(stepId, cookId, "voice", base);
+    if (intent === "drop") return doDrop(stepId, cookId, "voice", base);
+    return commit(base);
+  };
+
+  // Both a tap on Yes/No and a spoken "yes"/"no" answer the same
+  // question the same way — one path, so the two can't drift apart.
+  const resolvePendingConfirm = (answer, base = run) => {
+    if (!pendingConfirm) return undefined;
+    const { intent, stepId, cookId, label, candidates } = pendingConfirm;
+    setPendingConfirm(null);
+    if (answer === "yes") return runIntentAction(intent, stepId, cookId, base);
+    const options = (candidates.length ? candidates : claimSuggestions({ nodes, run, cookId })).slice(0, 3);
+    setPending({ intent, options, cookId });
+    return commit(say(base, `Not “${label}” — which one did you mean?`));
+  };
+
   const submitUtterance = (text) => {
     if (!text) return;
-    setPending(null);
     const cookId = speaker;
-    const activeStepId = activeStepFor(cookId, run);
+
+    // A question is pending: this utterance is the answer, not a new
+    // command. Anything that isn't clearly yes or no abandons the
+    // question rather than forcing a reading onto it — the cook moved
+    // on, they didn't mumble a confirmation.
+    if (pendingConfirm) {
+      const answer = matchConfirmation(text);
+      if (answer === "yes" || answer === "no") {
+        const heard = appendTranscript(run, { at: new Date().toISOString(), speaker: pendingConfirm.cookId, text });
+        return resolvePendingConfirm(answer, heard);
+      }
+      setPendingConfirm(null);
+      // Falls through: `text` gets parsed fresh below, same as any
+      // other utterance.
+    }
+
+    setPending(null);
+    const activeStepId = activeStepFor(cookId, run, nodes);
     const ownQueue = isVersus
       ? claimSuggestions({ nodes, run, cookId })
       : [assignments?.byCook[cookId]?.stepId].filter(Boolean);
@@ -361,6 +445,14 @@ export default function LiveCookPage() {
       setPending({ intent: result.intent, options, cookId });
       commit(say(heard, message));
     };
+
+    // A close-but-not-exact name match — a word dropped or swapped among
+    // steps that read alike — gets checked before it fires, instead of
+    // guessing which "cut the onion" was meant.
+    if (result.stepId && result.confidence === "confirm" && ["done", "start", "claim", "skip", "drop"].includes(result.intent)) {
+      setPendingConfirm({ intent: result.intent, stepId: result.stepId, cookId, label: byId[result.stepId]?.label, candidates: result.candidates });
+      return commit(say(heard, `Did you mean “${byId[result.stepId]?.label}”? Say yes or no.`));
+    }
 
     switch (result.intent) {
       case "done":
@@ -388,7 +480,7 @@ export default function LiveCookPage() {
         return commit(say(heard, board.map((b) => `${b.name} ${b.points}`).join(", ") + `. ${progress.pending} left.`));
       case "status": {
         const lines = cooks.map((c) => {
-          const active = activeStepFor(c.id, run);
+          const active = activeStepFor(c.id, run, nodes, now);
           if (active) return `${c.name}: ${byId[active].label}, ${clock(stepVariance(byId[active], run.steps[active], now).actualSec)} in`;
           return `${c.name}: free`;
         });
@@ -404,11 +496,7 @@ export default function LiveCookPage() {
   const runPending = (stepId) => {
     const { intent, cookId } = pending;
     setPending(null);
-    if (intent === "claim") return doClaim(stepId, cookId, "voice");
-    if (intent === "done") return doDone(stepId, cookId, "voice");
-    if (intent === "start") return doStart(stepId, cookId, "voice");
-    if (intent === "skip") return doSkip(stepId, cookId, "voice");
-    if (intent === "drop") return doDrop(stepId, cookId, "voice");
+    runIntentAction(intent, stepId, cookId);
   };
 
   const stepsLeft = progress.pending + progress.active;
@@ -501,9 +589,12 @@ export default function LiveCookPage() {
               speaker={speaker}
               onSpeaker={setSpeakerId}
               pending={pending}
+              pendingConfirm={pendingConfirm}
               byId={byId}
               onPick={runPending}
               onCancel={() => setPending(null)}
+              onConfirmYes={() => resolvePendingConfirm("yes")}
+              onConfirmNo={() => resolvePendingConfirm("no")}
               input={input}
               onInput={setInput}
               onSubmit={() => {
@@ -594,9 +685,14 @@ export default function LiveCookPage() {
 
 function PlayerFocusCard({ cook, index, cooks, run, nodes, byId, now, isVersus, paused, points, assignment, onStart, onDone, onSkip, onDrop, onClaim, onUndo }) {
   const key = playerKey(index);
-  const activeId = activeStepFor(cook.id, run);
+  const activeId = activeStepFor(cook.id, run, byId, now);
   const node = activeId ? byId[activeId] : null;
   const variance = node ? stepVariance(node, run.steps[activeId], now) : null;
+  // Unattended steps this cook has running. They do not occupy anyone, so
+  // they are deliberately not the card's headline — but they still have
+  // to be visible somewhere, or a 40-minute simmer someone started just
+  // vanishes and nobody remembers to go back to it.
+  const waiting = passiveStepsFor(cook.id, run, byId);
 
   // Versus has no plan: with nothing in hand the card offers the top
   // suggestion and points at the board for the rest.
@@ -632,6 +728,58 @@ function PlayerFocusCard({ cook, index, cooks, run, nodes, byId, now, isVersus, 
           {paused ? EYEBROW.paused : EYEBROW[reason]}
         </span>
       </header>
+
+      {/* Everything this cook has running that does not need them. It is a
+          queue, not a tag row, because an unattended step has a moment it
+          needs someone BACK — a simmer nobody returns to is a burnt pot.
+          Each one counts down, then goes loud and offers Done. */}
+      {waiting.length > 0 && (
+        <ul className="focus-queue">
+          {waiting.map((id) => {
+            const wNode = byId[id];
+            const v = stepVariance(wNode, run.steps[id], now);
+            const leftSec = v.estSec - v.actualSec;
+            const due = leftSec <= 0;
+            const nags = hasDeadline(wNode);
+            return (
+              <li
+                // Only a pot with a deadline gets loud. An ice bath five
+                // minutes over is not late, it is just when somebody got
+                // round to it, and pulsing about it teaches people to
+                // ignore the one that matters.
+                className={`focus-queue-item ${due ? (nags ? "is-due" : "is-ready") : ""}`}
+                key={id}
+              >
+                <span className="focus-queue-main">
+                  <span className="focus-queue-label">{wNode?.label}</span>
+                  <span className="lc-meta mono">
+                    {due
+                      ? nags
+                        ? "needs you now"
+                        : "ready when you are"
+                      : `${clock(leftSec)} left · ${
+                          nags ? "check on it" : isOneShot(wNode) ? "no need to come back" : "runs on its own"
+                        }`}
+                  </span>
+                </span>
+                {/* No button on a step nobody finishes — it closes
+                    itself, and offering Done would be asking for a task
+                    that does not exist. */}
+                {!isOneShot(wNode) && (
+                  <button
+                    type="button"
+                    className={`btn ${due && nags ? "btn-success" : "btn-ghost"} focus-queue-done`}
+                    disabled={paused}
+                    onClick={() => onDone(id)}
+                  >
+                    Done
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       {/* Every variant renders the same skeleton — title, body, then an
           action block pinned to the bottom — so both cards line up even
@@ -802,7 +950,7 @@ function TaskPoolBoard({ ready, blocked, run, byId, cooks, now, paused, onClaim 
             </Mono>
             <div className="lc-tile-claims">
               {cooks.map((cook, i) => {
-                const busy = Boolean(activeStepFor(cook.id, run));
+                const busy = Boolean(activeStepFor(cook.id, run, byId, now));
                 return (
                   <button
                     key={cook.id}
@@ -850,12 +998,27 @@ function TaskPoolBoard({ ready, blocked, run, byId, cooks, now, paused, onClaim 
 // The agent column: who's talking, what's been said, and the typed
 // fallback that drives the demo today. The mic itself is the shell's
 // VoiceBar; this panel is the record of the conversation.
-function AgentPanel({ cooks, transcript, speaker, onSpeaker, pending, byId, onPick, onCancel, input, onInput, onSubmit }) {
+function AgentPanel({
+  cooks,
+  transcript,
+  speaker,
+  onSpeaker,
+  pending,
+  pendingConfirm,
+  byId,
+  onPick,
+  onCancel,
+  onConfirmYes,
+  onConfirmNo,
+  input,
+  onInput,
+  onSubmit,
+}) {
   const logRef = useRef(null);
   const [expanded, setExpanded] = useState(false);
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
-  }, [transcript.length, pending, expanded]);
+  }, [transcript.length, pending, pendingConfirm, expanded]);
 
   const speakerCook = cooks.find((c) => c.id === speaker);
 
@@ -877,6 +1040,16 @@ function AgentPanel({ cooks, transcript, speaker, onSpeaker, pending, byId, onPi
             </div>
           );
         })}
+        {pendingConfirm && (
+          <div className="lc-pending">
+            <button type="button" className="btn lc-pending-option" onClick={onConfirmYes}>
+              Yes, {byId[pendingConfirm.stepId]?.label}
+            </button>
+            <button type="button" className="btn btn-ghost lc-btn-accent" onClick={onConfirmNo}>
+              No, someone else
+            </button>
+          </div>
+        )}
         {pending && (
           <div className="lc-pending">
             {pending.options.map((id) => (
