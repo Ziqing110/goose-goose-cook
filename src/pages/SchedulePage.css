@@ -54,6 +54,42 @@
 .sch-avatar-24 { width: 24px; height: 24px; font-size: 12px; }
 .sch-avatar-32 { width: 32px; height: 32px; font-size: 14px; }
 
+/* ---------------- planning screen ----------------
+   The sprite sheet is four 543×724 frames side by side: read → sort →
+   shuffle → thumbs up. While planning, steps(3) walks the first three
+   at ~5 fps — a flip-book, not a slide — and `.is-done` jumps to the
+   fourth and holds while the screen fades out. (Percent positions on a
+   400%-wide sheet: frame n sits at n/3 × 100%, so 0 → 100% is frames
+   0–3 and steps(3) stops short of the last one.) */
+@keyframes sch-shuffle { from { background-position-x: 0; } to { background-position-x: 100%; } }
+@keyframes sch-planning-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes sch-dot { 0%, 80%, 100% { opacity: 0.2; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+
+.sch-planning {
+  --sch-goose-w: clamp(150px, 28vw, 220px);
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100vh - var(--voice-bar-height) - 160px);
+}
+.sch-planning.is-done { animation: sch-planning-out 320ms 380ms ease-in both; }
+.sch-planning-stage { display: flex; flex-direction: column; align-items: center; gap: 6px; animation: sch-rise 240ms ease-out both; }
+.sch-goose {
+  width: var(--sch-goose-w);
+  height: calc(var(--sch-goose-w) * 724 / 543);
+  margin-bottom: 18px;
+  background-repeat: no-repeat;
+  background-size: 400% 100%;
+  background-position: 0 0;
+  animation: sch-shuffle 600ms steps(3) infinite;
+}
+.sch-planning.is-done .sch-goose { animation: sch-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; background-position-x: 100%; }
+.sch-planning-title { display: inline-flex; align-items: baseline; font-size: 22px; line-height: 28px; font-weight: 700; letter-spacing: -0.01em; }
+.sch-planning-dots { display: inline-flex; }
+.sch-planning-dots span { display: inline-block; animation: sch-dot 1200ms ease-in-out infinite; }
+.sch-planning-dots span:nth-child(2) { animation-delay: 160ms; }
+.sch-planning-dots span:nth-child(3) { animation-delay: 320ms; }
+.sch-planning-sub { text-align: center; }
+
 /* ---------------- title ---------------- */
 .sch-title-row { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; animation: sch-rise 240ms ease-out both; }
 .sch-title-row h1 { margin: 0; font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.01em; }
@@ -179,6 +215,10 @@
   border: 1px dashed var(--ds-waiting);
   background: repeating-linear-gradient(45deg, var(--ds-chip) 0 4px, var(--surface) 4px 8px);
 }
+/* The rail and the moment block, in neutral — the legend explains the
+   shapes, the lanes supply the player color. */
+.sch-legend-swatch.is-rail { width: 26px; height: 12px; border-radius: 6px; background: var(--line); border: 1px solid var(--ink-soft); }
+.sch-legend-swatch.is-moment { width: 10px; height: 16px; background: var(--surface); border: 2px solid var(--ink-soft); }
 
 /* zoom — a three-stop slider with the stop labels around it; the
    active stop reads in ink, the others in text-tertiary */
@@ -223,7 +263,14 @@
    Lane geometry is shared between the fixed label column and the
    scrolling track so the two stay row-aligned. */
 .sch-card {
-  --sch-lane-height: 60px;
+  /* A player lane is a 44px block zone over a 26px rail zone: hands-on
+     work up top, "cooking on its own" along the bottom. */
+  --sch-rail-zone-top: 60px;
+  --sch-rail-height: 16px;
+  --sch-rail-gap: 2px;
+  --sch-lane-height: 86px;
+  --sch-gear-lane-height: 44px;
+  --sch-group-head-height: 34px;
   --sch-ruler-height: 28px;
   --sch-label-width: 200px;
 }
@@ -235,6 +282,12 @@
 }
 .sch-lane-labels { flex: 0 0 auto; width: var(--sch-label-width); border-right: 1px solid var(--line); }
 .sch-ruler-spacer { height: var(--sch-ruler-height); }
+/* A custom property resolves where it is declared, so the row-aware
+   height has to live on the lane itself to see the lane's own
+   --sch-rail-rows (set inline; 1 → 86px, 2 → 104px). */
+.sch-lane-label, .sch-lane {
+  --sch-lane-height: calc(var(--sch-rail-zone-top) + 4px + var(--sch-rail-rows, 1) * (var(--sch-rail-height) + var(--sch-rail-gap)) + 4px);
+}
 .sch-lane-label {
   height: var(--sch-lane-height);
   display: flex;
@@ -249,13 +302,21 @@
 .sch-lane-name { font-size: 16px; line-height: 22px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sch-lane-busy { font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
 
-/* The equipment lanes underneath the cooks: no player color, a quieter
-   ground, and a divider so they read as a distinct section rather than
-   more cooks. */
-.sch-lane-divider { height: 1px; background: var(--line); }
-.sch-lane-divider-track { border-top: 1px solid var(--line); }
-.sch-lane-label.is-equipment { background-color: var(--surface-sunken); }
-.sch-lane-label.is-equipment .sch-lane-name { font-weight: 500; color: var(--ink-soft); }
+/* The equipment lanes underneath the cooks: a quieter ground, no tint
+   band, and an "Equipment" group head on a stronger rule so they read
+   as a distinct section rather than more cooks. */
+.sch-lane-group-head, .sch-lane-group-head-track {
+  height: var(--sch-group-head-height);
+  box-sizing: border-box;
+  border-top: 1px solid var(--line-strong);
+  background: var(--surface-sunken);
+}
+.sch-lane-group-head { display: flex; align-items: center; padding: 0 16px; }
+.sch-lane-label.is-equipment { height: var(--sch-gear-lane-height); gap: 10px; background-color: var(--surface-sunken); }
+.sch-lane-glyph { flex: 0 0 auto; color: var(--ink-soft); }
+.sch-lane-index { font-size: 11px; color: var(--ink-soft); }
+.sch-short { display: none; }
+.sch-lane-label.is-equipment .sch-lane-name { font-size: 13px; line-height: 18px; font-weight: 500; color: var(--ink); }
 
 .sch-scroll { flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; }
 .sch-track { position: relative; }
@@ -322,17 +383,136 @@
 }
 .sch-block.is-wait .sch-block-label { font-weight: 400; }
 
-/* Equipment lane blocks: a cross-reference, not new work, so hands-on
-   ones sit at reduced opacity — the step is already drawn above on its
-   cook's lane. Unattended ones are the one thing this lane exists for:
-   dashed and quiet, same as a wait, because that is what they are. */
-.sch-block.is-task.is-equipment { border-color: var(--line-strong); }
-.sch-block.is-task.is-equipment.is-hands-on { opacity: 0.55; }
-.sch-block.is-task.is-equipment.is-unattended {
-  border-style: dashed;
-  background: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.65) 0 6px, transparent 6px 12px);
-  color: var(--ink-soft);
+/* ---- unattended steps on a player lane: rail + moments ----
+   The rail zone is a faint band along the bottom of every player lane
+   so the two zones read as two things even when the lane is empty. */
+.sch-rail-zone {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--sch-rail-zone-top);
+  height: calc(var(--sch-lane-height) - var(--sch-rail-zone-top));
+  background: rgba(26, 26, 26, 0.035);
+  border-top: 1px solid rgba(26, 26, 26, 0.06);
+  pointer-events: none;
 }
+/* The run rail: the whole span, player tint at low strength with a 1px
+   inset of the player color — "a burner that's on". */
+.sch-rail {
+  position: absolute;
+  top: calc(var(--sch-rail-zone-top) + 4px + var(--sch-rail-row, 0) * (var(--sch-rail-height) + var(--sch-rail-gap)));
+  height: var(--sch-rail-height);
+  z-index: 2;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid;
+  border-radius: 8px;
+  overflow: hidden;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 120ms ease-out, background 120ms ease-out;
+  animation: sch-reveal 240ms ease-out both;
+}
+.sch-rail.is-tight { padding: 0 4px; }
+.sch-rail.is-a { background: rgba(47, 125, 209, 0.26); border-color: var(--cook-a); }
+.sch-rail.is-b { background: rgba(229, 138, 31, 0.26); border-color: var(--cook-b); }
+.sch-rail.is-critical { border-width: 2px; border-color: var(--critical); }
+.sch-rail-label { min-width: 0; font-size: 12px; line-height: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Selected wins over critical, same as blocks: the whole step goes ink. */
+.sch-rail.is-selected, .sch-rail.is-selected.is-critical {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.ds-v4 .sch-rail:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* A moment block sits on top of the rail with a short tick joining the
+   two, so the eye reads them as one step. */
+.sch-moment-group { display: contents; }
+.sch-moment-tick {
+  position: absolute;
+  top: 52px;
+  width: 2px;
+  height: calc(var(--sch-rail-zone-top) + 4px + var(--sch-rail-row, 0) * (var(--sch-rail-height) + var(--sch-rail-gap)) - 52px);
+  z-index: 1;
+  opacity: 0.55;
+  animation: sch-reveal 240ms ease-out both;
+}
+.sch-moment-tick.is-a { background: var(--cook-a); }
+.sch-moment-tick.is-b { background: var(--cook-b); }
+.sch-block.is-task.is-moment { z-index: 3; }
+.sch-block.is-task.is-moment.is-tight { padding: 4px 2px; }
+/* A 20-second check is a bare 10–26px bar at most zooms, so the kind
+   has to read without a label: Start carries a heavy left edge, Finish
+   a heavy right edge, and a Check a dot — all in the border color the
+   block already has, so critical and selected states keep working. */
+.sch-block.is-task.is-moment.is-initial { border-left-width: 5px; }
+.sch-block.is-task.is-moment.is-ending { border-right-width: 5px; }
+.sch-block.is-task.is-moment.is-checkpoint.is-bare { justify-content: flex-end; }
+.sch-block.is-task.is-moment.is-checkpoint.is-bare::after {
+  content: "";
+  align-self: center;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-bottom: 2px;
+}
+.sch-block.is-task.is-moment.is-checkpoint.is-a { color: var(--cook-a); }
+.sch-block.is-task.is-moment.is-checkpoint.is-b { color: var(--cook-b); }
+.sch-block.is-task.is-moment.is-checkpoint.is-critical { color: var(--critical); }
+.sch-block.is-task.is-moment.is-checkpoint .sch-moment-label,
+.sch-block.is-task.is-moment.is-checkpoint .sch-block-meta { color: var(--ink); }
+.sch-block.is-task.is-moment.is-selected,
+.sch-block.is-task.is-moment.is-selected .sch-moment-label,
+.sch-block.is-task.is-moment.is-selected .sch-block-meta { color: var(--bg); }
+.sch-moment-label { min-width: 0; font-size: 12px; line-height: 16px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- equipment lanes ----
+   Who has the wok at 9:00: every step's whole span in its OWNING
+   player's tint. Not selectable — the same step is already the
+   selectable thing on its cook's lane — and never critical-outlined. */
+.sch-lane.is-equipment { height: var(--sch-gear-lane-height); background-color: var(--surface-sunken); }
+.sch-block.is-equipment {
+  top: 6px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid;
+  cursor: default;
+}
+.sch-block.is-equipment.is-tight { padding: 0 3px; }
+.sch-block.is-equipment.is-a { background: var(--cook-a-bg); border-color: var(--cook-a); }
+.sch-block.is-equipment.is-b { background: var(--cook-b-bg); border-color: var(--cook-b); }
+/* One tick per hands-on moment: when the pot actually gets touched. */
+.sch-equipment-tick { position: absolute; top: -1px; bottom: -1px; width: 2px; z-index: 2; }
+.sch-block.is-equipment.is-a .sch-equipment-tick { background: var(--cook-a); }
+.sch-block.is-equipment.is-b .sch-equipment-tick { background: var(--cook-b); }
+
+/* ---------------- tending chip ----------------
+   System Chip, neutral. Sits by a step's name wherever it is listed off
+   the timeline; hands-on steps get none. */
+.sch-tending-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+/* Inside a "ready now" chip it nests as a smaller, flatter chip. */
+.sch-tending-chip.is-inset { height: 24px; padding: 0 8px; background: var(--ds-chip); border: none; color: var(--ink-soft); }
+/* Inside a "not yet" chip there is no room for a chip in a chip — and
+   it must not outweigh the step name it trails, which is faint there. */
+.sch-tending-chip.is-plain { height: auto; padding: 0; background: transparent; border: none; color: var(--ink-faint); font-size: 12px; font-weight: 400; }
 
 /* ---------------- task detail ---------------- */
 .sch-detail {
@@ -362,7 +542,15 @@
 }
 .sch-detail .sch-detail-close:hover { background: var(--accent-soft); color: var(--accent); }
 .sch-detail-head { display: flex; flex-direction: column; gap: 6px; padding-right: 80px; }
+.sch-detail-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .sch-detail-title { font-size: 18px; line-height: 24px; font-weight: 700; }
+.sch-detail-moments { display: flex; flex-direction: column; gap: 6px; max-width: 720px; }
+.sch-moments-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; }
+.sch-moment-item { display: inline-flex; align-items: baseline; gap: 6px; font-size: 13px; line-height: 18px; }
+.sch-moment-item-name { font-weight: 500; }
+.sch-moment-item-dot { color: var(--ink-faint); }
+.sch-moment-item-dur { color: var(--ink-soft); }
+.sch-detail-free { color: var(--ink); }
 .sch-detail-desc { font-size: 13px; line-height: 18px; color: var(--ink-soft); max-width: 720px; }
 .sch-detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 24px; max-width: 720px; }
 .sch-detail-grid > div { display: flex; flex-direction: column; gap: 4px; }
@@ -453,7 +641,7 @@
 .sch-bundle-row-label { font-size: 16px; line-height: 22px; font-weight: 500; }
 .sch-bundle-row-dish { font-size: 13px; color: var(--ink-soft); }
 .sch-bundle-row-dur { font-size: 14px; color: var(--ink-soft); }
-.sch-bundle-row.is-unattended .sch-bundle-row-label { color: var(--ink-soft); font-style: italic; }
+.sch-bundle-row-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 .sch-grabs { display: flex; flex-direction: column; gap: 12px; margin: 0 20px; padding-top: 16px; border-top: 1px solid var(--line); }
 .sch-grabs-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
@@ -553,6 +741,10 @@
   .sch-lane-label .sch-avatar-32 { width: 24px; height: 24px; font-size: 12px; }
   .sch-lane-name { font-size: 15px; line-height: 20px; }
   .sch-lane-busy { font-size: 11px; }
+  /* Equipment lane labels: glyph only at 96px (.sch-long hides the name). */
+  .sch-lane-label.is-equipment { justify-content: center; gap: 4px; padding: 0; }
+  .sch-short { display: inline; }
+  .sch-legend { flex-wrap: wrap; gap: 8px 14px; }
   .sch-card-foot { padding: 12px 16px; }
   .sch-intro, .sch-bundles, .sch-notice-inset { padding-left: 16px; padding-right: 16px; }
   .sch-notice-inset { margin: 0 16px; padding: 14px 16px; }
@@ -580,44 +772,9 @@
     animation-iteration-count: 1 !important;
     transition-duration: 200ms !important;
   }
-  .sch-title-row, .sch-modes-wrap, .sch-hud, .sch-notice, .sch-card, .sch-block, .sch-roll, .sch-mode-chip, .sch-detail.is-sheet { animation-name: sch-fade; }
-  .sch-dots { animation: none; }
-}
-
-/* --- equipment lanes -------------------------------------------------
-   Below the cooks: one track per burner, pot, board actually used. This
-   is where unattended work lives, since it occupies the equipment and
-   nobody. Quieter than the cook lanes on purpose — it is context for
-   the plan, not somebody's assignment. */
-.schedule-lane-divider,
-.schedule-lane-divider-track {
-  height: 1px;
-  background: var(--line);
-  margin: 6px 0;
-}
-.schedule-lane-label.is-equipment {
-  color: var(--ink-faint);
-}
-.schedule-lane-label.is-equipment .schedule-lane-name {
-  text-transform: lowercase;
-}
-.schedule-block-task.is-equipment {
-  background: var(--bg);
-  border: 1px solid var(--line-strong);
-  color: var(--ink-soft);
-}
-/* Hands-on work shown on an equipment lane is the same step already drawn
-   on a cook lane, so it reads as a cross-reference rather than new work. */
-.schedule-block-task.is-equipment.is-hands-on {
-  opacity: 0.55;
-}
-.schedule-block-task.is-equipment.is-unattended {
-  border-style: dashed;
-}
-
-/* A wait inside an opening bundle. Listed because someone has to start
-   it, quieter because it costs them nothing. */
-.opening-bundle-list li.is-unattended .opening-step-label {
-  color: var(--ink-soft);
-  font-style: italic;
+  .sch-title-row, .sch-modes-wrap, .sch-hud, .sch-notice, .sch-card, .sch-block, .sch-rail, .sch-moment-tick, .sch-roll, .sch-mode-chip, .sch-detail.is-sheet { animation-name: sch-fade; }
+  .sch-dots, .sch-planning-dots span { animation: none; }
+  /* No flip-book: hold the reading frame, then the thumbs up. */
+  .sch-goose { animation: none; }
+  .sch-planning.is-done { animation-delay: 0ms !important; }
 }

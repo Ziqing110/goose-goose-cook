@@ -31,6 +31,16 @@ export const EQUIPMENT_LABELS = {
 };
 
 const COOK_RESOURCE = "__cook__";
+// Display order of the equipment lanes on the schedule page. Anything
+// in EQUIPMENT_OPTIONS but not named here trails in option order.
+const EQUIPMENT_LANE_ORDER = [
+  "cutting_board",
+  "wok",
+  "pot",
+  "stove_burner",
+  "oven",
+  ...EQUIPMENT_OPTIONS.filter((t) => !["cutting_board", "wok", "pot", "stove_burner", "oven"].includes(t)),
+];
 // The search finds strong schedules quickly and then spends its time
 // *proving* nothing better exists. Since the result is reported against
 // a lower bound anyway, the budget is set for a responsive page rather
@@ -561,7 +571,10 @@ export function equipmentLanes(steps, nodes) {
   });
 
   const out = [];
-  EQUIPMENT_OPTIONS.forEach((type) => {
+  // Drawn in a fixed order — board, wok, pot, burner, oven — so the
+  // lanes sit in the same place on every plan, rather than in whatever
+  // order the scheduler's option list happens to be.
+  EQUIPMENT_LANE_ORDER.forEach((type) => {
     (lanesByType.get(type) || []).forEach((lane, i) => {
       const label = EQUIPMENT_LABELS[type] || type;
       out.push({
@@ -592,7 +605,9 @@ export function equipmentLanes(steps, nodes) {
       out.push({
         type: "__unattended__",
         index: i + 1,
-        label: laneSteps.length > 1 ? `waiting ${i + 1}` : "waiting",
+        // "Counter", not "waiting": the legend already uses Waiting for a
+        // cook who is stuck, and this lane is a step that needs no tool.
+        label: laneSteps.length > 1 ? `counter ${i + 1}` : "counter",
         stepIds,
       });
     });
