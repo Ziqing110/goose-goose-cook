@@ -19,10 +19,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { mergeRecipesForDisplay, formatDuration } from "../utils/graphLayout.js";
-import { EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
-import { hasDeadline, isOneShot } from "../utils/tending.js";
+import { EQUIPMENT_LABELS, unattendedEvents } from "../utils/scheduleLayout.js";
+import { hasDeadline, isOneShot, isAttended, tendingOf, TENDING } from "../utils/tending.js";
 import {
-  reconcileRun, isReady, readyStepIds, blockedStepIds, activeStepFor, stepVariance,
+  reconcileRun, isReady, readyStepIds, blockedStepIds, activeStepFor, stepVariance, unattendedPhaseNow,
   runProgress, isRunComplete, scoreboard, runOutcome, resolveAssignments, replan,
   arbitrateClaim, claimSuggestions, applyStart, applyDone, applySkip, applyDrop, passiveStepsFor,
   selfFinishingIds,
@@ -55,6 +55,30 @@ const EYEBROW = {
   paused: "Paused",
 };
 
+// The Schedule's vocabulary for tending kinds and moments, reused
+// exactly (design/claude-design-live-cook-v2-unattended.md §1).
+const TENDING_LABELS = {
+  [TENDING.TENDED]: "Check on it",
+  [TENDING.TIMED]: "Timed",
+  [TENDING.SET_AND_FORGET]: "Leave it",
+};
+const tendingLabel = (node) => TENDING_LABELS[tendingOf(node)] || null;
+const momentName = (m, count) => (m.kind === "initial" ? "Start" : m.kind === "ending" ? "Finish" : `Check ${m.index + 1}/${count}`);
+
+// A finish that has sat open this long reads as a count-up, not a
+// countdown (§3, "Late").
+const LATE_AFTER_SEC = 60;
+
+/**
+ * Hook point for the voice API: fired once per moment as it becomes
+ * due (a check opening, the finish window opening). Nothing is wired
+ * yet — the transcript line beside it is the design of what will be
+ * said (UNATTENDED_TASK_FRONTEND.md §6, "do not wire voice into this
+ * pass").
+ */
+// eslint-disable-next-line no-unused-vars
+function onMomentDue(stepId, phase, index) {}
+
 const capitalize = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
@@ -73,6 +97,50 @@ function useNow(paused) {
     return () => clearInterval(id);
   }, [paused]);
   return now;
+}
+
+/**
+ * Everything the card and the "cooking on its own" row need to know
+ * about one running unattended step, derived per tick from the step's
+ * real start — the same numbers unattendedPhaseNow reads, plus the
+ * moments laid out from 0 so a time axis can be drawn.
+ */
+function momentState(node, record, now) {
+  const moments = unattendedEvents(node, 0);
+  const checkCount = moments.filter((m) => m.kind === "checkpoint").length;
+  const { phase, index } = unattendedPhaseNow(node, record, now);
+  const elapsedSec = stepVariance(node, record, now).actualSec;
+  const estSec = node.estimated_duration_sec || 0;
+  const current =
+    phase === "initial"
+      ? moments.find((m) => m.kind === "initial")
+      : phase === "checkpoint"
+        ? moments.find((m) => m.kind === "checkpoint" && m.index === index)
+        : phase === "ending"
+          ? moments.find((m) => m.kind === "ending")
+          : null;
+  const from = current ? current.endSec : elapsedSec;
+  const next = phase === "ending" ? null : moments.find((m) => m !== current && m.atSec >= from) || null;
+  // The finish window stays open until Done; past LATE_AFTER_SEC it is
+  // a count-up in warning text, never red.
+  const lateSec = current?.kind === "ending" ? elapsedSec - current.atSec : 0;
+  return {
+    moments,
+    checkCount,
+    phase,
+    current,
+    next,
+    elapsedSec,
+    estSec,
+    inMoment: Boolean(current),
+    countdownSec: current ? Math.max(0, current.endSec - elapsedSec) : null,
+    nextInSec: next ? next.atSec - elapsedSec : null,
+    late: lateSec > LATE_AFTER_SEC,
+    lateSec,
+    // Leave it: nothing to come back for, just a moment it becomes usable.
+    readyInSec: Math.max(0, estSec - elapsedSec),
+    handsOnSec: moments.reduce((sum, m) => sum + (m.endSec - m.atSec), 0),
+  };
 }
 
 function Mono({ children, className = "" }) {
@@ -112,6 +180,39 @@ function EquipmentChip({ type }) {
       {glyph && <KpIcon glyph={glyph} size={14} />}
       {capitalize(EQUIPMENT_LABELS[type] || type)}
     </span>
+  );
+}
+
+function TendingChip({ node, className = "" }) {
+  const label = tendingLabel(node);
+  if (!label) return null;
+  return <span className={`lc-tending-chip ${className}`}>{label}</span>;
+}
+
+// The Schedule's rail-and-moments drawing, scaled to a row and made
+// live: a 6px rail 0 → est with the elapsed part filled in the player's
+// color, a block per moment standing on it (past ones drop to the
+// tint), and a 2px now marker.
+function MomentAxis({ state, player }) {
+  const { moments, elapsedSec, estSec } = state;
+  const pct = (sec) => (estSec > 0 ? Math.min(100, Math.max(0, (sec / estSec) * 100)) : 0);
+  return (
+    <div className={`lc-axis is-${player}`} aria-hidden="true">
+      <Mono className="lc-axis-end">0:00</Mono>
+      <div className="lc-axis-track">
+        <span className="lc-axis-rail" />
+        <span className="lc-axis-fill" style={{ width: `${pct(elapsedSec)}%` }} />
+        {moments.map((m) => (
+          <span
+            key={`${m.kind}-${m.index}`}
+            className={`lc-axis-moment ${m.endSec <= elapsedSec ? "is-past" : ""}`}
+            style={{ left: `${pct(m.atSec)}%`, width: `max(10px, ${pct(m.endSec - m.atSec)}%)` }}
+          />
+        ))}
+        <span className="lc-axis-now" style={{ left: `${pct(elapsedSec)}%` }} />
+      </div>
+      <Mono className="lc-axis-end">{clock(estSec)}</Mono>
+    </div>
   );
 }
 
@@ -193,6 +294,45 @@ export default function LiveCookPage() {
     saveRunNow(next);
     // `now` ticks every second; the guard above is what stops this
     // firing more than once per step.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now, paused, finished]);
+
+  // A moment coming due is the alarm. The row and the card already show
+  // it; this adds the agent's line to the transcript and is the hook
+  // point for voice output later (§4: "spoken later, not wired yet").
+  // Phase transitions are detected here, not stored — the run has no
+  // moment state, same as everything else derived from the clock.
+  const phasesRef = useRef(null);
+  useEffect(() => {
+    if (!run || paused || finished) return;
+    const current = {};
+    nodes.forEach((n) => {
+      const record = run.steps[n.id];
+      if (isAttended(n) || record?.status !== "active") return;
+      const { phase, index } = unattendedPhaseNow(n, record, now);
+      current[n.id] = `${phase}:${index}`;
+    });
+    const prev = phasesRef.current;
+    phasesRef.current = current;
+    // First tick after a load: nothing is "newly" due.
+    if (!prev) return;
+    let next = run;
+    let fired = false;
+    Object.entries(current).forEach(([stepId, key]) => {
+      if (prev[stepId] === key) return;
+      const [phase, index] = key.split(":");
+      if (phase !== "checkpoint" && phase !== "ending") return;
+      const node = byId[stepId];
+      if (!hasDeadline(node)) return;
+      const who = cooks.find((c) => c.id === run.steps[stepId].cookId)?.name || "Someone";
+      const count = node.unattended?.checkpoints?.count || 0;
+      const text = phase === "checkpoint" ? `${who} — check on “${node.label}”. ${Number(index) + 1} of ${count}.` : `${who} — finish “${node.label}” now.`;
+      onMomentDue(stepId, phase, Number(index));
+      next = appendTranscript(next, { at: new Date().toISOString(), speaker: "agent", text });
+      fired = true;
+    });
+    if (fired) saveRunNow(next);
+    // `now` ticks every second; the phase diff above is the guard.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now, paused, finished]);
 
@@ -685,14 +825,27 @@ export default function LiveCookPage() {
 
 function PlayerFocusCard({ cook, index, cooks, run, nodes, byId, now, isVersus, paused, points, assignment, onStart, onDone, onSkip, onDrop, onClaim, onUndo }) {
   const key = playerKey(index);
-  const activeId = activeStepFor(cook.id, run, byId, now);
+  // The engine says who is occupied by what. If a check comes due while
+  // the cook is mid-chop, both steps occupy them and the engine's pick
+  // is by record order — the card keeps the hands-on step so it does
+  // not flip under a working cook; the due check is the row's alarm
+  // (§4). Only with no hands-on step does an unattended moment lead.
+  const handsOnId = Object.entries(run.steps).find(([id, r]) => r.status === "active" && r.cookId === cook.id && isAttended(byId[id]))?.[0] || null;
+  const activeId = handsOnId || activeStepFor(cook.id, run, byId, now);
   const node = activeId ? byId[activeId] : null;
   const variance = node ? stepVariance(node, run.steps[activeId], now) : null;
-  // Unattended steps this cook has running. They do not occupy anyone, so
-  // they are deliberately not the card's headline — but they still have
-  // to be visible somewhere, or a 40-minute simmer someone started just
-  // vanishes and nobody remembers to go back to it.
-  const waiting = passiveStepsFor(cook.id, run, byId);
+  // The card is "On it" on an unattended step only while it is in a
+  // moment — the engine never makes a merely-waiting pot anyone's focus.
+  const focusMoment = node && !isAttended(node) ? momentState(node, run.steps[activeId], now) : null;
+  const inFinish = focusMoment?.phase === "ending";
+
+  // Every unattended step this cook has going, soonest moment first —
+  // the pots that need someone back. Whole-step based on purpose: a pot
+  // stays listed even while its check is the card's focus, so the row
+  // and the card agree.
+  const cooking = passiveStepsFor(cook.id, run, byId)
+    .map((id) => ({ id, node: byId[id], state: momentState(byId[id], run.steps[id], now) }))
+    .sort((a, b) => (a.state.nextInSec ?? -1) - (b.state.nextInSec ?? -1));
 
   // Versus has no plan: with nothing in hand the card offers the top
   // suggestion and points at the board for the rest.
@@ -715,9 +868,27 @@ function PlayerFocusCard({ cook, index, cooks, run, nodes, byId, now, isVersus, 
         finished: "is-finished",
         grabs: "is-next",
       }[reason];
+  const phaseLabel = focusMoment?.current ? momentName(focusMoment.current, focusMoment.checkCount) : null;
+  const eyebrowText = paused ? EYEBROW.paused : phaseLabel ? `${EYEBROW.active} · ${phaseLabel}` : EYEBROW[reason];
+
+  const secondary = (
+    <>
+      <button type="button" className="btn btn-ghost lc-btn-accent" disabled={paused} onClick={() => onSkip(activeId)}>
+        Skip
+      </button>
+      {isVersus && (
+        <button type="button" className="btn btn-ghost lc-btn-accent" disabled={paused} onClick={() => onDrop(activeId)}>
+          Put it back
+        </button>
+      )}
+      <button type="button" className="btn btn-ghost lc-btn-accent lc-btn-undo" disabled={!undoable} onClick={onUndo}>
+        Undo
+      </button>
+    </>
+  );
 
   return (
-    <article className={`lc-card is-${key} ${paused ? "is-paused" : ""}`} aria-label={`${cook.name} — ${EYEBROW[reason]}`}>
+    <article className={`lc-card is-${key} ${paused ? "is-paused" : ""}`} aria-label={`${cook.name} — ${eyebrowText}`}>
       <header className="lc-card-head">
         <PlayerAvatar cook={cook} index={index} size={40} />
         <span className="lc-card-name">{cook.name}</span>
@@ -725,70 +896,25 @@ function PlayerFocusCard({ cook, index, cooks, run, nodes, byId, now, isVersus, 
         <span className={`lc-eyebrow ${eyebrowClass}`}>
           {reason === "finished" && <KpIcon glyph="checkmark-burst" size={14} />}
           {(reason === "active" || reason === "waiting") && !paused && <span className="lc-eyebrow-dot" />}
-          {paused ? EYEBROW.paused : EYEBROW[reason]}
+          {eyebrowText}
         </span>
       </header>
 
-      {/* Everything this cook has running that does not need them. It is a
-          queue, not a tag row, because an unattended step has a moment it
-          needs someone BACK — a simmer nobody returns to is a burnt pot.
-          Each one counts down, then goes loud and offers Done. */}
-      {waiting.length > 0 && (
-        <ul className="focus-queue">
-          {waiting.map((id) => {
-            const wNode = byId[id];
-            const v = stepVariance(wNode, run.steps[id], now);
-            const leftSec = v.estSec - v.actualSec;
-            const due = leftSec <= 0;
-            const nags = hasDeadline(wNode);
-            return (
-              <li
-                // Only a pot with a deadline gets loud. An ice bath five
-                // minutes over is not late, it is just when somebody got
-                // round to it, and pulsing about it teaches people to
-                // ignore the one that matters.
-                className={`focus-queue-item ${due ? (nags ? "is-due" : "is-ready") : ""}`}
-                key={id}
-              >
-                <span className="focus-queue-main">
-                  <span className="focus-queue-label">{wNode?.label}</span>
-                  <span className="lc-meta mono">
-                    {due
-                      ? nags
-                        ? "needs you now"
-                        : "ready when you are"
-                      : `${clock(leftSec)} left · ${
-                          nags ? "check on it" : isOneShot(wNode) ? "no need to come back" : "runs on its own"
-                        }`}
-                  </span>
-                </span>
-                {/* No button on a step nobody finishes — it closes
-                    itself, and offering Done would be asking for a task
-                    that does not exist. */}
-                {!isOneShot(wNode) && (
-                  <button
-                    type="button"
-                    className={`btn ${due && nags ? "btn-success" : "btn-ghost"} focus-queue-done`}
-                    disabled={paused}
-                    onClick={() => onDone(id)}
-                  >
-                    Done
-                  </button>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
       {/* Every variant renders the same skeleton — title, body, then an
-          action block pinned to the bottom — so both cards line up even
-          when one is waiting. */}
+          action block — so both cards' action blocks line up. The
+          "cooking on its own" list below is the one thing allowed to
+          make them unequal in height. */}
       <div className="lc-card-body">
         {node && (
           <>
-            <h2 className="lc-step-title">{node.label}</h2>
+            <div className="lc-step-title-row">
+              <h2 className="lc-step-title">{node.label}</h2>
+              {phaseLabel && <span className={`lc-phase-chip is-${key}`}>{phaseLabel}</span>}
+            </div>
             {node.description && <p className="lc-step-desc">{node.description}</p>}
+            {focusMoment?.current && (
+              <MomentInstruction state={focusMoment} node={node} />
+            )}
             <div className={`lc-timer ${variance.over ? "is-over" : ""}`}>
               <Mono className="lc-timer-value">{clock(variance.actualSec)}</Mono>
               <Mono className="lc-timer-est">
@@ -808,7 +934,10 @@ function PlayerFocusCard({ cook, index, cooks, run, nodes, byId, now, isVersus, 
 
         {offered && (
           <>
-            <h2 className="lc-step-title">{offered.label}</h2>
+            <div className="lc-step-title-row">
+              <h2 className="lc-step-title">{offered.label}</h2>
+              <TendingChip node={offered} />
+            </div>
             {offered.description && <p className="lc-step-desc">{offered.description}</p>}
             <div className="lc-chips">
               <DifficultyChip level={offered.difficulty} />
@@ -857,26 +986,32 @@ function PlayerFocusCard({ cook, index, cooks, run, nodes, byId, now, isVersus, 
       </div>
 
       <div className="lc-card-actions">
-        {node && (
-          <>
-            <button type="button" className="btn lc-btn-xl lc-btn-done" disabled={paused} onClick={() => onDone(activeId)}>
+        {node && (focusMoment && !inFinish ? (
+          // Start / Check: no primary. The card must read "do the thing,
+          // then walk away", not "press a button" — the ghost Done on the
+          // left is for ending the step early.
+          <div className="lc-card-secondary is-ghost-row">
+            <button type="button" className="btn btn-ghost lc-btn-accent" disabled={paused} onClick={() => onDone(activeId)}>
               Done
             </button>
-            <div className="lc-card-secondary">
-              <button type="button" className="btn btn-ghost lc-btn-accent" disabled={paused} onClick={() => onSkip(activeId)}>
-                Skip
-              </button>
-              {isVersus && (
-                <button type="button" className="btn btn-ghost lc-btn-accent" disabled={paused} onClick={() => onDrop(activeId)}>
-                  Put it back
-                </button>
-              )}
-              <button type="button" className="btn btn-ghost lc-btn-accent lc-btn-undo" disabled={!undoable} onClick={onUndo}>
-                Undo
-              </button>
-            </div>
+            <span className="lc-card-secondary-right">{secondary}</span>
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              // Finish: the primary IS the Done, and the card pulses once
+              // when the window opens.
+              className={`btn lc-btn-xl lc-btn-done ${inFinish ? "lc-attend" : ""}`}
+              key={inFinish ? "finish" : "done"}
+              disabled={paused}
+              onClick={() => onDone(activeId)}
+            >
+              Done
+            </button>
+            <div className="lc-card-secondary">{secondary}</div>
           </>
-        )}
+        ))}
         {offered && (
           <button
             type="button"
@@ -897,7 +1032,105 @@ function PlayerFocusCard({ cook, index, cooks, run, nodes, byId, now, isVersus, 
           </div>
         )}
       </div>
+
+      {/* Pinned under the action block: every pot this cook has going,
+          with its next moment counting down. Whole-step based, so it
+          is still here while a check is the card's focus. */}
+      {cooking.length > 0 && (
+        <div className="lc-cooking">
+          <div className="lc-cooking-head">
+            <span className="lc-agent-eyebrow">Cooking on its own</span>
+            <Mono className="lc-meta">{cooking.length}</Mono>
+          </div>
+          {cooking.map(({ id, node: cNode, state }) => (
+            <CookingRow
+              key={id}
+              node={cNode}
+              state={state}
+              player={key}
+              paused={paused}
+              // Done never appears twice in one card: the row's ghost Done
+              // is suppressed only when this same step is the card's
+              // primary (its Finish-phase card).
+              showDone={!isOneShot(cNode) && state.phase === "ending" && !(activeId === id && inFinish)}
+              onDone={() => onDone(id)}
+            />
+          ))}
+        </div>
+      )}
     </article>
+  );
+}
+
+// The instruction line for a focus card mid-moment: what to do, the
+// small countdown for this moment (the big timer keeps counting the
+// whole step), and what comes next.
+function MomentInstruction({ state, node }) {
+  const { current, next, countdownSec, checkCount } = state;
+  const verb = current.kind === "initial" ? "Get it going" : current.kind === "checkpoint" ? "Check on it" : "Pull it off";
+  const nextText = next ? `Next: ${momentName(next, checkCount)} in ${clock(state.nextInSec)}.` : null;
+  return (
+    <div className="lc-moment">
+      <div className="lc-moment-line">
+        <span className="lc-moment-instruction">
+          {verb} — {current.kind === "ending" ? "now." : <><Mono>{clock(current.endSec - current.atSec)}</Mono>.</>}
+        </span>
+        {current.kind !== "ending" && <Mono className="lc-moment-countdown">{clock(countdownSec)}</Mono>}
+      </div>
+      {current.kind === "initial" && (
+        <span className="lc-meta">
+          {isOneShot(node) ? "Then it runs on its own — nothing to come back for." : `Then it runs on its own. ${nextText || ""}`}
+        </span>
+      )}
+      {current.kind === "checkpoint" && nextText && <span className="lc-meta">{nextText}</span>}
+    </div>
+  );
+}
+
+// One "cooking on its own" row: label + tending chip, the live axis,
+// and the next moment. Quiet while running; the system's "needs you"
+// treatment (warning tint, player-color rail, one pop) when a check or
+// the finish is due. Tapping does nothing yet — reserved for "agent
+// says the next moment".
+function CookingRow({ node, state, player, paused, showDone, onDone }) {
+  const { phase, current, next, checkCount, countdownSec, late, lateSec, readyInSec } = state;
+  const due = hasDeadline(node) && (phase === "checkpoint" || phase === "ending");
+  let label = "";
+  let value = "";
+  if (due) {
+    label = `${momentName(current, checkCount)} — now`;
+    value = late ? `+${clock(lateSec)}` : clock(countdownSec);
+  } else if (isOneShot(node)) {
+    label = readyInSec > 0 ? "Ready in" : "";
+    value = readyInSec > 0 ? clock(readyInSec) : "Ready";
+  } else if (next) {
+    label = `${momentName(next, checkCount)} in`;
+    value = clock(state.nextInSec);
+  } else if (phase === "initial" && current) {
+    label = "Starting";
+    value = clock(countdownSec);
+  }
+  return (
+    <div
+      className={`lc-cooking-row is-${player} ${due ? "is-due" : ""}`}
+      key={due ? `${phase}-${current?.index}` : "running"}
+      title="reserved: tap → agent says the next moment"
+    >
+      <div className="lc-cooking-row-title">
+        <span className="lc-cooking-row-label">{node.label}</span>
+        <TendingChip node={node} />
+      </div>
+      <MomentAxis state={state} player={player} />
+      <div className="lc-cooking-row-next">
+        {label && <span className="lc-cooking-row-next-label">{label}</span>}
+        <Mono className="lc-cooking-row-next-value">{value}</Mono>
+      </div>
+      {showDone && (
+        <button type="button" className="btn btn-ghost lc-btn-accent lc-cooking-row-done" disabled={paused} onClick={onDone}>
+          Done
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -942,11 +1175,26 @@ function TaskPoolBoard({ ready, blocked, run, byId, cooks, now, paused, onClaim 
         {/* One button per player rather than a single "Claim" that scores
             for whoever the speaker toggle happened to be left on. On a
             screen two people share, a tap has to say who tapped. */}
-        {ready.map((id) => (
+        {ready.map((id) => {
+          const tNode = byId[id];
+          // What a claim actually costs: an unattended step is mostly
+          // waiting, so the tile says its hands-on total, not its span.
+          const handsOnSec = isAttended(tNode) ? null : unattendedEvents(tNode, 0).reduce((sum, m) => sum + (m.endSec - m.atSec), 0);
+          return (
           <div key={id} className="lc-tile is-claimable">
-            <span className="lc-tile-label">{byId[id].label}</span>
+            <span className="lc-tile-title">
+              <span className="lc-tile-label">{tNode.label}</span>
+              <TendingChip node={tNode} />
+            </span>
             <Mono className="lc-tile-meta">
-              {clock(byId[id].estimated_duration_sec)} · +{DIFFICULTY_POINTS[byId[id].difficulty]}
+              {handsOnSec != null ? (
+                <>
+                  <span className="lc-tile-meta-strong">{clock(handsOnSec)}</span> hands-on of {clock(tNode.estimated_duration_sec)}
+                </>
+              ) : (
+                clock(tNode.estimated_duration_sec)
+              )}{" "}
+              · +{DIFFICULTY_POINTS[tNode.difficulty]}
             </Mono>
             <div className="lc-tile-claims">
               {cooks.map((cook, i) => {
@@ -959,7 +1207,7 @@ function TaskPoolBoard({ ready, blocked, run, byId, cooks, now, paused, onClaim 
                     onClick={() => onClaim(id, cook.id)}
                     disabled={paused || busy}
                     title={busy ? `${cook.name} is still on something` : undefined}
-                    aria-label={`${cook.name} takes ${byId[id].label}`}
+                    aria-label={`${cook.name} takes ${tNode.label}`}
                   >
                     {cook.name}
                   </button>
@@ -967,16 +1215,31 @@ function TaskPoolBoard({ ready, blocked, run, byId, cooks, now, paused, onClaim 
               })}
             </div>
           </div>
-        ))}
+          );
+        })}
         {taken.map(([id, record]) => {
           const i = cooks.findIndex((c) => c.id === record.cookId);
+          const tNode = byId[id];
+          // An unattended step's tile says its next moment, never a plain
+          // running time — the same right-column copy as the card's row.
+          const ms = tNode && !isAttended(tNode) ? momentState(tNode, record, now) : null;
+          let moment = null;
+          if (ms) {
+            if (ms.current?.kind === "initial") moment = "Starting";
+            else if (ms.current && hasDeadline(tNode)) moment = `${momentName(ms.current, ms.checkCount)} — now`;
+            else if (ms.next) moment = `${momentName(ms.next, ms.checkCount)} in ${clock(ms.nextInSec)}`;
+            else if (isOneShot(tNode)) moment = ms.readyInSec > 0 ? `Ready in ${clock(ms.readyInSec)}` : "Ready";
+          }
           return (
             <div key={id} className={`lc-tile is-taken is-${playerKey(i)}`}>
-              <span className="lc-tile-label">{byId[id]?.label}</span>
+              <span className="lc-tile-title">
+                <span className="lc-tile-label">{tNode?.label}</span>
+                <TendingChip node={tNode} />
+              </span>
               <span className="lc-tile-holder">
                 <PlayerAvatar cook={cooks[i]} index={i} size={20} />
                 {cooks[i]?.name}
-                <Mono>{clock(stepVariance(byId[id], record, now).actualSec)}</Mono>
+                {moment ? <Mono className={ms.current ? "is-due" : ""}>{moment}</Mono> : <Mono>{clock(stepVariance(tNode, record, now).actualSec)}</Mono>}
               </span>
             </div>
           );

@@ -21,6 +21,9 @@
 @keyframes lc-roll { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @keyframes lc-burst { 0% { transform: scale(0.6) rotate(-20deg); opacity: 0; } 60% { transform: scale(1.15) rotate(4deg); } 100% { transform: scale(1) rotate(0); opacity: 1; } }
 @keyframes lc-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+/* The system's attention motion — one spring on entering "needs you". */
+@keyframes lc-attend { 0% { transform: scale(0.97); } 60% { transform: scale(1.015); } 100% { transform: scale(1); } }
+.lc-attend { animation: lc-attend 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
 
 .lc-roll { animation: lc-roll 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
 
@@ -211,6 +214,44 @@
 .lc-card-body { display: flex; flex-direction: column; gap: 12px; flex: 1; padding: 20px 24px 8px; }
 .lc-step-title { margin: 0; font-size: 24px; line-height: 30px; font-weight: 700; letter-spacing: -0.01em; }
 .lc-step-desc { margin: 0; font-size: 16px; line-height: 24px; color: var(--ink-soft); }
+.lc-step-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* Phase chip: system Chip in the player's color, the one thing that
+   has to read from across the kitchen (with the eyebrow saying it too). */
+.lc-phase-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.lc-phase-chip.is-a { background: var(--cook-a-bg); color: var(--cook-a-ink); }
+.lc-phase-chip.is-b { background: var(--cook-b-bg); color: var(--cook-b-ink); }
+.lc-eyebrow.is-active { font-size: 15px; }
+
+/* Two clocks on one card is deliberate: the big timer is the step, the
+   small countdown is this moment. */
+.lc-moment { display: flex; flex-direction: column; gap: 4px; }
+.lc-moment-line { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.lc-moment-instruction { font-size: 16px; line-height: 24px; font-weight: 500; }
+.lc-moment-countdown { font-size: 24px; line-height: 30px; font-weight: 500; }
+
+/* Tending chip — the Schedule's vocabulary, as a neutral chip. */
+.lc-tending-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--ds-chip);
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
 .lc-timer {
   display: flex;
   align-items: baseline;
@@ -247,6 +288,11 @@
 .lc-card-actions { display: flex; flex-direction: column; gap: 4px; padding: 8px 24px 16px; min-height: 64px; margin-top: auto; }
 .lc-card-secondary { display: flex; align-items: center; gap: 4px; }
 .lc-btn-undo { margin-left: auto; }
+/* Start / Check: no primary — a ghost Done on the left, the usual
+   secondaries on the right, at the height the primary would have had
+   so the two cards' action blocks still line up. */
+.lc-card-secondary.is-ghost-row { justify-content: space-between; min-height: 64px; }
+.lc-card-secondary-right { display: flex; align-items: center; gap: 4px; }
 
 /* Paused: the whole card dims — the eyebrow, title and timer read as
    frozen, and the disabled buttons say the rest. */
@@ -255,6 +301,8 @@
 .lc-card.is-paused .lc-timer { background: var(--kp-bg-secondary); }
 .lc-card.is-paused .lc-chips, .lc-card.is-paused .lc-card-secondary { opacity: 0.5; }
 .lc-card.is-paused .lc-avatar { opacity: 0.6; }
+.lc-card.is-paused .lc-phase-chip, .lc-card.is-paused .lc-moment, .lc-card.is-paused .lc-cooking { opacity: 0.6; }
+.lc-card.is-paused .lc-cooking-row, .lc-card.is-paused .lc-btn-done { animation: none; }
 
 /* ---------------- agent column ---------------- */
 .lc-agent {
@@ -358,7 +406,10 @@
 .lc-pool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
 .lc-tile { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 12px; animation: lc-rise 240ms ease-out both; }
 .lc-tile.is-claimable { background: var(--surface); border: 1px solid var(--line); }
+.lc-tile-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .lc-tile-label { font-size: 16px; font-weight: 500; line-height: 22px; }
+.lc-tile-meta-strong { color: var(--ink); }
+.lc-tile-holder .mono.is-due { color: var(--warning-soft-ink); font-weight: 500; }
 .lc-tile-meta { font-size: 13px; color: var(--ink-soft); }
 .lc-tile-claims { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
 .ds-v4 .lc-claim { min-height: 44px; padding: 0 8px; color: #fff; font-weight: 600; }
@@ -425,70 +476,72 @@
 .paused-banner .mini-title { color: var(--crit); }
 
 
-/* --- the unattended queue --------------------------------------------
-   Steps this cook set going that do not need them. Deliberately not the
-   card's headline: they occupy nobody. But each one has a moment it
-   needs someone back, so it counts down and then goes loud. */
-.focus-queue {
-  list-style: none;
-  margin: 0 0 10px;
-  padding: 0;
+/* --- "Cooking on its own" -------------------------------------------
+   Pinned under the action block: every pot this cook has going, its
+   next moment counting down. Quiet while running; the system's "needs
+   you" treatment when a check or the finish is due. */
+.lc-cooking {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 24px 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.lc-cooking-head { display: flex; align-items: center; gap: 8px; }
+.lc-cooking-row {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-height: 56px;
+  padding: 8px 10px;
+  border-radius: var(--radius-control);
+  border-left: 3px solid transparent;
+  background: var(--surface);
+  animation: lc-fade 200ms ease-out both;
 }
-.focus-queue-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--radius-input);
-}
-.focus-queue-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-.focus-queue-label {
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.lc-cooking-row-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lc-cooking-row-label { flex: 1 1 auto; min-width: 0; font-size: 16px; line-height: 22px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-cooking-row-next { display: flex; align-items: baseline; justify-content: flex-end; gap: 8px; }
+.lc-cooking-row-next-label { font-size: 12px; line-height: 16px; color: var(--ink-soft); }
+.lc-cooking-row-next-value { font-size: 20px; line-height: 24px; font-weight: 500; }
+.ds-v4 .lc-cooking-row-done { width: 100%; min-height: 44px; }
 
-/* Due: the pot wants you. Solid border and a slow pulse — loud enough
-   to catch an eye across a kitchen, slow enough not to nag. */
-.focus-queue-item.is-due {
-  border-style: solid;
-  border-color: var(--crit);
-  background: var(--crit-soft);
-  color: var(--crit-soft-ink);
-  animation: focus-queue-pulse 2s ease-in-out infinite;
-}
-@keyframes focus-queue-pulse {
-  0%, 100% { border-color: var(--crit); }
-  50% { border-color: var(--line-strong); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .focus-queue-item.is-due { animation: none; }
-}
+/* Due: warning tint, the player's color as the left rail, one pop on
+   entry. No red — a passed check is just gone, a late finish counts up. */
+.lc-cooking-row.is-due { background: var(--warning-soft); animation: lc-attend 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.lc-cooking-row.is-due.is-a { border-left-color: var(--cook-a); }
+.lc-cooking-row.is-due.is-b { border-left-color: var(--cook-b); }
+.lc-cooking-row.is-due .lc-cooking-row-next-label { font-size: 13px; font-weight: 500; color: var(--warning-soft-ink); }
+.lc-cooking-row.is-due .lc-cooking-row-next-value { color: var(--warning-soft-ink); }
 
-/* There is no .btn-sm in tokens.css — only the height token that
-   .btn-ghost uses — so the queue's Done button sizes itself. */
-.focus-queue-done {
-  min-height: var(--btn-height-sm);
-  padding: 0 14px;
-  flex: none;
+/* The live time axis — the Schedule's rail-and-moments drawing scaled
+   to the row: 6px rail, 10×16 moment blocks in the player's color
+   (past ones in the tint), elapsed fill and a 2px now marker. */
+.lc-axis { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lc-axis-end { flex: none; font-size: 12px; color: var(--ink-soft); }
+.lc-axis-track { position: relative; flex: 1 1 auto; min-width: 0; height: 16px; }
+.lc-axis-rail, .lc-axis-fill { position: absolute; left: 0; top: 5px; height: 6px; border-radius: 999px; }
+.lc-axis-rail { right: 0; }
+.lc-axis-moment {
+  position: absolute;
+  top: 0;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid;
+  border-radius: 4px;
+  /* Centered on its time; clamped so the first and last stay inside. */
+  transform: translateX(-5px);
 }
-
-/* Due, but nobody minds when you get to it. Present without pulsing —
-   if everything shouts, the pot that is actually burning gets ignored. */
-.focus-queue-item.is-ready {
-  border-style: solid;
-  border-color: var(--line-strong);
-}
+.lc-axis-now { position: absolute; top: 0; width: 2px; height: 16px; margin-left: -1px; background: var(--ink); }
+.lc-axis.is-a .lc-axis-rail { background: var(--cook-a-bg); }
+.lc-axis.is-a .lc-axis-fill { background: var(--cook-a); }
+.lc-axis.is-a .lc-axis-moment { border-color: var(--cook-a); background: var(--cook-a); }
+.lc-axis.is-a .lc-axis-moment.is-past { background: var(--cook-a-bg); }
+.lc-axis.is-b .lc-axis-rail { background: var(--cook-b-bg); }
+.lc-axis.is-b .lc-axis-fill { background: var(--cook-b); }
+.lc-axis.is-b .lc-axis-moment { border-color: var(--cook-b); background: var(--cook-b); }
+.lc-axis.is-b .lc-axis-moment.is-past { background: var(--cook-b-bg); }
 
 /* ---------------- Service done (finished) ---------------- */
 .lc-service {
@@ -566,6 +619,7 @@
   .lc-card-head { padding: 12px 16px; }
   .lc-card-body { padding: 16px 16px 4px; }
   .lc-card-actions { padding: 8px 16px 16px; }
+  .lc-cooking { margin: 0 16px 16px; }
   .lc-step-title { font-size: 22px; line-height: 28px; }
   .lc-timer-value { font-size: 32px; line-height: 36px; }
   .lc-step-desc { font-size: 15px; line-height: 22px; }
@@ -599,5 +653,7 @@
 @media (prefers-reduced-motion: reduce) {
   .lc-header, .lc-paused, .lc-leaderboard, .lc-card, .lc-agent, .lc-pool, .lc-tile, .lc-service, .lc-roll, .lc-done-burst, .lc-line { animation-name: lc-fade; }
   .lc-eyebrow.is-active .lc-eyebrow-dot { animation: none; }
+  /* Due rows tint without popping; phase changes are plain fades. */
+  .lc-cooking-row, .lc-cooking-row.is-due, .lc-attend { animation-name: lc-fade; }
   .lc-leader-fill { transition: none; }
 }
