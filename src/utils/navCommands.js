@@ -316,8 +316,10 @@ export function normalizeUtterance(text) {
  * "we should resume later" — registered by Home — fired immediately,
  * which is the exact bug the guards exist to prevent.
  */
-export function isLikelyConversation(said, confidence) {
-  if (HAS_SUBJECT.test(said)) return true;
+export function isLikelyConversation(said, confidence, { allowSubject = false } = {}) {
+  // "I'm Mia" is a command whose first word is a subject. A command
+  // opts in; the confidence floor still applies to it.
+  if (!allowSubject && HAS_SUBJECT.test(said)) return true;
   if (typeof confidence === "number" && confidence < CONFIRM_CONFIDENCE) return true;
   return false;
 }

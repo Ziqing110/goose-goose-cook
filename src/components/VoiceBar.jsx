@@ -270,7 +270,7 @@ export default function VoiceBar() {
       if (pageCommand) {
         // Page commands get the same guards as navigation. Without this
         // "resume" was protected but "we should resume later" fired.
-        if (!isLikelyConversation(said, confidence)) {
+        if (!isLikelyConversation(said, confidence, { allowSubject: pageCommand.allowSubject })) {
           // Irreversible commands ask first. You said "start cooking" —
           // being misheard into starting a cook costs more than one
           // extra sentence.

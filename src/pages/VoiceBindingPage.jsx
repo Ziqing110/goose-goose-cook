@@ -13,6 +13,7 @@ import Icon from "../components/Icon.jsx";
 import Modal from "../components/Modal.jsx";
 import "./VoiceBindingPage.css";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { ORDINAL, ordinalIndex, resolveCookRef, cleanSpokenName } from "../utils/cookVoice.js";
 
 // No real audio anywhere in this app — voice binding is simulated the
 // same way VoiceInput.jsx simulates "voice" with a styled text input.
@@ -62,26 +63,14 @@ export default function VoiceBindingPage() {
     };
   }, []);
 
-  // Voice equivalent of "Continue to scheduling". Only navigation, so
-  // no confirmation — and gated on the same `bound` the button is, so
-  // saying it early tells you nothing happened rather than nothing
-  // happening silently.
   useEffect(() => {
-    return registerVoiceCommands([
-      {
-        phrases: [/\bcontinue to scheduling\b/, /\bgo to scheduling\b/],
-        run: () => {
-          if (!areCooksBound(cooks)) return;
-          navigate("/session/schedule");
-        },
-      },
-    ]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cooks, navigate]);
-
-  useEffect(() => {
-    if (!locked) return undefined;
-    dispatch({ type: "voice/setHint", payload: { hint: { line: "Your cook is still running — say “take me back” any time." } } });
+    const hint = locked
+      ? { line: "Your cook is still running — say “take me back” any time." }
+      : {
+          line: "Say “call the first cook Mia”, “pick a chef”, or “start reading”.",
+          sub: "Also “add a second cook”, “remove the second cook”, “continue to scheduling”.",
+        };
+    dispatch({ type: "voice/setHint", payload: { hint } });
     return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
   }, [locked, dispatch]);
 
@@ -157,6 +146,147 @@ export default function VoiceBindingPage() {
   const allPicked = cooks.every((c) => c.avatar);
   const ready = areCooksBound(cooks) && allPicked;
   const canAdd = cooks.length < MAX_COOKS && !locked;
+
+  // Voice. Everything a button here does, a command does — the commands
+  // read the latest state through a ref so the layer is registered once
+  // rather than torn down on every keystroke of a rename.
+  const voiceRef = useRef();
+  voiceRef.current = {
+    cooks, ready, canAdd, locked, navigate,
+    renameCook, addCook, removeCook, openPicker, startRecording, completeRecording, stopRecording,
+  };
+
+  // Layer 0: the page itself. Under the recording and picker layers,
+  // which are exclusive and sit above it.
+  useEffect(() => {
+    const v = () => voiceRef.current;
+    const ref = (text) => resolveCookRef(text, v().cooks);
+    const label = (cook) => cook.name.trim() || `cook ${v().cooks.indexOf(cook) + 1}`;
+
+    // A ref that names nobody is said out loud, not dropped.
+    const which = "Which cook? Say “first”, “second”, or their name.";
+
+    if (locked) {
+      // The hint promises this exact phrase; nothing else on a locked
+      // page has anything to say.
+      return registerVoiceCommands([
+        {
+          phrases: [/\btake me back\b/, /\bback to the cook\b/, /\bgo back to the cook\b/],
+          run: () => v().navigate("/session/live-cook"),
+        },
+        {
+          phrases: [/\bcontinue to scheduling\b/, /\bgo to scheduling\b/],
+          run: () => v().navigate("/session/schedule"),
+        },
+      ]);
+    }
+
+    const setName = (cook, spoken) => {
+      const name = cleanSpokenName(spoken);
+      if (!name) return "I didn’t catch a name — try “call the first cook Mia”.";
+      const taken = v().cooks.some((c) => c.id !== cook.id && c.name.trim().toLowerCase() === name.toLowerCase());
+      v().renameCook(cook.id, name);
+      return taken ? `${name} is already taken — pick a different name.` : `Cook ${v().cooks.indexOf(cook) + 1} is ${name}.`;
+    };
+
+    return registerVoiceCommands([
+      {
+        phrases: [/\bcontinue to scheduling\b/, /\bgo to scheduling\b/],
+        run: () => {
+          if (!v().ready) return "Not yet — every cook needs a chef, a name and a voice.";
+          v().navigate("/session/schedule");
+        },
+      },
+      {
+        phrases: [new RegExp(`\\b(?:call|name) (?:the )?(?:cook )?(${ORDINAL})(?: cook)? (?:is |as )?(.+)$`)],
+        run: ({ 1: slot, 2: spoken }) => {
+          const cook = v().cooks[ordinalIndex(slot)];
+          return cook ? setName(cook, spoken) : "There’s no second cook yet — say “add a second cook”.";
+        },
+      },
+      {
+        phrases: [new RegExp(`\\bcook (${ORDINAL}) (?:is|=) (.+)$`)],
+        run: ({ 1: slot, 2: spoken }) => {
+          const cook = v().cooks[ordinalIndex(slot)];
+          return cook ? setName(cook, spoken) : "There’s no second cook yet — say “add a second cook”.";
+        },
+      },
+      {
+        // "I'm Mia" starts with a subject word, which the bar would
+        // otherwise take for conversation.
+        allowSubject: true,
+        phrases: [/\b(?:i'm|i am|my name is|this is) ([a-z' -]+)$/],
+        run: ({ 1: spoken }) => {
+          const cook = v().cooks.find((c) => !c.name.trim());
+          if (!cook) return "Both cooks have names — say “call the first cook…” to change one.";
+          return setName(cook, spoken);
+        },
+      },
+      {
+        phrases: [/\b(?:pick|choose|select|change|open)(?: (?:my|the|a|your))? (?:chef|bird|avatar)(?: (?:for|of))?(?: (.+))?$/],
+        run: ({ 1: who }) => {
+          const cook = who ? ref(who) : v().cooks.find((c) => !c.avatar) ?? v().cooks[0];
+          if (!cook) return which;
+          v().openPicker(cook);
+        },
+      },
+      {
+        phrases: [/\bstart (?:reading|recording)(?: (?:for|of))?(?: (.+))?$/, /\brecord again(?: (?:for|of))?(?: (.+))?$/],
+        run: ({ 1: who }) => {
+          const ready = (c) => c.name.trim() && c.avatar;
+          const cook = who ? ref(who) : v().cooks.find((c) => ready(c) && !c.bound) ?? v().cooks.find(ready);
+          if (!cook) return who ? which : "Give a cook a name and a chef first.";
+          if (!ready(cook)) return `${label(cook)} needs a name and a chef first.`;
+          v().startRecording(cook.id);
+          return `Listening to ${label(cook)} — read the line, then say “stop and save”.`;
+        },
+      },
+      {
+        phrases: [/\badd (?:a |another |the )?(?:second |2nd )?cook\b/],
+        run: () => {
+          if (!v().canAdd) return "Two cooks is the most one kitchen takes.";
+          v().addCook();
+          return "Added a second cook.";
+        },
+      },
+      {
+        // Losing a name and a recorded voice is not undone by saying it
+        // again, so it asks first.
+        phrases: [/\b(?:remove|delete) (?:the )?(?:cook )?(.+)$/],
+        confirm: "Remove that cook and their voice?",
+        run: ({ 1: who }) => {
+          const cook = ref(who);
+          if (!cook) return which;
+          if (v().cooks.length <= 1) return "You need at least one cook.";
+          v().removeCook(cook.id);
+          return `Removed ${label(cook)}.`;
+        },
+      },
+    ]);
+  }, [locked, navigate]);
+
+  // Layer 10 while a voice is being taken. The line each cook reads out
+  // starts "I'm Mia…" — exactly what the naming command listens for — so
+  // for these seconds the only things heard are the two ways out.
+  useEffect(() => {
+    if (!recordingCookId) return undefined;
+    return registerVoiceCommands(
+      [
+        {
+          phrases: [/\bstop(?: and save| recording| reading)?\b/, /\bsave(?: it)?\b/, /\bdone reading\b/, /\bthat'?s it\b/],
+          label: "Saved.",
+          run: () => voiceRef.current.completeRecording(recordingCookId),
+        },
+        {
+          phrases: [/\bcancel\b/, /\bnever ?mind\b/, /\bdiscard\b/],
+          label: "Cancelled — nothing saved.",
+          run: () => voiceRef.current.stopRecording(),
+        },
+      ],
+      { priority: 10, exclusive: true },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordingCookId]);
 
   let note = "Every cook needs a chef, a name and a voice to carry on.";
   let noteClass = "is-accent";
@@ -367,6 +497,7 @@ export default function VoiceBindingPage() {
 }
 
 function ChefPicker({ slot, selected, taken, onPick, onCancel, onConfirm }) {
+  const { dispatch } = useAppState();
   const picked = selected ? chefAvatar(selected) : null;
   // Draws from the birds nobody else holds, skipping the current pick so
   // every press visibly changes something.
@@ -375,6 +506,67 @@ function ChefPicker({ slot, selected, taken, onPick, onCancel, onConfirm }) {
   const pickRandom = () => {
     if (pool.length) onPick(pool[Math.floor(Math.random() * pool.length)].id);
   };
+
+  // Exclusive, like the other dialogs: while the picker is open the only
+  // way out is one of its own commands. A bird is named by its name or
+  // its colour ("Whisk", "the orange one").
+  const actionsRef = useRef();
+  actionsRef.current = { taken, onPick, pickRandom, onCancel, onConfirm };
+  useEffect(() => {
+    const byWord = (word) => CHEF_AVATARS.find((a) => a.name.toLowerCase() === word || a.hue?.toLowerCase() === word);
+    const words = CHEF_AVATARS.flatMap((a) => [a.name, a.hue]).filter(Boolean).map((w) => w.toLowerCase());
+    return registerVoiceCommands(
+      [
+        {
+          phrases: [/\bthat'?s me\b/, /\bconfirm\b/, /\bthis one\b/, /\blooks good\b/, /\bsave\b/, /\bdone\b/],
+          run: () => {
+            if (!selectedRef.current) return "Pick a bird first — say a name or a colour.";
+            actionsRef.current.onConfirm();
+            return null;
+          },
+        },
+        {
+          phrases: [/\brandom\b/, /\bsurprise\b/, /\broll (?:the )?dice\b/],
+          run: () => {
+            actionsRef.current.pickRandom();
+            return "Random pick — say “that’s me” to keep it, or “random” again.";
+          },
+        },
+        {
+          phrases: [/\bcancel\b/, /\bnever ?mind\b/, /\bclose\b/, /\bgo back\b/],
+          run: () => {
+            actionsRef.current.onCancel();
+            return null;
+          },
+        },
+        {
+          phrases: [new RegExp(`\\b(${words.join("|")})\\b`)],
+          run: ({ 1: word }) => {
+            const bird = byWord(word);
+            if (actionsRef.current.taken.has(bird.id)) return `${bird.name} is taken — pick another.`;
+            actionsRef.current.onPick(bird.id);
+            return `Chef ${bird.name}. Say “that’s me” to confirm.`;
+          },
+        },
+      ],
+      { priority: 10, exclusive: true },
+    );
+  }, []);
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+
+  useEffect(() => {
+    dispatch({
+      type: "voice/setHint",
+      payload: {
+        hint: {
+          line: "Say a bird’s name or colour — “Whisk”, “the orange one” — or “random”.",
+          sub: "Then “that’s me”, or “cancel”.",
+        },
+      },
+    });
+    return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
+  }, [dispatch]);
   return (
     <Modal label="Pick your chef" onClose={onCancel} panelClassName="chef-picker ds-v4 ds-v4-layer">
       <div className="chef-picker-head">

@@ -10,6 +10,7 @@ import { readAnswer } from "../api/understanding.js";
 import Icon from "../components/Icon.jsx";
 import VoiceInput from "../components/VoiceInput.jsx";
 import UnderstandingSidecar from "../components/UnderstandingSidecar.jsx";
+import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 import "./ConversationPage.css";
 
 export default function ConversationPage() {
@@ -170,6 +171,21 @@ export default function ConversationPage() {
   // nothing left to ask, so treat it as done rather than rendering an
   // answer bar for a question that no longer exists.
   const isComplete = complete || !currentQuestion;
+
+  // Voice equivalent of "Check the inventory" — the hint above promises
+  // this exact phrase, and VoiceInput's dictation unmounts once the
+  // conversation is done, so without a command it just falls through to
+  // navigation, which doesn't know "check" as a movement verb. Said and
+  // ignored is worse than not promised at all.
+  useEffect(() => {
+    if (!isComplete) return undefined;
+    return registerVoiceCommands([
+      {
+        phrases: [/\bcheck (?:the )?inventory\b/, /\bcontinue to (?:the )?inventory\b/, /\bgo to (?:the )?inventory\b/],
+        run: () => navigate("/session/inventory"),
+      },
+    ]);
+  }, [isComplete, navigate]);
 
   return (
     <section className="page conversation-page">

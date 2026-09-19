@@ -11,7 +11,7 @@
 // nodes: the graph is what an LLM will generate, and where someone
 // dragged a card isn't part of the recipe. Anything never dragged falls
 // back to its dependency-depth slot, so a fresh session opens tidy.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { formatMinutes } from "../utils/inventory.js";
 import { autoPositions, boxOf, cardSize, edgePath, resolvePositions, settle, CARD_W, CARD_H, PAD } from "../utils/boardLayout.js";
 import "./RecipeBoard.css";
@@ -33,7 +33,7 @@ const MARGIN = 16;
 // warm ground a faded card dropped red ink under 3:1, so a card away
 // from the selection flattens its fill instead, and a blocked card
 // never recedes at all.
-export default function RecipeBoard({
+const RecipeBoard = forwardRef(function RecipeBoard({
   nodes,
   positions,
   selectedNodeId,
@@ -50,7 +50,7 @@ export default function RecipeBoard({
   zoom = null,
   onFitScale,
   readOnly = false,
-}) {
+}, ref) {
   const boardRef = useRef(null);
   const scrollRef = useRef(null);
   const [drag, setDrag] = useState(null);
@@ -249,6 +249,33 @@ export default function RecipeBoard({
 
   useEffect(() => onFitScale?.(fitScale), [fitScale, onFitScale]);
 
+  // Voice's "scroll right"/"scroll to step X" have no card or slider to
+  // click, so the scroll container needs an imperative door in. Kept
+  // narrow — two methods, not a general escape hatch — everything else
+  // about the board stays driven by props.
+  useImperativeHandle(
+    ref,
+    () => ({
+      scrollBy: (dx, dy) => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const smooth = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+        el.scrollBy({ left: dx, top: dy, behavior: smooth ? "smooth" : "auto" });
+      },
+      scrollToNode: (id) => {
+        const el = scrollRef.current;
+        const b = boxes[id];
+        if (!el || !b) return false;
+        const left = Math.max(0, (b.x + b.w / 2) * scale - el.clientWidth / 2);
+        const top = Math.max(0, (b.y + b.h / 2) * scale - el.clientHeight / 2);
+        const smooth = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+        el.scrollTo({ left, top, behavior: smooth ? "smooth" : "auto" });
+        return true;
+      },
+    }),
+    [boxes, scale]
+  );
+
   // Which cards are scrolled out of view, for the caption under the board.
   const offscreenKey = useRef("");
   const reportOffscreen = () => {
@@ -350,4 +377,6 @@ export default function RecipeBoard({
       </div>
     </div>
   );
-}
+});
+
+export default RecipeBoard;

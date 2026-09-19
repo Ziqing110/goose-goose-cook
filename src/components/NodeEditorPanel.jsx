@@ -1,6 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAppState } from "../state/AppStateContext.jsx";
 import { EQUIPMENT_OPTIONS, DIFFICULTY_OPTIONS, PHASE_OPTIONS, MATERIAL_CATEGORY_ORDER, MATERIAL_CATEGORY_LABELS, equipmentLabel } from "../data/dishes.js";
 import BoardPanel, { ChoiceChip, PanelField, Segmented } from "./BoardPanel.jsx";
+import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { spokenNumber, NUMBER_TOKEN } from "../utils/understanding.js";
+import { matchStepName } from "../utils/stepNameMatch.js";
 import "./NodeEditorPanel.css";
 
 export const DIFFICULTY_SEGMENTS = DIFFICULTY_OPTIONS.map((d) => ({
@@ -9,6 +13,11 @@ export const DIFFICULTY_SEGMENTS = DIFFICULTY_OPTIONS.map((d) => ({
 }));
 
 const ADD_NEW = "__new__";
+
+const N = `(${NUMBER_TOKEN})`;
+const TOGGLE_ON = (thing, a) => [new RegExp(`\\b(?:add|with) (?:${a} |the )?${thing}\\b`), new RegExp(`\\b${thing} on\\b`)];
+const TOGGLE_OFF = (thing, a) => [new RegExp(`\\b(?:remove|drop|without) (?:${a} |the )?${thing}\\b`), new RegExp(`\\b${thing} off\\b`)];
+const EQUIPMENT_ARTICLE = { cutting_board: "a", stove_burner: "a", wok: "a", pot: "a", oven: "an" };
 
 // Edits are staged locally and only committed to the graph when Save
 // is clicked — closing the panel just discards the draft. Adding a
@@ -26,6 +35,7 @@ export default function NodeEditorPanel({
   onRegisterMaterial,
   blockedDependencyIds,
 }) {
+  const { dispatch } = useAppState();
   const [draft, setDraft] = useState(node);
   const [addingMaterial, setAddingMaterial] = useState(false);
 
@@ -64,6 +74,128 @@ export default function NodeEditorPanel({
   );
   const unselectedMaterials = materialIds.filter((m) => !draft.required_materials.includes(m));
   const number = numberOf?.(node.id);
+
+  // Every field here was mouse-only, including for a step voice itself
+  // just created — the editor auto-opens after "add a task" and used to
+  // hand control straight back to the mouse. Registered once per node
+  // (not per keystroke), so values are read through a ref.
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const actionsRef = useRef();
+  actionsRef.current = { onSave, onDelete, onClose };
+
+  useEffect(() => {
+    const otherIds = others.map((o) => o.id);
+    const labelOf = (id) => others.find((o) => o.id === id)?.label;
+
+    const commands = [
+      {
+        phrases: [/\b(?:call it|rename it|name it) (.+)$/],
+        run: (m) => {
+          const name = m[1].trim();
+          if (!name) return null;
+          patch((n) => (n.label = name));
+          return `Called it “${name}.”`;
+        },
+      },
+      {
+        phrases: [new RegExp(`\\bset (?:the )?(?:duration|time) to ${N} minutes?\\b`), new RegExp(`\\bmake it ${N} minutes?\\b`), new RegExp(`\\b${N} minutes?\\b`)],
+        run: (m) => {
+          const mins = spokenNumber(m[1]);
+          if (mins === null) return null;
+          patch((n) => (n.estimated_duration_sec = Math.round(Math.max(0.25, mins) * 60)));
+          return `${mins} minute${mins === 1 ? "" : "s"}.`;
+        },
+      },
+      {
+        phrases: [/\b(?:set )?difficulty (?:to )?(low|medium|high)\b/, /\bmake it (low|medium|high)(?: difficulty)?\b/],
+        run: (m) => {
+          patch((n) => (n.difficulty = m[1]));
+          return `${m[1]} difficulty.`;
+        },
+      },
+      {
+        phrases: [/\b(?:set )?phase (?:to )?(prep|cook|plate)\b/, /\bmark it (?:as )?(prep|cook|plate)\b/],
+        run: (m) => {
+          patch((n) => (n.phase = m[1]));
+          return `Phase: ${m[1]}.`;
+        },
+      },
+      ...EQUIPMENT_OPTIONS.flatMap((eq) => {
+        const word = equipmentLabel(eq).toLowerCase();
+        const a = EQUIPMENT_ARTICLE[eq];
+        return [
+          {
+            phrases: TOGGLE_OFF(word, a),
+            label: `${equipmentLabel(eq)} — not needed.`,
+            run: () => patch((n) => (n.required_equipment = n.required_equipment.filter((x) => x !== eq))),
+          },
+          {
+            phrases: TOGGLE_ON(word, a),
+            label: `${equipmentLabel(eq)} needed.`,
+            run: () => patch((n) => (n.required_equipment = n.required_equipment.includes(eq) ? n.required_equipment : [...n.required_equipment, eq])),
+          },
+        ];
+      }),
+      {
+        phrases: [/\bstop waiting on (.+)$/, /\bremove (.+) from runs after\b/, /\bdon'?t wait on (.+)$/],
+        run: (m) => {
+          const match = matchStepName(m[1], otherIds, labelOf);
+          if (match.confidence !== "exact") return "I couldn't tell which step you meant.";
+          patch((n) => (n.depends_on = n.depends_on.filter((x) => x !== match.stepId)));
+          return `No longer waits on “${match.label}.”`;
+        },
+      },
+      {
+        phrases: [/\bruns? after (.+)$/, /\bwait(?:s|ing)? on (.+)$/],
+        run: (m) => {
+          const match = matchStepName(m[1], otherIds, labelOf);
+          if (match.confidence !== "exact") return "I couldn't tell which step you meant.";
+          if (blockedDependencyIds?.has(match.stepId)) return `That would create a loop — “${match.label}” already comes after this step.`;
+          patch((n) => (n.depends_on = n.depends_on.includes(match.stepId) ? n.depends_on : [...n.depends_on, match.stepId]));
+          return `Runs after “${match.label}.”`;
+        },
+      },
+      {
+        phrases: [/\bdelete (?:this )?step\b/, /\bdelete it\b/, /\bremove (?:this )?step\b/],
+        confirm: "Delete this step? Say yes or no.",
+        run: () => {
+          actionsRef.current.onDelete(node.id);
+          return null;
+        },
+      },
+      {
+        phrases: [/\bsave (?:the )?step\b/, /\bsave it\b/, /\bthat's? it\b/],
+        run: () => {
+          actionsRef.current.onSave(node.id, draftRef.current);
+          return null; // the panel is closing; the page will speak next
+        },
+      },
+      {
+        phrases: [/\bcancel\b/, /\bclose (?:this|the) (?:step|editor)\b/, /\bnever ?mind\b/],
+        run: () => {
+          actionsRef.current.onClose();
+          return null;
+        },
+      },
+    ];
+
+    return registerVoiceCommands(commands, { priority: 10, exclusive: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id, allNodes]);
+
+  useEffect(() => {
+    dispatch({
+      type: "voice/setHint",
+      payload: {
+        hint: {
+          line: "Say “call it sear the tofu”, “five minutes”, “add a wok”, “runs after mince garlic”.",
+          sub: "Then “save the step”, “delete it”, or “cancel”.",
+        },
+      },
+    });
+    return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
+  }, [dispatch]);
 
   return (
     <BoardPanel

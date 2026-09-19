@@ -5,11 +5,20 @@
 //
 // A step belongs to exactly one dish, so with more than one dish in the
 // run the target is picked explicitly rather than guessed.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAppState } from "../state/AppStateContext.jsx";
 import { PHASE_OPTIONS, EQUIPMENT_OPTIONS, equipmentLabel } from "../data/dishes.js";
 import BoardPanel, { ChoiceChip, PanelField, Segmented } from "./BoardPanel.jsx";
 import { DIFFICULTY_SEGMENTS } from "./NodeEditorPanel.jsx";
+import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { spokenNumber, NUMBER_TOKEN } from "../utils/understanding.js";
+import { matchStepName } from "../utils/stepNameMatch.js";
 import "./AddStepPanel.css";
+
+const N = `(${NUMBER_TOKEN})`;
+const TOGGLE_ON = (thing, a) => [new RegExp(`\\b(?:add|with) (?:${a} |the )?${thing}\\b`), new RegExp(`\\b${thing} on\\b`)];
+const TOGGLE_OFF = (thing, a) => [new RegExp(`\\b(?:remove|drop|without) (?:${a} |the )?${thing}\\b`), new RegExp(`\\b${thing} off\\b`)];
+const EQUIPMENT_ARTICLE = { cutting_board: "a", stove_burner: "a", wok: "a", pot: "a", oven: "an" };
 
 export default function AddStepPanel({
   recipes,
@@ -21,6 +30,7 @@ export default function AddStepPanel({
   initialDependsOn = [],
   initialRunsBefore = [],
 }) {
+  const { dispatch } = useAppState();
   const [label, setLabel] = useState(initialLabel);
   const [recipeId, setRecipeId] = useState(recipes[0]?.id || "");
   const [phase, setPhase] = useState("prep");
@@ -48,9 +58,9 @@ export default function AddStepPanel({
   };
 
   const submit = (e) => {
-    e.preventDefault();
+    e?.preventDefault();
     const name = label.trim();
-    if (!name || !recipeId) return;
+    if (!name || !recipeId) return false;
     onAdd(recipeId, {
       label: name,
       phase,
@@ -60,7 +70,127 @@ export default function AddStepPanel({
       equipment,
       durationSec: Math.max(15, Math.round(Number(minutes) * 60) || 0),
     });
+    return true;
   };
+
+  // This form only exists because voice or a click opened it, so it has
+  // to be finishable by voice too — otherwise a voice-prefilled form
+  // still dead-ends at a mouse click. The values read through a ref so
+  // the commands don't have to re-register on every keystroke.
+  const stateRef = useRef();
+  stateRef.current = { label, recipeId, phase, minutes, difficulty, equipment, dependsOn, runsBefore };
+  // Registered once per `nodes` change, so the command closures below must
+  // not read `label`/`onAdd`/`onClose` directly — those go stale the
+  // moment the effect doesn't re-run. Everything reads through these.
+  const actionsRef = useRef();
+  actionsRef.current = { onAdd, onClose };
+
+  useEffect(() => {
+    const stepIds = nodes.map((n) => n.id);
+    const labelOf = (id) => nodes.find((n) => n.id === id)?.label;
+
+    const commands = [
+      {
+        phrases: [/\b(?:call it|name it|for) (.+)$/],
+        run: (m) => {
+          const name = m[1].trim();
+          if (!name) return null;
+          setLabel(name);
+          return `Called it “${name}.”`;
+        },
+      },
+      {
+        phrases: [new RegExp(`\\bset (?:the )?(?:duration|time) to ${N} minutes?\\b`), new RegExp(`\\bmake it ${N} minutes?\\b`), new RegExp(`\\b${N} minutes?\\b`)],
+        run: (m) => {
+          const n = spokenNumber(m[1]);
+          if (n === null) return null;
+          setMinutes(n);
+          return `${n} minute${n === 1 ? "" : "s"}.`;
+        },
+      },
+      {
+        phrases: [/\b(?:set )?difficulty (?:to )?(low|medium|high)\b/, /\bmake it (low|medium|high)(?: difficulty)?\b/],
+        run: (m) => {
+          setDifficulty(m[1]);
+          return `${m[1]} difficulty.`;
+        },
+      },
+      {
+        phrases: [/\b(?:set )?phase (?:to )?(prep|cook|plate)\b/, /\bmark it (?:as )?(prep|cook|plate)\b/],
+        run: (m) => {
+          setPhase(m[1]);
+          return `Phase: ${m[1]}.`;
+        },
+      },
+      ...EQUIPMENT_OPTIONS.flatMap((eq) => {
+        const word = equipmentLabel(eq).toLowerCase();
+        const a = EQUIPMENT_ARTICLE[eq];
+        return [
+          { phrases: TOGGLE_OFF(word, a), label: `${equipmentLabel(eq)} — not needed.`, run: () => setEquipment((cur) => cur.filter((x) => x !== eq)) },
+          { phrases: TOGGLE_ON(word, a), label: `${equipmentLabel(eq)} needed.`, run: () => setEquipment((cur) => (cur.includes(eq) ? cur : [...cur, eq])) },
+        ];
+      }),
+      {
+        phrases: [/\bruns? after (.+)$/, /\bwait(?:s|ing)? on (.+)$/],
+        run: (m) => {
+          const match = matchStepName(m[1], stepIds, labelOf);
+          if (match.confidence !== "exact") return "I couldn't tell which step you meant.";
+          pickDependsOn(match.stepId);
+          return `Runs after “${match.label}.”`;
+        },
+      },
+      {
+        phrases: [/\bruns? before (.+)$/],
+        run: (m) => {
+          const match = matchStepName(m[1], stepIds, labelOf);
+          if (match.confidence !== "exact") return "I couldn't tell which step you meant.";
+          pickRunsBefore(match.stepId);
+          return `Runs before “${match.label}.”`;
+        },
+      },
+      {
+        phrases: [/\badd (?:it |this |the task )?to the board\b/, /\badd (?:the )?task\b/, /\bcreate (?:the )?step\b/, /\bthat's? it\b/],
+        run: () => {
+          const s = stateRef.current;
+          const name = s.label.trim();
+          if (!name || !s.recipeId) return "This task needs a name first — say “call it” and then the name.";
+          actionsRef.current.onAdd(s.recipeId, {
+            label: name,
+            phase: s.phase,
+            dependsOn: s.dependsOn,
+            runsBefore: s.runsBefore,
+            difficulty: s.difficulty,
+            equipment: s.equipment,
+            durationSec: Math.max(15, Math.round(Number(s.minutes) * 60) || 0),
+          });
+          return null; // the panel is closing; the page will speak next
+        },
+      },
+      {
+        phrases: [/\bcancel\b/, /\bclose (?:this|the) form\b/, /\bnever ?mind\b/],
+        run: () => {
+          actionsRef.current.onClose();
+          return null;
+        },
+      },
+    ];
+
+    return registerVoiceCommands(commands, { priority: 10, exclusive: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes]);
+
+  useEffect(() => {
+    dispatch({
+      type: "voice/setHint",
+      payload: {
+        hint: {
+          line: "Say “call it toast the sesame seeds”, “two minutes”, “add a wok”.",
+          sub: "Then “add it to the board”, or “cancel”.",
+        },
+      },
+    });
+    return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
+  }, [dispatch]);
 
   return (
     <form className="add-step-form" onSubmit={submit}>

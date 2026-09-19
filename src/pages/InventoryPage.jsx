@@ -283,9 +283,10 @@ export default function InventoryPage() {
   // meant a reload re-opened the editor on a step nobody had clicked.
   const [panel, setPanel] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
-  // A voice-guessed "before X" / "between X and Y" position waiting on
-  // yes/no — { question, onYes, onNo }, or null when nothing is pending.
-  const [addTaskConfirm, setAddTaskConfirm] = useState(null);
+  // A voice guess waiting on a yes/no before it acts — a "before X" /
+  // "between X and Y" task position, or which step "open X" meant.
+  // { question, onYes, onNo }, or null when nothing is pending.
+  const [pendingConfirm, setPendingConfirm] = useState(null);
   const [offscreen, setOffscreen] = useState({ left: [], right: [], other: [] });
   const [dismissedEquipment, setDismissedEquipment] = useState(null);
   // null = let the board fit itself to the frame; a number is the
@@ -295,6 +296,13 @@ export default function InventoryPage() {
   const [editingKitchen, setEditingKitchen] = useState(false);
   const [kitchenError, setKitchenError] = useState(null);
   const tabRowRef = useRef(null);
+  const boardRef = useRef(null);
+  // 0% is the fitted view; 100% is the ceiling above. Computed up here
+  // (not just before the JSX that reads it) so the voice commands below
+  // can drive the same zoom the slider does.
+  const zoomTop = zoomCeiling(fitScale);
+  const zoomPct = Math.round((((zoom ?? fitScale) - fitScale) / (zoomTop - fitScale)) * 100);
+  const setZoomPct = (pct) => setZoom(pct <= 0 ? null : fitScale + (pct / 100) * (zoomTop - fitScale));
 
   const inv = useMemo(
     () => buildInventory({ recipes, sharedSteps, catalog, outIds: outMaterialIds }),
@@ -423,6 +431,10 @@ export default function InventoryPage() {
   // nothing because a button was greyed out is a bug report waiting to
   // happen, so it says why.
   useEffect(() => {
+    // Nothing to approve while the board is still being generated — a
+    // stray "approve" overheard during that wait would otherwise open a
+    // spoken confirm for a plan that doesn't exist yet.
+    if (recipes.length === 0) return undefined;
     return registerVoiceCommands([
       {
         phrases: [/\bapprove\b/],
@@ -435,7 +447,7 @@ export default function InventoryPage() {
       },
     ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dishIsUndoable]);
+  }, [dishIsUndoable, recipes.length]);
 
   const revise = () => {
     recipes.forEach((r) => dispatch({ type: "session/recipes/updateOne", payload: { recipeId: r.id, patch: { approved: null } } }));
@@ -471,6 +483,13 @@ export default function InventoryPage() {
   const loading = hasDishes && !catalog && !catalogError;
 
   useEffect(() => {
+    // Nothing on this page takes voice yet while the board is still being
+    // written — advertising ingredient/approve commands over an empty
+    // page is the same bug the "approve" gate above exists to avoid.
+    if (!hasDishes || loading) {
+      dispatch({ type: "voice/setHint", payload: { hint: { line: "Writing your recipes — one moment.", sub: null } } });
+      return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
+    }
     dispatch({
       type: "voice/setHint",
       payload: {
@@ -481,7 +500,7 @@ export default function InventoryPage() {
       },
     });
     return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
-  }, [dispatch]);
+  }, [dispatch, hasDishes, loading]);
 
   const setOut = (ids) => dispatch({ type: "session/update", payload: { outMaterialIds: ids } });
   const toggle = (id) => {
@@ -553,7 +572,7 @@ export default function InventoryPage() {
               return `Opening the task form, between “${mx.label}” and “${my.label}.”`;
             }
             const question = `Between “${mx.label}” and “${my.label}”? Say yes or no.`;
-            setAddTaskConfirm({ question, onYes: () => openWith(position), onNo: () => openWith({}) });
+            setPendingConfirm({ question, onYes: () => openWith(position), onNo: () => openWith({}) });
             return question;
           }
 
@@ -568,7 +587,7 @@ export default function InventoryPage() {
             return `Opening the task form, before “${mb.label}.”`;
           }
           const question = `Before “${mb.label}”? Say yes or no.`;
-          setAddTaskConfirm({ question, onYes: () => openWith(position), onNo: () => openWith({}) });
+          setPendingConfirm({ question, onYes: () => openWith(position), onNo: () => openWith({}) });
           return question;
         },
       },
@@ -576,36 +595,181 @@ export default function InventoryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasDishes, catalog, inv.ingredients, outMaterialIds, hasOut, approved, boardNodes, nodeById]);
 
-  // A guessed position — "before X", "between X and Y" — whose name
-  // match came back close but not exact. Same reasoning as the live
-  // cook's step matching: firing on a guess among steps that read alike
-  // is how a new task ends up wired to the wrong one.
-  const resolveAddTaskConfirm = (answer) => {
-    if (!addTaskConfirm) return;
-    const { onYes, onNo } = addTaskConfirm;
-    setAddTaskConfirm(null);
+  // Board-level commands: switching tabs, opening a step by name, the
+  // kitchen-shortfall notice, dropping blocked steps, and un-approving.
+  // Everything here mirrors a button already on the page, in its words.
+  useEffect(() => {
+    if (!hasDishes || !catalog) return undefined;
+    const commands = [
+      {
+        phrases: [/\bshow (?:me )?(?:the )?ingredients\b/, /\bingredients tab\b/, /\bgo to (?:the )?ingredients\b/],
+        label: "Showing ingredients.",
+        run: () => showTab("ingredients"),
+      },
+      {
+        phrases: [/\bshow (?:me )?(?:the )?(?:recipe graph|board)\b/, /\brecipe graph\b/, /\bgo to (?:the )?(?:recipe graph|board)\b/],
+        label: "Showing the recipe graph.",
+        run: () => showTab("graph"),
+      },
+      {
+        phrases: [/\bzoom in\b/, /\bzoom (?:in )?closer\b/],
+        run: () => {
+          showTab("graph");
+          if (zoomPct >= 100) return "Already as close as it goes.";
+          setZoomPct(Math.min(100, zoomPct + ZOOM_STEP));
+          return null;
+        },
+      },
+      {
+        phrases: [/\bzoom out\b/],
+        run: () => {
+          showTab("graph");
+          if (zoomPct <= 0) return "Already fitted.";
+          setZoomPct(Math.max(0, zoomPct - ZOOM_STEP));
+          return null;
+        },
+      },
+      {
+        phrases: [/\bfit (?:the )?(?:board|graph)\b/, /\breset zoom\b/, /\bzoom to fit\b/],
+        label: "Fitted.",
+        run: () => {
+          showTab("graph");
+          setZoom(null);
+        },
+      },
+      {
+        phrases: [/\bscroll (?:to the )?right\b/, /\bpan (?:to the )?right\b/],
+        run: () => {
+          showTab("graph");
+          boardRef.current?.scrollBy(320, 0);
+        },
+      },
+      {
+        phrases: [/\bscroll (?:to the )?left\b/, /\bpan (?:to the )?left\b/],
+        run: () => {
+          showTab("graph");
+          boardRef.current?.scrollBy(-320, 0);
+        },
+      },
+      {
+        phrases: [/\bscroll (?:up|down)\b/, /\bpan (?:up|down)\b/],
+        run: (m) => {
+          showTab("graph");
+          const down = /down/.test(m[0]);
+          boardRef.current?.scrollBy(0, down ? 320 : -320);
+        },
+      },
+      {
+        phrases: [/\bscroll to (?:the )?step (.+)$/, /\bfind (?:the )?step (.+)$/, /\bshow me (?:the )?step (.+)$/],
+        run: (m) => {
+          showTab("graph");
+          const said = (m?.[1] || "").trim();
+          const ids = boardNodes.map((n) => n.id);
+          const labelOf = (id) => nodeById[id]?.label;
+          const match = matchStepName(said, ids, labelOf);
+          if (match.confidence === "none") return "I couldn't tell which step you meant.";
+          if (match.confidence === "exact") {
+            boardRef.current?.scrollToNode(match.stepId);
+            return `Scrolled to “${match.label}.”`;
+          }
+          const question = `Scroll to “${match.label}”? Say yes or no.`;
+          setPendingConfirm({ question, onYes: () => boardRef.current?.scrollToNode(match.stepId), onNo: () => {} });
+          return question;
+        },
+      },
+    ];
+
+    if (!approved) {
+      commands.push({
+        phrases: [/\bopen (?:the )?step (.+)$/, /\bedit (?:the )?step (.+)$/, /\bselect (?:the )?step (.+)$/],
+        run: (m) => {
+          showTab("graph");
+          const said = (m?.[1] || "").trim();
+          const ids = boardNodes.map((n) => n.id);
+          const labelOf = (id) => nodeById[id]?.label;
+          const match = matchStepName(said, ids, labelOf);
+          if (match.confidence === "none") return "I couldn't tell which step you meant.";
+          if (match.confidence === "exact") {
+            setPanel({ mode: "edit", id: match.stepId });
+            return `Opening “${match.label}.”`;
+          }
+          const question = `Open “${match.label}”? Say yes or no.`;
+          setPendingConfirm({ question, onYes: () => setPanel({ mode: "edit", id: match.stepId }), onNo: () => {} });
+          return question;
+        },
+      });
+    }
+
+    if (dishIsUndoable) {
+      commands.push({
+        phrases: [/\bremove (?:the )?blocked steps?\b/, /\bdrop (?:the )?blocked steps?\b/],
+        confirm: `Remove ${blockedIds.length} step${blockedIds.length === 1 ? "" : "s"} you can't do without those materials? Say yes or no.`,
+        label: "Removed.",
+        run: () => {
+          if (!blockedIds.length) return;
+          deleteNodes(blockedIds);
+          setPanel(null);
+        },
+      });
+    }
+
+    if (showEquipment) {
+      if (kitchenProfile) {
+        commands.push({
+          phrases: [/\bedit (?:the )?kitchen profile\b/, /\bedit (?:the |my )?kitchen\b/],
+          label: "Opening the kitchen profile.",
+          run: () => setEditingKitchen(true),
+        });
+      }
+      commands.push({
+        phrases: [/\bcook it anyway\b/],
+        label: "Okay — cooking with what you've got.",
+        run: () => setDismissedEquipment(lackingKey),
+      });
+    }
+
+    if (approved) {
+      commands.push({
+        phrases: [/\brevise\b/, /\bunapprove\b/, /\bgo back to editing\b/],
+        label: "Back to editing.",
+        run: () => revise(),
+      });
+    }
+
+    return registerVoiceCommands(commands);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasDishes, catalog, approved, boardNodes, nodeById, dishIsUndoable, blockedIds, showEquipment, kitchenProfile, lackingKey, zoomPct]);
+
+  // A guessed step reference — an "open X" that came back close but not
+  // exact, or a "before X"/"between X and Y" task position. Same
+  // reasoning as the live cook's step matching: firing on a guess among
+  // steps that read alike is how the wrong one gets picked.
+  const resolvePendingConfirm = (answer) => {
+    if (!pendingConfirm) return;
+    const { onYes, onNo } = pendingConfirm;
+    setPendingConfirm(null);
     if (answer === "yes") onYes();
     else onNo();
   };
 
   useEffect(() => {
-    if (!addTaskConfirm) return undefined;
+    if (!pendingConfirm) return undefined;
     const unregister = registerVoiceCommands(
       [
-        { phrases: [CONFIRM_YES_PATTERN], label: "Got it.", run: () => resolveAddTaskConfirm("yes") },
-        { phrases: [CONFIRM_NO_PATTERN], label: "Okay — pick it in the form.", run: () => resolveAddTaskConfirm("no") },
+        { phrases: [CONFIRM_YES_PATTERN], label: "Got it.", run: () => resolvePendingConfirm("yes") },
+        { phrases: [CONFIRM_NO_PATTERN], label: "Okay — pick it in the form.", run: () => resolvePendingConfirm("no") },
       ],
       { priority: 20, exclusive: true }
     );
     // Expires on its own so a stray "yes" a minute later can't be read
     // as an answer to a question nobody remembers asking.
-    const timer = setTimeout(() => setAddTaskConfirm(null), 10_000);
+    const timer = setTimeout(() => setPendingConfirm(null), 10_000);
     return () => {
       unregister();
       clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addTaskConfirm]);
+  }, [pendingConfirm]);
 
   const { coverage } = inv;
   const metaBits = [];
@@ -648,10 +812,6 @@ export default function InventoryPage() {
   }
 
   const counterTone = coverage.blocked > 0 ? "critical" : "warning";
-  // 0% is the fitted view; 100% is the ceiling above.
-  const zoomTop = zoomCeiling(fitScale);
-  const zoomPct = Math.round((((zoom ?? fitScale) - fitScale) / (zoomTop - fitScale)) * 100);
-  const setZoomPct = (pct) => setZoom(pct <= 0 ? null : fitScale + (pct / 100) * (zoomTop - fitScale));
 
   return (
     <section className="page inventory-page">
@@ -820,16 +980,16 @@ export default function InventoryPage() {
                 </div>
               </div>
 
-              {addTaskConfirm && (
+              {pendingConfirm && (
                 <div className="inv-equip" role="status">
                   <div className="inv-equip-main">
-                    <span className="inv-equip-title">{addTaskConfirm.question}</span>
+                    <span className="inv-equip-title">{pendingConfirm.question}</span>
                     <div className="inv-equip-actions">
-                      <button type="button" className="btn inv-equip-edit" onClick={() => resolveAddTaskConfirm("yes")}>
+                      <button type="button" className="btn inv-equip-edit" onClick={() => resolvePendingConfirm("yes")}>
                         Yes
                       </button>
-                      <button type="button" className="btn inv-equip-dismiss" onClick={() => resolveAddTaskConfirm("no")}>
-                        No — pick it myself
+                      <button type="button" className="btn inv-equip-dismiss" onClick={() => resolvePendingConfirm("no")}>
+                        No
                       </button>
                     </div>
                   </div>
@@ -906,6 +1066,7 @@ export default function InventoryPage() {
                       ))}
                     </span>
                     <RecipeBoard
+                      ref={boardRef}
                       nodes={boardNodes}
                       positions={nodePositions}
                       selectedNodeId={selectedId}

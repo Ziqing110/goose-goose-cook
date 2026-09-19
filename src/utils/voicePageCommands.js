@@ -53,6 +53,19 @@ export function registerVoiceCommands(commands, { priority = 0, exclusive = fals
   };
 }
 
+// Politeness and filler words nobody wrote a phrase for. "show me
+// ingredients" failed against `\bshow (?:the )?ingredients\b` because
+// "me" sat in a slot the pattern didn't expect — the phrase was right,
+// the words around it weren't the exact ones anticipated. Rather than
+// hand-editing every command's regex for every filler someone might
+// say, they're stripped once here and the phrases are tried again
+// against what's left. The command vocabulary itself stays closed —
+// this only forgives the padding around it.
+const FILLER_WORDS =
+  /\b(?:please|kindly|just|go ahead and|could you|can you|would you|will you|i want to|i'd like to|let's)\b/g;
+const BARE_ME = /\bme\b/g;
+const loosen = (said) => said.replace(FILLER_WORDS, " ").replace(BARE_ME, " ").replace(/\s+/g, " ").trim();
+
 /**
  * First page command matching this utterance, or null.
  *
@@ -64,13 +77,22 @@ export function matchPageCommand(said) {
   if (!said) return null;
   const top = topLayer();
   if (!top) return null;
-  for (const c of top.commands) {
-    for (const p of c.phrases) {
-      const match = p.exec(said);
-      // The match comes back with the command so `run` can read what was
-      // captured — "set burners to four" has to tell the form *four*,
-      // and a command that can only fire or not fire cannot do that.
-      if (match) return { ...c, match };
+  // Tried in order — command grammar is closed and this only widens how
+  // the same words can be padded, so the first hit either way is the
+  // right one.
+  const candidates = [said];
+  const loosened = loosen(said);
+  if (loosened && loosened !== said) candidates.push(loosened);
+  for (const text of candidates) {
+    for (const c of top.commands) {
+      for (const p of c.phrases) {
+        const match = p.exec(text);
+        // The match comes back with the command so `run` can read what
+        // was captured — "set burners to four" has to tell the form
+        // *four*, and a command that can only fire or not fire cannot
+        // do that.
+        if (match) return { ...c, match };
+      }
     }
   }
   return null;

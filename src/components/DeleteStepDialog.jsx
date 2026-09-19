@@ -6,14 +6,17 @@
 // So the dependents get somewhere to go. The default is to inherit what
 // the deleted step was itself waiting on — deleting B from A -> B -> C
 // leaves A -> C, which is what "remove this step" almost always means.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAppState } from "../state/AppStateContext.jsx";
 import Modal from "./Modal.jsx";
 import { ChoiceChip } from "./BoardPanel.jsx";
 import { cyclicDependencyIds } from "../utils/graphLayout.js";
+import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 import "./BoardPanel.css";
 import "./DeleteStepDialog.css";
 
 export default function DeleteStepDialog({ node, dependents, allNodes, onCancel, onConfirm }) {
+  const { dispatch } = useAppState();
   const inherited = node.depends_on || [];
 
   // Each mode rewrites one dependent's whole depends_on list, so every
@@ -48,6 +51,64 @@ export default function DeleteStepDialog({ node, dependents, allNodes, onCancel,
       onConfirm(safePicks);
     }
   };
+
+  // Registered once (the dialog's own node/dependents don't change while
+  // it's open); mode and the confirm/cancel actions read through refs so
+  // voice always acts on the latest picks, including ones made by mouse.
+  const confirmRef = useRef();
+  confirmRef.current = confirm;
+  const actionsRef = useRef();
+  actionsRef.current = { onCancel };
+
+  useEffect(() => {
+    const commands = [
+      {
+        phrases: [/\bmove them to what (?:it|this step) was waiting on\b/, /\binherit\b/, /\bmove (?:it|them) (?:to|onto) (?:its|the) (?:old )?dependencies\b/],
+        label: "Moving dependents to what this step was waiting on.",
+        run: () => setMode("inherit"),
+      },
+      {
+        phrases: [/\bchoose for each\b/, /\blet me choose\b/, /\bpick (?:it|them) myself\b/],
+        label: "Choose for each — pick them in the panel.",
+        run: () => setMode("choose"),
+      },
+      {
+        phrases: [/\bjust drop (?:the )?link\b/, /\bdrop (?:the )?links?\b/],
+        label: "Dropping the link.",
+        run: () => setMode("drop"),
+      },
+      {
+        phrases: [/\bremove (?:the )?step\b/, /\bdelete (?:the )?step\b/, /\bconfirm\b/],
+        run: () => {
+          confirmRef.current();
+          return null; // the dialog is closing; the page will speak next
+        },
+      },
+      {
+        phrases: [/\bkeep it\b/, /\bcancel\b/, /\bnever ?mind\b/],
+        run: () => {
+          actionsRef.current.onCancel();
+          return null;
+        },
+      },
+    ];
+
+    return registerVoiceCommands(commands, { priority: 10, exclusive: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    dispatch({
+      type: "voice/setHint",
+      payload: {
+        hint: {
+          line: "Say “move them to what it was waiting on”, “choose for each”, or “just drop the link”.",
+          sub: "Then “remove the step”, or “keep it”.",
+        },
+      },
+    });
+    return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
+  }, [dispatch]);
 
   return (
     // Portaled to <body>, outside the app shell — the layer classes bring
