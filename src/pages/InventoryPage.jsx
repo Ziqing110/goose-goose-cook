@@ -22,6 +22,7 @@ import BoardPanel from "../components/BoardPanel.jsx";
 import DeleteStepDialog from "../components/DeleteStepDialog.jsx";
 import ImpactList, { ImpactMark } from "../components/ImpactList.jsx";
 import Icon from "../components/Icon.jsx";
+import GooseLoading from "../components/GooseLoading.jsx";
 import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
 import NodeEditorPanel from "../components/NodeEditorPanel.jsx";
 import { useStepEditing } from "../state/useStepEditing.js";
@@ -847,12 +848,10 @@ export default function InventoryPage() {
       {/* The board below only renders once the recipes exist, so without
           this the page is blank for the half-minute generation takes. */}
       {!hasDishes && (
-        <div className="inv-hud" role="status" aria-live="polite">
-          <span className="inv-meta">
-            {generating ? "Writing your recipes" : "Setting your dishes"}{" "}
-            <span className="mono inv-dots">…</span>
-          </span>
-        </div>
+        <GooseLoading
+          title={generating ? "Writing your recipes" : "Setting your dishes"}
+          sub={generating ? "This can take about half a minute." : null}
+        />
       )}
 
       {hasDishes && catalogError && (
