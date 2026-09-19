@@ -48,6 +48,11 @@
 .lc-avatar-24 { width: 24px; height: 24px; font-size: 12px; }
 .lc-avatar-32 { width: 32px; height: 32px; font-size: 14px; }
 .lc-avatar-40 { width: 40px; height: 40px; font-size: 17px; }
+.lc-avatar.has-chef { background-size: cover; background-position: center; box-shadow: 0 0 0 2px var(--cook-a); }
+.lc-avatar.has-chef.is-b { box-shadow: 0 0 0 2px var(--cook-b); }
+.lc-avatar-20.has-chef { box-shadow: 0 0 0 1.5px var(--cook-a); }
+.lc-avatar-20.has-chef.is-b { box-shadow: 0 0 0 1.5px var(--cook-b); }
+.lc-speaker-seg.is-selected .lc-avatar.has-chef { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85); }
 
 /* The agent — lavender, never a player color. */
 .lc-agent-avatar {
@@ -168,6 +173,26 @@
 }
 .lc-cards { display: contents; }
 
+/* Versus is the arena: the two cards take the full width 50/50 under
+   the leaderboard, and the agent drops to a band beneath them — log on
+   the left, speaker + typed fallback on the right — so nothing narrows
+   the cards or sits between them and the pool. */
+.is-versus .lc-play { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.is-versus .lc-agent {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-areas: "head controls" "log controls";
+  grid-template-rows: auto 1fr;
+  column-gap: 24px;
+  row-gap: 10px;
+  align-items: start;
+}
+.is-versus .lc-agent-head { grid-area: head; }
+.is-versus .lc-log { grid-area: log; min-height: 88px; max-height: 132px; }
+.is-versus .lc-agent-controls { grid-area: controls; display: flex; flex-direction: column; gap: 10px; align-self: stretch; justify-content: flex-end; }
+.is-versus .lc-card { min-height: 0; }
+
 /* PlayerFocusCard — white, hairline border, header row with the
    status chip; the timer sits on a bg-secondary block. The player's
    color lives in the avatar and the "On it" chip only. */
@@ -285,12 +310,26 @@
 .lc-waiting-copy .lc-avatar { vertical-align: -3px; margin-left: 6px; }
 .lc-done-burst { color: var(--success); animation: lc-burst 480ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
 
-.lc-card-actions { display: flex; flex-direction: column; gap: 4px; padding: 8px 24px 16px; min-height: 64px; margin-top: auto; }
-.lc-card-secondary { display: flex; align-items: center; gap: 4px; }
+/* The action block is two fixed slots — 64px primary, 44px secondary
+   row — on every variant, whether or not a variant fills them. That is
+   what keeps Done / Start / Take it on one line across both cards and
+   the Skip · Undo row from pushing a primary up on one side only. */
+.lc-card-actions {
+  display: grid;
+  grid-template-rows: 64px 44px;
+  gap: 4px;
+  padding: 8px 24px 16px;
+  margin-top: auto;
+}
+/* Explicit rows: a waiting card has no primary, and its (empty)
+   secondary row must not float up into the primary's slot. */
+.lc-card-actions > .lc-btn-xl { grid-row: 1; }
+.lc-card-secondary { grid-row: 2; display: flex; align-items: center; gap: 4px; min-height: 44px; }
+.lc-card-secondary.is-ghost-row { grid-row: 1; }
 .lc-btn-undo { margin-left: auto; }
 /* Start / Check: no primary — a ghost Done on the left, the usual
-   secondaries on the right, at the height the primary would have had
-   so the two cards' action blocks still line up. */
+   secondaries on the right, sitting in the primary's slot so the two
+   cards' action blocks still line up. */
 .lc-card-secondary.is-ghost-row { justify-content: space-between; min-height: 64px; }
 .lc-card-secondary-right { display: flex; align-items: center; gap: 4px; }
 
@@ -373,7 +412,7 @@
 .lc-speaker-seg.is-selected { color: #fff; }
 .lc-speaker-seg.is-selected.is-a { background: var(--cook-a); }
 .lc-speaker-seg.is-selected.is-b { background: var(--cook-b); }
-.lc-speaker-seg.is-selected .lc-avatar { background: rgba(255, 255, 255, 0.25); }
+.lc-speaker-seg.is-selected .lc-avatar:not(.has-chef) { background: rgba(255, 255, 255, 0.25); }
 
 .lc-say { display: flex; gap: 8px; }
 .lc-say-input {
@@ -405,13 +444,17 @@
 .lc-pool-head h2 { margin: 0; font-size: 20px; line-height: 26px; font-weight: 700; }
 .lc-pool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
 .lc-tile { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 12px; animation: lc-rise 240ms ease-out both; }
+/* Tiles in one grid row stretch to the tallest; the claim buttons pin
+   to the bottom so a one-line label and a two-line label still put
+   their buttons on the same baseline. */
+.lc-tile-claims { margin-top: auto; padding-top: 4px; }
 .lc-tile.is-claimable { background: var(--surface); border: 1px solid var(--line); }
 .lc-tile-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .lc-tile-label { font-size: 16px; font-weight: 500; line-height: 22px; }
 .lc-tile-meta-strong { color: var(--ink); }
 .lc-tile-holder .mono.is-due { color: var(--warning-soft-ink); font-weight: 500; }
 .lc-tile-meta { font-size: 13px; color: var(--ink-soft); }
-.lc-tile-claims { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+.lc-tile-claims { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .ds-v4 .lc-claim { min-height: 44px; padding: 0 8px; color: #fff; font-weight: 600; }
 .ds-v4 .lc-claim.is-a { background: var(--cook-a); }
 .ds-v4 .lc-claim.is-b { background: var(--cook-b); }
@@ -596,6 +639,7 @@
 @media (max-width: 1100px) {
   .lc-play { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .lc-agent { grid-column: 1 / -1; }
+  .is-versus .lc-agent { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "log" "controls"; grid-template-rows: auto auto auto; }
   .lc-log { min-height: 0; max-height: 200px; }
   .lc-leader-row { grid-template-columns: 32px 110px 1fr auto; }
 }
@@ -614,7 +658,7 @@
   .lc-clock-value { font-size: 28px; line-height: 32px; }
   .lc-count { font-size: 15px; }
 
-  .lc-play { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .lc-play, .is-versus .lc-play { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .lc-card { min-height: 0; }
   .lc-card-head { padding: 12px 16px; }
   .lc-card-body { padding: 16px 16px 4px; }
@@ -625,8 +669,8 @@
   .lc-step-desc { font-size: 15px; line-height: 22px; }
 
   /* The transcript collapses to the last two lines with a "More". */
-  .lc-log { min-height: 0; max-height: 64px; overflow: hidden; }
-  .lc-agent.is-expanded .lc-log { max-height: 240px; overflow-y: auto; }
+  .lc-log, .is-versus .lc-log { min-height: 0; max-height: 64px; overflow: hidden; }
+  .lc-agent.is-expanded .lc-log, .is-versus .lc-agent.is-expanded .lc-log { max-height: 240px; overflow-y: auto; }
   .lc-log:has(.lc-pending) { max-height: none; overflow: visible; }
   .ds-v4 .lc-agent-more { display: inline-flex; align-self: flex-end; min-height: 36px; padding-inline: 10px; font-size: 14px; }
 

@@ -14,8 +14,13 @@ module.exports = {
   },
   overrides: [
     {
-      files: ["server/**/*.js"],
+      files: ["server/**/*.js", "src/**/*.test.js"],
       env: { browser: false, node: true, es2021: true },
+    },
+    {
+      // Playwright drivers: node at the top level, browser inside page.evaluate.
+      files: ["scripts/**/*.mjs"],
+      env: { browser: true, node: true, es2021: true },
     },
   ],
 };

@@ -96,7 +96,12 @@ await shot("conversation-complete");
 // Inventory carries the whole main line now: ingredients, the step
 // board, its editor and approval are all one page.
 await click(/Check the inventory/);
-await page.waitForTimeout(2000);
+await page.waitForTimeout(400);
+await shot("inventory-writing");
+// The chef-at-work beat holds until the recipes land (up to a minute
+// against the real generator; instant on the seeded templates).
+await page.locator(".chef-working").waitFor({ state: "detached", timeout: 130000 }).catch(() => {});
+await page.waitForTimeout(600);
 await shot("inventory");
 
 await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
@@ -120,6 +125,18 @@ for (let i = 0; i < count; i++) {
   await page.waitForTimeout(150);
 }
 await shot("voice-binding-named");
+
+// Every cook picks a chef bird before they can record.
+for (let i = 0; i < count; i++) {
+  const pick = page.getByRole("button", { name: /Pick your chef/ }).first();
+  if (!(await pick.isVisible().catch(() => false))) break;
+  await pick.click();
+  await page.waitForTimeout(300);
+  await page.locator(".chef-tile:not([disabled])").first().click();
+  await page.waitForTimeout(150);
+  await click(/That.s me/);
+  await page.waitForTimeout(300);
+}
 
 for (let i = 0; i < count; i++) {
   const btn = page.getByRole("button", { name: /Start reading|Record again/ }).nth(i);

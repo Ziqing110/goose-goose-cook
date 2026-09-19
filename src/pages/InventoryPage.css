@@ -25,7 +25,6 @@
 @keyframes inv-roll { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 
 .inv-roll { display: inline-block; animation: inv-roll 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
-.inv-dots { animation: ds-dots 1600ms ease-in-out infinite; }
 
 /* ---------------- title row ---------------- */
 .inv-title-row {
@@ -569,7 +568,6 @@
 /* Reduced motion is handled globally by the v4 block (everything
    becomes a 200ms fade); only the looping dots need stopping. */
 @media (prefers-reduced-motion: reduce) {
-  .inv-dots { animation: none; }
 }
 
 /* The step board sits full-width under the ingredient columns. */

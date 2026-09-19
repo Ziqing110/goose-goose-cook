@@ -22,14 +22,17 @@ import BoardPanel from "../components/BoardPanel.jsx";
 import DeleteStepDialog from "../components/DeleteStepDialog.jsx";
 import ImpactList, { ImpactMark } from "../components/ImpactList.jsx";
 import Icon from "../components/Icon.jsx";
-import GooseLoading from "../components/GooseLoading.jsx";
 import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
+import ChefWorkingScreen from "../components/ChefWorkingScreen.jsx";
 import NodeEditorPanel from "../components/NodeEditorPanel.jsx";
 import { useStepEditing } from "../state/useStepEditing.js";
 import { buildInventory, formatClock, formatStepDuration, PHASE_LABELS } from "../utils/inventory.js";
 import dishMapoTofu from "../assets/dish-mapo-tofu.png";
 import dishNoodleSoup from "../assets/dish-noodle-soup.png";
 import "./InventoryPage.css";
+
+// How long the thumbs-up frame holds once the recipes land.
+const WORKING_DONE_MS = 700;
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 import { normalizeUtterance, CONFIRM_YES_PATTERN, CONFIRM_NO_PATTERN } from "../utils/navCommands.js";
 import { matchStepName } from "../utils/stepNameMatch.js";
@@ -483,6 +486,21 @@ export default function InventoryPage() {
   const hasOut = outMaterialIds.length > 0;
   const loading = hasDishes && !catalog && !catalogError;
 
+  // The chef-at-work beat covers recipe generation, which is the one
+  // real wait in the flow (the better part of a minute for two dishes).
+  // "writing" → "done" → null: the thumbs-up frame holds for a beat
+  // once the dishes land, then the board takes over. Starts skipped
+  // when the recipes are already there (coming back from Schedule).
+  const [beat, setBeat] = useState(() => (hasDishes ? null : "writing"));
+  useEffect(() => {
+    if (beat === "writing" && hasDishes) setBeat("done");
+  }, [beat, hasDishes]);
+  useEffect(() => {
+    if (beat !== "done") return undefined;
+    const t = setTimeout(() => setBeat(null), WORKING_DONE_MS);
+    return () => clearTimeout(t);
+  }, [beat]);
+
   useEffect(() => {
     // Nothing on this page takes voice yet while the board is still being
     // written — advertising ingredient/approve commands over an empty
@@ -812,6 +830,32 @@ export default function InventoryPage() {
     );
   }
 
+  if (beat) {
+    const asked = session.conversation?.answers?.dishIdea;
+    const dishes = (Array.isArray(asked) ? asked : [asked])
+      .filter(Boolean)
+      .map((d) => d.charAt(0).toUpperCase() + d.slice(1));
+    const servings = session.conversation?.answers?.servings;
+    const details = [
+      dishes.length ? dishes.join(" + ") : "Your dishes",
+      servings ? <><Mono>{servings}</Mono> servings</> : null,
+      kitchenProfile?.name || "Your kitchen",
+    ].filter(Boolean);
+    return (
+      <ChefWorkingScreen
+        done={beat === "done"}
+        eyebrow="A menu worth waiting for"
+        doneEyebrow="Recipes are ready"
+        title={<>Good food takes<br />a little thought.</>}
+        desc={<>Your chef is writing every step for tonight&rsquo;s dishes,<br className="inv-long" /> and checking them over before you see them.</>}
+        live={generating ? "Writing your recipes" : "Setting your dishes"}
+        doneLive="Recipes are written"
+        details={details}
+        quote="You bring the appetite. I'll bring the plan."
+      />
+    );
+  }
+
   const counterTone = coverage.blocked > 0 ? "critical" : "warning";
 
   return (
@@ -819,11 +863,7 @@ export default function InventoryPage() {
       <header className="inv-title-row">
         <div className="inv-title">
           <h1>Inventory</h1>
-          {!hasDishes ? (
-            <span className="inv-meta is-tertiary">
-              {generating ? "Writing your recipes" : "Setting your dishes"} <span className="mono inv-dots">…</span>
-            </span>
-          ) : loading ? (
+          {loading ? (
             <span className="inv-meta is-tertiary">Loading your ingredients…</span>
           ) : (
             <span className="inv-meta">
@@ -844,15 +884,6 @@ export default function InventoryPage() {
           </span>
         )}
       </header>
-
-      {/* The board below only renders once the recipes exist, so without
-          this the page is blank for the half-minute generation takes. */}
-      {!hasDishes && (
-        <GooseLoading
-          title={generating ? "Writing your recipes" : "Setting your dishes"}
-          sub={generating ? "This can take about half a minute." : null}
-        />
-      )}
 
       {hasDishes && catalogError && (
         <div className="inv-hud inv-hud-error">

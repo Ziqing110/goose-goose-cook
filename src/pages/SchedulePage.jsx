@@ -26,16 +26,7 @@ import { formatClock } from "../utils/inventory.js";
 import KpIcon from "../components/KpIcon.jsx";
 import Modal from "../components/Modal.jsx";
 import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
-import chefGooseSheet from "../assets/chef-goose-schedule-loading-v1.png";
 import "./SchedulePage.css";
-
-// The "dealing the plan" screen. The plan itself is computed in one
-// synchronous pass, so this is a staged beat, not a real wait: the
-// goose shuffles the cards for a moment, lands on the thumbs-up frame,
-// and the page fades in. Skipped when a run already exists — coming
-// back from Live cook shouldn't re-deal a plan that's already dealt.
-const PLANNING_MS = 2400;
-const PLANNING_DONE_MS = 700;
 
 // Player colors come from the index in cooks[] — player 1 is "a",
 // player 2 is "b" — never stored, never chosen (design-v4.css tokens).
@@ -166,8 +157,6 @@ export default function SchedulePage() {
   const [confirmAbandon, setConfirmAbandon] = useState(false);
   const [editingKitchen, setEditingKitchen] = useState(false);
   const [kitchenError, setKitchenError] = useState(null);
-  // "planning" → "done" → null. Starts skipped when a run exists.
-  const [planning, setPlanning] = useState(() => (run ? null : "planning"));
 
   const approved = useMemo(() => mergeRecipesForDisplay(recipes, sharedSteps).approved, [recipes, sharedSteps]);
   const nodes = useMemo(() => approved?.nodes || [], [approved]);
@@ -195,21 +184,8 @@ export default function SchedulePage() {
 
   const grabsCount = opening.poolIds.length + opening.lockedIds.length;
 
-  // Hold on the shuffle until the plan is actually there (approved is
-  // null while the session is still syncing), then the done beat.
   useEffect(() => {
-    if (planning !== "planning" || !approved) return undefined;
-    const t = setTimeout(() => setPlanning("done"), PLANNING_MS);
-    return () => clearTimeout(t);
-  }, [planning, approved]);
-  useEffect(() => {
-    if (planning !== "done") return undefined;
-    const t = setTimeout(() => setPlanning(null), PLANNING_DONE_MS);
-    return () => clearTimeout(t);
-  }, [planning]);
-
-  useEffect(() => {
-    if (!approved || planning) return undefined;
+    if (!approved) return undefined;
     const sub = isCoop
       ? `Plan's ready — ${finish} with ${cooks.length} players.`
       : isVersus
@@ -220,7 +196,7 @@ export default function SchedulePage() {
       payload: { hint: { line: "Say “co-op” or “versus”, then “go live”.", sub } },
     });
     return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
-  }, [dispatch, approved, planning, finish, cooks.length, isCoop, isVersus, grabsCount]);
+  }, [dispatch, approved, finish, cooks.length, isCoop, isVersus, grabsCount]);
 
   // Mode is snapshotted into the run, so changing it mid-cook would
   // desync what's already happened — the cards lock once a run exists.
@@ -374,8 +350,19 @@ export default function SchedulePage() {
 
   const progress = run ? runProgress(run, nodes, Date.now()) : null;
 
-  if (!approved || planning) {
-    return <PlanningScreen done={planning === "done"} steps={nodes.length} cooks={cooks} />;
+  // `approved` is null only while the session is still syncing; the plan
+  // itself is one synchronous pass, so there is nothing to wait on here.
+  if (!approved) {
+    return (
+      <section className="page schedule-page">
+        <header className="sch-title-row">
+          <h1>Schedule</h1>
+          <span className="sch-meta is-tertiary">
+            Building your plan<Mono className="sch-dots">…</Mono>
+          </span>
+        </header>
+      </section>
+    );
   }
 
   const selectedStep = selectedStepId ? stepById[selectedStepId] : null;
@@ -592,40 +579,6 @@ export default function SchedulePage() {
           }}
         />
       )}
-    </section>
-  );
-}
-
-// Full-page beat while the plan is dealt. The goose sprite loops its
-// three "working" frames — reading the cards, sorting, shuffling — and
-// snaps to the fourth (thumbs up) once the plan is ready.
-function PlanningScreen({ done, steps, cooks }) {
-  const names = cooks.map((c) => c.name).filter(Boolean);
-  const who = names.length === 2 ? `${names[0]} and ${names[1]}` : names.join(", ") || "the two of you";
-  return (
-    <section className={`page schedule-page sch-planning ${done ? "is-done" : ""}`} aria-live="polite" aria-busy={!done}>
-      <div className="sch-planning-stage">
-        <div className="sch-goose" style={{ backgroundImage: `url(${chefGooseSheet})` }} role="img" aria-label="Chef goose sorting recipe cards" />
-        <span className="sch-planning-title">
-          {done ? "Plan's ready" : "Dealing the plan"}
-          {!done && (
-            <span className="sch-planning-dots" aria-hidden="true">
-              <span>.</span>
-              <span>.</span>
-              <span>.</span>
-            </span>
-          )}
-        </span>
-        <span className="sch-meta sch-planning-sub">
-          {steps > 0 ? (
-            <>
-              Sorting <Mono>{steps}</Mono> steps between {who}
-            </>
-          ) : (
-            "Reading the recipe"
-          )}
-        </span>
-      </div>
     </section>
   );
 }

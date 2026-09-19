@@ -32,6 +32,7 @@ import {
 import { parseCommand, HELP_TEXT } from "../utils/voiceCommands.js";
 import { matchConfirmation } from "../utils/navCommands.js";
 import { buildSummary } from "../utils/summaryCard.js";
+import { chefAvatar } from "../utils/cooks.js";
 import KpIcon from "../components/KpIcon.jsx";
 import Modal from "../components/Modal.jsx";
 import "./LiveCookPage.css";
@@ -147,10 +148,18 @@ function Mono({ children, className = "" }) {
   return <span className={`mono ${className}`}>{children}</span>;
 }
 
+// The chef bird the player picked on the Cooks page, ringed in their
+// player color; the initial is the fallback for a cook who predates
+// avatars. Same identity system either way — the color is the key.
 function PlayerAvatar({ cook, index, size = 32 }) {
+  const chef = cook?.avatar ? chefAvatar(cook.avatar) : null;
   return (
-    <span className={`lc-avatar is-${playerKey(index)} lc-avatar-${size}`} aria-hidden="true">
-      {cook?.name?.[0]?.toUpperCase() || "?"}
+    <span
+      className={`lc-avatar is-${playerKey(index)} lc-avatar-${size} ${chef ? "has-chef" : ""}`}
+      style={chef ? { backgroundColor: chef.bg, backgroundImage: `url(${chef.src})` } : undefined}
+      aria-hidden="true"
+    >
+      {!chef && (cook?.name?.[0]?.toUpperCase() || "?")}
     </span>
   );
 }
@@ -1022,13 +1031,17 @@ function PlayerFocusCard({ cook, index, cooks, run, nodes, byId, now, isVersus, 
             {reason === "assigned" ? "Start" : "Take it"}
           </button>
         )}
-        {/* A player's last Done/Skip stays undoable for 60s even though
-            their card has already moved on — the button follows them. */}
-        {!node && undoable && (
+        {/* The secondary slot is always rendered so the primary above it
+            sits at the same height on both cards. A player's last
+            Done/Skip stays undoable for 60s even though their card has
+            already moved on — the button follows them into this slot. */}
+        {!node && (
           <div className="lc-card-secondary">
-            <button type="button" className="btn btn-ghost lc-btn-accent lc-btn-undo" onClick={onUndo}>
-              Undo
-            </button>
+            {undoable && (
+              <button type="button" className="btn btn-ghost lc-btn-accent lc-btn-undo" onClick={onUndo}>
+                Undo
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -1330,6 +1343,7 @@ function AgentPanel({
         {expanded ? "Less" : "More"}
       </button>
 
+      <div className="lc-agent-controls">
       {/* Temporary until voice ID lands: the backend can't tell voices
           apart, so whoever is selected here owns everything said. */}
       <div className="lc-speaker" role="radiogroup" aria-label="Who is speaking">
@@ -1367,6 +1381,7 @@ function AgentPanel({
           Say it
         </button>
       </form>
+      </div>
     </aside>
   );
 }
