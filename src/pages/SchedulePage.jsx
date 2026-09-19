@@ -18,15 +18,22 @@ import {
   missingEquipment,
   equipmentLanes,
   unattendedEvents,
+  cookFreeWindows,
   isAttended,
   EQUIPMENT_LABELS,
 } from "../utils/scheduleLayout.js";
+import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { CONFIRM_YES_PATTERN, CONFIRM_NO_PATTERN } from "../utils/navCommands.js";
+import { matchStepName } from "../utils/stepNameMatch.js";
 import { tendingOf, TENDING } from "../utils/tending.js";
 import { formatClock } from "../utils/inventory.js";
 import KpIcon from "../components/KpIcon.jsx";
 import Modal from "../components/Modal.jsx";
 import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
 import "./SchedulePage.css";
+
+// Abandoning destroys the run, so voice makes you read the sentence back.
+const ABANDON_PHRASE = "I want to abandon this cook";
 
 // Player colors come from the index in cooks[] — player 1 is "a",
 // player 2 is "b" — never stored, never chosen (design-v4.css tokens).
@@ -191,12 +198,16 @@ export default function SchedulePage() {
       : isVersus
         ? `${grabsCount} steps up for grabs — first to claim wins.`
         : "Pick a mode and I'll deal the plan.";
-    dispatch({
-      type: "voice/setHint",
-      payload: { hint: { line: "Say “co-op” or “versus”, then “go live”.", sub } },
-    });
+    const line = run
+      ? runEnded
+        ? "Say “see the result”."
+        : "Say “back to the cook”."
+      : isCoop
+        ? "Say “go live”, “select the simmer”, or “when am I free”."
+        : "Say “co-op” or “versus”, then “go live”.";
+    dispatch({ type: "voice/setHint", payload: { hint: { line, sub } } });
     return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
-  }, [dispatch, approved, finish, cooks.length, isCoop, isVersus, grabsCount]);
+  }, [dispatch, approved, finish, cooks.length, isCoop, isVersus, grabsCount, run, runEnded]);
 
   // Mode is snapshotted into the run, so changing it mid-cook would
   // desync what's already happened — the cards lock once a run exists.
@@ -349,6 +360,173 @@ export default function SchedulePage() {
   }));
 
   const progress = run ? runProgress(run, nodes, Date.now()) : null;
+
+  // A guessed step name ("select the simmer" heard as a near match) asks
+  // before it opens anything — same reasoning and same shape as the
+  // recipe graph's step matching.
+  const [pendingConfirm, setPendingConfirm] = useState(null);
+  useEffect(() => {
+    if (!pendingConfirm) return undefined;
+    const answer = (yes) => () => {
+      setPendingConfirm(null);
+      if (yes) pendingConfirm.onYes();
+    };
+    const unregister = registerVoiceCommands(
+      [
+        { phrases: [CONFIRM_YES_PATTERN], label: "Got it.", run: answer(true) },
+        { phrases: [CONFIRM_NO_PATTERN], label: "Okay.", run: answer(false) },
+      ],
+      { priority: 20, exclusive: true }
+    );
+    // Expires on its own so a stray "yes" later isn't read as an answer.
+    const timer = setTimeout(() => setPendingConfirm(null), 10_000);
+    return () => {
+      unregister();
+      clearTimeout(timer);
+    };
+  }, [pendingConfirm]);
+
+  // Voice. Only the top layer listens, so the abandon dialog and the
+  // kitchen form (which register their own exclusive layers) already
+  // silence this set while open; nothing is live while the plan is still syncing.
+  useEffect(() => {
+    if (!approved) return undefined;
+    const lockedMsg = "Mode is locked while a cook is in progress.";
+    const pickMode = (nextMode, name) => () => {
+      if (run) return lockedMsg;
+      setMode(nextMode);
+      return `${name} selected.`;
+    };
+    const needsCoop = (what) => `${what} only applies to the co-op timeline — pick co-op first.`;
+
+    const commands = [
+      { phrases: [/\bco ?-?op(?:eration)?\b/, /\bcooperat(?:ive|ion)\b/], run: pickMode("cooperation", "Co-op") },
+      { phrases: [/\bversus\b/, /\bcompetition\b/, /\bcompetitive\b/, /\bvs\b/], run: pickMode("competition", "Versus") },
+    ];
+
+    if (run) {
+      commands.push({
+        phrases: [/\bgo live\b/, /\bback to the cook\b/, /\b(?:see|show) (?:the )?result\b/],
+        label: runEnded ? "Opening the result." : "Back to the cook.",
+        run: () => navigate("/session/live-cook"),
+      });
+      if (!runEnded) {
+        commands.push({
+          // Destroys the run, so a yes/no is not enough — same as Home.
+          phrases: [/\b(?:abandon|abort|discard) (?:the |this )?(?:cook|run|session)\b/],
+          confirmPhrase: ABANDON_PHRASE,
+          label: "Cook abandoned.",
+          run: abandonRun,
+        });
+      }
+    } else if (canStart) {
+      commands.push({
+        phrases: [/\bgo live\b/, /\bstart (?:the )?(?:cook|cooking)\b/],
+        confirm: "Go live? Say yes or no.",
+        label: "Going live.",
+        run: goLive,
+      });
+    } else {
+      commands.push({
+        phrases: [/\bgo live\b/, /\bstart (?:the )?(?:cook|cooking)\b/],
+        run: () =>
+          hasLoop
+            ? "Can't go live yet — some steps depend on each other in a loop. Say “back to the recipe graph” to fix it."
+            : "Pick co-op or versus first, then say go live.",
+      });
+    }
+
+    commands.push({
+      phrases: [/\b(?:back to|go to|open|show) (?:the )?recipe (?:graph|board)\b/, /\bfix (?:the )?loop\b/],
+      label: "Opening the recipe graph.",
+      run: () => navigate("/session/inventory"),
+    });
+
+    if (kitchenProfile) {
+      commands.push({
+        phrases: [/\bedit (?:the )?kitchen(?: profile)?\b/],
+        label: "Opening the kitchen form.",
+        run: () => setEditingKitchen(true),
+      });
+    }
+
+    // ---- Co-op timeline: zoom, details, free time ----
+    const zoomBy = (delta) => () => {
+      if (!isCoop) return needsCoop("Zoom");
+      const next = ZOOM_STOPS[Math.min(ZOOM_STOPS.length - 1, Math.max(0, ZOOM_STOPS.indexOf(zoom) + delta))];
+      if (next === zoom) return delta > 0 ? "Already at the closest zoom." : "Already zoomed all the way out.";
+      setZoom(next);
+      return next === "Fit" ? "Fit to screen." : `Zoom ${next}.`;
+    };
+    commands.push(
+      {
+        phrases: [/\bzoom (?:to )?fit\b/, /\bfit (?:the )?(?:timeline|plan|schedule|screen)\b/, /^fit$/, /\breset zoom\b/],
+        run: () => {
+          if (!isCoop) return needsCoop("Zoom");
+          setZoom("Fit");
+          return "Fit to screen.";
+        },
+      },
+      { phrases: [/\bzoom in\b/, /\bzoom closer\b/], run: zoomBy(1) },
+      { phrases: [/\bzoom out\b/], run: zoomBy(-1) },
+      {
+        phrases: [/\b(?:close|hide|dismiss) (?:the )?(?:details|panel|sheet|step)\b/],
+        run: () => {
+          if (!selectedStepId) return "Nothing is open.";
+          setSelectedStepId(null);
+          return "Closed.";
+        },
+      },
+      {
+        phrases: [/\b(?:select|open|show details (?:for|on|of)|details (?:for|on|of)) (?:the )?(?:step |task )?(.+)$/],
+        run: (m) => {
+          if (!isCoop) return needsCoop("Step details");
+          const ids = schedule.steps.map((s) => s.id);
+          const labelOf = (id) => byId[id]?.label;
+          const match = matchStepName((m?.[1] || "").trim(), ids, labelOf);
+          if (match.confidence === "none") return "I couldn't tell which step you meant.";
+          const open = () => setSelectedStepId(match.stepId);
+          if (match.confidence === "exact") {
+            open();
+            return `Showing “${match.label}.”`;
+          }
+          const question = `Show “${match.label}”? Say yes or no.`;
+          setPendingConfirm({ question, onYes: open });
+          return question;
+        },
+      },
+      {
+        // "When do I get free" has a subject in it, which the conversation
+        // filter would otherwise throw away.
+        allowSubject: true,
+        phrases: [
+          /\bwhen (?:am i|are we|do i|do we|can i|can we|is \S+) (?:get |be )?(?:a )?(?:free|break)\b/,
+          /\bfree time\b/,
+          /\bwho(?:'s| is) free\b/,
+        ],
+        run: () => {
+          if (!isCoop) return needsCoop("Free time");
+          const lines = cooks
+            .map((cook) => {
+              const windows = cookFreeWindows(
+                schedule.steps.filter((s) => s.cookId === cook.id),
+                byId
+              ).slice(0, 3);
+              if (!windows.length) return null;
+              const spans = windows
+                .map((w) => `${formatClock(w.startSec)}–${formatClock(w.endSec)} while “${byId[w.stepIds[0]]?.label}” cooks`)
+                .join(", ");
+              return `${cook.name}: ${spans}`;
+            })
+            .filter(Boolean);
+          return lines.length ? `Free stretches — ${lines.join(". ")}.` : "Nobody gets free time — nothing runs on its own in this plan.";
+        },
+      }
+    );
+
+    return registerVoiceCommands(commands);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [approved, run, runEnded, mode, canStart, hasLoop, kitchenProfile, zoom, selectedStepId, schedule, byId, cooks, isCoop]);
 
   // `approved` is null only while the session is still syncing; the plan
   // itself is one synchronous pass, so there is nothing to wait on here.

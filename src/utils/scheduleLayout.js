@@ -523,6 +523,49 @@ export function unattendedEvents(node, startSec) {
 }
 
 /**
+ * When a cook is free even though something is still cooking.
+ *
+ * "Free" means: not inside one of their hands-on steps or hands-on
+ * moments, but inside an unattended step's span. A gap with nothing
+ * running is a wait, not free time, and is left out — the same rule the
+ * Schedule lanes use for drawing hatched waits versus rails.
+ *
+ * `cookSteps` are that cook's scheduled steps. Returns
+ * [{ startSec, endSec, stepIds }] in time order, windows shorter than
+ * `minSec` dropped.
+ */
+export function cookFreeWindows(cookSteps, byId, minSec = 30) {
+  const occupied = [];
+  const rails = [];
+  cookSteps.forEach((s) => {
+    const node = byId[s.id];
+    if (!node) return;
+    if (isAttended(node)) {
+      occupied.push([s.startSec, s.endSec]);
+      return;
+    }
+    rails.push({ id: s.id, startSec: s.startSec, endSec: s.endSec });
+    unattendedEvents(node, s.startSec).forEach((m) => occupied.push([m.atSec, m.endSec]));
+  });
+  occupied.sort((a, b) => a[0] - b[0]);
+
+  const windows = [];
+  rails.forEach((rail) => {
+    let cursor = rail.startSec;
+    const close = (endSec) => {
+      if (endSec - cursor >= minSec) windows.push({ startSec: cursor, endSec, stepIds: [rail.id] });
+    };
+    occupied.forEach(([os, oe]) => {
+      if (oe <= cursor || os >= rail.endSec) return;
+      if (os > cursor) close(os);
+      cursor = Math.max(cursor, oe);
+    });
+    if (cursor < rail.endSec) close(rail.endSec);
+  });
+  return windows.sort((a, b) => a.startSec - b.startSec);
+}
+
+/**
  * Which physical burner / pot / board each step uses.
  *
  * The scheduler enforces equipment as a COUNT — two burners means at

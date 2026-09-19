@@ -28,7 +28,7 @@ import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 // The same normalizer VoiceBar runs over the utterance before matching —
 // kitchen names have to be folded exactly the same way or they will
 // never line up.
-import { normalizeUtterance } from "../utils/navCommands.js";
+import { kitchenPickCommands } from "../utils/kitchenPick.js";
 
 const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight"];
 
@@ -137,45 +137,6 @@ function LoadoutChips({ profile, delayBase = 0 }) {
 // constant, used by both the command and the on-screen copy, so the two
 // can never drift apart and leave you reading a phrase that won't match.
 const ABORT_PHRASE = "I want to abort this cooking session";
-
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-/**
- * One command per kitchen on offer, matching what its button says.
- *
- * Kitchens are named by people, so the full name is the primary match —
- * "flat 3 galley" has to work as three words, not just its first. But
- * nobody says the whole name every time, so a single distinctive word
- * counts too, as long as it belongs to exactly one kitchen on the list.
- * Ambiguity is dropped rather than guessed: picking the wrong kitchen
- * starts a whole run against the wrong equipment.
- */
-function kitchenPickCommands(profiles, start) {
-  const norm = (s) => normalizeUtterance(s);
-
-  // Words that identify exactly one kitchen. Anything shared between two
-  // ("kitchen", "flat") identifies neither.
-  const counts = new Map();
-  profiles.forEach((p) => {
-    new Set(norm(p.name).split(" ").filter((w) => w.length > 3)).forEach((w) => {
-      counts.set(w, (counts.get(w) || 0) + 1);
-    });
-  });
-
-  return profiles.map((p) => {
-    const full = norm(p.name);
-    const phrases = [new RegExp(`\\b${escapeRe(full)}\\b`)];
-    norm(p.name)
-      .split(" ")
-      .filter((w) => w.length > 3 && counts.get(w) === 1)
-      .forEach((w) => phrases.push(new RegExp(`\\b${escapeRe(w)}\\b`)));
-    return {
-      phrases,
-      label: `Starting in ${p.name}.`,
-      run: () => start(p.id),
-    };
-  });
-}
 
 export default function HomePage() {
   const {

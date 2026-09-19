@@ -1,5 +1,8 @@
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
+import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { kitchenPickCommands } from "../utils/kitchenPick.js";
 import "./SessionKitchenSetupPage.css";
 
 // Reached only if the session's kitchen profile was deleted mid-session
@@ -14,6 +17,21 @@ export default function SessionKitchenSetupPage() {
     dispatch({ type: "session/update", payload: { kitchenProfileId: id } });
     navigate("/session/conversation");
   };
+
+  // Say a kitchen's name (or one word only it has) to pick it. A word two
+  // kitchens share picks neither — the wrong kitchen means the wrong equipment.
+  useEffect(() => {
+    dispatch({
+      type: "voice/setHint",
+      payload: { hint: { line: "Say a kitchen's name to pick it.", sub: "This session's kitchen was removed." } },
+    });
+    return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
+  }, [dispatch]);
+  useEffect(
+    () => registerVoiceCommands(kitchenPickCommands(state.kitchenProfiles, pickExisting, (p) => `Using ${p.name}.`)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.kitchenProfiles]
+  );
 
   return (
     <section className="page session-kitchen-setup-page">

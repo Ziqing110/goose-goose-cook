@@ -133,3 +133,30 @@ test("activeStepFor: still honors a real hands_on step regardless of any unatten
 
   assert.equal(activeStepFor("a", run, nodes, 200_000), "chop");
 });
+
+// ---- cookFreeWindows -----------------------------------------------------
+import { cookFreeWindows } from "./scheduleLayout.js";
+
+test("cookFreeWindows: free between moments of a rail, not inside hands-on work", () => {
+  const chop = { id: "chop", estimated_duration_sec: 300, tending: "hands_on" };
+  const byId = { simmer: tendedNode, chop };
+  const steps = [
+    { id: "simmer", startSec: 0, endSec: 2400 },
+    { id: "chop", startSec: 100, endSec: 400 },
+  ];
+  const windows = cookFreeWindows(steps, byId);
+  // Nothing free overlaps the chop or the start moment.
+  windows.forEach((w) => {
+    assert.ok(w.endSec <= 100 || w.startSec >= 400, "window overlaps chop");
+    assert.deepEqual(w.stepIds, ["simmer"]);
+  });
+  assert.ok(windows.length > 1);
+  // The 20s gap before the chop is under the minimum, so the first real
+  // window opens when the chop ends.
+  assert.equal(windows[0].startSec, 400);
+});
+
+test("cookFreeWindows: nothing running means no free time", () => {
+  const chop = { id: "chop", estimated_duration_sec: 300, tending: "hands_on" };
+  assert.deepEqual(cookFreeWindows([{ id: "chop", startSec: 0, endSec: 300 }], { chop }), []);
+});
