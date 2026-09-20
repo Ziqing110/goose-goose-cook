@@ -11,6 +11,7 @@
     "dev:voice": "concurrently -n web,api,speaker -c blue,green,magenta \"npm:dev\" \"npm:server\" \"npm:speaker\"",
     "build": "vite build",
     "preview": "vite preview",
+    "tts-lab": "node tts-lab/server.js",
     "speaker": ".venv-voice\\Scripts\\python.exe speaker-sidecar/server.py",
     "lint": "eslint . --ext .js,.jsx --max-warnings 0",
     "test": "node --test src/utils/*.test.js",

@@ -13,5 +13,4 @@ reference_html
 # Model comparison output for recipe generation. Big JSON dumps for
 # reading, not for keeping.
 recipe-bench/
-.venv-parler
 speaker-sidecar/voiceprints.json

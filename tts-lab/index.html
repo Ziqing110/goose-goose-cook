@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TTS lab</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+  body { max-width: 760px; margin: 24px auto; padding: 0 16px; }
+  h1 { font-size: 1.2rem; }
+  label { display: block; margin: 12px 0 4px; font-size: .85rem; opacity: .75; }
+  select, input, textarea, button { font: inherit; padding: 6px 8px; }
+  textarea { width: 100%; box-sizing: border-box; min-height: 64px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .presets button { font-size: .8rem; }
+  table { border-collapse: collapse; width: 100%; margin-top: 16px; font-size: .85rem; }
+  td, th { border-bottom: 1px solid #8884; padding: 4px 8px; text-align: left; }
+  #status { margin-top: 12px; font-size: .85rem; min-height: 1.2em; }
+</style>
+</head>
+<body>
+<h1>TTS lab — Web Speech vs Kokoro-82M (local, free)</h1>
+
+<label for="engine">Engine</label>
+<div class="row">
+  <select id="engine">
+    <option value="kokoro-webgpu">Kokoro-82M · WebGPU (fp32)</option>
+    <option value="kokoro-wasm">Kokoro-82M · WASM (q8)</option>
+    <option value="web">Web Speech API (built in)</option>
+  </select>
+  <select id="voice"></select>
+  <select id="effect">
+    <option value="chipmunk">chipmunk</option>
+    <option value="none">no effect</option>
+    <option value="giant">giant</option>
+    <option value="robot">robot</option>
+    <option value="goose">goose (vibrato + high)</option>
+    <option value="megaphone">megaphone</option>
+    <option value="cave">cave</option>
+  </select>
+  <label style="margin:0">speed <input id="speed" type="number" min="0.6" max="1.6" step="0.1" value="1" style="width:4.5em"></label>
+</div>
+
+<label for="text">Text</label>
+<textarea id="text">Lindy, the garlic is yours. Zeina, the onions are next.</textarea>
+<div class="row presets" id="presets"></div>
+
+<div class="row" style="margin-top:12px">
+  <button id="speak">Speak</button>
+  <button id="stop">Stop (barge-in)</button>
+  <button id="honk">Honk</button>
+</div>
+<div id="status"></div>
+
+<table>
+  <thead><tr><th>engine</th><th>voice</th><th>load s</th><th>first audio ms</th><th>audio s</th><th>RTF</th></tr></thead>
+  <tbody id="log"></tbody>
+</table>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const PERSONAS = [
+  { label: "Santa", text: "Ho ho ho! Lindy, the garlic is yours. Burn it and you are on the naughty list!", voice: "bm_george", effect: "giant", speed: 0.9 },
+  { label: "Pirate", text: "Arr, Zeina! The onions be yours, matey. Chop them fast or walk the plank!", voice: "bm_fable", effect: "none", speed: 1 },
+  { label: "Goose", text: "Honk! Lindy. Garlic. Yours. Honk honk. Do not test me.", voice: "af_nicole", effect: "goose", speed: 1.1 },
+  { label: "Drama chef", text: "The rice is RAW! Raw, Lindy! My grandmother is weeping in her grave!", voice: "am_fenrir", effect: "none", speed: 1.1 },
+  { label: "Robot", text: "Timer complete. Rice is done. Please proceed to the next step, human.", voice: "am_puck", effect: "robot", speed: 1 },
+  { label: "Whisper heist", text: "Psst. Zeina. You have four minutes while the stock simmers. Go. Go!", voice: "af_bella", effect: "cave", speed: 0.95 },
+  { label: "Plain", text: "Going back to the schedule.", voice: "af_heart", effect: "none", speed: 1 },
+];
+for (const p of PERSONAS) {
+  const b = document.createElement("button");
+  b.textContent = p.label;
+  b.onclick = () => {
+    $("text").value = p.text;
+    $("effect").value = p.effect;
+    $("speed").value = p.speed;
+    if ([...$("voice").options].some((o) => o.value === p.voice)) $("voice").value = p.voice;
+  };
+  $("presets").append(b);
+}
+
+const status = (m) => { $("status").textContent = m; };
+let ctx, source, cancelled = 0;
+const kokoro = {};
+
+// ---- Web Speech ----
+function webVoices() {
+  return new Promise((resolve) => {
+    const v = speechSynthesis.getVoices();
+    if (v.length) return resolve(v);
+    speechSynthesis.onvoiceschanged = () => resolve(speechSynthesis.getVoices());
+    setTimeout(() => resolve(speechSynthesis.getVoices()), 1500);
+  });
+}
+async function fillWeb() {
+  const voices = await webVoices();
+  $("voice").replaceChildren(...voices.map((v) =>
+    new Option(`${v.name} (${v.lang})${v.localService ? "" : " · online"}`, v.name)));
+  const pref = voices.find((v) => /natural|aria|jenny|samantha/i.test(v.name))
+    || voices.find((v) => v.lang.startsWith("en"));
+  if (pref) $("voice").value = pref.name;
+}
+async function speakWeb(text) {
+  const voices = await webVoices();
+  return new Promise((resolve) => {
+    const u = new SpeechSynthesisUtterance(text);
+    u.voice = voices.find((v) => v.name === $("voice").value) || null;
+    u.rate = Number($("speed").value);
+    u.pitch = { chipmunk: 2, giant: 0.2, goose: 1.8, robot: 0.6 }[$("effect").value] ?? 1;
+    const t0 = performance.now();
+    let first = null;
+    u.onstart = () => { first = performance.now() - t0; };
+    u.onend = u.onerror = () => resolve({ first, audio: (performance.now() - t0) / 1000, load: 0 });
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  });
+}
+
+// ---- Kokoro ----
+async function loadKokoro(kind) {
+  if (kokoro[kind]) return { tts: kokoro[kind], load: 0 };
+  const { KokoroTTS } = await import("https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm");
+  const t0 = performance.now();
+  const gpu = kind === "kokoro-webgpu";
+  status(`loading Kokoro (${gpu ? "webgpu fp32" : "wasm q8"}); first run downloads the model…`);
+  const tts = await KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", {
+    dtype: gpu ? "fp32" : "q8",
+    device: gpu ? "webgpu" : "wasm",
+  });
+  kokoro[kind] = tts;
+  return { tts, load: (performance.now() - t0) / 1000 };
+}
+async function fillKokoro(kind) {
+  const { tts } = await loadKokoro(kind);
+  const list = tts.list_voices();
+  // list_voices() may print or return depending on version; fall back to .voices
+  const map = tts.voices || {};
+  const ids = Array.isArray(list) ? list.map((v) => v.id ?? v) : Object.keys(map);
+  $("voice").replaceChildren(...ids.map((id) => {
+    const v = map[id] || {};
+    return new Option(`${id} ${v.gender ? "· " + v.gender : ""}`, id);
+  }));
+  $("voice").value = ids.includes("am_santa") ? "am_santa" : ids[0];
+}
+async function speakKokoro(kind, text, token) {
+  const { tts, load } = await loadKokoro(kind);
+  status("generating…");
+  const t0 = performance.now();
+  const audio = await tts.generate(text, { voice: $("voice").value, speed: Number($("speed").value) });
+  if (token !== cancelled) return null; // barge-in during generation
+  const first = performance.now() - t0;
+  ctx ??= new AudioContext();
+  const buf = ctx.createBuffer(1, audio.audio.length, audio.sampling_rate);
+  buf.copyToChannel(audio.audio, 0);
+  await playWithEffect(buf, $("effect").value);
+  return { first, audio: buf.duration, load };
+}
+
+
+// ---- Effects (Kokoro output only; Web Speech gets a pitch nudge) ----
+function impulse(seconds = 1.6) {
+  const n = ctx.sampleRate * seconds, ir = ctx.createBuffer(2, n, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = ir.getChannelData(c);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3);
+  }
+  return ir;
+}
+function distortion(amount = 40) {
+  const ws = ctx.createWaveShaper(), curve = new Float32Array(1024);
+  for (let i = 0; i < 1024; i++) { const x = (i / 512) - 1; curve[i] = Math.tanh(x * amount / 10); }
+  ws.curve = curve;
+  return ws;
+}
+// Every effect is a set of these knobs. Presets are just named sets; the
+// console can override any of them (see window.say below).
+//   rate      0.5-2     playback speed AND pitch together (1 = off)
+//   vibHz     0-20      vibrato speed;  vibDepth 0-0.01 s (0 = off)
+//   ringHz    0-400     ring-mod (robot) frequency (0 = off)
+//   hp / lp   Hz        highpass / lowpass (0 = off)
+//   drive     0-40      distortion amount (0 = off)
+//   wet       0-1.5     reverb level;  room 0.2-4 s reverb length
+const FX = {
+  none: {},
+  chipmunk: { rate: 1.6 },
+  giant: { rate: 0.75 },
+  robot: { ringHz: 60 },
+  goose: { rate: 1.3, vibHz: 9, vibDepth: 0.004 },
+  megaphone: { hp: 600, lp: 3200, drive: 40 },
+  cave: { wet: 0.7, room: 1.6 },
+};
+async function playWithEffect(buf, effect, over = {}) {
+  const f = { ...FX[effect], ...over };
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  source = src;
+  src.playbackRate.value = f.rate ?? 1;
+  let node = src;
+  const chain = (n) => { node.connect(n); node = n; };
+  const stops = [];
+  if (f.vibDepth) {
+    const d = ctx.createDelay(); d.delayTime.value = 0.012;
+    const lfo = ctx.createOscillator(), depth = ctx.createGain();
+    lfo.frequency.value = f.vibHz ?? 8; depth.gain.value = f.vibDepth;
+    lfo.connect(depth); depth.connect(d.delayTime); lfo.start(); stops.push(lfo);
+    chain(d);
+  }
+  if (f.ringHz) {
+    const g = ctx.createGain(); g.gain.value = 0;
+    const osc = ctx.createOscillator(); osc.frequency.value = f.ringHz; osc.connect(g.gain); osc.start(); stops.push(osc);
+    chain(g);
+  }
+  if (f.hp) { const n = ctx.createBiquadFilter(); n.type = "highpass"; n.frequency.value = f.hp; chain(n); }
+  if (f.lp) { const n = ctx.createBiquadFilter(); n.type = "lowpass"; n.frequency.value = f.lp; chain(n); }
+  if (f.drive) chain(distortion(f.drive));
+  if (f.wet) {
+    const conv = ctx.createConvolver(); conv.buffer = impulse(f.room ?? 1.6);
+    const wet = ctx.createGain(); wet.gain.value = f.wet;
+    node.connect(ctx.destination);
+    node.connect(conv); conv.connect(wet); wet.connect(ctx.destination);
+  } else {
+    node.connect(ctx.destination);
+  }
+  await new Promise((r) => { src.onended = r; src.start(); });
+  stops.forEach((o) => o.stop());
+  if (f.wet) await new Promise((r) => setTimeout(r, (f.room ?? 1.6) * 700));
+}
+
+// Console tuning. Open devtools on this page and call, e.g.
+//   await say("Ho ho ho!", { rate: 1.7, vibHz: 6, vibDepth: 0.003 })
+// Kokoro-side options: voice (id), speed (0.5-2, tempo without pitch change).
+window.say = async (text, o = {}) => {
+  const { voice = "am_santa", speed = 1, effect = "chipmunk", ...fx } = o;
+  const { tts } = await loadKokoro("kokoro-webgpu");
+  const audio = await tts.generate(text, { voice, speed });
+  ctx ??= new AudioContext();
+  const buf = ctx.createBuffer(1, audio.audio.length, audio.sampling_rate);
+  buf.copyToChannel(audio.audio, 0);
+  await playWithEffect(buf, effect, fx);
+};
+
+$("honk").onclick = () => {
+  ctx ??= new AudioContext();
+  const t = ctx.currentTime, osc = ctx.createOscillator(), g = ctx.createGain();
+  const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 1800;
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(330, t);
+  osc.frequency.exponentialRampToValueAtTime(520, t + 0.08);
+  osc.frequency.exponentialRampToValueAtTime(380, t + 0.35);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.5, t + 0.03);
+  g.gain.setValueAtTime(0.5, t + 0.28); g.gain.linearRampToValueAtTime(0, t + 0.4);
+  osc.connect(lp); lp.connect(g); g.connect(ctx.destination);
+  osc.start(t); osc.stop(t + 0.42);
+};
+
+// ---- UI ----
+async function refreshVoices() {
+  const e = $("engine").value;
+  try {
+    await (e === "web" ? fillWeb() : fillKokoro(e));
+    status("");
+  } catch (err) {
+    status(`${e} failed: ${err.message}`);
+  }
+}
+$("engine").onchange = refreshVoices;
+
+$("speak").onclick = async () => {
+  const e = $("engine").value, token = ++cancelled, text = $("text").value.trim();
+  if (!text) return;
+  try {
+    const r = e === "web" ? await speakWeb(text) : await speakKokoro(e, text, token);
+    if (!r) return status("stopped");
+    status("done");
+    const rtf = e === "web" ? "n/a" : ((r.first / 1000) / r.audio).toFixed(2);
+    const tr = document.createElement("tr");
+    for (const c of [e, $("voice").value, r.load.toFixed(1), Math.round(r.first ?? 0), r.audio.toFixed(1), rtf]) {
+      const td = document.createElement("td");
+      td.textContent = c;
+      tr.append(td);
+    }
+    $("log").prepend(tr);
+  } catch (err) {
+    status(`error: ${err.message}`);
+  }
+};
+$("stop").onclick = () => {
+  cancelled++;
+  speechSynthesis.cancel();
+  try { source?.stop(); } catch { /* not started */ }
+  status("stopped");
+};
+
+refreshVoices();
+</script>
+</body>
+</html>
