@@ -13,7 +13,8 @@
     "speaker": ".venv-voice\\Scripts\\python.exe speaker-sidecar/server.py",
     "lint": "eslint . --ext .js,.jsx --max-warnings 0",
     "test": "node --test src/utils/*.test.js",
-    "test:e2e": "node scripts/livecook-e2e.mjs"
+    "test:e2e": "node scripts/livecook-e2e.mjs",
+    "seed": "node scripts/seed.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

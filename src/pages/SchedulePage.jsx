@@ -30,6 +30,8 @@ import { formatClock } from "../utils/inventory.js";
 import KpIcon from "../components/KpIcon.jsx";
 import Modal from "../components/Modal.jsx";
 import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
+import ChefWorkingScreen from "../components/ChefWorkingScreen.jsx";
+import { devPreview } from "../dev/preview.js";
 import "./SchedulePage.css";
 
 // Abandoning destroys the run, so voice makes you read the sentence back.
@@ -529,17 +531,20 @@ export default function SchedulePage() {
   }, [approved, run, runEnded, mode, canStart, hasLoop, kitchenProfile, zoom, selectedStepId, schedule, byId, cooks, isCoop]);
 
   // `approved` is null only while the session is still syncing; the plan
-  // itself is one synchronous pass, so there is nothing to wait on here.
-  if (!approved) {
+  // itself is one synchronous pass, so this is a short wait, not a staged
+  // beat. It uses the same chef screen as the recipe generation on
+  // Inventory, with no "done" hold: the page is simply there once ready.
+  // ?preview=loading pins this screen (dev only, see dev/preview.js).
+  if (!approved || devPreview()) {
+    const who = cooks.map((c) => c.name).filter(Boolean);
     return (
-      <section className="page schedule-page">
-        <header className="sch-title-row">
-          <h1>Schedule</h1>
-          <span className="sch-meta is-tertiary">
-            Building your plan<Mono className="sch-dots">…</Mono>
-          </span>
-        </header>
-      </section>
+      <ChefWorkingScreen
+        eyebrow="Lining up the kitchen"
+        title={<>Who does what,<br />and when.</>}
+        desc={<>Your chef is sorting the steps between you,<br /> so the timing works out.</>}
+        live="Building your plan"
+        details={[who.length ? who.join(" + ") : "Your cooks", kitchenProfile?.name || "Your kitchen"]}
+      />
     );
   }
 
