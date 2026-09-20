@@ -54,7 +54,6 @@ body:has(.home-v4) { background: var(--kp-bg); }
   }
   .hp-reveal, .hp-pop, .hp-roll { animation-name: kpFade; }
   .hp-dots { animation: none; }
-  .hp-stage.is-current .hp-stage-node { animation: none; box-shadow: 0 0 0 3px rgba(212, 85, 42, 0.35); }
 }
 @keyframes kpFade { from { opacity: 0; } to { opacity: 1; } }
 
@@ -165,6 +164,11 @@ body:has(.home-v4) { background: var(--kp-bg); }
 
 /* run card (state A) */
 .hp-run { display: flex; align-items: flex-start; justify-content: space-between; gap: 40px; }
+/* The shared stage path (components/StagePath.css) sits in the card's
+   content column, so it keeps the width the old .hp-stages had rather
+   than running the full width of the card. */
+.hp-run-body .stage-path { max-width: 720px; padding-top: 4px; }
+
 .hp-run-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 .hp-run-actions { flex: 0 0 auto; display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
 .hp-run-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
@@ -200,35 +204,6 @@ body:has(.home-v4) { background: var(--kp-bg); }
 /* stage path — the session's seven stages as 28px nodes on a 2px
    divider line. Stages share the card width equally so the path
    always fits; labels wrap under their node when narrow. */
-.hp-stages { list-style: none; margin: 0; padding: 4px 0 0; display: flex; align-items: flex-start; max-width: 720px; }
-.hp-stage { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.hp-stage-link {
-  position: absolute;
-  top: 13px;
-  right: calc(50% + 14px);
-  width: calc(100% - 28px);
-  height: 2px;
-  background: var(--kp-divider);
-}
-.hp-stage-node {
-  position: relative;
-  z-index: 1;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--kp-bg);
-  border: 2px solid var(--kp-status-waiting);
-}
-.hp-stage.is-done .hp-stage-node { border-color: var(--kp-status-done); color: var(--kp-status-done); }
-.hp-stage.is-current .hp-stage-node { background: var(--kp-accent); border-color: var(--kp-accent); animation: kpRingAccent 1600ms ease-in-out infinite; }
-.hp-stage-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--kp-status-waiting); }
-.hp-stage-label { display: flex; flex-direction: column; align-items: center; font-size: 13px; color: var(--kp-text-secondary); text-align: center; }
-.hp-stage.is-done .hp-stage-label { color: var(--kp-status-done); }
-.hp-stage.is-current .hp-stage-label { color: var(--kp-accent); font-weight: 500; }
-.hp-stage-count { font-size: 14px; font-weight: 400; }
 
 /* ---------------- list cards ---------------- */
 
@@ -323,20 +298,6 @@ body:has(.home-v4) { background: var(--kp-bg); }
 
   .hp-stats { gap: 8px; }
   .hp-stat { flex: 1 1 0; min-width: 0; padding: 10px 12px; }
-
-  /* Seven labels don't fit a phone: only the current stage keeps its
-     label on screen; the rest stay in the accessibility tree. */
-  .hp-stage { gap: 6px; }
-  .hp-stage-label { font-size: 12px; }
-  .hp-stage:not(.is-current) .hp-stage-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
-  .hp-stage.is-current .hp-stage-label { white-space: nowrap; }
 
   .hp-card { margin-top: 16px; }
   .hp-card-head { padding: 14px 16px; gap: 12px; flex-wrap: wrap; }

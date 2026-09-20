@@ -1,29 +1,7 @@
-.session-progress {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding-bottom: 14px;
-  margin-bottom: 6px;
-  border-bottom: 1px solid var(--line);
-}
-.session-progress .progress-track { flex: 1; }
-.session-back-btn,
-.session-exit-btn { flex: none; white-space: nowrap; }
-
-@media (max-width: 600px) {
-  .session-progress { flex-wrap: wrap; gap: 10px 14px; }
-  .session-progress > .hint { flex: 1; }
-  .session-progress .progress-track { order: 3; flex-basis: 100%; }
-  /* Compact exit so "Step N of 3 · label" and the button share one line on phones. */
-  .session-back-btn,
-  .session-exit-btn { min-height: 36px; padding: 4px 12px; font-size: 0.85rem; }
-}
-
-/* ---------------- stage path (design system v4) ----------------
-   28px nodes joined by a 2px divider line: done = checkmark-burst in
-   status-done, current = accent node with a 1.6s pulse ring,
-   waiting = grey dot. Only rendered inside .ds-v4, so it uses
-   the v4 tokens directly. */
+/* ---------------- stage path row (design system v4) ----------------
+   The path itself is a shared component (StagePath.jsx/.css, also used
+   by Home's run card). What's left here is the row it sits in and the
+   buttons beside it. */
 .stage-progress {
   display: flex;
   align-items: flex-start;
@@ -38,90 +16,8 @@
 .stage-compact-label { font-size: 13px; color: var(--ink-soft); }
 .stage-progress.is-compact .session-exit-btn { min-height: 36px; padding: 0 12px; font-size: 14px; }
 
-.stage-path {
-  display: flex;
-  align-items: flex-start;
-  flex: 1 1 auto;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* Equal flexible columns; each connector runs from the previous node's
-   right edge to this node's left edge — Home's geometry (.hp-stage-link
-   in HomePage.css), so the line never has gaps whatever the width. */
-.stage {
-  position: relative;
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  text-align: center;
-  font-size: 13px;
-  line-height: 18px;
-  color: var(--ink-soft);
-}
-.stage + .stage::before {
-  content: "";
-  position: absolute;
-  top: 13px;
-  right: calc(50% + 14px);
-  width: calc(100% - 28px);
-  height: 2px;
-  background: var(--line);
-}
-
-.stage-node {
-  position: relative;
-  z-index: 1;
-  width: 28px;
-  height: 28px;
-  flex: none;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.stage-done { color: var(--success); }
-.stage-done .stage-node { background: var(--bg); border: 2px solid var(--success); }
-
-.stage-current { color: var(--accent); }
-.stage-current .stage-label { font-weight: 500; }
-.stage-current .stage-node {
-  background: var(--accent);
-  border: 2px solid var(--accent);
-  animation: ds-ring 1600ms ease-in-out infinite;
-}
-
-.stage-waiting .stage-node { background: var(--bg); border: 2px solid var(--ds-waiting); }
-.stage-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ds-waiting); }
 
 @media (max-width: 860px) {
   .stage-path { flex: 1 1 100%; }
   .stage-progress .stage-actions { margin-left: auto; }
-}
-
-@media (max-width: 560px) {
-  /* Five labels don't fit side by side; keep only the current one
-     visible (others stay available to assistive tech). */
-  .stage:not(.stage-current) .stage-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
-  .stage-current .stage-label { white-space: nowrap; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .stage-current .stage-node {
-    animation: none !important;
-    box-shadow: 0 0 0 3px rgba(212, 85, 42, 0.35);
-  }
 }

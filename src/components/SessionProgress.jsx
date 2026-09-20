@@ -1,24 +1,22 @@
-// In-session chrome: the stage path (numbered checkpoints with icons) on
-// the design-v4 session routes, or a "Step N of 6" fill bar elsewhere,
-// plus Back and an explicit exit that returns to Home without discarding
-// the session (it stays resumable). Rendered once by SessionLayout, not
-// per page.
+// In-session chrome: the stage path (StagePath, shared with Home's run
+// card), plus Back and an explicit exit that returns to Home without
+// discarding the session (it stays resumable). Rendered once by
+// SessionLayout, not per page.
 //
-// TODO(design discussion): the two variants are deliberate and temporary
-// (see utils/designV4.js). Every stage page is a v4 route, so the stage
-// path is what people see; the bar only remains for the kitchen-setup
-// fallback route.
+// Every session route gets the same path now, including the
+// kitchen-setup fallback, which used to fall through to a separate
+// "Step N of 5" fill bar because it is not a design-v4 route. Two
+// chromes for one piece of furniture is what let them drift.
 import { useLocation, useNavigate } from "react-router-dom";
-import { useDesignV4 } from "../utils/designV4.js";
 import { SESSION_STEPS } from "../utils/sessionSteps.js";
-import Icon from "./Icon.jsx";
+import StagePath from "./StagePath.jsx";
 import "./SessionProgress.css";
 
 export default function SessionProgress() {
   const location = useLocation();
   const navigate = useNavigate();
-  const isDesignV4 = useDesignV4();
-
+  // Not a stage route at all (kitchen-setup): the path shows Conversation
+  // as current, which is where this page sends you next.
   const stepIndex = Math.max(0, SESSION_STEPS.findIndex((s) => s.path === location.pathname));
   // Live cook is the play surface: it's shared from across the counter,
   // and its two player cards must fit the screen with the VoiceBar. The
@@ -41,7 +39,7 @@ export default function SessionProgress() {
     </button>
   );
 
-  if (isDesignV4 && isLiveCook) {
+  if (isLiveCook) {
     return (
       <div className="stage-progress is-compact">
         <span className="mono stage-compact-label">
@@ -52,45 +50,26 @@ export default function SessionProgress() {
     );
   }
 
-  if (isDesignV4) {
-    return (
-      <div className="stage-progress">
-        <ol className="stage-path" aria-label="Session progress">
-          {SESSION_STEPS.map((step, i) => {
-            const status = i < stepIndex ? "done" : i === stepIndex ? "current" : "waiting";
-            return (
-              <li
-                key={step.key}
-                className={`stage stage-${status}`}
-                aria-current={status === "current" ? "step" : undefined}
-              >
-                <span className="stage-node" aria-hidden="true">
-                  {status === "done" && <Icon glyph="checkmark-burst" size={16} />}
-                  {status === "waiting" && <span className="stage-dot" />}
-                </span>
-                <span className="stage-label">{step.label}</span>
-              </li>
-            );
-          })}
-        </ol>
-        <span className="stage-actions">
-          {backButton}
-          {exitButton}
-        </span>
-      </div>
-    );
-  }
-
   return (
-    <div className="session-progress">
-      <span className="hint mono">
-        Step {stepIndex + 1} of {SESSION_STEPS.length} &middot; {SESSION_STEPS[stepIndex].label}
+    <div className="stage-progress">
+      <StagePath
+        label="Session progress"
+        stages={[
+          // Home is not a session stage (it is where you were before one
+          // existed), but it is the first stop on the path and the way
+          // back out, so it leads the line as a finished step.
+          { key: "home", label: "Home", state: "done", onClick: () => navigate("/") },
+          ...SESSION_STEPS.map((step, i) => ({
+            key: step.key,
+            label: step.label,
+            state: i < stepIndex ? "done" : i === stepIndex ? "current" : "waiting",
+          })),
+        ]}
+      />
+      <span className="stage-actions">
+        {backButton}
+        {exitButton}
       </span>
-      <div className="progress-track">
-        <div className="progress-fill" style={{ width: `${((stepIndex + 1) / SESSION_STEPS.length) * 100}%` }} />
-      </div>
-      {backButton}
-      {exitButton}
     </div>
   );
 }
