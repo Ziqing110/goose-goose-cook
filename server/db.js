@@ -188,6 +188,27 @@ function mapoTofuNodes(isMeatFree) {
       status: "pending",
       phase: "prep",
     },
+    // The default demo's unattended steps, taken from a real generated Mapo
+    // Tofu run: both are timed (nobody minds while they go, but the moment
+    // they end matters), so a cook can start the water and go chop.
+    {
+      id: "boil_water",
+      label: "Boil salted water in pot",
+      description: "Bring salted water to a boil in a pot.",
+      estimated_duration_sec: 300,
+      difficulty: "low",
+      required_equipment: ["stove_burner", "pot"],
+      required_materials: [],
+      depends_on: [],
+      status: "pending",
+      phase: "prep",
+      tending: "timed",
+      unattended: {
+        initial: { duration_sec: 45, difficulty: "low" },
+        checkpoints: null,
+        ending: { duration_sec: 15, difficulty: "low" },
+      },
+    },
     {
       id: "tofu_blanch",
       label: "Blanch tofu",
@@ -196,9 +217,15 @@ function mapoTofuNodes(isMeatFree) {
       difficulty: "low",
       required_equipment: ["stove_burner", "pot"],
       required_materials: [],
-      depends_on: ["tofu_cut"],
+      depends_on: ["tofu_cut", "boil_water"],
       status: "pending",
       phase: "cook",
+      tending: "timed",
+      unattended: {
+        initial: { duration_sec: 20, difficulty: "low" },
+        checkpoints: null,
+        ending: { duration_sec: 30, difficulty: "low" },
+      },
     },
     {
       id: "aromatics_saute",
@@ -451,8 +478,9 @@ const MATERIALS_SEED = [
 ];
 
 const insertTemplateStmt = db.prepare(`
-  INSERT OR IGNORE INTO recipe_templates (id, title, dish_idea_raw, diet, servings_default, nodes_json, created_at)
+  INSERT INTO recipe_templates (id, title, dish_idea_raw, diet, servings_default, nodes_json, created_at)
   VALUES (@id, @title, @dish_idea_raw, @diet, @servings_default, @nodes_json, @created_at)
+  ON CONFLICT(id) DO UPDATE SET nodes_json = excluded.nodes_json
 `);
 const insertMaterialStmt = db.prepare(`
   INSERT OR IGNORE INTO materials (id, label, category, amount, unit) VALUES (@id, @label, @category, @amount, @unit)
@@ -465,7 +493,9 @@ const insertKitchenStmt = db.prepare(`
 // Everything demo-shaped lives here rather than in a committed database
 // file, so a clone is `npm install && npm run dev:full` and nothing else.
 // INSERT OR IGNORE on fixed ids means this is safe to re-run and never
-// overwrites anything someone has since edited.
+// overwrites anything someone has since edited. Templates are the one
+// exception: they are read-only reference data, so their steps follow
+// this file and an existing database picks up changes on restart.
 //
 // This is placeholder content standing in for real generation — when the
 // LLM recipe API lands, TEMPLATE_SEED stops being the source of dishes

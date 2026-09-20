@@ -200,13 +200,17 @@ Look for cooking that is wrong, and for four things in particular:
 Report nothing you are not confident about. An empty list is the right
 answer for a good plan, and is much better than an invented fix.`;
 
+// Whole minutes hide short steps: a 20s garnish rounds to "0min" and the
+// reviewer then "fixes" a duration that was never zero.
+const formatDuration = (sec) => (sec < 120 ? `${Math.round(sec)}s` : `${Math.round(sec / 60)}min`);
+
 function compactPlan(plan) {
   return plan.recipes
     .map((r) => {
       const steps = r.nodes
         .map(
           (n) =>
-            `    ${n.id} | ${n.label} | ${Math.round(n.estimated_duration_sec / 60)}min | ${n.difficulty} | ${n.phase} | ${n.tending}${
+            `    ${n.id} | ${n.label} | ${formatDuration(n.estimated_duration_sec)} | ${n.difficulty} | ${n.phase} | ${n.tending}${
               n.unattended?.checkpoints ? ` every ${Math.round(n.unattended.checkpoints.interval_sec / 60)}min` : ""
             } | after: ${(n.depends_on || []).join(",") || "-"}\n      ${n.description}`,
         )
@@ -269,7 +273,10 @@ export function applyFixes(plan, fixes, validate) {
 
   const applied = [];
   const rejected = [];
-  const note = (fix, reason) => rejected.push(`${fix.kind} ${fix.step_id || ""}: ${reason}`);
+  const note = (fix, reason) =>
+    rejected.push(
+      `${fix.kind} ${fix.step_id || ""}${fix.field ? `.${fix.field} = ${fix.value}` : ""}: ${reason}`,
+    );
 
   for (const fix of (fixes || []).slice(0, MAX_FIXES)) {
     // A correction nobody can explain is not a correction. Asked to
