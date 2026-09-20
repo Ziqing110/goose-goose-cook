@@ -14,3 +14,7 @@ reference_html
 # reading, not for keeping.
 recipe-bench/
 speaker-sidecar/voiceprints.json
+
+# Working documents, kept locally and not committed.
+VOICE_PLAN.md
+UNATTENDED_TASK_FRONTEND.md
