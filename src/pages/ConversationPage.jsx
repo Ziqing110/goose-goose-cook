@@ -11,7 +11,7 @@ import { UNCLAIMED_AVATAR } from "../utils/cooks.js";
 import Icon from "../components/Icon.jsx";
 import VoiceInput from "../components/VoiceInput.jsx";
 import UnderstandingSidecar from "../components/UnderstandingSidecar.jsx";
-import { GooseAvatar } from "../components/GooseMarks.jsx";
+import { GooseProfile } from "../components/GooseMarks.jsx";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 import "./ConversationPage.css";
 
@@ -445,7 +445,7 @@ export default function ConversationPage() {
                 <Fragment key={i}>
                   {before}
                   <div className="chat-row chat-agent">
-                    <GooseAvatar size={30} delay={(turn % 2) * 300} aria-hidden="true" />
+                    <GooseProfile size={40} delay={(turn % 2) * 300} aria-hidden="true" />
                     <div className="chat-msg">
                       <span className="chat-who">Goose</span>
                       {/* The tilt goes on a wrapper so the HONK pill rides
@@ -498,7 +498,7 @@ export default function ConversationPage() {
                 is doing ("Listening…", "Reading…"). */}
             {reading && (
               <div className="chat-row chat-agent" aria-live="polite" aria-label="Goose is thinking">
-                <GooseAvatar size={30} aria-hidden="true" />
+                <GooseProfile size={40} aria-hidden="true" />
                 <div className="chat-msg">
                   <span className="chat-who">Goose</span>
                   <p className="chat-bubble typing-bubble" aria-hidden="true">

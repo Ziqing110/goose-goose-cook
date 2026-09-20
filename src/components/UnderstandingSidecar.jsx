@@ -10,7 +10,7 @@
 // The page owns the readings (conversation.understanding); this only
 // holds which card is being edited and its draft.
 import { useRef, useState } from "react";
-import { GooseAvatar, GooseFeather, GooseTracks } from "./GooseMarks.jsx";
+import { GooseProfile, GooseFeather, GooseTracks } from "./GooseMarks.jsx";
 import "./UnderstandingSidecar.css";
 
 const PLACEHOLDER = {
@@ -89,7 +89,7 @@ export default function UnderstandingSidecar({ slots, locked = false, onConfirm,
   return (
     <aside className="us-sidecar" aria-label="What the agent understood">
       <header className="us-head">
-        <GooseAvatar size={24} aria-hidden="true" />
+        <GooseProfile size={24} aria-hidden="true" />
         <span className="us-head-title">My notes</span>
         <span className="us-head-count" aria-label={`${confirmedCount} of ${slots.length} confirmed`}>
           {confirmedCount}/{slots.length}
