@@ -37,6 +37,84 @@ The seed is placeholder content standing in for real generation. When
 the recipe API lands, `TEMPLATE_SEED` stops being the source of dishes
 and the seed shrinks back to the kitchen and the materials catalog.
 
+## Setting up on a new machine
+
+The app, the AssemblyAI voice features and the agent's brain need only
+this:
+
+1. Install a recent **Node** (developed on 24; the server script relies on
+   `--env-file-if-exists`). On a fresh Windows laptop `npm install` may
+   need the C++ build tools, because `better-sqlite3` is a native module.
+2. `npm install`
+3. Copy `.env.example` to `.env` and set `ASSEMBLYAI_API_KEY`. That one key
+   covers streaming speech-to-text, the LLM gateway (recipe generation and
+   the live-cook agent's brain) and everything else that calls AssemblyAI.
+   It stays on the server: the browser only ever gets short-lived tokens.
+4. `npm run dev:full`, then open `http://localhost:5173` in **Chrome or
+   Edge** and allow the microphone when asked.
+
+Things the key does not cover:
+
+- **Gateway model access depends on the account.** The agent defaults to
+  `gpt-4.1` (`AAI_AGENT_MODEL`). A "no access" error means the account
+  doesn't have it; pick another from `.env.example`. A free-tier account
+  may only have a small fallback model.
+- **The agent's voice** runs in the browser on WebGPU (Kokoro-82M) and
+  needs a working GPU and internet on first use: the library loads from a
+  CDN and the model (about 300 MB) from Hugging Face, then it is cached.
+  Without WebGPU it falls back to the browser's built-in voice.
+- **Speaker identification is optional and separate** (see below). Without
+  it everything works, and the live cook uses its speaker toggle.
+
+## Voice agent
+
+The live cook has an agent, currently named **Goose** (`AGENT_NAME` in
+`src/voice/agentVoice.js`; the one place to rename it). Say its name first:
+"Goose, I'm done with the onion". It only acts when addressed, and typed
+commands in the agent box work the same way. Turn the mic on in the voice
+bar to speak; it starts muted.
+
+| Piece | Where | Notes |
+|---|---|---|
+| Speech in | `src/components/VoiceBar.jsx`, `src/hooks/useStreamingTranscript.js` | AssemblyAI streaming STT, one mic for the whole app |
+| Brain | `server/routes/agent.js`, `server/agent/` | `POST /api/agent/turn`; the model proposes tool calls, the server checks them, the page applies them through the same handlers a tap uses |
+| Voice out | `src/voice/agentVoice.js` | Kokoro-82M on WebGPU; the voice settings are in `AGENT_VOICE` |
+| Who is speaking | `speaker-sidecar/`, `src/api/speaker.js` | local TitaNet service, optional |
+
+Checks and tools:
+
+```bash
+npm run agent:calibrate                       # test the agent against a table of utterances
+npm run agent:calibrate -- --models a,b       # compare gateway models
+node --test src/utils/*.test.js server/agent/*.test.js   # unit tests
+npm run tts-lab                               # voice bench at http://localhost:3101
+```
+
+### Speaker identification (optional)
+
+One mic, two cooks: a local service identifies who spoke by comparing each
+turn's audio with a voiceprint recorded on the chef assignment page.
+Voiceprints never leave the machine; audio is turned into numbers and
+discarded, and they are kept in `speaker-sidecar/voiceprints.json`
+(gitignored).
+
+```bash
+npm run speaker        # http://127.0.0.1:3103, or run everything: npm run dev:voice
+```
+
+It needs the Python environment `.venv-voice` (Python 3.13, CUDA torch,
+NVIDIA NeMo, `soundfile`, `soxr`, `librosa`) and the
+`nvidia/speakerverification_en_titanet_large` model, which downloads on
+first use. That environment is not in the repo and has to be created on
+each machine; the steps have not been tested from a clean install. If the
+GPU is short of memory it falls back to CPU (`SPEAKER_DEVICE=cpu` forces
+it). Delete one cook's voiceprint by removing the cook on the chef page, or
+everyone's with `DELETE http://127.0.0.1:3103/voiceprints`.
+
+On the chef assignment page, tapping "Start reading" records the cook
+reading their line and enrols it. The recording ends when they stop
+speaking, not after a fixed time.
+
 ## What's real vs. stubbed
 
 - **Kitchen profiles** — full CRUD (`src/components/KitchenProfileForm*`),
@@ -54,11 +132,10 @@ and the seed shrinks back to the kitchen and the materials catalog.
   than one dish: steps from every dish render merged into the same
   phase columns and dependency graph, tagged by dish.
 - **Voice input** (`src/components/VoiceInput.jsx`, `VoiceBar.jsx`,
-  `src/pages/VoiceBindingPage.jsx`) — mic button / status bar / cook
-  voice binding, all standing in for AssemblyAI realtime STT. There is
-  no real audio capture anywhere yet: "recording" is a staged
-  animation and the name is typed. `VoiceInput`'s public contract
-  (`onAnswer(value, label)`) can stay the same when swapped for real STT.
+  `src/pages/VoiceBindingPage.jsx`) — real AssemblyAI streaming STT
+  through the one mic in the voice bar. Voice binding records the cook
+  reading their line for real and, if the speaker service is running,
+  enrols their voice. See "Voice agent" above.
 - **Recipe generation** — dish templates and the materials catalog are
   seeded rows in SQLite (`server/db.js`), served via
   `/api/recipe-templates` and `/api/materials`. Two demo dishes (Mapo
@@ -77,9 +154,11 @@ and the seed shrinks back to the kitchen and the materials catalog.
   waits, task detail) or the Versus opening hand + "up for grabs" pool,
   all computed by the resource-constrained scheduler. Mode is session
   state; "Go live" writes the run and hands off to Live cook.
-- **Live cook / diary** — not built. `SessionProgress` has their step
-  slots commented in for when they're ready, and the schedule page's
-  "Start cooking" button is deliberately still disabled.
+- **Live cook** (`src/pages/LiveCookPage.jsx`, `src/utils/liveCook.js`)
+  — built. Takes typed or spoken commands through the agent, with the
+  old keyword grammar (`src/utils/voiceCommands.js`) as the fallback when
+  the agent is slow or unreachable. Not yet run end to end with a real
+  microphone.
 
 ## Project structure
 
