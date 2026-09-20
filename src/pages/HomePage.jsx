@@ -22,6 +22,7 @@ import {
   runTotalSeconds,
   summarizeRun,
 } from "../utils/runStats.js";
+import StagePath from "../components/StagePath.jsx";
 import "./HomePage.css";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 // The same normalizer VoiceBar runs over the utterance before matching —
@@ -105,29 +106,6 @@ function PhaseBar({ counts }) {
         ))}
       </span>
     </div>
-  );
-}
-
-function StagePath({ stages }) {
-  return (
-    <ol className="hp-stages" aria-label="Run progress">
-      {stages.map((stage, i) => (
-        <li key={stage.id} className={`hp-stage is-${stage.state}`}>
-          {i > 0 && <span className="hp-stage-link" aria-hidden="true" />}
-          <span className="hp-stage-node" aria-hidden="true">
-            {stage.state === "done" && <KpIcon glyph="checkmark-burst" size={16} />}
-            {stage.state === "future" && <span className="hp-stage-dot" />}
-          </span>
-          <span className="hp-stage-label">
-            <span>{stage.label}</span>
-            {stage.count && <span className="mono hp-stage-count">{stage.count}</span>}
-          </span>
-          <span className="sr-only">
-            {stage.state === "done" ? " — done" : stage.state === "current" ? " — in progress" : " — not started"}
-          </span>
-        </li>
-      ))}
-    </ol>
   );
 }
 
@@ -557,7 +535,16 @@ export default function HomePage() {
             </>
           )}
 
-          <StagePath stages={stages} />
+          <StagePath
+            label="Run progress"
+            stages={stages.map((stage) => ({
+              key: stage.id,
+              label: stage.label,
+              // Home calls the stages it hasn't reached "future"; the
+              // shared path calls them "waiting".
+              state: stage.state === "future" ? "waiting" : stage.state,
+            }))}
+          />
         </div>
 
         <div className="hp-run-actions">

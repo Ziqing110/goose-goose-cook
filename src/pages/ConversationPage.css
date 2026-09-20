@@ -51,7 +51,10 @@
    One continuous 4px bar, as wide as the transcript: divider-grey
    track, accent fill that grows with answered questions, status-done
    green once complete. */
+/* The label is only there once the conversation is finished, so the gap
+   collapses while it is absent rather than holding an empty line. */
 .convo-progress { display: flex; flex-direction: column; gap: 8px; padding-bottom: 16px; }
+.convo-progress:not(.is-complete) { gap: 0; }
 .convo-progress-label { font-size: 13px; line-height: 18px; font-weight: 500; color: var(--ink-soft); }
 .convo-progress-track {
   height: 4px;
@@ -147,26 +150,30 @@
 .chat-agent .chat-msg { align-items: flex-start; }
 .chat-cook .chat-msg { align-items: flex-end; }
 
-/* Round avatars, per the design system: the agent takes the AI hue with
-   a waveform glyph (it speaks), the cook is a plain identity-coloured
-   PlayerAvatar with no initials. */
+/* The cook's own avatar is the app's goose art (UNCLAIMED_AVATAR), on
+   the same grounded treatment as .vb-avatar on the Cooks page: whole
+   bird, not a head crop. 40px rather than the 28px dot it replaced —
+   the art is pale and needs the room. The agent's avatar is the
+   character's head, drawn in GooseMarks. */
 .chat-avatar {
   flex: none;
-  width: 28px;
-  height: 28px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  background-color: var(--ds-chip);
+  border: 1px solid var(--line);
+  background-size: 96%;
+  background-position: center 52%;
+  background-repeat: no-repeat;
 }
-.chat-agent .chat-avatar { background: var(--ai); color: #ffffff; }
-.chat-cook .chat-avatar { background: var(--kp-cook-a); }
 
 .chat-who { font-size: 13px; line-height: 18px; font-weight: 500; color: var(--ink-soft); }
-.chat-agent .chat-who { color: var(--ai); }
+/* The goose is a character, not a system voice: its name carries the
+   same ink as its words. */
+.chat-agent .chat-who { color: var(--ink); }
 
-/* White tile on bg-secondary for the agent; accent tint marks the
-   cook's own replies. Body text stays ink on both for contrast. */
+/* Accent tint marks the cook's own replies; the goose's side is the
+   ink-outlined bubble below. */
 .chat-bubble {
   margin: 0;
   padding: 12px 16px;
@@ -179,11 +186,49 @@
 }
 .chat-cook .chat-bubble { background: var(--accent-soft); }
 
+/* ---------------- the goose's bubbles ----------------
+   Mono, ink-outlined, with the corner nearest the speaker pulled in
+   tight, and each one tilted a fraction of a degree (the angle is
+   authored per message in ConversationPage.jsx). */
+.chat-bubble-wrap { position: relative; }
+.chat-agent .chat-bubble {
+  border: 2.5px solid var(--goose-ink, #1a1a1a);
+  border-radius: 14px 14px 14px 3px;
+  font-family: var(--font-mono);
+}
+/* The one that asks you to check a reading gets a pill poking out of
+   the corner. #b8461f, not the lighter bill orange — white text on
+   #e8862c fails contrast. */
+.chat-honk {
+  position: absolute;
+  right: -8px;
+  top: -11px;
+  transform: rotate(9deg);
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--goose-honk, #b8461f);
+  color: #ffffff;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+/* An idle nudge is the same voice without a second avatar: it tucks
+   under the goose's last message in the space the avatar leaves. */
+.chat-nudge { margin-top: -6px; }
+.chat-nudge-spacer { flex: none; width: 40px; }
+.chat-nudge .chat-bubble { padding: 10px 14px; }
+
 /* The agent composing its next turn. Uses the loading "dots" fade
    rather than a bounce — pulse loops are reserved for the stage ring and
    the listening dot. Lives on the agent's side because the agent is the
    one thinking; the cook's side is described by the answer bar. */
-.typing-bubble {
+/* Scoped past `.chat-agent .chat-bubble`'s ink outline: a bubble with
+   nothing in it yet keeps the waiting dash. */
+.chat-agent .typing-bubble {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -229,4 +274,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .typing-dot { animation: none; opacity: 0.7; }
+  .chat-row { animation: none; }
 }

@@ -22,17 +22,6 @@
   gap: 10px;
   padding: 18px 20px 12px;
 }
-.us-head-mark {
-  flex: none;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--ai);
-  color: #ffffff;
-}
 .us-head-title,
 .us-head-count,
 .us-label {
@@ -45,7 +34,9 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.us-head-title { flex: 1 1 auto; min-width: 0; color: var(--ai); }
+/* The rail is the goose's own notebook, so the heading carries page ink
+   rather than the old agent hue. */
+.us-head-title { flex: 1 1 auto; min-width: 0; color: var(--ink); }
 .us-head-count { flex: none; color: var(--ink-faint); }
 
 /* ---------------- rail ---------------- */
@@ -68,7 +59,10 @@
 .us-rail::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
 
 /* ---------------- cards ---------------- */
+/* Relative for the feather that falls across a card just confirmed and
+   the prints in one not filled in yet. */
 .us-card {
+  position: relative;
   flex: none;
   display: flex;
   flex-direction: column;
@@ -77,8 +71,19 @@
   border-radius: var(--radius-card);
   animation: ds-reveal 240ms ease-out both;
 }
-.us-card.is-confirmed { background: var(--surface); }
-.us-card.is-low-confidence { gap: 6px; background: var(--warning-soft); }
+/* A confirmed card must not clip the feather; an empty one must clip
+   its prints to the card's own edge. */
+.us-card.is-confirmed { background: var(--surface); overflow: visible; }
+/* The amber ground has to win over the confirmed card's white. */
+.us-card.is-confirmed.is-editing { background: var(--warning-soft); }
+.us-card.is-asking,
+.us-card.is-asking-again,
+.us-card.is-pending { overflow: hidden; }
+/* Being edited is being unsure again: a card open for correction takes
+   the same amber ground and warm ink as one waiting to be checked, so
+   the rail never shows a white "settled" card that is mid-rewrite. */
+.us-card.is-low-confidence,
+.us-card.is-editing { gap: 6px; background: var(--warning-soft); }
 .us-card.is-asking,
 .us-card.is-asking-again,
 .us-card.is-pending { border: 1px dashed var(--line-strong); }
@@ -99,7 +104,8 @@
 .us-card.is-asking-again .us-card-head,
 .us-card.is-pending .us-card-head { min-height: 0; }
 .us-label { flex: 1 1 auto; min-width: 0; color: var(--ink-faint); }
-.us-card.is-low-confidence .us-label { color: var(--warning-soft-ink); }
+.us-card.is-low-confidence .us-label,
+.us-card.is-editing .us-label { color: var(--warning-soft-ink); }
 
 .us-value {
   font-size: 16px;
@@ -145,7 +151,23 @@
   font-weight: 500;
 }
 
-.us-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+/* The goose's nod on a reading the cook just checked off. */
+.us-approved {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--warning-soft-ink);
+}
+.us-approved-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+
+/* Pushed to the right-hand edge, with the accept sitting last: it is
+   the button the cook reaches for, and it lines up with the card's Edit
+   above it. */
+.us-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 2px; }
 .us-action {
   min-height: 32px;
   padding: 0 12px;

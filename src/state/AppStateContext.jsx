@@ -18,8 +18,18 @@ function emptySessionConversation() {
   // cooks isn't asked about any more, so it starts at the default that
   // the rest of the flow (voice binding, schedule, run stats) reads.
   // `understanding` holds the agent's reading of each answer, keyed by
-  // question id (see utils/understanding.js).
-  return { complete: false, transcript: [], answers: { cooks: DEFAULT_COOK_COUNT }, understanding: {}, questionIndex: 0 };
+  // question id (see utils/understanding.js). `nudges` are the lines the
+  // agent volunteered while waiting — they live with the conversation so
+  // they survive a trip to Home, and so Start over clears them with
+  // everything else.
+  return {
+    complete: false,
+    transcript: [],
+    answers: { cooks: DEFAULT_COOK_COUNT },
+    understanding: {},
+    questionIndex: 0,
+    nudges: [],
+  };
 }
 
 function makeSession(id, kitchenProfileId) {

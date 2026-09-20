@@ -186,9 +186,19 @@ export function interpretAnswer(question, text) {
   return read(text);
 }
 
+const ECHO_PREFIX = "I took that as";
+
 /** The agent's echo for a read it isn't sure of, prepended to its next turn. */
 export function echoFor(reading) {
-  return `I took that as ${reading.display} — it's on the right if you want to check it.`;
+  return `${ECHO_PREFIX} ${reading.display} — it's on the right if you want to check it.`;
+}
+
+/** True for an agent line that opens with an echo of an unsure reading.
+ * The transcript stores the finished sentence rather than its parts, so
+ * this is how the page spots the turn that asks you to check a reading
+ * (see the HONK pill in ConversationPage). */
+export function isEchoLine(text = "") {
+  return text.startsWith(ECHO_PREFIX);
 }
 
 /**

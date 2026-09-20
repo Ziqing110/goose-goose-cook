@@ -1,0 +1,115 @@
+/* ---------------------------------------------------------------
+   Stage path — shared by the in-session chrome and Home's run card.
+
+   Colours come from the --kp-* palette rather than the route-scoped v4
+   aliases: this renders both inside `.ds-v4` and on Home, which is not
+   a v4 route, and the generic names resolve to different values there.
+   Its own keyframes for the same reason — it should not depend on a
+   stylesheet that only one of its two homes loads.
+----------------------------------------------------------------*/
+
+.stage-path {
+  display: flex;
+  align-items: flex-start;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Equal flexible columns; each connector runs from the previous node's
+   right edge to this node's left edge, so the line never has gaps
+   whatever the width. */
+.stage {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--kp-text-secondary);
+}
+.stage + .stage::before {
+  content: "";
+  position: absolute;
+  top: 13px;
+  right: calc(50% + 14px);
+  width: calc(100% - 28px);
+  height: 2px;
+  background: var(--kp-divider);
+}
+
+/* A stage you can walk back to keeps the node-over-label stack, on a
+   button. */
+.stage-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.stage-btn:hover .stage-label { color: var(--kp-text); }
+
+.stage-node {
+  position: relative;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--kp-bg);
+  border: 2px solid var(--kp-status-waiting);
+}
+
+.stage-done { color: var(--kp-status-done); }
+.stage-done .stage-node { border-color: var(--kp-status-done); color: var(--kp-status-done); }
+
+.stage-current { color: var(--kp-accent); }
+.stage-current .stage-label { font-weight: 500; }
+.stage-current .stage-node {
+  background: var(--kp-accent);
+  border-color: var(--kp-accent);
+  animation: stage-ring 1600ms ease-in-out infinite;
+}
+@keyframes stage-ring {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(212, 85, 42, 0.5); }
+  50% { box-shadow: 0 0 0 7px rgba(212, 85, 42, 0); }
+}
+
+.stage-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--kp-status-waiting); }
+
+@media (max-width: 560px) {
+  /* The labels don't fit side by side on a phone; only the current one
+     stays visible, and the rest stay in the accessibility tree. */
+  .stage { gap: 6px; }
+  .stage-label { font-size: 12px; }
+  .stage:not(.stage-current) .stage-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .stage-current .stage-label { white-space: nowrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-current .stage-node {
+    animation: none !important;
+    box-shadow: 0 0 0 3px rgba(212, 85, 42, 0.35);
+  }
+}
