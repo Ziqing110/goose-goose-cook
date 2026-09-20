@@ -11,11 +11,18 @@
 // The point is to be able to change one of those and re-measure against
 // real kitchen audio in a second, instead of re-recording or re-billing.
 //
+// With --steps it goes one further and resolves each acted-on turn against
+// the seeded Mapo Tofu board, so "which step did it think you meant" is
+// answerable from the same recordings. That is the keyword grammar, which
+// is also what the app falls back to when the model is slow or down.
+//
 //   node scripts/grade-turns.mjs runs/*.appcfg.jsonl
+//   node scripts/grade-turns.mjs runs/*.appcfg.jsonl --steps
 //   node scripts/grade-turns.mjs runs/*.jsonl --no-carry   (what it did before)
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { isAddressed, isNameOnlyTurn } from "../src/utils/addressing.js";
+import { parseCommand } from "../src/utils/voiceCommands.js";
 
 // Kept in step with LiveCookPage by hand. They are two numbers; a shared
 // module for them would be more ceremony than the coupling is worth.
@@ -23,8 +30,26 @@ const MIN_VOICE_CONFIDENCE = 0.4;
 const NAME_CARRY_MS = 5_000;
 const AGENT_NAME = "Goose";
 
+// The seeded Mapo Tofu board, as the live cook would hold it: nothing
+// started, so every step is claimable and none is anyone's current one.
+// Matching a spoken name against this list is the whole question.
+const BOARD = [
+  { id: "tofu_cut", label: "Cut tofu into cubes" },
+  { id: "mince_garlic", label: "Mince garlic" },
+  { id: "aromatics_mince_other", label: "Mince ginger & scallion" },
+  { id: "sauce_mix", label: "Mix sauce & slurry" },
+  { id: "tofu_blanch", label: "Blanch tofu" },
+  { id: "aromatics_saute", label: "Brown pork, then fry doubanjiang & aromatics" },
+  { id: "simmer_combine", label: "Combine & simmer" },
+  { id: "thicken_garnish", label: "Thicken & garnish" },
+  { id: "plate_serve", label: "Plate & serve" },
+];
+const BY_ID = Object.fromEntries(BOARD.map((n) => [n.id, n]));
+const ALL = BOARD.map((n) => n.id);
+
 const argv = process.argv.slice(2);
 const carry = !argv.includes("--no-carry");
+const withSteps = argv.includes("--steps");
 const files = argv.filter((a) => !a.startsWith("--"));
 
 if (!files.length) {
@@ -81,6 +106,13 @@ for (const file of files) {
       } else {
         acted += 1;
         console.log(`  ${clock(at)}  ACT ${engaged ? "*" : " "} ${text}`);
+        if (withSteps) {
+          const r = parseCommand(text, { byId: BY_ID, activeStepId: null, claimable: ALL, ownQueue: ALL, agentName: AGENT_NAME });
+          const target = r.stepId ? `${BY_ID[r.stepId].label} (${r.confidence})` : r.candidates.length
+            ? `unsure between ${r.candidates.map((id) => BY_ID[id].label).join(" / ")}`
+            : "no step";
+          console.log(`              -> ${r.intent}: ${target}`);
+        }
       }
     } else {
       console.log(`  ${clock(at)}  --    ${text}`);

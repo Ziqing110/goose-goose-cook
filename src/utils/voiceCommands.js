@@ -38,8 +38,16 @@ function detectIntent(text) {
  *  similarity metric itself (Dice over content-word sets, three
  *  confidence tiers) lives in stepNameMatch.js, shared with the recipe
  *  graph's "add a task before/between" voice command. */
-function resolveStepRef(text, matched, candidates, byId) {
-  const rest = normalize(text).replace(matched, " ");
+function resolveStepRef(text, matched, candidates, byId, agentName) {
+  // Drop the agent's name before matching. It is addressed speech, not
+  // part of the step's name, and leaving it in dilutes every score by a
+  // word: "Goose, take the ginger and scallion" scored 2 hits out of 5
+  // spoken words instead of 2 out of 4, which dropped it under the floor
+  // and turned a clear match into "which one did you mean".
+  const spoken = normalize(text).replace(matched, " ");
+  const rest = agentName
+    ? spoken.split(" ").filter((w) => w !== normalize(agentName)).join(" ")
+    : spoken;
   const { stepId, candidates: alternates, confidence } = matchStepName(rest, candidates, (id) => byId[id]?.label);
   return { stepId, candidates: alternates, confidence };
 }
@@ -49,9 +57,10 @@ function resolveStepRef(text, matched, candidates, byId) {
  * @param {object} ctx   { nodes, byId, activeStepId, claimable, ownQueue }
  *   `claimable` / `ownQueue` are the pre-scoped candidate lists — the
  *   caller knows the run state, this module deliberately doesn't.
+ *   `agentName` is stripped before step matching; see resolveStepRef.
  */
 export function parseCommand(text, ctx) {
-  const { byId, activeStepId, claimable = [], ownQueue = [] } = ctx;
+  const { byId, activeStepId, claimable = [], ownQueue = [], agentName = "" } = ctx;
   const { intent, matched } = detectIntent(text);
   const base = { intent, raw: text, stepId: null, candidates: [], confidence: "none" };
   if (["status", "score", "help", "undo", "finish_run", "unknown"].includes(intent)) return base;
@@ -66,7 +75,7 @@ export function parseCommand(text, ctx) {
       ? [activeStepId, ...ownQueue]
       : ownQueue;
 
-  const resolved = resolveStepRef(text, matched, [...new Set(scope)], byId);
+  const resolved = resolveStepRef(text, matched, [...new Set(scope)], byId, agentName);
   if (resolved.stepId) return { ...base, ...resolved };
 
   // No name given: done/skip/drop fall back to whatever they're holding.

@@ -982,7 +982,7 @@ export default function LiveCookPage() {
     const ownQueue = isVersus
       ? claimSuggestions({ nodes, run, cookId })
       : [assignments?.byCook[cookId]?.stepId].filter(Boolean);
-    const result = parseCommand(text, { byId, activeStepId, claimable: ready, ownQueue });
+    const result = parseCommand(text, { byId, activeStepId, claimable: ready, ownQueue, agentName: AGENT_NAME });
 
     const heard = appendTranscript(run, { at: new Date().toISOString(), speaker: cookId, text });
 
