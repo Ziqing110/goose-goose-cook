@@ -32,6 +32,7 @@ import Modal from "../components/Modal.jsx";
 import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
 import ChefWorkingScreen from "../components/ChefWorkingScreen.jsx";
 import { devPreview } from "../dev/preview.js";
+import VersusCountdown from "../components/VersusCountdown.jsx";
 import "./SchedulePage.css";
 
 // Abandoning destroys the run, so voice makes you read the sentence back.
@@ -166,6 +167,7 @@ export default function SchedulePage() {
   const [confirmAbandon, setConfirmAbandon] = useState(false);
   const [editingKitchen, setEditingKitchen] = useState(false);
   const [kitchenError, setKitchenError] = useState(null);
+  const [countingDown, setCountingDown] = useState(false);
 
   const approved = useMemo(() => mergeRecipesForDisplay(recipes, sharedSteps).approved, [recipes, sharedSteps]);
   const nodes = useMemo(() => approved?.nodes || [], [approved]);
@@ -218,10 +220,15 @@ export default function SchedulePage() {
     dispatch({ type: "session/update", payload: { mode: nextMode } });
   };
 
-  const goLive = () => {
+  const startCook = () => {
     // schedule/opening are already memoized above — no extra solver run.
     saveRunNow(createRun({ nodes, mode, schedule, opening, now: new Date() }));
     navigate("/session/live-cook");
+  };
+  const goLive = () => {
+    if (!canStart || run || countingDown) return;
+    if (isVersus) setCountingDown(true);
+    else startCook();
   };
   const abandonRun = () => {
     saveRunNow(null);
@@ -570,6 +577,16 @@ export default function SchedulePage() {
 
   return (
     <section className="page schedule-page">
+      {countingDown && (
+        <VersusCountdown
+          cooks={cooks}
+          title={approved.title}
+          nodes={nodes}
+          opening={opening}
+          onComplete={startCook}
+          onCancel={() => setCountingDown(false)}
+        />
+      )}
       <header className="sch-title-row">
         <h1>Schedule</h1>
         <span className="sch-meta">

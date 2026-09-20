@@ -1,0 +1,228 @@
+/* ---------------------------------------------------------------
+   Versus countdown ("Kitchen Path Versus Countdown"). Full-screen over
+   the Schedule page: the split field, a dark top bar, one card per
+   half with what it opens with, the two geese leaning in over the
+   seam, and the ring in the middle counting 3 · 2 · 1 · GO. Tokens
+   come from the shell's design-v4 scope. Beat colours: 3 in cook A's
+   blue, 2 in cook B's orange, 1 in the accent, GO in the success green.
+----------------------------------------------------------------*/
+
+@keyframes vs-count { 0% { opacity: 0; transform: scale(1.5); letter-spacing: 0.06em; } 14% { opacity: 1; transform: scale(1); letter-spacing: -0.03em; } 92% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(0.96); } }
+@keyframes vs-go-stamp { 0% { opacity: 0; transform: scale(1.9) rotate(-6deg); } 22% { opacity: 1; transform: scale(0.96) rotate(-2deg); } 34% { transform: scale(1.02) rotate(-2deg); } 100% { opacity: 1; transform: scale(1) rotate(-2deg); } }
+@keyframes vs-lean-l { 0%, 100% { transform: translateX(0) rotate(0deg); } 50% { transform: translateX(10px) rotate(4deg); } }
+@keyframes vs-lean-r { 0%, 100% { transform: translateX(0) rotate(0deg); } 50% { transform: translateX(-10px) rotate(-4deg); } }
+@keyframes vs-seam-pulse { 0%, 100% { opacity: 0.85; } 50% { opacity: 1; } }
+@keyframes vs-reveal { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.vs-countdown {
+  --beat: var(--cook-a);
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--field-cook-b);
+  font-family: var(--kp-font);
+}
+.vs-countdown.is-2 { --beat: var(--cook-b); }
+.vs-countdown.is-1 { --beat: var(--accent); }
+.vs-countdown.is-go { --beat: var(--success); }
+
+/* ---------------- the field ---------------- */
+.vs-field { position: absolute; inset: 0; pointer-events: none; }
+.vs-half { position: absolute; top: 0; height: 100%; width: 52%; }
+.vs-half.is-a { left: 0; background: var(--cook-a-bg); clip-path: polygon(0 0, 100% 0, calc(100% - 118px) 100%, 0 100%); }
+.vs-half.is-b { right: 0; background: var(--field-cook-b); clip-path: polygon(118px 0, 100% 0, 100% 100%, 0 100%); }
+.vs-seam {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  margin-left: -1px;
+  background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--ink) 22%, transparent) 18%, color-mix(in srgb, var(--ink) 22%, transparent) 82%, transparent 100%);
+  transform: skewX(-8deg);
+  animation: vs-seam-pulse 2400ms ease-in-out infinite;
+}
+/* "1": the seam stops breathing and holds solid — the halves are final. */
+.vs-countdown.is-1 .vs-seam, .vs-countdown.is-go .vs-seam { animation: none; opacity: 1; }
+
+/* ---------------- top bar ---------------- */
+.vs-topbar {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 64px;
+  padding: 0 24px;
+  background: var(--kp-voice-bg);
+  color: #fff;
+}
+.vs-topbar-mode { font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: color-mix(in srgb, #fff 62%, transparent); }
+.vs-topbar-title { min-width: 0; font-size: 16px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vs-topbar-spacer { flex: 1 1 auto; }
+.vs-topbar-meta { flex: none; font-size: 14px; color: color-mix(in srgb, #fff 62%, transparent); }
+.vs-topbar-pill { flex: none; display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 999px; background: rgba(255, 255, 255, 0.12); font-size: 13px; font-weight: 500; }
+
+/* ---------------- the arena ---------------- */
+.vs-arena { position: relative; flex: 1 1 auto; min-height: 0; }
+
+/* One card per half: who, what they open with, ready. */
+.vs-card {
+  position: absolute;
+  top: 32px;
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  background: var(--surface);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-card);
+  animation: vs-reveal 280ms ease-out both;
+}
+.vs-card.is-a { left: 24px; border-color: var(--cook-a-ink); }
+.vs-card.is-b { right: 24px; animation-delay: 80ms; }
+.vs-card-head { display: flex; align-items: center; gap: 12px; }
+.vs-avatar {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+}
+.vs-avatar.is-a { background: var(--cook-a); }
+.vs-avatar.is-b { background: var(--cook-b); }
+.vs-card-id { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.vs-card-name { font-size: 22px; line-height: 26px; font-weight: 700; }
+.vs-card-sub { font-size: 14px; line-height: 18px; color: var(--ink-soft); }
+.vs-rule { height: 1px; background: var(--line); }
+.vs-opens { display: flex; flex-direction: column; gap: 8px; }
+.vs-eyebrow { font-size: 13px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-soft); }
+.vs-opens-step { font-size: 17px; line-height: 24px; font-weight: 500; text-wrap: pretty; }
+.vs-opens-meta { font-size: 14px; color: var(--ink-soft); }
+.vs-ready { align-self: flex-start; display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border-radius: 999px; font-size: 14px; font-weight: 500; }
+.vs-ready.is-a { background: var(--cook-a-bg); color: var(--cook-a-ink); }
+.vs-ready.is-b { background: var(--cook-b-bg); color: var(--cook-b-ink); }
+
+/* The geese, leaning in over the seam once a second. The left one is
+   mirrored on the sprite itself so the lean on the wrapper stays a
+   plain lean. */
+.vs-goose { position: absolute; bottom: 24px; line-height: 0; pointer-events: none; }
+.vs-goose.is-a { left: 44px; animation: vs-lean-l 1000ms ease-in-out infinite; }
+.vs-goose.is-b { right: 44px; animation: vs-lean-r 1000ms ease-in-out infinite; }
+.vs-goose-art.is-flipped { transform: scaleX(-1); }
+.vs-countdown.is-go .vs-goose { animation: none; }
+
+/* The ring: a 260px face with a 14px conic ring around it in the
+   beat's colour, draining a third per second. The number is mono 150,
+   swapping with a scale-down each beat; GO stamps in at −2°. */
+.vs-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  width: 520px;
+  max-width: 100%;
+}
+.vs-ring { position: relative; width: 260px; height: 260px; display: flex; align-items: center; justify-content: center; }
+.vs-ring-paint { position: absolute; inset: -14px; border-radius: 50%; background: conic-gradient(var(--beat) 0 var(--pct, 100%), var(--line) var(--pct, 100%) 100%); opacity: 0.9; transition: background 200ms ease-out; }
+.vs-ring-paint::after { content: ""; position: absolute; inset: 10px; border-radius: 50%; background: var(--surface); }
+.vs-ring-face { position: absolute; inset: 0; border-radius: 50%; background: var(--surface); border: 3px solid var(--ink); box-shadow: 0 8px 0 var(--ink); }
+.vs-count {
+  position: relative;
+  font-size: 150px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--beat);
+  animation: vs-count 1100ms ease-out both;
+}
+.vs-count.is-go { font-size: 92px; animation: vs-go-stamp 420ms cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+.vs-caption {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 20px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 500;
+  text-align: center;
+}
+
+/* ---------------- footer ---------------- */
+.vs-footer {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  height: 78px;
+  padding: 0 24px;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  backdrop-filter: blur(6px);
+  border-top: 1px solid var(--line);
+}
+.vs-footer-note { font-size: 15px; color: var(--ink-soft); text-align: center; }
+.vs-back {
+  height: 44px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.vs-back:hover { background: var(--accent-soft); }
+.vs-back:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* ---------------- narrow ----------------
+   The cards give way to the ring: names only, geese smaller, still
+   facing each other across the seam. */
+@media (max-width: 960px) {
+  .vs-card { width: min(260px, calc(50% - 32px)); padding: 14px; gap: 10px; }
+  .vs-opens { display: none; }
+  .vs-goose.is-a { left: 16px; }
+  .vs-goose.is-b { right: 16px; }
+  .vs-goose .kp-baby-goose { width: 120px !important; height: 120px !important; }
+  .vs-topbar-meta { display: none; }
+}
+@media (max-width: 600px) {
+  .vs-topbar { height: 56px; padding: 0 16px; gap: 10px; }
+  .vs-card { top: 16px; width: calc(50% - 22px); }
+  .vs-card.is-a { left: 16px; }
+  .vs-card.is-b { right: 16px; }
+  .vs-avatar { width: 40px; height: 40px; font-size: 16px; }
+  .vs-card-name { font-size: 18px; line-height: 22px; }
+  .vs-card-sub { display: none; }
+  .vs-ring { width: 200px; height: 200px; }
+  .vs-count { font-size: 112px; }
+  .vs-count.is-go { font-size: 72px; }
+  .vs-caption { font-size: 16px; line-height: 22px; padding: 8px 14px; }
+  .vs-goose .kp-baby-goose { width: 88px !important; height: 88px !important; }
+  .vs-footer { height: auto; padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
+  .vs-footer-note { font-size: 13px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vs-seam, .vs-goose { animation: none; }
+  .vs-count, .vs-count.is-go, .vs-card { animation: vs-reveal 200ms ease-out both; }
+}

@@ -87,14 +87,20 @@
 
   /* Player colors — by index in cooks[] (player 1 = a, player 2 = b),
      never stored. The Schedule page is where they first appear; Live
-     cook will reuse them. -ink is the readable text tone on white,
-     -bg the lane/rail tint. */
+     cook reuses them. -ink is the readable text tone on the surface,
+     -bg the lane/rail tint; both have dark variants in tokens.css. */
   --cook-a: var(--kp-cook-a);
-  --cook-a-ink: #2664a7;
-  --cook-a-bg: #eaf2fb;
+  --cook-a-ink: var(--kp-cook-a-ink);
+  --cook-a-bg: var(--kp-cook-a-bg);
   --cook-b: var(--kp-cook-b);
-  --cook-b-ink: #b76e19;
-  --cook-b-bg: #fdf3e8;
+  --cook-b-ink: var(--kp-cook-b-ink);
+  --cook-b-bg: var(--kp-cook-b-bg);
+  /* Live cook's field, the scoreboard-as-background (tokens.css). */
+  --field-cook-a: var(--kp-field-cook-a);
+  --field-cook-b: var(--kp-field-cook-b);
+  --field-warm-0: var(--kp-field-warm-0);
+  --field-warm-50: var(--kp-field-warm-50);
+  --field-warm-100: var(--kp-field-warm-100);
   /* The one legitimate red on a planning page: the critical path.
      Only ever an outline or a line of text, never a fill or a button. */
   --critical: var(--kp-critical);

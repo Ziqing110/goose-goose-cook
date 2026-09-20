@@ -425,6 +425,22 @@ button { font: inherit; cursor: pointer; }
 
   --kp-cook-a: #2f7dd1;
   --kp-cook-b: #e58a1f;
+  /* -ink is the readable text tone on the surface, -bg the lane/rail
+     and chip tint. Both flip for dark: the light inks vanish on near-
+     black and the paper tints glare. */
+  --kp-cook-a-ink: #2664a7;
+  --kp-cook-a-bg: #eaf2fb;
+  --kp-cook-b-ink: #b76e19;
+  --kp-cook-b-bg: #fdf3e8;
+  /* Live cook's field ("Live Cook v4 — game layer"): the player colours
+     at ~18 % over paper, one step deeper than the 10 % chip tints so the
+     ground still reads under white panels. Co-op has no scores, so its
+     field warms in three static steps with progress instead. */
+  --kp-field-cook-a: #d8e7f7;
+  --kp-field-cook-b: #fae8cf;
+  --kp-field-warm-0: #fbf7f1;
+  --kp-field-warm-50: #faf2e9;
+  --kp-field-warm-100: #f8eddf;
   /* the one legitimate red on a planning page — outlines and text only */
   --kp-critical: #c62828;
 
@@ -462,6 +478,15 @@ button { font: inherit; cursor: pointer; }
     --kp-board: #2a241d;
     --kp-board-edge: #3a3128;
     --kp-board-lip: #40362b;
+    --kp-cook-a-ink: #8dbcf0;
+    --kp-cook-a-bg: #1f3247;
+    --kp-cook-b-ink: #f0ad5c;
+    --kp-cook-b-bg: #3b2a15;
+    --kp-field-cook-a: #1c2a3a;
+    --kp-field-cook-b: #33271a;
+    --kp-field-warm-0: #1a1917;
+    --kp-field-warm-50: #1f1c18;
+    --kp-field-warm-100: #251f18;
   }
 }
 
@@ -489,4 +514,13 @@ button { font: inherit; cursor: pointer; }
   --kp-board: #2a241d;
   --kp-board-edge: #3a3128;
   --kp-board-lip: #40362b;
+  --kp-cook-a-ink: #8dbcf0;
+  --kp-cook-a-bg: #1f3247;
+  --kp-cook-b-ink: #f0ad5c;
+  --kp-cook-b-bg: #3b2a15;
+  --kp-field-cook-a: #1c2a3a;
+  --kp-field-cook-b: #33271a;
+  --kp-field-warm-0: #1a1917;
+  --kp-field-warm-50: #1f1c18;
+  --kp-field-warm-100: #251f18;
 }
