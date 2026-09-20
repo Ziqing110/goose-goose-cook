@@ -5,7 +5,8 @@ dist
 server/data.sqlite
 .claude
 reference_html
-
+runs/
+recordings/
 .env
 
 .venv-voice

@@ -16,4 +16,10 @@ for (const [name, path] of [
   ["Schedule loading      ", "/session/schedule?preview=loading"],
 ]) console.log(`  ${name} ${BASE}${path}`);
 console.log("");
-console.log("Go live from Schedule for the live cook. Re-run to start over.");
+console.log("Straight into a live cook, no clicking (dev server only):");
+for (const [name, path] of [
+  ["Co-op                 ", "/session/schedule?go=coop"],
+  ["Versus                ", "/session/schedule?go=versus"],
+]) console.log(`  ${name} ${BASE}${path}`);
+console.log("");
+console.log("Re-run this to start over; it abandons whatever run is in progress.");

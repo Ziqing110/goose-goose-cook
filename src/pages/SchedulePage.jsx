@@ -32,6 +32,7 @@ import Modal from "../components/Modal.jsx";
 import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
 import ChefWorkingScreen from "../components/ChefWorkingScreen.jsx";
 import { devPreview } from "../dev/preview.js";
+import { devQuickstart } from "../dev/quickstart.js";
 import VersusCountdown from "../components/VersusCountdown.jsx";
 import "./SchedulePage.css";
 
@@ -220,9 +221,29 @@ export default function SchedulePage() {
     dispatch({ type: "session/update", payload: { mode: nextMode } });
   };
 
-  const startCook = () => {
+  // ?go=coop / ?go=versus starts the cook on arrival (dev only, see
+  // dev/quickstart.js). Guarded by a ref rather than by `run`, because
+  // saveRunNow lands asynchronously and this effect would otherwise fire
+  // again before it does, starting a second run over the first.
+  const quickstartedRef = useRef(false);
+  useEffect(() => {
+    const wanted = devQuickstart();
+    if (!wanted || quickstartedRef.current) return;
+    if (run || !approved || hasLoop) return;
+    quickstartedRef.current = true;
+    dispatch({ type: "session/update", payload: { mode: wanted } });
+    startCook(wanted);
+    // startCook is redefined every render and would re-run this; the ref
+    // is what actually makes it fire once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run, approved, hasLoop]);
+
+  // `useMode` is passed explicitly by the dev shortcut, which picks the
+  // mode and starts in one go: dispatching it to session state and reading
+  // it back would be a render too late.
+  const startCook = (useMode = mode) => {
     // schedule/opening are already memoized above — no extra solver run.
-    saveRunNow(createRun({ nodes, mode, schedule, opening, now: new Date() }));
+    saveRunNow(createRun({ nodes, mode: useMode, schedule, opening, now: new Date() }));
     navigate("/session/live-cook");
   };
   const goLive = () => {
@@ -583,7 +604,7 @@ export default function SchedulePage() {
           title={approved.title}
           nodes={nodes}
           opening={opening}
-          onComplete={startCook}
+          onComplete={() => startCook()}
           onCancel={() => setCountingDown(false)}
         />
       )}
