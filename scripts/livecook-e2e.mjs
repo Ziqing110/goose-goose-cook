@@ -3,14 +3,20 @@
 // pool's claim buttons line up, Versus is the arena (cards full-width,
 // agent beneath), a pause freezes every clock and disables every
 // action, "done" with nothing held asks which one, and Call it early
-// lands on Service done. Requires `npm run dev:full` to be running.
+// lands on Service done. Requires `npm run dev:full` to be running. Setup
+// seeds a session through the API (see below); it does not click through.
 //
 //   node scripts/livecook-e2e.mjs
+//   HEADED=1 node scripts/livecook-e2e.mjs      # watch it in a real browser
 import { chromium } from "playwright";
 import assert from "node:assert/strict";
+import { seedSession } from "./seed-session.mjs";
 
 const BASE = "http://localhost:5173";
-const browser = await chromium.launch();
+// HEADED=1 opens a visible browser, slowed by SLOWMO ms per action (default
+// 200) so the run can be followed by eye:  HEADED=1 npm run test:e2e
+const headed = process.env.HEADED === "1";
+const browser = await chromium.launch({ headless: !headed, slowMo: headed ? Number(process.env.SLOWMO || 200) : 0 });
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 const failures = [];
 const errors = [];
@@ -22,7 +28,18 @@ page.on("dialog", (d) => {
   dialogs += 1;
   d.accept();
 });
-page.on("console", (m) => m.type() === "error" && !/404/.test(m.text()) && errors.push(m.text()));
+// The agent's voice (Kokoro) is a ~300 MB model fetched from a CDN. It is not
+// what this test is about, so it is blocked: the page falls back to the
+// browser's own voice, and the failed fetches are not counted as errors.
+await page.route(/cdn\.jsdelivr\.net|huggingface\.co/, (route) => route.abort());
+// The agent's brain is blocked too. This test is about the page's layout and
+// handlers, which the typed box reaches either way; a model call would make
+// every "type, wait, look" step depend on the network and on model timing.
+// Blocked, the page falls back to its keyword grammar, as it always did.
+await page.route("**/api/agent/turn", (route) => route.abort());
+const isVoiceModelNoise = (m) =>
+  /jsdelivr|huggingface|\/api\/agent/.test(m.location().url || "") || /onnxruntime/.test(m.text());
+page.on("console", (m) => m.type() === "error" && !/404/.test(m.text()) && !isVoiceModelNoise(m) && errors.push(m.text()));
 
 const click = async (text, opts = {}) => {
   const el = page.getByRole("button", { name: text, ...opts }).first();
@@ -49,67 +66,28 @@ const sameY = (a, b, msg) => assert.ok(Math.abs(a.y - b.y) <= 1, `${msg}: y ${a.
 const sameBottom = (a, b, msg) => assert.ok(Math.abs(a.y + a.height - (b.y + b.height)) <= 1, `${msg}: bottom ${a.y + a.height} vs ${b.y + b.height}`);
 
 // ---------------------------------------------------------------------
-// Setup: Home → kitchen → conversation → inventory → cooks → schedule.
-// Same clicks as screenshot-flow.mjs, minus the screenshots.
+// Setup: seed a session through the API instead of clicking through it.
+//
+// The conversation now reads answers with a model and Voice binding needs
+// real speech, so driving both from a headless browser is slow, flaky and
+// (for binding) impossible without a microphone. What this test is about
+// starts at Schedule, so the session is built to look like one that got
+// there: conversation complete, recipes approved, two cooks bound.
+//
+// The recipes are the app's own FALLBACK path, on purpose. With no dish
+// named in the conversation the app instantiates its seeded templates
+// (Mapo Tofu + Chicken Noodle Soup, with the shared garlic) with no model
+// call, so the run is the same every time and needs no API key. This uses
+// the app's own helpers, so it cannot drift from what the page would build.
+//
+// Note: starting a session closes out any other active one. That is the
+// API's invariant, not this script's choice, so a run you had going is
+// abandoned. The session created here is deleted at the end.
 // ---------------------------------------------------------------------
-await page.goto(BASE, { waitUntil: "networkidle" });
-if (await page.getByRole("button", { name: /Add your first kitchen|\+ Add kitchen/ }).first().isVisible().catch(() => false)) {
-  await click(/Add your first kitchen|\+ Add kitchen/);
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Kitchen name").fill("E2E Kitchen");
-  await dialog.getByRole("button", { name: /Add kitchen|Save changes/ }).click();
-  await page.waitForTimeout(600);
-}
-if (await page.getByRole("button", { name: /Abandon run|Discard and start new/ }).first().isVisible().catch(() => false)) {
-  await click(/Abandon run|Discard and start new/);
-  await page.waitForTimeout(500);
-}
-await click(/Start the run/);
-await page.waitForTimeout(600);
-const pick = page.getByRole("button", { name: /Kitchen$/ }).first();
-if (await pick.isVisible().catch(() => false)) {
-  await pick.click();
-  await page.waitForTimeout(800);
-}
-for (let i = 0; i < 8; i++) {
-  if (await page.getByRole("button", { name: /Check the inventory/ }).first().isVisible().catch(() => false)) break;
-  const input = page.locator(".answer-input");
-  await input.click();
-  await page.waitForTimeout(100);
-  const twoCooks = page.locator(".template-chip", { hasText: /^2 cooks$/ });
-  const chip = (await twoCooks.count()) ? twoCooks.first() : page.locator(".template-chip").first();
-  if (await chip.isVisible().catch(() => false)) await chip.click();
-  else await input.fill("mapo tofu and chicken noodle soup");
-  await page.waitForTimeout(100);
-  await page.getByRole("button", { name: "Send" }).click();
-  await page.waitForTimeout(350);
-}
-await click(/Check the inventory/);
-await page.waitForTimeout(2000);
-await click(/Approve and schedule/);
-await page.waitForTimeout(800);
-await click(/Continue to schedule/);
-await page.waitForTimeout(600);
-const names = ["Mia", "Leo"];
-const inputs = page.locator(".cook-name-input");
-const count = await inputs.count();
-for (let i = 0; i < count; i++) await inputs.nth(i).fill(names[i] || `Cook ${i + 1}`);
-for (let i = 0; i < count; i++) {
-  const pickChef = page.getByRole("button", { name: /Pick your chef/ }).first();
-  if (!(await pickChef.isVisible().catch(() => false))) break;
-  await pickChef.click();
-  await page.waitForTimeout(300);
-  await page.locator(".chef-tile:not([disabled])").first().click();
-  await click(/That.s me/);
-}
-for (let i = 0; i < count; i++) {
-  const btn = page.getByRole("button", { name: /Start reading|Record again/ }).nth(i);
-  if (await btn.isVisible().catch(() => false)) {
-    await btn.click();
-    await page.waitForTimeout(3000);
-  }
-}
-await click(/Continue to scheduling/);
+const { remove: removeSession } = await seedSession(BASE);
+
+// Loaded fresh, so the app hydrates the seeded session as its active one.
+await page.goto(`${BASE}/session/schedule`, { waitUntil: "networkidle" });
 await page.waitForTimeout(1500);
 
 const cards = page.locator(".lc-card");
@@ -343,6 +321,8 @@ await check("co-op: Call it early is a Modal, and confirming lands on Service do
 });
 
 await browser.close();
+// The seeded session was this script's; leave the database without it.
+await removeSession().catch((err) => console.log("cleanup failed:", err.message));
 
 if (errors.length) console.log("\nbrowser errors:\n  " + errors.join("\n  "));
 console.log(`\n${failures.length === 0 ? "all checks passed" : `${failures.length} check(s) failed`}`);

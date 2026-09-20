@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------------
-   Chef Goose's marks — head, feather, footprints. Colours are the
+   Chef Goose's marks — profile picture, feather, footprints. Colours are the
    character's own (ink line, #e8862c bill, warm browns for the prints)
    rather than palette tokens, so the bird stays the bird whatever the
    surface it lands on.
@@ -8,29 +8,25 @@
    bottom reaches all of it, here and in the pages that use these.
 ----------------------------------------------------------------*/
 
-.goose-avatar {
+/* The profile picture: a round, ringed frame with a slight wiggle. The
+   wiggle is on the frame and the flip on the picture, so the two don't
+   fight. The picture is already cropped to the head, and the art faces
+   left, so it is flipped to look toward the words beside it. */
+.goose-profile {
   flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
+  overflow: hidden;
   border-radius: 50%;
   background: #ffffff;
   border: 1.5px solid var(--goose-ink, #1a1a1a);
   animation: gs-wiggle 2600ms ease-in-out infinite;
 }
-.goose-eye {
-  position: relative;
-  flex: none;
-  border-radius: 50%;
-  background: var(--goose-ink, #1a1a1a);
-}
-/* A CSS triangle, so the bill keeps its hard edges at any size. */
-.goose-beak {
-  flex: none;
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-color: transparent transparent transparent var(--goose-bill, #e8862c);
+.goose-profile-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
 }
 
 @keyframes gs-wiggle {

@@ -15,6 +15,12 @@ export default defineConfig({
       // nothing until they land, so that delay shows up as a white screen
       // for ten seconds, which looks exactly like a crash.
       "/api": "http://127.0.0.1:3001",
+      // Local speaker-identification sidecar (`npm run speaker`). Same
+      // 127.0.0.1 reasoning as above.
+      "/speaker": {
+        target: "http://127.0.0.1:3103",
+        rewrite: (path) => path.replace(/^\/speaker/, ""),
+      },
     },
   },
 });

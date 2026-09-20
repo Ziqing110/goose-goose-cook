@@ -1,30 +1,25 @@
-// Chef Goose's marks — the drawn bits of the conversation skin, shared
-// by the transcript and the understanding rail so the bird is one
-// drawing rather than three.
+// Chef Goose's marks — the profile picture, feather and footprints of the
+// conversation skin, shared by the transcript and the understanding rail
+// so the bird is one drawing rather than three.
 //
 // Every animated element carries `.anim`, which GooseMarks.css switches
 // off under prefers-reduced-motion.
 import "./GooseMarks.css";
+import gooseProfile from "../assets/goose-chef-profile.png";
 
-// The head, as the character art draws it: white, ink-outlined, a plain
-// black eye dot on the head (never on the bill) and an orange wedge
-// bill. Scales from the 30px transcript avatar down to the 24px one in
-// the rail header.
-export function GooseAvatar({ size = 30, delay = 0, className = "", ...rest }) {
-  const scale = size / 30;
-  const eye = 8 * scale;
-  const beak = 8 * scale;
+// The agent's profile picture: the chef goose's head, cropped from the
+// character art. The art faces left, so the image is flipped horizontally
+// (in the CSS) to look toward the words beside it. Round frame, with a
+// slight wiggle. Shown at 40px in the transcript, the same as the cook's
+// avatar on the other side of the chat, and at 24px in the rail header.
+export function GooseProfile({ size = 30, delay = 0, className = "", ...rest }) {
   return (
     <span
-      className={`goose-avatar anim ${className}`}
+      className={`goose-profile anim ${className}`}
       style={{ width: size, height: size, animationDelay: `${delay}ms` }}
       {...rest}
     >
-      <span className="goose-eye" style={{ width: eye, height: eye, left: -2 * scale }} />
-      <span
-        className="goose-beak"
-        style={{ borderTopWidth: 3.5 * scale, borderBottomWidth: 3.5 * scale, borderLeftWidth: beak }}
-      />
+      <img className="goose-profile-img" src={gooseProfile} alt="" />
     </span>
   );
 }

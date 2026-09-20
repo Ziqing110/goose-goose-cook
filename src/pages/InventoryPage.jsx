@@ -24,6 +24,7 @@ import ImpactList, { ImpactMark } from "../components/ImpactList.jsx";
 import Icon from "../components/Icon.jsx";
 import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
 import ChefWorkingScreen from "../components/ChefWorkingScreen.jsx";
+import { devPreview } from "../dev/preview.js";
 import NodeEditorPanel from "../components/NodeEditorPanel.jsx";
 import { useStepEditing } from "../state/useStepEditing.js";
 import { buildInventory, formatClock, formatStepDuration, PHASE_LABELS } from "../utils/inventory.js";
@@ -830,7 +831,10 @@ export default function InventoryPage() {
     );
   }
 
-  if (beat) {
+  // ?preview=loading / ?preview=done pins the screen (dev only, see dev/preview.js).
+  const preview = devPreview();
+  const shownBeat = preview === "loading" ? "writing" : preview === "done" ? "done" : beat;
+  if (shownBeat) {
     const asked = session.conversation?.answers?.dishIdea;
     const dishes = (Array.isArray(asked) ? asked : [asked])
       .filter(Boolean)
@@ -843,7 +847,7 @@ export default function InventoryPage() {
     ].filter(Boolean);
     return (
       <ChefWorkingScreen
-        done={beat === "done"}
+        done={shownBeat === "done"}
         eyebrow="A menu worth waiting for"
         doneEyebrow="Recipes are ready"
         title={<>Good food takes<br />a little thought.</>}

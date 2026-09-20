@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { useStreamingTranscript } from "../hooks/useStreamingTranscript.js";
+import { agentWasSpeakingAt, preload, speak, stop as stopSpeaking } from "../voice/agentVoice.js";
 import {
   matchConfirmation,
   matchNavCommand,
@@ -126,12 +127,20 @@ export default function VoiceBar() {
   const onError = useCallback((message) => setError(message), []);
 
   const say = useCallback((line) => {
+    speak(line);
     clearTimeout(feedbackTimer.current);
     setFeedback(line);
     feedbackTimer.current = setTimeout(() => setFeedback(null), FEEDBACK_MS);
   }, []);
 
   useEffect(() => () => clearTimeout(feedbackTimer.current), []);
+
+  // Warm the voice up front so the first line isn't late, and never leave
+  // it talking after the bar is gone.
+  useEffect(() => {
+    preload();
+    return stopSpeaking;
+  }, []);
 
   const run = useCallback(
     (action, path) => {
@@ -162,6 +171,7 @@ export default function VoiceBar() {
   const askToConfirm = useCallback((question, perform, phrase) => {
     pendingRef.current = { perform, phrase };
     setPending(question);
+    speak(question);
     clearTimeout(pendingTimer.current);
     // Expires on its own. A question left hanging would make a later
     // "yes" get read as an answer to something asked a minute ago.
@@ -192,7 +202,21 @@ export default function VoiceBar() {
     (turn) => {
       const text = turn.transcript?.trim();
       if (!text) return;
+      // The mic hears the agent's own voice. Judged by when the words
+      // were spoken, since the transcript lands after the agent is done.
+      if (agentWasSpeakingAt(turn.startedAt ?? Date.now())) {
+        console.info("[voice] the agent's own voice, ignored:", text);
+        return;
+      }
       const route = routeRef.current;
+
+      // A page with its own conversation gets every turn untouched, and
+      // navigation stays out of it.
+      const takeover = getVoiceDictation(route);
+      if (takeover?.takeover) {
+        takeover.onFinal(text, turn);
+        return;
+      }
       if (NAV_OFF_ROUTES.includes(route)) return;
 
       // Two signals the matcher can't get from the words alone.
@@ -362,6 +386,7 @@ export default function VoiceBar() {
   // want the opposite. Applied on connect and whenever a page starts or
   // stops dictating; restoring means re-applying the mode preset, which
   // is what the docs prescribe.
+  const keytermsSentRef = useRef(false);
   const [registryVersion, setRegistryVersion] = useState(0);
   useEffect(() => subscribeVoiceRegistry(() => setRegistryVersion((v) => v + 1)), []);
   useEffect(() => {
@@ -371,8 +396,19 @@ export default function VoiceBar() {
     // undoing a mid-stream override, but it would reset min_turn_silence
     // to the preset's 128ms and bring back the one-word truncation this
     // page sets 400ms to avoid.
-    const wanted = getVoiceDictation(pathname)?.turnDetection;
-    updateConfig(wanted || COMMAND_TURN);
+    const listening = getVoiceDictation(pathname);
+    const patch = { ...(listening?.turnDetection || COMMAND_TURN) };
+    // Names and step labels the recogniser would otherwise have to guess.
+    // Cleared once, on the way out, so they don't follow you to the next
+    // page.
+    if (listening?.keyterms?.length) {
+      patch.keyterms_prompt = listening.keyterms;
+      keytermsSentRef.current = true;
+    } else if (keytermsSentRef.current) {
+      patch.keyterms_prompt = [];
+      keytermsSentRef.current = false;
+    }
+    updateConfig(patch);
   }, [status, registryVersion, pathname, updateConfig]);
 
   // Forward partials to a page taking dictation, so its input fills as
