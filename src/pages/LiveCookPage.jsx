@@ -47,6 +47,7 @@ import { AGENT_NAME, speak } from "../voice/agentVoice.js";
 import { audioTap } from "../voice/audioTap.js";
 import { identifySpeaker } from "../api/speaker.js";
 import { decideSpeaker } from "../utils/speakerMatch.js";
+import { isNameOnlyTurn } from "../utils/addressing.js";
 import { buildSummary } from "../utils/summaryCard.js";
 import { chefAvatar } from "../utils/cooks.js";
 import KpIcon from "../components/KpIcon.jsx";
@@ -92,6 +93,12 @@ const LATE_AFTER_SEC = 60;
 // short commands sat above 0.9.
 const ENGAGED_MS = 10_000;
 const MIN_VOICE_CONFIDENCE = 0.4;
+
+// How long a turn that was only the agent's name keeps the door open for
+// the rest of the sentence. Shorter than ENGAGED_MS: this is someone
+// mid-breath, not someone thinking about an answer. Measured on the
+// kitchen recordings the gap between "Goose." and the command ran 2-3s.
+const NAME_CARRY_MS = 5_000;
 
 /**
  * Hook point for the voice API: fired once per moment as it becomes
@@ -931,6 +938,16 @@ export default function LiveCookPage() {
       return;
     }
     if (pendingConfirm) return submitKeywordUtterance(text);
+    // "Goose." on its own is somebody getting the agent's attention before
+    // saying the thing. The recogniser ends the turn in that pause, so the
+    // instruction lands in the NEXT turn with no name on it — and would be
+    // thrown away as kitchen chatter. Hold the door open instead of acting
+    // on a turn that asked for nothing.
+    if (isNameOnlyTurn(text, AGENT_NAME)) {
+      engagedUntilRef.current = Date.now() + NAME_CARRY_MS;
+      console.info("[voice] name only, waiting for the rest:", text);
+      return;
+    }
     // This turn's audio, cut out by its word timestamps with a little
     // room either side, for the speaker check.
     const words = turn?.words || [];

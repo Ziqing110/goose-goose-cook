@@ -8,6 +8,11 @@
 // against the snapshot, and the client executes the survivors through the
 // same handlers a tap uses.
 
+// The addressing rule is shared with the client, which uses it to decide
+// what is worth sending at all. One copy, so the two can't disagree about
+// whether a turn was meant for the agent.
+export { isAddressed } from "../../src/utils/addressing.js";
+
 /** Tool names are the intent names parseCommand already produces. */
 export const INTENTS = [
   "claim", "start", "done", "skip", "drop", "undo",
@@ -18,46 +23,6 @@ const NEEDS_STEP = new Set(["claim", "start", "done", "skip", "drop"]);
 const MAX_CALLS = 3;
 const MAX_REPLY_CHARS = 200;
 
-const norm = (s) => String(s ?? "").toLowerCase().replace(/[^\p{L}\p{N}\s']/gu, " ").replace(/\s+/g, " ").trim();
-
-function editDistance(a, b) {
-  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    let prev = row[0];
-    row[0] = i;
-    for (let j = 1; j <= b.length; j++) {
-      const tmp = row[j];
-      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
-      prev = tmp;
-    }
-  }
-  return row[b.length];
-}
-
-/**
- * Was the agent spoken to?
- *
- * Deterministic on purpose. It runs before the model, so speech that
- * isn't for the agent never leaves the machine and never costs a call,
- * and the rule is one we can calibrate rather than a model's mood.
- *
- * `engaged` is true for a short window after the agent last spoke, so
- * "yes" or "the garlic one" answering its question doesn't need the name
- * repeated.
- *
- * Speech recognition won't always spell the name right, so a word within
- * one edit of it counts, but only for names of four letters or more:
- * one edit on a three-letter name matches half the dictionary.
- */
-export function isAddressed(text, name, engaged = false) {
-  if (engaged) return true;
-  const target = norm(name);
-  if (!target) return false;
-  const slack = target.length >= 4 ? 1 : 0;
-  return norm(text)
-    .split(" ")
-    .some((word) => word === target || (slack && Math.abs(word.length - target.length) <= slack && editDistance(word, target) <= slack));
-}
 
 /**
  * The tool list for this moment in the run. Step ids are an enum built
@@ -124,6 +89,8 @@ export function buildUserMessage(snapshot, text) {
   const open = (snapshot.steps || []).map((s) => ({
     id: s.id,
     label: s.label,
+    // What the recipe says to do for this step, when it says anything.
+    ...(s.how ? { how: s.how } : null),
     status: s.status,
     ready: s.ready,
     holder: s.holder ?? null,
@@ -138,6 +105,53 @@ export function buildUserMessage(snapshot, text) {
   }
   lines.push(`${snapshot.speakerName} said: "${text}"`);
   return lines.join("\n");
+}
+
+
+// Small models narrate. Asked a cooking question they sometimes emit their
+// own scratchpad as the answer — "Thinking Process: 1. Identify the user's
+// intent...", or a stray "toolcode print(default_api.status())" — and this
+// reply is SPOKEN ALOUD, so it cannot be passed through on the hope that it
+// is prose. Seen on gemini-2.5-flash-lite in calibration, 2 runs in 23.
+const SCAFFOLDING = [
+  /thinking process/i,
+  /\btool_?code\b/i,
+  /\bdefault_?api\b/i,
+  /^(?:the user|this is a cooking question|i should (?:answer|call|use))/i,
+  /^okay,? (?:so )?(?:the user|let'?s think)/i,
+];
+
+/**
+ * What the agent actually says. Two jobs beyond tidying markdown:
+ *
+ * Drop a reply that is the model thinking out loud rather than talking to
+ * the cook. Silence is a fine outcome — the action still ran, and the page
+ * speaks its own line for that.
+ *
+ * Cut to whole sentences. The character cap used to slice mid-word, and a
+ * chopped-off sentence read by a text-to-speech voice is worse than a
+ * shorter one ("recipe doesn't say how much dou").
+ */
+export function cleanReply(content) {
+  const text = String(content ?? "")
+    .replace(/[*_`#>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return "";
+  if (SCAFFOLDING.some((re) => re.test(text))) return "";
+  if (text.length <= MAX_REPLY_CHARS) return text;
+
+  // Keep whole sentences up to the cap; if the first one alone is longer
+  // than that, fall back to cutting at a word boundary.
+  const sentences = text.match(/[^.!?]+[.!?]*/g) || [text];
+  let out = "";
+  for (const sentence of sentences) {
+    if ((out + sentence).trim().length > MAX_REPLY_CHARS) break;
+    out += sentence;
+  }
+  out = out.trim();
+  if (out) return out;
+  return `${text.slice(0, MAX_REPLY_CHARS).replace(/\s+\S*$/, "")}...`;
 }
 
 /**
@@ -180,11 +194,5 @@ export function parseChoice(choice, snapshot) {
     calls.push({ name, stepId });
   }
 
-  const reply = String(message.content ?? "")
-    .replace(/[*_`#>]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, MAX_REPLY_CHARS);
-
-  return { calls, reply, rejected };
+  return { calls, reply: cleanReply(message.content), rejected };
 }

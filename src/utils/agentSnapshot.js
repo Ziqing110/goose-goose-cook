@@ -8,6 +8,10 @@ import { readyStepIds } from "./liveCook.js";
 
 const MAX_STEPS = 40;
 const MAX_HISTORY = 6;
+// Enough for the one- or two-clause instruction these carry ("Fine-mince
+// ginger; separate scallion whites from greens."), short enough that
+// forty of them don't crowd out the rest of the turn.
+const MAX_DESC = 120;
 
 /**
  * @param {object} args
@@ -27,6 +31,11 @@ export function buildAgentSnapshot({ run, nodes, cooks, speakerId, paused = fals
     .map(({ node, record }) => ({
       id: node.id,
       label: node.label,
+      // What the recipe actually says to do. The page has shown this on
+      // the step card all along; the model could not see it, so a cook
+      // asking "how fine should the ginger be" got a refusal while the
+      // answer sat on screen.
+      ...(node.description ? { how: String(node.description).slice(0, MAX_DESC) } : null),
       status: record.status,
       // An active step is by definition past readiness; the model only
       // needs the flag for pending ones.

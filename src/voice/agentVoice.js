@@ -157,3 +157,27 @@ export async function speak(text) {
     }
   }
 }
+
+// Dev-only handle for the barge-in and echo takes (see
+// docs/VOICE_RECORDING_SCRIPTS.md, scene 10). Testing "Goose talks over
+// you" needs the agent talking on cue and for long enough to be talked
+// over, which its own replies — capped at fifteen words — are not. This
+// gives the recording session a way to start and stop it deliberately.
+//
+// Stripped from production builds: import.meta.env.DEV is a compile-time
+// constant, so the whole block disappears from the bundle.
+if (import.meta.env.DEV && typeof window !== "undefined") {
+  window.goose = {
+    speak,
+    stop,
+    isSpeaking,
+    /** A line long enough to still be talking when you cut in. */
+    ramble: () =>
+      speak(
+        "Right, while that simmers, here is where we stand. The tofu is cubed and blanched, " +
+          "the garlic and the ginger are minced, the sauce is mixed and waiting, and the " +
+          "doubanjiang has had its minute in the wok. What happens next is the part people " +
+          "rush: let it sit, let the oil go red, and do not stir it like a risotto.",
+      ),
+  };
+}

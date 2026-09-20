@@ -4,7 +4,12 @@
 import { buildSystemPrompt, buildTools, buildUserMessage, isAddressed, parseChoice } from "./turn.js";
 
 const GATEWAY = "https://llm-gateway.assemblyai.com/v1/chat/completions";
-const MAX_TOKENS = 300;
+// Generous because this budget is shared with the model's own reasoning
+// tokens, which on gemini-2.5-flash-lite run ~90 for a one-sentence
+// answer. At 300 a cooking answer ran out mid-word and was spoken aloud
+// that way ("recipe doesn't say how much dou"). What actually bounds the
+// reply is MAX_REPLY_CHARS, after the model has finished a sentence.
+const MAX_TOKENS = 700;
 
 export class TurnError extends Error {
   constructor(message, status) {

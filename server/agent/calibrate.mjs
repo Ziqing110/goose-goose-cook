@@ -31,9 +31,9 @@ const KITCHEN = {
   paused: false,
   cooks: [{ name: "Lindy" }, { name: "Zeina" }],
   steps: [
-    { id: "s1", label: "Chop the garlic", status: "pending", ready: true, holder: null },
-    { id: "s2", label: "Boil the rice", status: "active", ready: true, holder: "Zeina" },
-    { id: "s3", label: "Cut the yellow onion", status: "active", ready: true, holder: "Lindy" },
+    { id: "s1", label: "Chop the garlic", how: "Smash, peel, then fine-chop the cloves.", status: "pending", ready: true, holder: null },
+    { id: "s2", label: "Boil the rice", how: "Rinse until the water runs clear, then simmer covered 12 minutes.", status: "active", ready: true, holder: "Zeina" },
+    { id: "s3", label: "Cut the yellow onion", how: "Halve root to tip, then slice into thin half-moons.", status: "active", ready: true, holder: "Lindy" },
     { id: "s4", label: "Cut the red onion", status: "pending", ready: true, holder: null },
     { id: "s5", label: "Plate up", status: "pending", ready: false, holder: null },
   ],
@@ -65,6 +65,19 @@ const CASES = [
   // Garbled name still lands; a wrong step must not.
   { id: "misheard-name", say: "Goos done with the onion", calls: [call("done", [null, "s3"])] },
   { id: "invented-step", say: "Goose start the soup", calls: [], reply: true },
+
+  // Cooking questions. The failure that matters here is not a weak
+  // answer, it is calling a tool: status or score would read out the run,
+  // and help would read out the command list, at someone who asked how to
+  // cut an onion. All of these must answer and call nothing.
+  { id: "howto-from-recipe", say: "Goose how do I cut the yellow onion", calls: [], reply: true },
+  { id: "howto-technique", say: "Goose how fine should the garlic be", calls: [], reply: true },
+  { id: "howto-doneness", say: "Goose how do I know when the rice is done", calls: [], reply: true },
+  { id: "howto-quantity", say: "Goose how much salt goes in the rice", calls: [], reply: true },
+  { id: "howto-equipment", say: "Goose should I use a wok or a pot for this", calls: [], reply: true },
+  { id: "howto-rescue-salty", say: "Goose the sauce is way too salty, what do I do", calls: [], reply: true },
+  { id: "howto-rescue-sticking", say: "Goose the rice is sticking to the bottom", calls: [], reply: true },
+  { id: "howto-substitute", say: "Goose I have no red onion, can I use a shallot", calls: [], reply: true },
 
   // Not for the agent, or not a command.
   { id: "no-name", say: "I'm done with this wine", addressed: false, calls: [] },
