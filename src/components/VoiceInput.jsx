@@ -119,13 +119,16 @@ export default function VoiceInput({ question, onAnswer, busy = false }) {
       {question.options.length > 0 && (
         <div className="answer-templates">
           <span className="answer-templates-label">Quick answers</span>
-          {question.options.map((o) => {
+          {question.options.map((o, i) => {
             const active = muted && text === o.label;
             return (
               <button
                 key={o.value}
                 type="button"
-                className={`btn template-chip${active ? " is-active" : ""}`}
+                // The pecked edge is a per-chip mask (VoiceInput.css):
+                // the same bite in the same place on every chip reads as
+                // a manufacturing defect rather than a bird.
+                className={`btn template-chip is-pecked-${(i % 3) + 1}${active ? " is-active" : ""}`}
                 aria-pressed={active}
                 onClick={() => applyTemplate(o.label)}
               >
@@ -160,7 +163,16 @@ export default function VoiceInput({ question, onAnswer, busy = false }) {
             sentence is the send. The button stays for typing. */}
         {/* Busy beats both states: the answer has gone, and pressing
             Send again would submit it twice. */}
-        <button type="submit" className="btn btn-primary" disabled={busy || !muted || !text.trim()}>
+        {/* Once there is something to send, the button becomes the
+            goose's bill. The clip path is cut for the word "Send" at
+            89px (VoiceInput.css), so the shape is only worn while that
+            is the label — the busy and listening states keep the plain
+            rectangle. */}
+        <button
+          type="submit"
+          className={`btn btn-primary${!busy && muted && text.trim() ? " is-bill" : ""}${busy || !muted ? " is-wide" : ""}`}
+          disabled={busy || !muted || !text.trim()}
+        >
           {busy ? "Reading…" : muted ? "Send" : "Listening…"}
         </button>
       </form>

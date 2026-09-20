@@ -36,20 +36,53 @@
 .ds-v4 .btn.template-chip {
   min-height: 34px;
   padding: 0 14px;
-  border: 1px solid var(--line);
+  /* Warmer and lighter than --line: the chip sits on white and the
+     hairline divider grey read as a disabled control. */
+  border: 1px solid #efece6;
   border-radius: 999px;
   background: var(--bg);
   color: var(--ink);
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 500;
   transition: transform 120ms ease-out, background 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out;
 }
-.ds-v4 .btn.template-chip:hover { background: var(--surface-sunken); border-color: var(--line-strong); }
+/* One warm yellow for the whole chip: hovering it, pressing it and
+   having picked it are the same colour, so the row never flashes a
+   second hue on the way to being chosen. */
+.ds-v4 .btn.template-chip:hover,
+.ds-v4 .btn.template-chip:active,
 .ds-v4 .btn.template-chip.is-active,
 .ds-v4 .btn.template-chip.is-active:hover {
-  background: var(--accent-soft);
-  border-color: transparent;
-  color: var(--accent);
+  background: #fdf4d8;
+  border-color: #e8d9a4;
+  color: var(--ink);
+}
+
+/* ---------------- pecked edges ----------------
+   Bites out of the chip's own edge, cut with two masks composited to
+   their intersection. The arrangement differs per chip (is-pecked-1..3,
+   assigned by position in VoiceInput.jsx) so the row reads as pecked
+   rather than punched by a machine. Each stop runs transparent <r> →
+   opaque <r + 0.5px>, and the centres stay clear of the label's box. */
+.ds-v4 .btn.template-chip.is-pecked-1 {
+  -webkit-mask-image: radial-gradient(circle 5px at 28% -2px, transparent 5px, #000 5.5px),
+    radial-gradient(circle 3px at 63% -1px, transparent 3px, #000 3.5px);
+  mask-image: radial-gradient(circle 5px at 28% -2px, transparent 5px, #000 5.5px),
+    radial-gradient(circle 3px at 63% -1px, transparent 3px, #000 3.5px);
+}
+.ds-v4 .btn.template-chip.is-pecked-2 {
+  -webkit-mask-image: radial-gradient(circle 7px at 101% 78%, transparent 7px, #000 7.5px);
+  mask-image: radial-gradient(circle 7px at 101% 78%, transparent 7px, #000 7.5px);
+}
+.ds-v4 .btn.template-chip.is-pecked-3 {
+  -webkit-mask-image: radial-gradient(circle 4px at 19% 101%, transparent 4px, #000 4.5px),
+    radial-gradient(circle 6px at 72% -3px, transparent 6px, #000 6.5px);
+  mask-image: radial-gradient(circle 4px at 19% 101%, transparent 4px, #000 4.5px),
+    radial-gradient(circle 6px at 72% -3px, transparent 6px, #000 6.5px);
+}
+.ds-v4 .btn.template-chip[class*="is-pecked-"] {
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
 }
 .ds-v4 .answer-input-row { gap: 8px; }
 /* Typing: the heavier of the two neutral borders — the hairline divider
@@ -78,3 +111,39 @@
   background: var(--ds-chip);
   color: var(--ink-faint);
 }
+
+/* One width in every state. The button swaps between a rectangle and a
+   bill as you type, and a shape that also changes width makes the input
+   beside it jump on the first keystroke. 89px is the bill's own width
+   (the clip path is drawn in pixels), so the rectangle matches it rather
+   than the other way round. */
+.ds-v4 .answer-input-row .btn-primary {
+  width: 89px;
+  min-width: 89px;
+  padding: 0;
+  text-align: center;
+}
+/* The mic's own labels are longer than "Send" and are not the bill, so
+   they size themselves. */
+.ds-v4 .answer-input-row .btn-primary.is-wide { width: auto; padding: 0 20px; }
+
+/* ---------------- Send, as a bill ----------------
+   Straight taper with only the point rounded (3px). `clip-path:
+   polygon()` cannot round a vertex and `border-radius` rounds the whole
+   shape into a blob, so this is `path()` — which fixes the width at
+   89px, since the path is drawn in pixels. Changing the label means
+   recomputing the x coordinates. */
+.ds-v4 .btn.btn-primary.is-bill {
+  height: 44px;
+  min-height: 44px;
+  padding: 0 34px 0 18px;
+  border-radius: 0;
+  text-align: left;
+  font-weight: 600;
+  background: var(--goose-honk, #b8461f);
+  clip-path: path("M8 0H60.5L86.1 19.8a3 3 0 0 1 0 4.4L60.5 44H8a8 8 0 0 1-8-8V8a8 8 0 0 1 8-8Z");
+}
+.ds-v4 .btn.btn-primary.is-bill:hover { background: #9c3a19; }
+/* The shape is the focus ring's outline too, and a clipped outline is
+   invisible — so the ring goes outside, on the row. */
+.app-shell.ds-v4 .btn.btn-primary.is-bill:focus-visible { outline-offset: 3px; }
