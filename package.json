@@ -8,6 +8,7 @@
     "server": "node --env-file-if-exists=.env server/index.js",
     "agent:calibrate": "node --env-file-if-exists=.env server/agent/calibrate.mjs",
     "dev:full": "concurrently -n web,api -c blue,green \"npm:dev\" \"npm:server\"",
+    "dev:voice": "concurrently -n web,api,speaker -c blue,green,magenta \"npm:dev\" \"npm:server\" \"npm:speaker\"",
     "build": "vite build",
     "preview": "vite preview",
     "speaker": ".venv-voice\\Scripts\\python.exe speaker-sidecar/server.py",

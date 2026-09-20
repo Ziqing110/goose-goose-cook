@@ -133,6 +133,13 @@ const notify = () => listeners.forEach((fn) => fn());
  *   route           the pathname this dictation belongs to. Required.
  *   onPartial       (text) => void, called as the words arrive
  *   onFinal         (text) => void, called once the turn ends
+ *   takeover        optional boolean. Every turn goes to onFinal(text, turn)
+ *                   as-is: no navigation, no page commands. For a page with
+ *                   its own conversation (the live cook), where "back"
+ *                   and "next" mean something else and leaving mid-cook
+ *                   by voice is exactly what must not happen.
+ *   keyterms        optional string[] sent to the recogniser while this
+ *                   page listens, and cleared when it stops.
  *   turnDetection   optional {min_turn_silence, max_turn_silence, ...}
  *                   applied to the live connection while this page is
  *                   listening, and restored when it stops.

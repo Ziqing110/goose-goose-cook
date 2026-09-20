@@ -9,6 +9,7 @@
 // for more than tidiness — AssemblyAI bills for the time the socket is
 // open, not the audio sent, so an idle connection is a real charge.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { audioTap } from "../voice/audioTap.js";
 
 const WS_BASE = "wss://streaming.assemblyai.com/v3/ws";
 const CHUNK_MS = 50;
@@ -75,6 +76,10 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
   // talking" from "the room is loud".
   const turnStartedRef = useRef(0);
   const wordsThisTurnRef = useRef(false);
+  // Wall-clock time of stream time zero (the first audio chunk), so a
+  // word's `start` (ms into the stream) converts to when it was spoken.
+  const streamStartRef = useRef(0);
+  const firstWordAtRef = useRef(0);
   onTurnRef.current = onTurn;
   onErrorRef.current = onError;
   onIdleRef.current = onIdle;
@@ -85,6 +90,7 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
     nodeRef.current?.disconnect();
     streamRef.current?.getTracks().forEach((t) => t.stop());
     ctxRef.current?.close().catch(() => {});
+    audioTap.stop();
     nodeRef.current = null;
     streamRef.current = null;
     ctxRef.current = null;
@@ -205,6 +211,11 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
             // Raw binary frame. Wrapping this in JSON or base64 is the
             // single most common way to get silence back from this API.
             ws.send(data.pcm.buffer);
+            // The same audio, kept for a few seconds so a turn's clip can
+            // be cut out by its word timestamps (speaker identification).
+            // Only chunks actually sent, so the ring's clock is the
+            // recogniser's.
+            audioTap.push(data.pcm);
           }
         };
 
@@ -216,6 +227,8 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
         node.connect(sink).connect(ctx.destination);
         lastVoiceRef.current = Date.now();
         turnStartedRef.current = Date.now();
+        streamStartRef.current = Date.now();
+        audioTap.reset(ctx.sampleRate, streamStartRef.current);
         wordsThisTurnRef.current = false;
         setStatus("live");
       };
@@ -250,9 +263,17 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
               // in it. Pass it on anyway — every consumer already ignores
               // an empty transcript, and swallowing it would hide the
               // watchdog from anyone debugging this later.
-              onTurnRef.current?.(msg);
+              // When the first word was SPOKEN, not when this arrived. The
+              // audio clock is exact; the first partial is the fallback.
+              const firstMs = msg.words?.[0]?.start;
+              const startedAt = Number.isFinite(firstMs) && streamStartRef.current
+                ? streamStartRef.current + firstMs
+                : firstWordAtRef.current || Date.now();
+              firstWordAtRef.current = 0;
+              onTurnRef.current?.({ ...msg, startedAt });
             } else {
               setPartial(heard);
+              if (heard && !wordsThisTurnRef.current) firstWordAtRef.current = Date.now();
               if (heard) {
                 wordsThisTurnRef.current = true;
                 lastVoiceRef.current = Date.now();

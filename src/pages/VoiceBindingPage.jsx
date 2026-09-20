@@ -13,12 +13,25 @@ import Icon from "../components/Icon.jsx";
 import Modal from "../components/Modal.jsx";
 import "./VoiceBindingPage.css";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { audioTap } from "../voice/audioTap.js";
+import { speechActivity } from "../utils/speechActivity.js";
+import { enrollVoice, clearVoice, speakerHealth } from "../api/speaker.js";
 import { ORDINAL, ordinalIndex, resolveCookRef, cleanSpokenName } from "../utils/cookVoice.js";
 
-// No real audio anywhere in this app — voice binding is simulated the
-// same way VoiceInput.jsx simulates "voice" with a styled text input.
-// This is purely a staged animation; the name itself is just typed.
-const RECORDING_DURATION_MS = 2500;
+// Binding is real: the line is read into the app's one microphone and the
+// audio goes to the local speaker service, which keeps a voiceprint for
+// that cook (never the audio, never off this machine). The live cook then
+// uses it to tell who is speaking.
+//
+// It stops when the cook has actually finished the line: enough speech,
+// then a real pause (see utils/speechActivity.js). Not after a fixed time,
+// which is counted from the click and cut off anyone who started late or
+// read slowly. Only the speech itself, with a little room either side, is
+// kept for the voiceprint.
+const MIN_SPEECH_MS = 2000; // pressing Stop with less than this leaves too little to go on
+const SPEECH_MARGIN_MS = 300;
+const MAX_RECORDING_MS = 25_000; // stop waiting for a pause after this
+const MIC_WAIT_MS = 15_000; // give up if the mic never comes on
 
 // Hackathon scope: exactly two cooks max, not the open-ended "add a
 // third cook" the reference mockup shows.
@@ -42,8 +55,24 @@ export default function VoiceBindingPage() {
   // { cookId, avatar } while the chef picker is open; `avatar` is the
   // draft pick, committed only on "That's me".
   const [picker, setPicker] = useState(null);
-  const timeoutRef = useRef(null);
   const intervalRef = useRef(null);
+  const recordStartRef = useRef(0);
+  // True when starting to read is what switched the mic on, so it is
+  // switched off again afterwards rather than left listening.
+  const micWasMutedRef = useRef(false);
+  // What the last recording came to, shown in place of the status line.
+  const [enrollNote, setEnrollNote] = useState(null); // { cookId, text, tone }
+  // Is the local speaker service up, and whose voice does it hold? null
+  // until the first answer. A cook can be "bound" (their line was read)
+  // without a voiceprint, e.g. bound before the service existed.
+  const [service, setService] = useState(null); // { up, enrolled: {cookId: samples} }
+  const refreshService = () =>
+    speakerHealth()
+      .then((h) => setService({ up: true, enrolled: h.enrolled || {} }))
+      .catch(() => setService({ up: false, enrolled: {} }));
+  useEffect(() => {
+    refreshService();
+  }, []);
 
   // Seed default slots once, from the session's cook count — the
   // two-cook default (data/dishes.js) unless an older session answered
@@ -58,7 +87,6 @@ export default function VoiceBindingPage() {
 
   useEffect(() => {
     return () => {
-      clearTimeout(timeoutRef.current);
       clearInterval(intervalRef.current);
     };
   }, []);
@@ -101,32 +129,100 @@ export default function VoiceBindingPage() {
 
   const removeCook = (id) => {
     if (locked || cooks.length <= 1) return;
+    clearVoice(id).catch(() => {}); // their voiceprint goes with them
     setCooks(cooks.filter((c) => c.id !== id));
     if (recordingCookId === id) stopRecording();
   };
 
   const stopRecording = () => {
-    clearTimeout(timeoutRef.current);
     clearInterval(intervalRef.current);
     setRecordingCookId(null);
     setRecordingProgress(0);
+    if (micWasMutedRef.current) {
+      micWasMutedRef.current = false;
+      dispatch({ type: "voice/setMuted", payload: { muted: true } });
+    }
   };
 
-  const completeRecording = (id) => {
+  // Bind from the newest cooks, not the closure's: this runs after an
+  // await, by which time the list may have changed under it.
+  const bindCook = (id) =>
+    setCooks(voiceRef.current.cooks.map((c) => (c.id === id ? { ...c, bound: true } : c)));
+
+  // What has been said since recording began, and where it sits in time.
+  const heardSoFar = () => {
+    const { levels, startWall } = audioTap.levelsSince(recordStartRef.current);
+    return { ...speechActivity(levels), startWall };
+  };
+
+  const completeRecording = async (id) => {
+    const activity = heardSoFar();
     stopRecording();
-    updateCook(id, { bound: true });
+    if (activity.voicedMs < MIN_SPEECH_MS) {
+      setEnrollNote({
+        cookId: id,
+        text: activity.voicedMs
+          ? `I only heard ${(activity.voicedMs / 1000).toFixed(1)}s of you. Read the whole line.`
+          : "I didn't hear anything. Check the mic.",
+        tone: "is-accent",
+      });
+      return;
+    }
+    // Just the speech, not the silence around it.
+    const clip = audioTap.sliceWall(
+      activity.startWall + activity.firstVoiced * 50 - SPEECH_MARGIN_MS,
+      activity.startWall + (activity.lastVoiced + 1) * 50 + SPEECH_MARGIN_MS,
+    );
+    if (!clip) {
+      setEnrollNote({ cookId: id, text: "I lost the recording. Try again.", tone: "is-accent" });
+      return;
+    }
+    try {
+      // Re-recording replaces the old voiceprint rather than adding to it.
+      await clearVoice(id).catch(() => {});
+      await enrollVoice({ cookId: id, pcm: clip.pcm, rate: clip.rate });
+      setEnrollNote({ cookId: id, text: "Got your voice", tone: "is-done" });
+      refreshService();
+    } catch (err) {
+      // The speaker service isn't running. Binding still completes: the
+      // live cook falls back to its speaker toggle, so nobody is stuck.
+      console.info("[speaker] not enrolled:", err.message);
+      setEnrollNote({
+        cookId: id,
+        text: "Got your line, but the speaker service is off, so I can't learn your voice yet",
+        tone: "is-accent",
+      });
+      refreshService();
+    }
+    bindCook(id);
   };
 
   const startRecording = (id) => {
-    clearTimeout(timeoutRef.current);
     clearInterval(intervalRef.current);
+    setEnrollNote(null);
     setRecordingCookId(id);
     setRecordingProgress(0);
+    if (state.voice.muted) {
+      micWasMutedRef.current = true;
+      dispatch({ type: "voice/setMuted", payload: { muted: false } });
+    }
+    recordStartRef.current = Date.now();
     const startedAt = Date.now();
     intervalRef.current = setInterval(() => {
-      setRecordingProgress(Math.min(100, ((Date.now() - startedAt) / RECORDING_DURATION_MS) * 100));
+      const activity = heardSoFar();
+      // Filled by speech, not by the clock; 99 until it is actually saved.
+      setRecordingProgress(Math.min(99, (activity.voicedMs / 3000) * 100));
+      const elapsed = Date.now() - startedAt;
+      if (activity.done || (elapsed > MAX_RECORDING_MS && activity.voicedMs >= MIN_SPEECH_MS)) {
+        completeRecording(id);
+      } else if (elapsed > MIC_WAIT_MS && audioTap.secondsSince(recordStartRef.current) < 0.5) {
+        stopRecording();
+        setEnrollNote({ cookId: id, text: "The mic never came on. Try again.", tone: "is-accent" });
+      } else if (elapsed > MAX_RECORDING_MS) {
+        stopRecording();
+        setEnrollNote({ cookId: id, text: "I didn't hear enough. Try again.", tone: "is-accent" });
+      }
     }, 100);
-    timeoutRef.current = setTimeout(() => completeRecording(id), RECORDING_DURATION_MS);
   };
 
   const openPicker = (cook) => {
@@ -292,6 +388,7 @@ export default function VoiceBindingPage() {
   let noteClass = "is-accent";
   if (locked) [note, noteClass] = ["The line-up is locked until this cook finishes.", ""];
   else if (duplicates.size > 0) [note, noteClass] = ["Give each cook a different name to carry on.", "is-crit"];
+  else if (service && !service.up) [note, noteClass] = ["Speaker service is off. Run npm run speaker so I can learn voices.", "is-accent"];
   else if (allPicked) [note, noteClass] = ["Voices stay on this device.", ""];
 
   return (
@@ -376,8 +473,10 @@ export default function VoiceBindingPage() {
               let status = "Waiting on a name";
               let statusClass = "";
               if (!cook.avatar) [status, statusClass] = ["Tap the bird to pick your chef", "is-accent"];
+              else if (isBound && service?.up && !service.enrolled[cook.id]) [status, statusClass] = ["Line recorded, but I haven't learned your voice. Record again", "is-accent"];
               else if (isBound) [status, statusClass] = ["Got your voice", "is-done"];
               else if (name) [status, statusClass] = ["Ready when you are", "is-accent"];
+              if (enrollNote?.cookId === cook.id && !isRecording) [status, statusClass] = [enrollNote.text, enrollNote.tone];
 
               return (
                 <div className={`cook-slot${isRecording ? " is-recording" : ""}`} key={cook.id}>

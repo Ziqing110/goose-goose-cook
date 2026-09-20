@@ -31,6 +31,13 @@ import {
 } from "../utils/liveCook.js";
 import { parseCommand, HELP_TEXT } from "../utils/voiceCommands.js";
 import { matchConfirmation } from "../utils/navCommands.js";
+import { registerVoiceDictation } from "../utils/voicePageCommands.js";
+import { buildAgentSnapshot } from "../utils/agentSnapshot.js";
+import { agentTurn } from "../api/agent.js";
+import { AGENT_NAME, speak } from "../voice/agentVoice.js";
+import { audioTap } from "../voice/audioTap.js";
+import { identifySpeaker } from "../api/speaker.js";
+import { decideSpeaker } from "../utils/speakerMatch.js";
 import { buildSummary } from "../utils/summaryCard.js";
 import { chefAvatar } from "../utils/cooks.js";
 import KpIcon from "../components/KpIcon.jsx";
@@ -69,6 +76,13 @@ const momentName = (m, count) => (m.kind === "initial" ? "Start" : m.kind === "e
 // A finish that has sat open this long reads as a count-up, not a
 // countdown (§3, "Late").
 const LATE_AFTER_SEC = 60;
+
+// How long after the agent speaks that an answer needs no name, and the
+// word confidence below which a spoken turn is not acted on. From the
+// R-core recordings, mishearings bottomed out near 0.2-0.4 and clean
+// short commands sat above 0.9.
+const ENGAGED_MS = 10_000;
+const MIN_VOICE_CONFIDENCE = 0.4;
 
 /**
  * Hook point for the voice API: fired once per moment as it becomes
@@ -237,6 +251,21 @@ export default function LiveCookPage() {
   const storedRun = state.session.run;
   const run = useMemo(() => (storedRun ? reconcileRun(storedRun, nodes) : null), [storedRun, nodes]);
 
+  // The newest run, including writes that have not rendered yet. An agent
+  // turn awaits the network, so the closure's `run` is stale by the time
+  // it answers, and several calls in one turn must chain rather than each
+  // overwrite the last. Every commit updates it synchronously.
+  const latestRunRef = useRef(null);
+  latestRunRef.current = run;
+  // One agent turn at a time, in the order things were said.
+  const agentQueueRef = useRef(Promise.resolve());
+  // Speech handler, re-pointed every render so the microphone always
+  // reaches the current closure without re-registering.
+  const voiceHandlerRef = useRef(null);
+  // For a while after the agent asks something, "yes" or "the garlic one"
+  // is an answer to it and needs no name.
+  const engagedUntilRef = useRef(0);
+
   const finished = Boolean(run?.endedAt);
   const paused = isPaused(run);
   const now = useNow(finished || paused);
@@ -265,7 +294,7 @@ export default function LiveCookPage() {
       : paused
         ? { line: "Paused — say “resume” to pick it back up.", sub: "Every clock is stopped; nothing else lands until then." }
         : {
-            line: HELP_TEXT,
+            line: `Say “${AGENT_NAME}” first — “${AGENT_NAME}, I'm done with the onion.”`,
             sub: pendingConfirm
               ? `${speakerCook?.name || "Someone"} is speaking — waiting on “yes” or “no”.`
               : pending
@@ -275,6 +304,31 @@ export default function LiveCookPage() {
     dispatch({ type: "voice/setHint", payload: { hint } });
     return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
   }, [dispatch, run, finished, paused, speakerCook?.name, pending, pendingConfirm]);
+
+  // The microphone. VoiceBar owns the one connection; this page asks for
+  // every turn (takeover) plus the words it would otherwise mishear: the
+  // agent's name, the cooks', and every step on the board.
+  const keyterms = useMemo(
+    () =>
+      [AGENT_NAME, ...cooks.map((c) => c.name), ...nodes.map((n) => n.label)]
+        .map((t) => String(t || "").trim())
+        .filter((t) => t && t.length <= 50)
+        .slice(0, 100),
+    [cooks, nodes],
+  );
+  const keytermsKey = keyterms.join("|");
+  const hasRun = Boolean(run);
+  useEffect(() => {
+    if (!hasRun) return undefined;
+    return registerVoiceDictation({
+      route: "/session/live-cook",
+      takeover: true,
+      keyterms,
+      onFinal: (text, turn) => voiceHandlerRef.current?.(text, turn),
+    });
+    // keyterms is keyed by content so a re-render doesn't re-register.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasRun, keytermsKey]);
 
   // Rice closes itself. Nobody finishes a set-and-forget step — the end
   // of it belongs to whatever plates it — so once its time is up it
@@ -373,7 +427,10 @@ export default function LiveCookPage() {
   const say = (nextRun, text, actions) =>
     appendTranscript(nextRun, { at: new Date().toISOString(), speaker: "agent", text, actions });
 
-  const commit = (nextRun) => saveRunNow(nextRun);
+  const commit = (nextRun) => {
+    latestRunRef.current = nextRun;
+    saveRunNow(nextRun);
+  };
 
 
 
@@ -554,7 +611,178 @@ export default function LiveCookPage() {
     return commit(say(base, `Not “${label}” — which one did you mean?`));
   };
 
+  const scoreLine = () => board.map((b) => `${b.name} ${b.points}`).join(", ") + `. ${progress.pending} left.`;
+  const statusLine = (base) => {
+    const lines = cooks.map((c) => {
+      const active = activeStepFor(c.id, base, nodes, now);
+      if (active) return `${c.name}: ${byId[active].label}, ${clock(stepVariance(byId[active], base.steps[active], now).actualSec)} in`;
+      return `${c.name}: free`;
+    });
+    return `${lines.join(". ")}. ${progress.done} of ${progress.total} done.`;
+  };
+
+  // --- voice, through the agent: the model reads the words, this applies them ---
+  //
+  // The model only proposes. Each call goes through the same handler a tap
+  // uses, on the newest run, so every rule (busy, not ready, equipment,
+  // paused) is still enforced by the code that owns it.
+  const PAUSED_OK = new Set(["resume", "status", "score", "help"]);
+  const applyAgentTurn = (turn, text, cookId) => {
+    const at = () => new Date().toISOString();
+    commit(appendTranscript(latestRunRef.current, { at: at(), speaker: cookId, text }));
+    const spoken = [];
+
+    turn.calls.forEach((call) => {
+      const cur = latestRunRef.current;
+      const nowPaused = isPaused(cur);
+      if (nowPaused && !PAUSED_OK.has(call.name)) {
+        commit(say(cur, "We're paused — say \"resume\" when you're ready."));
+        return;
+      }
+      // done, skip and drop without a name mean "the one I'm on".
+      const own = ["done", "skip", "drop"].includes(call.name) ? activeStepFor(cookId, cur, nodes) : null;
+      const stepId = call.stepId ?? own;
+      if (["done", "skip", "drop"].includes(call.name) && !stepId) {
+        // Holding nothing and not naming anything: ask which one, with the
+        // same tappable options the keyword path offers, instead of just
+        // saying no. The pending state is what draws those buttons.
+        const question = {
+          done: "Which one did you finish?",
+          skip: "Which one should I skip?",
+          drop: "Which one are you putting back?",
+        }[call.name];
+        setPending({ intent: call.name, options: claimSuggestions({ nodes, run: cur, cookId }).slice(0, 3), cookId });
+        commit(say(cur, question));
+        spoken.push(question);
+        return;
+      }
+      switch (call.name) {
+        case "claim": return doClaim(stepId, cookId, "voice", cur);
+        case "start": return doStart(stepId, cookId, "voice", cur);
+        case "done": return doDone(stepId, cookId, "voice", cur);
+        case "skip": return doSkip(stepId, cookId, "voice", cur);
+        case "drop": return doDrop(stepId, cookId, "voice", cur);
+        case "undo": return doUndo(cookId, cur);
+        case "pause":
+          return commit(say(applyPause({ run: cur, at: at() }), "Paused. Nothing's being timed until you say go."));
+        case "resume":
+          return nowPaused ? commit(say(applyResume({ run: cur, at: at() }), "Back on. Clock's running again.")) : undefined;
+        case "finish_run": return doFinish(cur);
+        case "status": {
+          const line = statusLine(cur);
+          spoken.push(line);
+          return commit(say(cur, line));
+        }
+        case "score": {
+          const line = scoreLine();
+          spoken.push(line);
+          return commit(say(cur, line));
+        }
+        case "help": return commit(say(cur, HELP_TEXT));
+        default: return undefined;
+      }
+    });
+
+    // Talk that was not addressed by name, only let through because the
+    // agent had just asked something, gets a reply only if it turned into
+    // an action. Otherwise the room's chatter, or the other cook talking
+    // to someone, would be answered out loud, and each answer would open
+    // the window for the next.
+    const chatter = !turn.named && !turn.calls.length;
+    if (turn.reply && !chatter) {
+      spoken.unshift(turn.reply);
+      commit(say(latestRunRef.current, turn.reply));
+    } else if (turn.reply) {
+      console.info("[voice] not answering unaddressed talk:", text, "->", turn.reply);
+    }
+    if (spoken.length) speak(spoken.join(" "));
+    // Only a question leaves the door open for an unnamed answer, and only
+    // briefly. Statements and refusals don't.
+    if (turn.reply && !chatter && /\?\s*$/.test(turn.reply)) engagedUntilRef.current = Date.now() + ENGAGED_MS;
+  };
+
+  // Who was that? Asks the local speaker service, which compares the turn's
+  // audio with each cook's enrolled voice. Returns a cook id only when the
+  // match is clear, otherwise null and the speaker toggle stands: a wrong
+  // credit is worse than no answer. Never throws; the service being off is
+  // an ordinary state.
+  const whoSpoke = async (clip) => {
+    if (!clip || cooks.length < 2) return null;
+    try {
+      const result = await identifySpeaker({ pcm: clip.pcm, rate: clip.rate, candidates: cooks.map((c) => c.id) });
+      const verdict = decideSpeaker(result);
+      const named = Object.fromEntries(Object.entries(result.scores || {}).map(([id, v]) => [name(id), v]));
+      console.info(`[speaker] ${verdict.cookId ? name(verdict.cookId) : "unsure"} (${verdict.reason})`, named, `margin ${result.margin}`);
+      return verdict.cookId;
+    } catch (err) {
+      console.info("[speaker] unavailable, using the speaker toggle:", err.message);
+      return null;
+    }
+  };
+
+  const askAgent = (text, cookId, { engaged = true, clip = null } = {}) => {
+    agentQueueRef.current = agentQueueRef.current.then(async () => {
+      const heardAs = await whoSpoke(clip);
+      if (heardAs && heardAs !== cookId) {
+        cookId = heardAs;
+        setSpeakerId(heardAs); // so the toggle shows who was heard
+      }
+      let turn;
+      try {
+        turn = await agentTurn({
+          text,
+          agentName: AGENT_NAME,
+          // Typed text is aimed at the agent by definition. Spoken words
+          // must say its name (checked on the server) unless it just
+          // asked a question.
+          engaged,
+          snapshot: buildAgentSnapshot({ run: latestRunRef.current, nodes, cooks, speakerId: cookId, paused: isPaused(latestRunRef.current) }),
+        });
+      } catch (err) {
+        // Slow, down or unreachable: the keyword grammar still works.
+        console.warn("Agent unavailable, using the keyword grammar:", err.message);
+        submitKeywordUtterance(text);
+        return;
+      }
+      if (!turn.addressed) {
+        // Shows what the recogniser heard instead of the name, which is
+        // how a chronically misheard agent name gets caught.
+        console.info("[voice] not addressed:", text);
+        return;
+      }
+      applyAgentTurn(turn, text, cookId);
+    });
+  };
+
+  // An open question ("did you mean…?") is answered by the keyword path,
+  // which owns that state; everything else goes to the agent.
   const submitUtterance = (text) => {
+    if (!text) return;
+    if (pendingConfirm) return submitKeywordUtterance(text);
+    askAgent(text, speaker);
+  };
+
+  // What the microphone hears. The name check happens on the server, so
+  // ordinary kitchen talk never reaches a model. Attribution is still the
+  // speaker toggle until speaker identification exists.
+  voiceHandlerRef.current = (text, turn) => {
+    const confidence = (turn?.words || []).reduce((lowest, w) => Math.min(lowest, w.confidence ?? 1), 1);
+    if (confidence < MIN_VOICE_CONFIDENCE) {
+      console.info("[voice] too unclear to act on:", text);
+      return;
+    }
+    if (pendingConfirm) return submitKeywordUtterance(text);
+    // This turn's audio, cut out by its word timestamps with a little
+    // room either side, for the speaker check.
+    const words = turn?.words || [];
+    const clip = words.length ? audioTap.sliceStream(words[0].start - 150, words[words.length - 1].end + 150) : null;
+    // One unnamed answer per question: the window closes once used.
+    const engaged = Date.now() < engagedUntilRef.current;
+    if (engaged) engagedUntilRef.current = 0;
+    askAgent(text, speaker, { engaged, clip });
+  };
+
+  const submitKeywordUtterance = (text) => {
     if (!text) return;
     const cookId = speaker;
 
@@ -626,15 +854,9 @@ export default function LiveCookPage() {
       case "finish_run":
         return doFinish(heard);
       case "score":
-        return commit(say(heard, board.map((b) => `${b.name} ${b.points}`).join(", ") + `. ${progress.pending} left.`));
-      case "status": {
-        const lines = cooks.map((c) => {
-          const active = activeStepFor(c.id, run, nodes, now);
-          if (active) return `${c.name}: ${byId[active].label}, ${clock(stepVariance(byId[active], run.steps[active], now).actualSec)} in`;
-          return `${c.name}: free`;
-        });
-        return commit(say(heard, `${lines.join(". ")}. ${progress.done} of ${progress.total} done.`));
-      }
+        return commit(say(heard, scoreLine()));
+      case "status":
+        return commit(say(heard, statusLine(run)));
       case "help":
         return commit(say(heard, HELP_TEXT));
       default:
