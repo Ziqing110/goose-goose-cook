@@ -6,9 +6,11 @@
 // "the model was slow" is not an answer.
 import { apiRequest } from "./client.js";
 
-// A little over the server's own 6s budget, so the server's readable
-// timeout error wins the race rather than an anonymous abort.
-const TIMEOUT_MS = 8000;
+// A little over the server's own budget, so the server's readable
+// timeout error wins the race rather than an anonymous abort. The
+// budget is 6s for an ordinary turn and 14s for one where the agent
+// looks something up, so this covers the longer case.
+const TIMEOUT_MS = 16_000;
 
 /**
  * @returns {Promise<{addressed:boolean, calls:{name:string, stepId:string|null}[],
