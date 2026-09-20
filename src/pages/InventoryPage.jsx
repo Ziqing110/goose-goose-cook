@@ -318,7 +318,10 @@ export default function InventoryPage() {
 
   // The same steps the ingredients are folded under, as a board.
   const { working, draft, approved } = useMemo(() => mergeRecipesForDisplay(recipes, sharedSteps), [recipes, sharedSteps]);
-  const boardNodes = working.nodes || [];
+  // Memoised rather than defaulted inline: `working.nodes || []` hands
+  // back a fresh array on every render whenever nodes is empty, which
+  // would rebuild everything keyed on it for no reason.
+  const boardNodes = useMemo(() => working.nodes || [], [working.nodes]);
   const nodeById = useMemo(() => Object.fromEntries(boardNodes.map((n) => [n.id, n])), [boardNodes]);
 
   // One source for status and numbering, so the HUD, bar, rail, rows
