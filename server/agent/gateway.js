@@ -1,14 +1,13 @@
 // One agent turn, end to end: the addressing gate, the gateway call, and
 // validation. The route and the calibration runner both call this, so
 // what gets calibrated is exactly what ships.
-import { buildSystemPrompt, buildTools, buildUserMessage, isAddressed, parseChoice } from "./turn.js";
+import { buildSystemPrompt, buildTools, buildUserMessage, cleanReply, isAddressed, parseChoice } from "./turn.js";
 import { searchConfigured, searchWeb } from "./search.js";
 
 const GATEWAY = "https://llm-gateway.assemblyai.com/v1/chat/completions";
 // One search, not an open-ended agentic loop. Every extra hop is another
 // few seconds of a cook standing over a hot wok, and no cooking question
 // worth asking mid-service needs two lookups to answer.
-const MAX_SEARCH_ROUNDS = 1;
 // The whole turn, not each leg. Without a wall clock a search turn is
 // two model calls plus a lookup, each with its own budget, and the cook
 // waits for the sum. This caps what they can actually experience.
@@ -78,17 +77,20 @@ export async function requestTurn({ apiKey, model, text, agentName, engaged = fa
     return body.choices?.[0];
   };
 
-  let choice = await ask();
-  let searched = 0;
+  const choice = await ask();
+  const lookups = (choice?.message?.tool_calls || []).filter((c) => c?.function?.name === "search_web");
+  const vetted = parseChoice(choice, snapshot);
 
-  // The model asked to look something up. Run it, hand back the result,
-  // and let it answer. Its action tool calls (if it made any alongside)
-  // survive into the second choice or are simply repeated there; either
-  // way parseChoice vets whatever comes out at the end.
-  while (searched < MAX_SEARCH_ROUNDS) {
-    const lookups = (choice?.message?.tool_calls || []).filter((c) => c?.function?.name === "search_web");
-    if (!lookups.length) break;
-    searched += 1;
+  if (!lookups.length) {
+    return { addressed: true, named, ...vetted, searched: false, ms: Date.now() - started, model };
+  }
+
+  // The model wants to look something up. Do NOT wait for it here: the
+  // caller's turn queue is serial, so blocking would hold every later
+  // utterance behind this one question. Hand back what the model already
+  // decided, plus something to say, and let the caller collect the
+  // answer whenever it lands.
+  const resume = (async () => {
     messages.push(choice.message);
     for (const call of lookups) {
       let query = "";
@@ -101,14 +103,24 @@ export async function requestTurn({ apiKey, model, text, agentName, engaged = fa
         content: await searchWeb(query, { timeoutMs: Math.min(4000, left()) }),
       });
     }
-    choice = await ask();
-  }
+    const answer = await ask();
+    // Reply only. The board has had several seconds to move on, and the
+    // snapshot this was vetted against is that old too — acting on it
+    // now would be acting on a kitchen that no longer exists. Anything
+    // the model wanted to DO it had its chance to say in the first
+    // response, which was applied immediately.
+    return { reply: cleanReply(answer?.message?.content), ms: Date.now() - started, model };
+  })();
 
   return {
     addressed: true,
     named,
-    ...parseChoice(choice, snapshot),
-    searched: searched > 0,
+    ...vetted,
+    // Something to say now, so nobody is left listening to silence while
+    // it reads. The model's own line if it offered one, ours if not.
+    reply: vetted.reply || "Let me look that up.",
+    searched: true,
+    resume,
     ms: Date.now() - started,
     model,
   };

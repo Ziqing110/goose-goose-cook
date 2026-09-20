@@ -42,7 +42,7 @@ import { parseCommand, HELP_TEXT } from "../utils/voiceCommands.js";
 import { matchConfirmation } from "../utils/navCommands.js";
 import { registerVoiceDictation } from "../utils/voicePageCommands.js";
 import { buildAgentSnapshot } from "../utils/agentSnapshot.js";
-import { agentTurn } from "../api/agent.js";
+import { agentTurn, collectAnswer } from "../api/agent.js";
 import { AGENT_NAME, speak } from "../voice/agentVoice.js";
 import { audioTap } from "../voice/audioTap.js";
 import { identifySpeaker } from "../api/speaker.js";
@@ -917,7 +917,38 @@ export default function LiveCookPage() {
         return;
       }
       applyAgentTurn(turn, text, cookId);
+      // The agent is reading something up. Collect it OUTSIDE this
+      // queue: the whole point is that the next command does not wait
+      // behind a question. Deliberately not awaited here.
+      if (turn.pendingId) awaitAnswer(turn.pendingId, cookId);
     });
+  };
+
+  /**
+   * A looked-up answer, spoken whenever it arrives.
+   *
+   * It is reply-only by the time it gets here — the server drops any
+   * action the model proposed on the second pass, because the board has
+   * had several seconds to move on and acting on a stale snapshot is
+   * worse than not acting. So this just says the thing and logs it.
+   */
+  const awaitAnswer = async (pendingId, cookId) => {
+    let answer;
+    try {
+      answer = await collectAnswer(pendingId);
+    } catch (err) {
+      // Expired, failed, or the search timed out. Goose simply has
+      // nothing to add; it already said it would look.
+      console.info("[agent] no answer came back:", err.message);
+      return;
+    }
+    const line = answer?.reply?.trim();
+    if (!line) return;
+    // latestRunRef, not `run`: this resolves long after the closure that
+    // started it, and the cook has very likely done something since.
+    commit(say(latestRunRef.current, line));
+    speak(line);
+    console.info(`[agent] answered after ${answer.ms}ms`, { cookId });
   };
 
   // An open question ("did you mean…?") is answered by the keyword path,

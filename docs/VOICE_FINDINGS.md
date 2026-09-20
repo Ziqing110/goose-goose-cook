@@ -121,7 +121,21 @@ about what we want, not a parameter tweak.
 ## The agent, asked a cooking question
 
 Separate from the recordings, measured with `npm run agent:calibrate`
-(gemini-2.5-flash-lite, 3 repeats, 31 cases).
+(3 repeats, 31 cases).
+
+**Check which model you are measuring.** `.env` sets no `AAI_AGENT_MODEL`,
+so the route falls back to **gpt-4.1**, while `calibrate.mjs` defaults to
+gemini-2.5-flash-lite. They are not close:
+
+| model | actions | how-to | median |
+|---|---|---|---|
+| gemini-2.5-flash-lite | 53/69 | 18/24 | 1031ms |
+| **gpt-4.1** (what ships) | **67/69** | **20/24** | **608ms** |
+
+Faster and far more accurate. Every ratio below that is not labelled
+gpt-4.1 was measured on flash-lite and understates what ships; the
+`status` and `help` misfires in particular are mostly a small-model
+problem. Pass `--models gpt-4.1` to measure what your cooks will meet.
 
 Asked "how do I mince the scallions?" Goose used to **refuse** — "I can't
 help with that, but your recipe should tell you how" — and two questions in
