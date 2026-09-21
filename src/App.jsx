@@ -9,6 +9,7 @@ import VoiceBindingPage from "./pages/VoiceBindingPage.jsx";
 import SchedulePage from "./pages/SchedulePage.jsx";
 import LiveCookPage from "./pages/LiveCookPage.jsx";
 import CookSummaryPage from "./pages/CookSummaryPage.jsx";
+import DevJump from "./dev/DevJump.jsx";
 import { useAppState } from "./state/AppStateContext.jsx";
 import { isFullyApproved } from "./utils/graphLayout.js";
 import { areCooksBound } from "./utils/cooks.js";
@@ -162,6 +163,10 @@ export default function App() {
             Home the moment a cook is saved, which would make the card
             unreachable exactly when you want it. */}
         <Route path="/cook/:sessionId" element={<CookSummaryPage />} />
+
+        {/* /jump/schedule, /jump/coop, /jump/versus — seed a session and
+            land on the screen (see dev/DevJump.jsx). Dev server only. */}
+        {import.meta.env.DEV && <Route path="/jump/:target" element={<DevJump />} />}
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

@@ -1,0 +1,233 @@
+{
+  "g1-on-it": {
+    "width": 320,
+    "height": 320,
+    "frames": 6,
+    "duration": 1200,
+    "frameDuration": 200,
+    "webp": "webp/goose-g1-on-it.webp",
+    "sprite": "sprites/goose-g1-on-it.png",
+    "poster": "posters/goose-g1-on-it.png",
+    "cuts": [
+      0,
+      594,
+      1103,
+      1629,
+      2172
+    ],
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "g2-up-next": {
+    "width": 320,
+    "height": 320,
+    "frames": 6,
+    "duration": 1440,
+    "frameDuration": 240,
+    "webp": "webp/goose-g2-up-next.webp",
+    "sprite": "sprites/goose-g2-up-next.png",
+    "poster": "posters/goose-g2-up-next.png",
+    "cuts": [
+      0,
+      543,
+      1086,
+      1629,
+      2172
+    ],
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "g3-waiting": {
+    "width": 320,
+    "height": 320,
+    "frames": 6,
+    "duration": 2520,
+    "frameDuration": 420,
+    "webp": "webp/goose-g3-waiting.webp",
+    "sprite": "sprites/goose-g3-waiting.png",
+    "poster": "posters/goose-g3-waiting.png",
+    "cuts": [
+      0,
+      543,
+      1086,
+      1629,
+      2172
+    ],
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "g4-free-hands": {
+    "width": 320,
+    "height": 320,
+    "frames": 6,
+    "duration": 1380,
+    "frameDuration": 230,
+    "webp": "webp/goose-g4-free-hands.webp",
+    "sprite": "sprites/goose-g4-free-hands.png",
+    "poster": "posters/goose-g4-free-hands.png",
+    "cuts": [
+      0,
+      543,
+      1086,
+      1629,
+      2172
+    ],
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "g5-done-for-the-night": {
+    "width": 320,
+    "height": 320,
+    "frames": 6,
+    "duration": 3120,
+    "frameDuration": 520,
+    "webp": "webp/goose-g5-done-for-the-night.webp",
+    "sprite": "sprites/goose-g5-done-for-the-night.png",
+    "poster": "posters/goose-g5-done-for-the-night.png",
+    "cuts": [
+      0,
+      543,
+      1086,
+      1629,
+      2172
+    ],
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "g6-up-for-grabs": {
+    "width": 320,
+    "height": 320,
+    "frames": 6,
+    "duration": 1800,
+    "frameDuration": 300,
+    "webp": "webp/goose-g6-up-for-grabs.webp",
+    "sprite": "sprites/goose-g6-up-for-grabs.png",
+    "poster": "posters/goose-g6-up-for-grabs.png",
+    "cuts": [
+      0,
+      543,
+      1086,
+      1629,
+      2172
+    ],
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "g7-honk": {
+    "width": 320,
+    "height": 320,
+    "frames": 6,
+    "duration": 1080,
+    "frameDuration": 180,
+    "webp": "webp/goose-g7-honk.webp",
+    "sprite": "sprites/goose-g7-honk.png",
+    "poster": "posters/goose-g7-honk.png",
+    "cuts": [
+      0,
+      543,
+      1086,
+      1629,
+      2172
+    ],
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "g9-victory": {
+    "width": 320,
+    "height": 320,
+    "frames": 6,
+    "duration": 1980,
+    "frameDuration": 330,
+    "webp": "webp/goose-g9-victory.webp",
+    "sprite": "sprites/goose-g9-victory.png",
+    "poster": "posters/goose-g9-victory.png",
+    "cuts": [
+      0,
+      543,
+      1086,
+      1629,
+      2172
+    ],
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "toque-idle": {
+    "width": 320,
+    "height": 320,
+    "frames": 6,
+    "duration": 2640,
+    "frameDuration": 440,
+    "webp": "webp/goose-toque-idle.webp",
+    "sprite": "sprites/goose-toque-idle.png",
+    "poster": "posters/goose-toque-idle.png",
+    "cuts": [
+      0,
+      543,
+      1086,
+      1629,
+      2172
+    ],
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "toque-left": {
+    "width": 320,
+    "height": 320,
+    "frames": 6,
+    "duration": 960,
+    "frameDuration": 160,
+    "webp": "webp/goose-toque-left.webp",
+    "sprite": "sprites/goose-toque-left.png",
+    "poster": "posters/goose-toque-left.png",
+    "cuts": [
+      0,
+      543,
+      1086,
+      1629,
+      2172
+    ],
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "toque-right": {
+    "width": 320,
+    "height": 320,
+    "frames": 6,
+    "duration": 960,
+    "frameDuration": 160,
+    "webp": "webp/goose-toque-right.webp",
+    "sprite": "sprites/goose-toque-right.png",
+    "poster": "posters/goose-toque-right.png",
+    "cuts": [
+      0,
+      543,
+      1086,
+      1629,
+      2172
+    ],
+    "alpha": [
+      0,
+      255
+    ]
+  }
+}

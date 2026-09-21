@@ -1,0 +1,123 @@
+[
+  {
+    "name": "g1-on-it",
+    "size": [
+      724,
+      724
+    ],
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "name": "g2-up-next",
+    "size": [
+      724,
+      724
+    ],
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "name": "g4-free-hands",
+    "size": [
+      724,
+      724
+    ],
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "name": "g3-waiting",
+    "size": [
+      724,
+      724
+    ],
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "name": "g5-done-for-the-night",
+    "size": [
+      724,
+      724
+    ],
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "name": "g6-up-for-grabs",
+    "size": [
+      724,
+      724
+    ],
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "name": "g7-honk",
+    "size": [
+      887,
+      887
+    ],
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "name": "g9-victory",
+    "size": [
+      887,
+      887
+    ],
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "name": "toque-idle",
+    "size": [
+      724,
+      724
+    ],
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "name": "toque-left",
+    "size": [
+      724,
+      724
+    ],
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "name": "toque-right",
+    "size": [
+      724,
+      724
+    ],
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  }
+]

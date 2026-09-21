@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="g1-on-it" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" class="kp-animated-goose"><title>g1-on-it</title><style>
+.kp-animated-goose{color:var(--goose-ink,#171717)}
+.goose-motion{transform-box:view-box;animation-timing-function:ease-in-out;animation-iteration-count:infinite;animation-play-state:var(--goose-play-state,running)}
+@keyframes goose-stir{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
+@keyframes goose-wave{0%,60%,100%{transform:rotate(0)}15%,40%{transform:rotate(-10deg)}27%{transform:rotate(4deg)}}
+@keyframes goose-offer{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(5deg)}}
+@keyframes goose-breathe{0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.025)}}
+@keyframes goose-sleep{0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.045)}}
+@keyframes goose-hover{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes goose-nod{0%,100%{transform:rotate(0)}50%{transform:rotate(3deg)}}
+@keyframes goose-talk{0%,40%,80%,100%{transform:rotate(0)}20%,60%{transform:rotate(-2.5deg)}}
+@keyframes goose-beak{0%,35%,75%,100%{transform:scaleY(.65)}15%,55%{transform:scaleY(1)}}
+@keyframes goose-call{0%,15%,35%,100%{transform:translateY(0)}8%,25%{transform:translateY(-2px)}}
+@keyframes goose-sound{0%,38%,100%{opacity:0}7%,30%{opacity:1}}
+@keyframes goose-blink{0%,43%,47%,100%{transform:scaleY(1)}45%{transform:scaleY(.08)}}
+@media(prefers-reduced-motion:reduce){.goose-motion{animation:none!important}}
+</style><path d="M91 158v16l-20 8 9 4h24l9-6-8-7v-15Z" fill="#FF850B" /><path d="M127 158v16l-16 9 9 3h25l9-6-12-7v-15Z" fill="#FF850B" /><path d="M99 105C73 111 65 135 80 154Q91 171 111 162Q132 174 151 156Q170 145 163 128Q153 137 144 115L129 104Z" fill="white" /><path d="M125 110Q122 61 95 56Q65 49 65 78L71 97 83 93Q82 71 94 79L104 111Z" fill="white" /><path d="M66 82L70 106Q76 112 83 92Z" fill="#FF850B" /><g class="goose-motion" style="transform-origin:77px 72px;animation-name:goose-blink;animation-duration:calc(5.8s * var(--goose-tempo,1))"><circle cx="77" cy="72" r="3.2" fill="#111111" stroke="none" /></g><g transform="translate(113 108)"><path d="M-15-4Q0 2 14-5L5 13Q-5 18-15-4Z" fill="var(--kp-cook-a,#E58A1F)" /><path d="M13-5Q26-17 31-8L18 1 30 13Q18 16 13 1Z" fill="var(--kp-cook-a,#E58A1F)" /><circle cx="14" cy="-3" r="4" fill="var(--kp-cook-a,#E58A1F)" /></g><path d="M32 138h53v32H32Z" fill="#F6DDB0" /><path d="M27 174h64v10H27Z" fill="#F6DDB0" /><path d="M30 136h56M31 147H23m62 0h8" fill="none" /><g class="goose-motion" style="transform-origin:64px 126px;animation-name:goose-stir;animation-duration:calc(1.6s * var(--goose-tempo,1))"><path d="M72 117Q55 111 43 119Q37 130 48 132L64 129" fill="white" /><path d="M44 133L35 109" fill="none" /><path d="M23 98L39 92 47 108 31 114Z" fill="#F6DDB0" /></g><path d="M92 119Q74 115 64 128Q66 141 82 136L107 136Q120 132 116 119" fill="white" /></svg>

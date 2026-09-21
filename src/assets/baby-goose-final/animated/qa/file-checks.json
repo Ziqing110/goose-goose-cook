@@ -1,0 +1,130 @@
+{
+  "g1-on-it": {
+    "frames": 6,
+    "size": [
+      320,
+      320
+    ],
+    "bytes": 90398
+  },
+  "g10-walking": {
+    "frames": 4,
+    "size": [
+      320,
+      320
+    ],
+    "bytes": 36926
+  },
+  "g11-handoff": {
+    "frames": 6,
+    "size": [
+      320,
+      320
+    ],
+    "bytes": 65540
+  },
+  "g12-behind-plan": {
+    "frames": 6,
+    "size": [
+      320,
+      320
+    ],
+    "bytes": 63718
+  },
+  "g13-listening": {
+    "frames": 6,
+    "size": [
+      320,
+      320
+    ],
+    "bytes": 61928
+  },
+  "g14-defeat-good-game": {
+    "frames": 6,
+    "size": [
+      320,
+      320
+    ],
+    "bytes": 63770
+  },
+  "g2-up-next": {
+    "frames": 6,
+    "size": [
+      320,
+      320
+    ],
+    "bytes": 62546
+  },
+  "g3-waiting": {
+    "frames": 6,
+    "size": [
+      320,
+      320
+    ],
+    "bytes": 38778
+  },
+  "g4-free-hands": {
+    "frames": 6,
+    "size": [
+      320,
+      320
+    ],
+    "bytes": 65866
+  },
+  "g5-done-for-the-night": {
+    "frames": 6,
+    "size": [
+      320,
+      320
+    ],
+    "bytes": 78370
+  },
+  "g6-eyeing-the-offer": {
+    "frames": 6,
+    "size": [
+      320,
+      320
+    ],
+    "bytes": 58078
+  },
+  "g7-due-honk": {
+    "frames": 6,
+    "size": [
+      320,
+      320
+    ],
+    "bytes": 50408
+  },
+  "g8-toque-neutral": {
+    "frames": 6,
+    "size": [
+      320,
+      320
+    ],
+    "bytes": 55122
+  },
+  "g8x-toque-speaking-left": {
+    "frames": 6,
+    "size": [
+      320,
+      320
+    ],
+    "bytes": 59858
+  },
+  "g8y-toque-calling-right": {
+    "frames": 6,
+    "size": [
+      320,
+      320
+    ],
+    "bytes": 60552
+  },
+  "g9-victory": {
+    "frames": 6,
+    "size": [
+      320,
+      320
+    ],
+    "bytes": 70416
+  }
+}

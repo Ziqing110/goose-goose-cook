@@ -1,0 +1,15 @@
+Character sheet of a cartoon goose, same character in every pose, in the exact style of the attached reference: bold single-weight black outline, flat white body, flat orange beak and feet, no gradients, no shading, no texture, no text, no background — real transparent PNG. One small black dot eye, no eyebrows, no mouth curve; deadpan, expression only from neck posture, wing position and held object. Single triangular neckerchief knotted at side, flat #E58A1F only coloured clothing. No chef hat. Front three-quarter standing view, feet on common baseline, same anatomical scale in every pose, generous even spacing, no overlaps. Props same outline and at most one flat warm fill. Readable silhouette at 32px. Use equal-width cells in one horizontal row, no cell borders, no labels. Reference is style reference, do not copy its poses or paper cards.
+
+working
+Draw exactly 3 poses left to right: 1 On it: leans forward over small stockpot on burner, neck arched DOWN toward pot, wing holding spatula, other wing on pot rim. 2 Up next: upright STRAIGHT neck, ONE wing raised to shoulder height like student ready to be called on, other wing down. 3 Free hands: BOTH wings raised HIGH and OPEN, neck projecting slightly FORWARD and lower than upright pose, offering. Deadpan. Landscape 3:1.
+
+resting
+Draw exactly 3 poses left to right: 1 Waiting: slumps against kitchen counter edge, one wing supporting body, neck HORIZONTAL and head resting FLAT on countertop, bored. 2 Done for night: sits on folded legs, head tucked BACKWARDS UNDER wing asleep, compact rounded silhouette, dot eye hidden in wing, no sleep symbols. 3 Up for grabs: standing, neck curved DOWN sideways toward small plain playing card on counter, head tilted, one wing hovering over card. Same body proportions; seated pose naturally shorter; feet/seat bottom aligned. Landscape 3:1.
+
+alarm-victory
+Draw exactly TWO poses side by side, generous space, equal cells. Left Honk: rigid, neck stretched FULLY VERTICAL UP, beak wide OPEN, wings CLAMPED tight to body, exactly three short black sound lines beside beak. Right Victory: stands tall neck UP, BOTH wings spread WIDE SIDEWAYS with tips raised, beak CLOSED, calm triumph, not jumping. Landscape 2:1.
+
+toque
+Draw exactly 3 poses in equal cells left to right: Idle upright straight neck wings down; Speaking left same body stance and fixed feet but neck extended forward to VIEWER LEFT and beak slightly open; Speaking right MIRROR of second pose, neck extended to VIEWER RIGHT. Every pose wears tall WHITE PLEATED CHEF TOQUE exactly as reference, and triangular neckerchief flat #7C5CE0 purple instead of orange. No orange clothing. Landscape 3:1.
+
+Working revision: preserve cooking and up-next; Free hands has both wings above head and a conspicuously horizontal forward neck. Original reference attached to every call. Built-in image_gen used.

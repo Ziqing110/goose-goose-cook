@@ -1,0 +1,14 @@
+{
+  "cards": 16,
+  "pause": true,
+  "frameChanges": {
+    "g1-on-it": true,
+    "g7-due-honk": true,
+    "g8x-toque-speaking-left": true,
+    "g10-walking": true
+  },
+  "speed": "0.798s",
+  "original": true,
+  "mobileOverflow": false,
+  "reducedMotion": true
+}

@@ -23,3 +23,4 @@ for (const [name, path] of [
 ]) console.log(`  ${name} ${BASE}${path}`);
 console.log("");
 console.log("Re-run this to start over; it abandons whatever run is in progress.");
+console.log("Or skip this script: /jump/schedule, /jump/coop and /jump/versus seed and jump in one URL.");

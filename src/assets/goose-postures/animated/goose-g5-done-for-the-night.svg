@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="g5-done-for-the-night" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" class="kp-animated-goose"><title>g5-done-for-the-night</title><style>
+.kp-animated-goose{color:var(--goose-ink,#171717)}
+.goose-motion{transform-box:view-box;animation-timing-function:ease-in-out;animation-iteration-count:infinite;animation-play-state:var(--goose-play-state,running)}
+@keyframes goose-stir{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
+@keyframes goose-wave{0%,60%,100%{transform:rotate(0)}15%,40%{transform:rotate(-10deg)}27%{transform:rotate(4deg)}}
+@keyframes goose-offer{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(5deg)}}
+@keyframes goose-breathe{0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.025)}}
+@keyframes goose-sleep{0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.045)}}
+@keyframes goose-hover{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes goose-nod{0%,100%{transform:rotate(0)}50%{transform:rotate(3deg)}}
+@keyframes goose-talk{0%,40%,80%,100%{transform:rotate(0)}20%,60%{transform:rotate(-2.5deg)}}
+@keyframes goose-beak{0%,35%,75%,100%{transform:scaleY(.65)}15%,55%{transform:scaleY(1)}}
+@keyframes goose-call{0%,15%,35%,100%{transform:translateY(0)}8%,25%{transform:translateY(-2px)}}
+@keyframes goose-sound{0%,38%,100%{opacity:0}7%,30%{opacity:1}}
+@keyframes goose-blink{0%,43%,47%,100%{transform:scaleY(1)}45%{transform:scaleY(.08)}}
+@media(prefers-reduced-motion:reduce){.goose-motion{animation:none!important}}
+</style><g class="goose-motion" style="transform-origin:110px 177px;animation-name:goose-sleep;animation-duration:calc(3.6s * var(--goose-tempo,1))"><path d="M77 136Q77 110 97 107Q116 88 134 110L149 135Q171 131 165 144Q164 177 113 178Q74 181 67 164Z" fill="white" /></g><path d="M87 172L69 180 77 186 104 181 116 184 141 184 134 174Z" fill="#FF850B" /><g class="goose-motion" style="transform-origin:110px 177px;animation-name:goose-breathe;animation-duration:calc(3.6s * var(--goose-tempo,1))"><g transform="translate(126 128)"><path d="M-15-4Q0 2 14-5L5 13Q-5 18-15-4Z" fill="var(--kp-cook-a,#E58A1F)" /><path d="M13-5Q26-17 31-8L18 1 30 13Q18 16 13 1Z" fill="var(--kp-cook-a,#E58A1F)" /><circle cx="14" cy="-3" r="4" fill="var(--kp-cook-a,#E58A1F)" /></g><path d="M85 160Q65 156 79 134Q101 114 117 126Q135 140 117 141L107 153Q96 165 93 151Z" fill="white" /></g></svg>

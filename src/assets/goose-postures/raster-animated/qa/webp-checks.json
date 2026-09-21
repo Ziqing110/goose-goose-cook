@@ -1,0 +1,123 @@
+{
+  "goose-g1-on-it": {
+    "size": [
+      320,
+      320
+    ],
+    "frames": 6,
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "goose-g2-up-next": {
+    "size": [
+      320,
+      320
+    ],
+    "frames": 6,
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "goose-g3-waiting": {
+    "size": [
+      320,
+      320
+    ],
+    "frames": 6,
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "goose-g4-free-hands": {
+    "size": [
+      320,
+      320
+    ],
+    "frames": 6,
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "goose-g5-done-for-the-night": {
+    "size": [
+      320,
+      320
+    ],
+    "frames": 6,
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "goose-g6-up-for-grabs": {
+    "size": [
+      320,
+      320
+    ],
+    "frames": 6,
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "goose-g7-honk": {
+    "size": [
+      320,
+      320
+    ],
+    "frames": 6,
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "goose-g9-victory": {
+    "size": [
+      320,
+      320
+    ],
+    "frames": 6,
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "goose-toque-idle": {
+    "size": [
+      320,
+      320
+    ],
+    "frames": 6,
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "goose-toque-left": {
+    "size": [
+      320,
+      320
+    ],
+    "frames": 6,
+    "alpha": [
+      0,
+      255
+    ]
+  },
+  "goose-toque-right": {
+    "size": [
+      320,
+      320
+    ],
+    "frames": 6,
+    "alpha": [
+      0,
+      255
+    ]
+  }
+}

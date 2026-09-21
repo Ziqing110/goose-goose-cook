@@ -1,0 +1,62 @@
+{
+  "base": "Use attached screenshot ONLY as baby-goose character identity/style reference, never reproduce UI, colour tiles, text, buttons or layout. ONE full-body BABY GOOSE, large round head, tiny short neck, plump pear-shaped white body, small rounded scalloped wings like screenshot, tiny orange webbed feet, tiny orange triangular beak, small dot eye. Much closer to the screenshot's cute simple baby chefs than an adult long-neck goose. Thin confident slightly hand-drawn continuous black contour, delicate sparse loose crosshatch only at wing folds, flat 2D children's cookbook ink illustration. Warm off-white solid body, genuine transparent PNG background (NO paper rectangle, no checkerboard painted in). NO ground shadow, no scenery, no text. Centered square image, full figure and props inside 6% padding. Foot baseline near bottom. Small tied triangular neckerchief. Silhouette readable at 32 pixels. Wing shoulders clearly connected to body, no floating hands. Preserve baby proportions even for stretched-neck poses.",
+  "poses": [
+    [
+      "g1-on-it",
+      "Leaning forward over a small pot on a stove, wooden spatula held in one wing, steam curling up, focused half-closed eye. Other wing visibly attached."
+    ],
+    [
+      "g3-waiting",
+      "Slumped BELLY DOWN on counter edge, neck stretched FLAT HORIZONTAL along surface, bored droopy eye. A compact flattened tired silhouette, not standing upright beside counter."
+    ],
+    [
+      "g4-free-hands",
+      "Standing, BOTH wings lifted OPEN AND EMPTY at shoulder height, palms-up shrug energy, neutral CLOSED beak. Relaxed short neck. No props."
+    ],
+    [
+      "g5-done-for-the-night",
+      "SITTING asleep, head FULLY TUCKED BACKWARDS UNDER ONE WING, only rounded body and folded wing visible. Head, eye and beak concealed. Compact ball silhouette."
+    ],
+    [
+      "g6-eyeing-the-offer",
+      "Head TILTED 30 degrees, ONE eye wide, leaning slightly toward something OFF-FRAME TO VIEWER RIGHT, curious not alarmed. Beak closed. Both wings down visible, no counter or card or question marks."
+    ],
+    [
+      "g7-due-honk",
+      "Neck straight VERTICAL stretched up but retains baby large head, beak WIDE OPEN honking, tiny black motion ticks beside head, BOTH wings tight to body."
+    ],
+    [
+      "g8-toque-neutral",
+      "Tall white chef TOQUE, standing square, neck relaxed SHORT, beak CLOSED calm dot eye, both wings down. PURPLE scarf #7C5CE0."
+    ],
+    [
+      "g8x-toque-speaking-left",
+      "Tall white chef TOQUE, neck extended FORWARD TO VIEWER LEFT toward unseen listener, beak SLIGHTLY PARTED, ONE wing gesturing conversationally. PURPLE scarf #7C5CE0. Keep neck short enough for baby proportions."
+    ],
+    [
+      "g9-victory",
+      "Neck stretched UP, BOTH wings thrown WIDE OPEN, chest out celebrating; SMALL GOLD TROPHY held securely in ONE wing, other wing empty. Beak CLOSED. Still baby proportions."
+    ],
+    [
+      "g10-walking",
+      "Mid-stride SIDE PROFILE facing left, one tiny orange foot FORWARD and one BACK, neck level short, deadpan eye, beak CLOSED. Wings naturally near sides. No motion lines."
+    ],
+    [
+      "g11-handoff",
+      "Turning to side, offering a small warm-cream BOWL forward held securely with BOTH wings visibly attached to shoulders, beak CLOSED, friendly tiny dot eye."
+    ],
+    [
+      "g12-behind-plan",
+      "Neck SAGGING, ONE wing wiping forehead, one small SWEAT DROP beside head, slightly hunched. Beak CLOSED, tired but cute. Other wing at side."
+    ],
+    [
+      "g13-listening",
+      "Head COCKED toward viewer, ONE wing CUPPED BEHIND EAR-SPOT on side of head, eye wide, beak CLOSED, attentive. Other wing down. No drawn human ear."
+    ],
+    [
+      "g14-defeat-good-game",
+      "Standing, ONE wing extended SIDEWAYS as a handshake OFFER toward someone off-frame, head slightly lowered, soft eye, beak CLOSED, gracious good-game mood not distraught. Other wing down."
+    ]
+  ],
+  "notes": "G2 establishes model; G3 repaired to add counter; G8x repaired to extend neck left; G8y exact mirror. Built-in image_gen. Original screenshot attached as character reference. Output PNGs normalized to 1280px with minimum 6% transparent margin."
+}

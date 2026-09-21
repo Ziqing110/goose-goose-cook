@@ -1,0 +1,63 @@
+{
+  "reference": "../baby-goose-postures-v2/png/goose-g2-up-next-final-tuft.png",
+  "tool": "built-in image_gen",
+  "constraints": "Preserve approved proportions, low white-filled two-tip tuft, opaque white background. Toque hat hides tuft. No vector redraw.",
+  "poses": [
+    [
+      "g1-on-it",
+      "leaning forward cooking over small pot on burner, wooden spatula in one attached wing, other wing on rim, curling steam, half-closed focused eye"
+    ],
+    [
+      "g3-waiting",
+      "belly-down slumped ON A VISIBLE THIN KITCHEN COUNTER, neck flat horizontal and head resting on surface, droopy bored eye, feet dangling at rear"
+    ],
+    [
+      "g4-free-hands",
+      "standing short relaxed neck, BOTH wings empty lifted open to either side in palms-up shrug, closed beak"
+    ],
+    [
+      "g5-done-for-the-night",
+      "sitting asleep compact body, head tucked completely backwards under one folded wing, no face or beak visible, tuft concealed too"
+    ],
+    [
+      "g6-eyeing-the-offer",
+      "head tilted 30 degrees curiously toward viewer RIGHT, leaning slightly toward off-frame offer, one wide dot eye, beak CLOSED, both wings down, no props"
+    ],
+    [
+      "g7-due-honk",
+      "neck vertical stretched up, beak WIDE OPEN honking, tiny black motion ticks by head, wings tight to body"
+    ],
+    [
+      "g8-toque-neutral",
+      "tall white pleated chef toque covering tuft, purple scarf #7C5CE0, relaxed short neck, standing square wings down beak CLOSED"
+    ],
+    [
+      "g8x-toque-speaking-left",
+      "white tall chef toque covering tuft, purple scarf #7C5CE0, neck conspicuously extended diagonally FORWARD-LEFT, head left of belly not above it, beak slightly parted, one wing gesturing toward unseen listener"
+    ],
+    [
+      "g9-victory",
+      "neck raised, chest out, BOTH wings spread WIDE, one holds small golden trophy, beak CLOSED celebrating"
+    ],
+    [
+      "g10-walking",
+      "side profile MID STRIDE, one foot clearly forward one back, neck level, deadpan dot eye, beak closed"
+    ],
+    [
+      "g11-handoff",
+      "turned sideways offering small cream bowl FORWARD held by BOTH clearly attached wings, beak closed, friendly dot eye"
+    ],
+    [
+      "g12-behind-plan",
+      "slightly hunched, neck sagging, ONE wing wiping forehead, small sweat drop, other wing down, beak closed"
+    ],
+    [
+      "g13-listening",
+      "head cocked toward viewer, ONE wing cupped behind ear spot, alert eye, other wing down, beak closed"
+    ],
+    [
+      "g14-defeat-good-game",
+      "one wing extended sideways offering HANDSHAKE toward unseen partner, head slightly lowered soft eye, other wing down, beak closed"
+    ]
+  ]
+}

@@ -112,6 +112,33 @@ const primariesAboveBar = async () => {
     assert.ok(b.y + b.height <= bar.y, `primary ${i} bottom ${b.y + b.height} vs bar top ${bar.y}`);
   }
 };
+// The seeded template has no unattended step, and the "cooking on its
+// own" list is the one thing that changes a card's height — so mark one
+// step timed through the sessions API (the same PATCH the editor uses)
+// and reload, so the run has a pot to walk away from.
+await page.evaluate(async () => {
+  const [session] = await (await fetch("/api/sessions?status=active")).json();
+  for (const recipe of session.recipes) {
+    const mark = (graph) =>
+      graph && {
+        ...graph,
+        nodes: graph.nodes.map((n) =>
+          n.label === "Blanch tofu"
+            ? { ...n, tending: "timed", unattended: { initial: { duration_sec: 10, difficulty: "low" }, checkpoints: null, ending: { duration_sec: 20, difficulty: "low" } } }
+            : n
+        ),
+      };
+    if (!recipe.approved?.nodes?.some((n) => n.label === "Blanch tofu")) continue;
+    await fetch(`/api/sessions/${session.id}/recipes/${recipe.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ working: mark(recipe.working), approved: mark(recipe.approved) }),
+    });
+  }
+});
+await page.reload({ waitUntil: "networkidle" });
+await page.waitForTimeout(800);
+
 await pickMode("Versus");
 await goLive();
 
@@ -130,7 +157,6 @@ await check("versus: one column — strip, cards 50/50 with a score each, the bo
   assert.ok(pool.y >= a.y + a.height - 1, "the board is under the cards");
   assert.ok(toque.y >= pool.y + pool.height - 1, "Toque's line is under the board");
   assert.equal(await page.locator(".lc-race").count(), 0, "no race widget");
-  assert.equal(await page.locator(".lc-side").count(), 0, "no side column in Versus");
   assert.equal(await cards.locator(".lc-card-points").count(), 2, "a score on each card");
   assert.ok(await page.locator(".lc-lead-line").isVisible(), "the strip carries the lead line");
   assert.equal(await page.locator(".lc-field.is-versus .lc-seam").count(), 1, "the versus field has its seam");
@@ -167,7 +193,10 @@ await check("versus: a claim moves the tile to Taken, and the busy player's butt
   await page.waitForTimeout(600);
   const taken = page.locator(".lc-tile.is-taken", { hasText: label });
   assert.equal(await taken.count(), 1, "tile is now Taken");
-  assert.equal(await cards.nth(0).locator(".lc-card-status").innerText(), "On it");
+  // Versus says "on it" with the rail and the Done, not a status line.
+  assert.equal(await cards.nth(0).locator(".lc-card-status").count(), 0, "no status line while simply on it");
+  assert.ok(await cards.nth(0).locator(".lc-rail").isVisible(), "the rail is up");
+  assert.ok(await cards.nth(0).getByRole("button", { name: "Done", exact: true }).isVisible(), "Done is the primary");
   const miaButtons = page.locator(".lc-tile.is-claimable .lc-claim.is-a");
   const n = await miaButtons.count();
   for (let i = 0; i < n; i++) assert.equal(await miaButtons.nth(i).isEnabled(), false, "Mia is busy");
@@ -230,6 +259,31 @@ await check("versus: Done and Take it sit on one line with both secondary slots 
   sameY(await box(xl.nth(0)), await box(xl.nth(1)), "primaries");
 });
 
+await check("versus: a pot 'cooking on its own' grows the card instead of squeezing the step into a scroll box", async () => {
+  // Mia is free; give her an unattended step (a tile with a tending chip).
+  const tile = page.locator(".lc-tile.is-claimable", { has: page.locator(".lc-tending-chip") }).filter({ has: page.locator(".lc-claim.is-a:enabled") }).first();
+  assert.ok(await tile.count(), "an unattended step is up for grabs");
+  await tile.locator(".lc-claim.is-a").click();
+  await page.waitForTimeout(800);
+  // While she is at the pot getting it going (the 10 s Start above), it
+  // is the card's focus and not also a row — the cards stay one height.
+  assert.equal(await page.locator(".lc-card .lc-cooking").count(), 0, "no pot row during Start");
+  const a0 = await box(cards.nth(0));
+  const b0 = await box(cards.nth(1));
+  assert.ok(Math.abs(a0.height - b0.height) <= 1, `cards equal during Start: ${a0.height} vs ${b0.height}`);
+  // Once the Start moment is over the step leaves focus and joins the list.
+  await page.locator(".lc-card .lc-cooking").waitFor({ state: "visible", timeout: 15000 });
+  const a = await box(cards.nth(0));
+  const b = await box(cards.nth(1));
+  sameY(a, b, "cards start level");
+  const squeezed = await page.evaluate(() => [...document.querySelectorAll(".lc-card-body")].map((el) => el.scrollHeight - el.clientHeight));
+  // A few px of slack: the tilted offer's rotated box overhangs its
+  // track by ~4px, which is not a scroll box.
+  squeezed.forEach((d, i) => assert.ok(d <= 6, `card ${i} body scrolls by ${d}px`));
+  const xl = page.locator(".lc-card .lc-card-actions .lc-btn-xl, .lc-card .lc-card-actions .lc-moment");
+  sameY(await box(xl.nth(0)), await box(xl.nth(1)), "action blocks");
+});
+
 // Mobile: single column, fixed order, primaries stay 64 and full width.
 await page.setViewportSize({ width: 390, height: 844 });
 await page.waitForTimeout(500);
@@ -274,11 +328,34 @@ await check("co-op: 768 wide — the strip's note shrinks instead of widening th
 });
 
 const primaries = page.locator(".lc-card .lc-card-actions .lc-btn-xl");
+// Toque's panel is in the drawer in both modes; open it if it isn't.
+const openToque = async () => {
+  if ((await page.locator(".lc-agent .lc-say-input").count()) === 0) {
+    await page.locator(".lc-toque-line").click();
+    await page.locator(".lc-agent .lc-say-input").waitFor({ state: "visible", timeout: 3000 });
+  }
+};
 
 await check("co-op: exactly two player cards, in player order", async () => {
   assert.equal(await cards.count(), 2);
   assert.equal(await cards.nth(0).locator(".lc-card-name").innerText(), "Mia");
   assert.equal(await cards.nth(1).locator(".lc-card-name").innerText(), "Leo");
+});
+
+await check("co-op: the same one-column arena as Versus — cards 50/50, Toque one line beneath, the panel in the drawer", async () => {
+  const a = await box(cards.nth(0));
+  const b = await box(cards.nth(1));
+  const toque = await box(page.locator(".lc-toque-line"));
+  sameY(a, b, "cards");
+  assert.ok(Math.abs(a.width - b.width) <= 1, "equal card widths");
+  assert.ok(toque.y >= a.y + a.height - 1, "Toque's line is under the cards");
+  assert.ok(Math.abs(toque.width - (b.x + b.width - a.x)) <= 2, "Toque's line spans the cards");
+  assert.equal(await page.locator(".lc-agent").count(), 0, "no agent panel on the page until the drawer opens");
+  await page.locator(".lc-toque-line").click();
+  await page.locator(".lc-agent .lc-say-input").waitFor({ state: "visible", timeout: 3000 });
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator(".lc-agent").count(), 0, "Escape closes the drawer");
 });
 
 await check("co-op: both cards start with a 64px primary on the same line", async () => {
@@ -348,7 +425,8 @@ await check("co-op: pause freezes both clocks and disables every action; Resume 
 });
 
 await check("co-op: 'done' from a player holding nothing asks which one, with ≤3 options + Cancel", async () => {
-  // Leo is the speaker, holding nothing.
+  // Leo is the speaker, holding nothing. The typed box is in the drawer.
+  await openToque();
   await page.getByRole("radio", { name: /Leo/ }).click();
   await page.locator(".lc-say-input").fill("done");
   await click(/Say it/);
@@ -363,6 +441,7 @@ await check("co-op: 'done' from a player holding nothing asks which one, with �
 });
 
 await check("co-op: 'done' from the player holding a step finishes it via the same handler as the button", async () => {
+  await openToque();
   await page.getByRole("radio", { name: /Mia/ }).click();
   const before = await page.locator(".lc-count-big").innerText();
   await page.locator(".lc-say-input").fill("done");
@@ -374,6 +453,9 @@ await check("co-op: 'done' from the player holding a step finishes it via the sa
 });
 
 await check("co-op: Call it early is a Modal, and confirming lands on Service done", async () => {
+  // The drawer from the typed "done" above is still open; it's a modal.
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
   const dialogsBefore = dialogs;
   await click(/Call it early/);
   assert.equal(dialogs, dialogsBefore, "no browser dialog on the play surface");

@@ -59,7 +59,6 @@ import "./LiveCookPage.css";
 const PLAYER_KEYS = ["a", "b"];
 const playerKey = (index) => PLAYER_KEYS[index % PLAYER_KEYS.length];
 
-const DIFFICULTY_FLAMES = { low: 1, medium: 2, high: 3 };
 const EQUIPMENT_GLYPHS = { cutting_board: "cutting-board", stove_burner: "burner", pot: "pot", wok: "wok", oven: "oven" };
 
 // Copy that is the engine's own — reproduced verbatim on the card.
@@ -293,16 +292,6 @@ function AgentAvatar({ size = 20 }) {
   return (
     <span className={`lc-agent-avatar lc-agent-avatar-${size}`} aria-hidden="true">
       <KpIcon glyph="mic" size={Math.round(size * 0.6)} />
-    </span>
-  );
-}
-
-function DifficultyChip({ level }) {
-  return (
-    <span className={`lc-chip is-difficulty is-${level}`} aria-label={`${level} difficulty`}>
-      {Array.from({ length: DIFFICULTY_FLAMES[level] || 1 }, (_, i) => (
-        <KpIcon key={i} glyph="flame" size={14} />
-      ))}
     </span>
   );
 }
@@ -1148,10 +1137,9 @@ export default function LiveCookPage() {
             </div>
           )}
 
-          {/* The arena. Versus is one column — the two cards, one half
-              each, the board of what's up for grabs under them, and
-              Toque as a single line that opens the drawer. Co-op keeps
-              Toque in a side column; the cards never narrow for it. */}
+          {/* The arena: one column in both modes — the two cards, one
+              half each, then (Versus) the board of what's up for grabs,
+              then Toque as a single line that opens the drawer. */}
           <div className="lc-arena">
             <div className="lc-main">
               <div className="lc-cards">
@@ -1204,67 +1192,35 @@ export default function LiveCookPage() {
                 />
               )}
 
-              {isVersus && (
-                <ToqueLine cooks={cooks} transcript={run.transcript} paused={paused} listening={listening} onOpen={() => setLogOpen(true)} />
-              )}
+              <ToqueLine cooks={cooks} transcript={run.transcript} paused={paused} listening={listening} onOpen={() => setLogOpen(true)} />
             </div>
-
-            {!isVersus && (
-              <div className="lc-side">
-                <AgentPanel
-                  cooks={cooks}
-                  transcript={run.transcript}
-                  speaker={speaker}
-                  onSpeaker={setSpeakerId}
-                  pending={pending}
-                  pendingConfirm={pendingConfirm}
-                  byId={byId}
-                  paused={paused}
-                  listening={listening}
-                  onPick={runPending}
-                  onCancel={() => setPending(null)}
-                  onConfirmYes={() => resolvePendingConfirm("yes")}
-                  onConfirmNo={() => resolvePendingConfirm("no")}
-                  input={input}
-                  onInput={setInput}
-                  onSubmit={() => {
-                    const text = input.trim();
-                    setInput("");
-                    submitUtterance(text);
-                  }}
-                />
-              </div>
-            )}
           </div>
 
-          {isVersus && (
-            <ToqueDrawer open={logOpen || Boolean(pending || pendingConfirm)} onClose={() => setLogOpen(false)}>
-              <AgentPanel
-                variant="drawer"
-                onClose={() => setLogOpen(false)}
-                cooks={cooks}
-                transcript={run.transcript}
-                speaker={speaker}
-                onSpeaker={setSpeakerId}
-                pending={pending}
-                pendingConfirm={pendingConfirm}
-                byId={byId}
-                paused={paused}
-                listening={listening}
-                onPick={runPending}
-                onCancel={() => setPending(null)}
-                onConfirmYes={() => resolvePendingConfirm("yes")}
-                onConfirmNo={() => resolvePendingConfirm("no")}
-                input={input}
-                onInput={setInput}
-                onSubmit={() => {
-                  const text = input.trim();
-                  setInput("");
-                  submitUtterance(text);
-                }}
-              />
+          <ToqueDrawer open={logOpen || Boolean(pending || pendingConfirm)} onClose={() => setLogOpen(false)}>
+            <AgentPanel
+              onClose={() => setLogOpen(false)}
+              cooks={cooks}
+              transcript={run.transcript}
+              speaker={speaker}
+              onSpeaker={setSpeakerId}
+              pending={pending}
+              pendingConfirm={pendingConfirm}
+              byId={byId}
+              paused={paused}
+              listening={listening}
+              onPick={runPending}
+              onCancel={() => setPending(null)}
+              onConfirmYes={() => resolvePendingConfirm("yes")}
+              onConfirmNo={() => resolvePendingConfirm("no")}
+              input={input}
+              onInput={setInput}
+              onSubmit={() => {
+                const text = input.trim();
+                setInput("");
+                submitUtterance(text);
+              }}
+            />
             </ToqueDrawer>
-          )}
 
           <footer className={`lc-footer ${complete ? "is-final lc-piece is-dark" : ""}`}>
             {complete ? (
@@ -1351,8 +1307,12 @@ function PlayerFocusCard({ cardRef, scoreRef, cook, index, cooks, run, nodes, by
   // Every unattended step this cook has going, soonest moment first —
   // the pots that need someone back. Whole-step based on purpose: a pot
   // stays listed even while its check is the card's focus, so the row
-  // and the card agree.
+  // and the card agree. The one exception is the Start moment: the cook
+  // is standing at that pot getting it going, there is nothing to come
+  // back to yet, and listing it would only make this card taller than
+  // the other one. It joins the list the moment they walk away.
   const cooking = passiveStepsFor(cook.id, run, byId)
+    .filter((id) => !(id === activeId && focusMoment?.phase === "initial"))
     .map((id) => ({ id, node: byId[id], state: momentState(byId[id], run.steps[id], now) }))
     .sort((a, b) => (a.state.nextInSec ?? -1) - (b.state.nextInSec ?? -1));
 
@@ -1397,7 +1357,7 @@ function PlayerFocusCard({ cardRef, scoreRef, cook, index, cooks, run, nodes, by
         grabs: "is-next",
       }[reason];
   const phaseLabel = focusMoment?.current ? momentName(focusMoment.current, focusMoment.checkCount) : null;
-  const eyebrowText = paused ? EYEBROW.paused : phaseLabel ? `${EYEBROW.active} · ${phaseLabel}` : EYEBROW[reason];
+  const eyebrowText = paused ? EYEBROW.paused : EYEBROW[reason];
 
   // The silhouette (design §04): rail + chamfer in the player colour for
   // On it, dashed inset for a dealt card, the tilted card-within-a-card
@@ -1412,6 +1372,12 @@ function PlayerFocusCard({ cardRef, scoreRef, cook, index, cooks, run, nodes, by
 
   const secondary = (
     <>
+      {focusMoment && !inFinish && (
+        // Mid-moment the banner holds the slot; Done here ends the step early.
+        <button type="button" className="btn btn-ghost lc-btn-accent" disabled={paused} onClick={() => onDone(activeId)}>
+          Done
+        </button>
+      )}
       <button type="button" className="btn btn-ghost lc-btn-accent" disabled={paused} onClick={() => onSkip(activeId)}>
         Skip
       </button>
@@ -1443,11 +1409,15 @@ function PlayerFocusCard({ cardRef, scoreRef, cook, index, cooks, run, nodes, by
         {isVersus ? (
           <span className="lc-card-id">
             <span className="lc-card-name">{cook.name}</span>
-            <span className={`lc-card-status ${eyebrowClass} ${due ? "is-due" : ""}`}>
-              {reason === "finished" && <KpIcon glyph="checkmark-burst" size={14} />}
-              {reason === "active" && !paused && <span className="lc-eyebrow-dot" />}
-              {due && !phaseLabel ? "Due now" : reason === "grabs" ? "free — nothing held" : eyebrowText}
-            </span>
+            {/* The rail, the Done and the tilted offer already say "on
+                it" / "free"; the line only appears when something is
+                off the usual — paused, due, or done for the night. */}
+            {(paused || due || reason === "finished") && (
+              <span className={`lc-card-status ${eyebrowClass} ${due ? "is-due" : ""}`}>
+                {reason === "finished" && <KpIcon glyph="checkmark-burst" size={14} />}
+                {due && !paused ? (phaseLabel ? `${phaseLabel} — now` : "Due now") : eyebrowText}
+              </span>
+            )}
           </span>
         ) : (
           <>
@@ -1480,26 +1450,30 @@ function PlayerFocusCard({ cardRef, scoreRef, cook, index, cooks, run, nodes, by
               <h2 className="lc-step-title">{node.label}</h2>
               {phaseLabel && <span className={`lc-phase-chip is-${key}`}>{phaseLabel}</span>}
             </div>
-            {node.description && <p className="lc-step-desc">{node.description}</p>}
-            {focusMoment?.current && (
-              <MomentInstruction state={focusMoment} node={node} />
-            )}
-            <div className={`lc-timer-ring is-${key} ${variance.over ? "is-over" : ""}`} style={{ "--heat": `${heatPct.toFixed(1)}%` }}>
-              <div className="lc-timer">
+            {/* The description is the instruction — the one thing on
+                the card that says what to do with your hands. */}
+            {node.description && <p className="lc-step-desc is-instruction">{node.description}</p>}
+            {focusMoment?.current ? (
+              // Mid-moment: the moment's own countdown sits in the action
+              // slot below, and the whole step's clock is the pot row
+              // under the card — nothing more here.
+              focusMoment.current.kind === "initial" && isOneShot(node) && <p className="lc-meta">Then it runs on its own — nothing to come back for.</p>
+            ) : (
+              // Elapsed against est as one rail — the same drawing as
+              // the pot rows below, so a hands-on step and a pot read
+              // the same way. Past est the rail turns amber and the
+              // right end says by how much. Difficulty and equipment
+              // are not repeated: they mattered on the board tile when
+              // this was chosen, not now.
+              <div className={`lc-step-rail is-${key} ${variance.over ? "is-over" : ""}`}>
                 <Mono className="lc-timer-value">{clock(variance.actualSec)}</Mono>
-                <Mono className="lc-timer-est">
-                  est {clock(variance.estSec)}
-                  {variance.over ? ` · ${clock(variance.deltaSec)} over` : ""}
-                </Mono>
+                <span className="lc-step-rail-track" aria-hidden="true">
+                  <span className="lc-step-rail-fill" style={{ width: `${heatPct.toFixed(1)}%` }} />
+                </span>
+                <Mono className="lc-timer-est">{variance.over ? `${clock(variance.deltaSec)} over` : clock(variance.estSec)}</Mono>
+                {isVersus && <Mono className="lc-chip is-points">+{DIFFICULTY_POINTS[node.difficulty]}</Mono>}
               </div>
-            </div>
-            <div className="lc-chips">
-              <DifficultyChip level={node.difficulty} />
-              {(node.required_equipment || []).map((e) => (
-                <EquipmentChip key={e} type={e} />
-              ))}
-              {isVersus && <Mono className="lc-chip is-points">worth +{DIFFICULTY_POINTS[node.difficulty]}</Mono>}
-            </div>
+            )}
           </>
         )}
 
@@ -1512,15 +1486,14 @@ function PlayerFocusCard({ cardRef, scoreRef, cook, index, cooks, run, nodes, by
               <TendingChip node={offered} />
             </div>
             {offered.description && reason !== "grabs" && <p className="lc-step-desc">{offered.description}</p>}
-            <div className="lc-chips">
-              <Mono className="lc-chip is-est">{reason === "grabs" ? clock(offered.estimated_duration_sec) : `est ${clock(offered.estimated_duration_sec)}`}</Mono>
+            {/* What deciding takes: how long, what it needs, what it's
+                worth. Difficulty is in the points already. */}
+            <div className="lc-offer-meta">
+              <Mono className="lc-offer-facts">
+                {[clock(offered.estimated_duration_sec), ...(offered.required_equipment || []).map((e) => capitalize(EQUIPMENT_LABELS[e] || e))].join(" · ")}
+              </Mono>
               {isVersus && <Mono className="lc-chip is-points is-big">+{DIFFICULTY_POINTS[offered.difficulty]}</Mono>}
-              <DifficultyChip level={offered.difficulty} />
-              {(offered.required_equipment || []).map((e) => (
-                <EquipmentChip key={e} type={e} />
-              ))}
             </div>
-            {reason === "grabs" && <p className="lc-step-desc">Nobody&rsquo;s holding it. The full pool is on the board below.</p>}
             {reason === "idle_fill" && <p className="lc-step-desc">Fits the gap.</p>}
             {claimNote?.stepId === offeredId && (
               <p key={claimNote.key} className="lc-claim-note" role="status">
@@ -1531,29 +1504,35 @@ function PlayerFocusCard({ cardRef, scoreRef, cook, index, cooks, run, nodes, by
         )}
 
         {reason === "waiting" && (
+          // Same skeleton as On it — title, line, then the number in the
+          // rail's slot — so the two cards' rows line up. The number is
+          // said once, here, not again in the sentence.
           <>
-            <p className="lc-waiting-copy">
+            <div className="lc-step-title-row">
+              <h2 className="lc-step-title is-quiet">Nothing to do yet</h2>
+            </div>
+            <p className="lc-step-desc lc-waiting-copy">
               {waitingOn ? (
                 <>
                   Waiting on &ldquo;{waitingOn.label}&rdquo;
-                  {assignment.etaSec != null && (
+                  {waitingCookIndex >= 0 && (
                     <>
-                      , about <Mono>{clock(assignment.etaSec)}</Mono> left
+                      {" "}&mdash; {cooks[waitingCookIndex].name} has it
+                      <PlayerAvatar cook={cooks[waitingCookIndex]} index={waitingCookIndex} size={20} />
                     </>
                   )}
-                  .{waitingCookIndex >= 0 && <PlayerAvatar cook={cooks[waitingCookIndex]} index={waitingCookIndex} size={20} />}
+                  .
                 </>
               ) : (
                 "Waiting on the other player."
               )}
             </p>
             {assignment?.etaSec != null && (
-              <div className="lc-timer is-countdown">
+              <div className="lc-step-rail is-countdown">
                 <Mono className="lc-timer-value">{clock(assignment.etaSec)}</Mono>
                 <Mono className="lc-timer-est">left</Mono>
               </div>
             )}
-            <p className="lc-meta">Nothing to do yet.</p>
           </>
         )}
 
@@ -1574,15 +1553,14 @@ function PlayerFocusCard({ cardRef, scoreRef, cook, index, cooks, run, nodes, by
       <div className="lc-card-actions">
         <CardGoose pose={goosePose} paused={paused} motion={paused ? "none" : gooseMotion} />
         {node && (focusMoment && !inFinish ? (
-          // Start / Check: no primary. The card must read "do the thing,
-          // then walk away", not "press a button" — the ghost Done on the
-          // left is for ending the step early.
-          <div className="lc-card-secondary is-ghost-row">
-            <button type="button" className="btn btn-ghost lc-btn-accent" disabled={paused} onClick={() => onDone(activeId)}>
-              Done
-            </button>
-            <span className="lc-card-secondary-right">{secondary}</span>
-          </div>
+          // Start / Check: the moment's instruction and countdown take
+          // the primary's slot. The card must read "do the thing, then
+          // walk away", not "press a button" — so the one thing at
+          // button height is a clock, and Done is a ghost in the row.
+          <>
+            <MomentInstruction state={focusMoment} />
+            <div className="lc-card-secondary">{secondary}</div>
+          </>
         ) : (
           <>
             <button
@@ -1674,27 +1652,18 @@ function PlayerFocusCard({ cardRef, scoreRef, cook, index, cooks, run, nodes, by
   );
 }
 
-// The instruction line for a focus card mid-moment: what to do, the
-// small countdown for this moment (the big timer keeps counting the
-// whole step), and what comes next.
-function MomentInstruction({ state, node }) {
-  const { current, next, countdownSec, checkCount } = state;
+// The moment banner, in the action block's primary slot: what to do
+// and this moment's countdown. The whole step's clock is the pot row
+// under the card.
+function MomentInstruction({ state }) {
+  const { current, countdownSec } = state;
   const verb = current.kind === "initial" ? "Get it going" : current.kind === "checkpoint" ? "Check on it" : "Pull it off";
-  const nextText = next ? `Next: ${momentName(next, checkCount)} in ${clock(state.nextInSec)}.` : null;
   return (
-    <div className="lc-moment">
-      <div className="lc-moment-line">
-        <span className="lc-moment-instruction">
-          {verb} — {current.kind === "ending" ? "now." : <><Mono>{clock(current.endSec - current.atSec)}</Mono>.</>}
-        </span>
-        {current.kind !== "ending" && <Mono className="lc-moment-countdown">{clock(countdownSec)}</Mono>}
-      </div>
-      {current.kind === "initial" && (
-        <span className="lc-meta">
-          {isOneShot(node) ? "Then it runs on its own — nothing to come back for." : `Then it runs on its own. ${nextText || ""}`}
-        </span>
-      )}
-      {current.kind === "checkpoint" && nextText && <span className="lc-meta">{nextText}</span>}
+    <div className="lc-moment" role="timer">
+      <span className="lc-moment-instruction">
+        {verb} — {current.kind === "ending" ? "now." : <><Mono>{clock(current.endSec - current.atSec)}</Mono>.</>}
+      </span>
+      {current.kind !== "ending" && <Mono className="lc-moment-countdown">{clock(countdownSec)}</Mono>}
     </div>
   );
 }
@@ -1954,12 +1923,10 @@ function ToqueDrawer({ open, onClose, children }) {
   );
 }
 
-// The agent column: who's talking, what's been said, and the typed
-// fallback that drives the demo today. The mic itself is the shell's
-// VoiceBar; this panel is the record of the conversation. Co-op keeps
-// it beside the cards; in Versus the same panel fills the drawer.
+// The agent panel, filling the drawer: who's talking, what's been said,
+// and the typed fallback that drives the demo today. The mic itself is
+// the shell's VoiceBar; this panel is the record of the conversation.
 function AgentPanel({
-  variant = "column",
   onClose,
   cooks,
   transcript,
@@ -1979,10 +1946,9 @@ function AgentPanel({
   onSubmit,
 }) {
   const logRef = useRef(null);
-  const [expanded, setExpanded] = useState(false);
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
-  }, [transcript.length, pending, pendingConfirm, expanded]);
+  }, [transcript.length, pending, pendingConfirm]);
 
   const speakerCook = cooks.find((c) => c.id === speaker);
 
@@ -2006,27 +1972,17 @@ function AgentPanel({
   }, [lastId, last, cooks]);
   const toquePose = facing === "left" ? GOOSE.toqueLeft : facing === "right" ? GOOSE.toqueRight : listening ? GOOSE.listening : GOOSE.toque;
 
-  const inDrawer = variant === "drawer";
   return (
-    <aside className={`lc-agent ${inDrawer ? "is-drawer" : "lc-piece"} ${expanded ? "is-expanded" : ""}`} aria-label="Toque, the agent">
+    <aside className="lc-agent" aria-label="Toque, the agent">
       <header className="lc-agent-head">
         <BabyGoose pose={toquePose} size={48} paused={paused} label="Toque" className="lc-toque" />
-        {inDrawer ? (
-          <>
-            <span className="lc-agent-title">
-              <span className="lc-agent-name">Toque</span>
-              <Mono className="lc-meta">everything said this run</Mono>
-            </span>
-            <button type="button" className="lc-agent-close" onClick={onClose} aria-label="Close">
-              ✕
-            </button>
-          </>
-        ) : (
-          <>
-            <span className="lc-agent-eyebrow">Toque</span>
-            <span className="lc-agent-tag">AI</span>
-          </>
-        )}
+        <span className="lc-agent-title">
+          <span className="lc-agent-name">Toque</span>
+          <Mono className="lc-meta">everything said this run</Mono>
+        </span>
+        <button type="button" className="lc-agent-close" onClick={onClose} aria-label="Close">
+          ✕
+        </button>
       </header>
 
       <div className="lc-log" ref={logRef} role="log" aria-live="polite">
@@ -2063,10 +2019,6 @@ function AgentPanel({
           </div>
         )}
       </div>
-      <button type="button" className="btn btn-ghost lc-agent-more" onClick={() => setExpanded((v) => !v)}>
-        {expanded ? "Less" : "More"}
-      </button>
-
       <div className="lc-agent-controls">
       {/* Temporary until voice ID lands: the backend can't tell voices
           apart, so whoever is selected here owns everything said. */}
@@ -2138,7 +2090,10 @@ function ServiceDone({ outcome, cooks, isVersus, onExit, saving, saveError }) {
             const i = cooks.findIndex((c) => c.id === entry.cookId);
             return (
               <div className={`lc-score-tile lc-piece is-${playerKey(i)} ${won(entry.cookId) ? "is-winner" : ""}`} key={entry.cookId}>
-                <BabyGoose pose={won(entry.cookId) ? GOOSE.victory : GOOSE.defeat} size={96} className="lc-score-goose" label={won(entry.cookId) ? `${entry.name} wins` : `${entry.name} — good game`} />
+                {/* The two sprites fill their frames differently — the
+                    victory bird is drawn small to leave room for the
+                    trophy — so the boxes differ to make the geese match. */}
+                <BabyGoose pose={won(entry.cookId) ? GOOSE.victory : GOOSE.defeat} size={won(entry.cookId) ? 116 : 88} className="lc-score-goose" label={won(entry.cookId) ? `${entry.name} wins` : `${entry.name} — good game`} />
                 <PlayerAvatar cook={cooks[i]} index={i} size={40} />
                 <span className="lc-score-body">
                   <span className="lc-score-name">{entry.name}</span>
@@ -2169,14 +2124,18 @@ function ServiceDone({ outcome, cooks, isVersus, onExit, saving, saveError }) {
         )}
       </div>
 
-      <div className="lc-service-steps lc-piece">
-        <header className="lc-pool-head">
-          <span className="lc-agent-eyebrow">Every step</span>
-          <Mono className="lc-meta is-tertiary">
-            {outcome.doneCount} done · {outcome.skippedCount} skipped
-          </Mono>
-        </header>
-        <ul className="lc-step-list">
+      {/* The list is as tall as the column beside it and scrolls inside
+          — the cell is the grid item, the panel is taken out of flow, so
+          nineteen rows never stretch the page past the celebration. */}
+      <div className="lc-service-steps-cell">
+        <div className="lc-service-steps lc-piece">
+          <header className="lc-service-steps-head">
+            <h2 className="lc-service-steps-title">Every step</h2>
+            <Mono className="lc-meta">
+              {outcome.doneCount} done · {outcome.skippedCount} skipped
+            </Mono>
+          </header>
+          <ul className="lc-step-list">
           {outcome.perStep.map((s) => (
             <li key={s.id} className={`lc-step-row ${s.status === "skipped" ? "is-skipped" : ""} ${s.deltaSec > 0 ? "is-over" : ""}`}>
               <span className="lc-step-row-label">{s.label}</span>
@@ -2187,7 +2146,8 @@ function ServiceDone({ outcome, cooks, isVersus, onExit, saving, saveError }) {
               </Mono>
             </li>
           ))}
-        </ul>
+          </ul>
+        </div>
       </div>
     </div>
   );

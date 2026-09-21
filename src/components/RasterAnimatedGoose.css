@@ -1,0 +1,9 @@
+.kp-raster-goose {
+  display: inline-block;
+  flex-shrink: 0;
+  background-size: 600% 100%;
+  background-repeat: no-repeat;
+  animation: kp-raster-goose-frames 1.2s steps(6) infinite;
+}
+@keyframes kp-raster-goose-frames { to { background-position-x: 120%; } }
+@media (prefers-reduced-motion: reduce) { .kp-raster-goose { animation: none; } }
