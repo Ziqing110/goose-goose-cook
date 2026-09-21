@@ -53,7 +53,7 @@ agentRouter.get("/answer/:id", async (req, res) => {
 });
 
 agentRouter.post("/turn", async (req, res) => {
-  const { text, agentName, engaged, snapshot } = req.body || {};
+  const { text, agentName, engaged, shared, snapshot } = req.body || {};
   const said = String(text ?? "").trim().slice(0, MAX_TEXT_CHARS);
   if (!said || !agentName || !snapshot?.speakerName || !Array.isArray(snapshot.steps)) {
     return res.status(400).json({ error: "text, agentName and snapshot {speakerName, steps} are required." });
@@ -65,6 +65,7 @@ agentRouter.post("/turn", async (req, res) => {
       text: said,
       agentName,
       engaged: Boolean(engaged),
+      shared: Boolean(shared),
       snapshot,
     });
     // A detached lookup: park the promise, hand back its id, and answer

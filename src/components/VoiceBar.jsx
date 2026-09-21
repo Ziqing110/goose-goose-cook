@@ -94,6 +94,21 @@ const STREAM_CONFIG = {
   // command longer than one word.
   vadThreshold: 0.45,
   turnDetection: COMMAND_TURN,
+  // Who said it, decided server-side, with no voice enrolled anywhere.
+  // Two things came out of turning this on, measured by replaying the
+  // kitchen takes with and without it:
+  //
+  // Every word carries a speaker confidence, and on a turn where one
+  // cook cut across another it steps down exactly at the handover —
+  // which is the only reliable way we have found to notice that a single
+  // turn holds two people (see hasHandover in speakerMatch.js).
+  //
+  // And the diarization-tuned silence defaults (640ms rather than our
+  // 400) turn out to MERGE the split after the agent's name that scene 4
+  // shows, rather than aggravate it: "Goose." plus "I'm done with the
+  // mincing" came back as one turn.
+  speakerLabels: true,
+  maxSpeakers: 2,
 };
 
 export default function VoiceBar() {

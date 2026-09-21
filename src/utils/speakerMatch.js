@@ -45,3 +45,41 @@ export function decideSpeaker(result, thresholds = SPEAKER_THRESHOLDS) {
   if (result.margin != null && result.margin < thresholds.minMargin) return { cookId: null, reason: "too close to call" };
   return { cookId: result.cook, reason: "ok" };
 }
+
+// Two cooks inside one turn.
+//
+// The streaming API's diarization labels a turn with ONE speaker even
+// when two people are in it, so the label alone cannot catch the case
+// that matters: "Goose, done with—" "no way, that's mine!" arrives as a
+// single turn credited to whoever won, and half of it is wrong.
+//
+// The per-word speaker confidence does catch it. On the one genuinely
+// merged turn in the kitchen recordings it steps down exactly at the
+// handover, and holds flat everywhere else:
+//
+//   Goose,/1.00 done/1.00 with—/1.00 no/0.63 way,/0.63 that's/0.63 mine./0.63
+//
+// Measured across four scenes: drop 0.37 on the merged turn, 0.00 on all
+// nineteen single-speaker turns. It is the DROP that separates them, not
+// the level — clean turns sit anywhere from 0.50 to 1.00 and are none
+// the worse for it, so a floor on absolute confidence would fire on
+// perfectly good speech.
+//
+// Not caught, and deliberately: both cooks saying the same words at the
+// same instant ("Goose, status" in chorus) holds flat too. Nothing needs
+// clarifying there — they asked for the same thing.
+const MIN_HANDOVER_DROP = 0.25;
+
+/**
+ * @param {Array<{speaker_confidence?:number}>} words a turn's words
+ * @returns {boolean} true when the turn changed speaker part-way through
+ */
+export function hasHandover(words, minDrop = MIN_HANDOVER_DROP) {
+  const confidences = (words || [])
+    .map((w) => w.speaker_confidence)
+    .filter((c) => Number.isFinite(c));
+  // Fewer than two words says nothing, and no diarization says nothing
+  // either — both are "we don't know", not "one speaker".
+  if (confidences.length < 2) return false;
+  return Math.max(...confidences) - Math.min(...confidences) >= minDrop;
+}

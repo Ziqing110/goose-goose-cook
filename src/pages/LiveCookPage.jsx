@@ -46,7 +46,7 @@ import { agentTurn, collectAnswer } from "../api/agent.js";
 import { AGENT_NAME, speak } from "../voice/agentVoice.js";
 import { audioTap } from "../voice/audioTap.js";
 import { identifySpeaker } from "../api/speaker.js";
-import { decideSpeaker } from "../utils/speakerMatch.js";
+import { decideSpeaker, hasHandover } from "../utils/speakerMatch.js";
 import { isNameOnlyTurn } from "../utils/addressing.js";
 import { buildSummary } from "../utils/summaryCard.js";
 import { chefAvatar } from "../utils/cooks.js";
@@ -886,7 +886,7 @@ export default function LiveCookPage() {
     }
   };
 
-  const askAgent = (text, cookId, { engaged = true, clip = null } = {}) => {
+  const askAgent = (text, cookId, { engaged = true, clip = null, shared = false } = {}) => {
     agentQueueRef.current = agentQueueRef.current.then(async () => {
       const heardAs = await whoSpoke(clip);
       if (heardAs && heardAs !== cookId) {
@@ -902,6 +902,9 @@ export default function LiveCookPage() {
           // must say its name (checked on the server) unless it just
           // asked a question.
           engaged,
+          // Two voices ended up in this one turn, so the words cannot be
+          // trusted to belong to one person asking for one thing.
+          shared,
           snapshot: buildAgentSnapshot({ run: latestRunRef.current, nodes, cooks, speakerId: cookId, paused: isPaused(latestRunRef.current) }),
         });
       } catch (err) {
@@ -986,7 +989,12 @@ export default function LiveCookPage() {
     // One unnamed answer per question: the window closes once used.
     const engaged = Date.now() < engagedUntilRef.current;
     if (engaged) engagedUntilRef.current = 0;
-    askAgent(text, speaker, { engaged, clip });
+    // Two cooks inside one turn. Whatever this gets credited to, half of
+    // it is wrong, so nothing is acted on: the agent is told what
+    // happened and asks which of them meant it.
+    const shared = hasHandover(turn?.words);
+    if (shared) console.info("[voice] two cooks in one turn:", text);
+    askAgent(text, speaker, { engaged, clip, shared });
   };
 
   const submitKeywordUtterance = (text) => {

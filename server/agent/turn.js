@@ -91,7 +91,7 @@ Rules:
 }
 
 /** The user message: state of the kitchen, recent talk, then the words. */
-export function buildUserMessage(snapshot, text) {
+export function buildUserMessage(snapshot, text, { shared = false } = {}) {
   const open = (snapshot.steps || []).map((s) => ({
     id: s.id,
     label: s.label,
@@ -108,6 +108,16 @@ export function buildUserMessage(snapshot, text) {
   ];
   if (snapshot.history?.length) {
     lines.push(`Recent: ${snapshot.history.slice(-6).map((h) => `${h.speaker}: ${h.text}`).join(" | ")}`);
+  }
+  if (shared) {
+    // The transcript is one turn holding two people, so it may be two
+    // half-sentences stitched together and the name on it is a coin
+    // flip. Say so plainly rather than letting the model puzzle over a
+    // sentence that contradicts itself.
+    lines.push(
+      `TWO COOKS SPOKE AT ONCE and this is both of them in one transcript, so it may be two half-sentences and the speaker above may be the wrong one. Take no action. Ask, in one short question, which of them meant it and what they wanted: "${text}"`,
+    );
+    return lines.join("\n");
   }
   lines.push(`${snapshot.speakerName} said: "${text}"`);
   return lines.join("\n");
@@ -166,7 +176,7 @@ export function cleanReply(content) {
  * executed: a model that names a finished step or a made-up id gets
  * ignored, not obeyed.
  */
-export function parseChoice(choice, snapshot) {
+export function parseChoice(choice, snapshot, { shared = false } = {}) {
   const message = choice?.message || {};
   const steps = snapshot.steps || [];
   const tools = Object.fromEntries(buildTools(snapshot).map((t) => [t.function.name, t.function.parameters]));
@@ -176,6 +186,15 @@ export function parseChoice(choice, snapshot) {
   for (const raw of message.tool_calls || []) {
     if (calls.length >= MAX_CALLS) break; // cap what survives, not what was attempted
     const name = raw?.function?.name;
+    // Two cooks in one turn: nothing fires, whatever the model decided.
+    // The prompt asks it to hold off and ask instead, but a prompt is a
+    // request and this is the guarantee — acting on a turn whose speaker
+    // is a coin flip is the exact failure we set out to stop, and it is
+    // not worth leaving to a model having a bad day.
+    if (shared && name !== "search_web") {
+      rejected.push({ name, reason: "two_speakers" });
+      continue;
+    }
     let args = {};
     try {
       args = JSON.parse(raw?.function?.arguments || "{}") || {};

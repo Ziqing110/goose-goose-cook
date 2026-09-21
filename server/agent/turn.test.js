@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildTools, cleanReply, isAddressed, parseChoice } from "./turn.js";
+import { buildTools, buildUserMessage, cleanReply, isAddressed, parseChoice } from "./turn.js";
 
 const snapshot = {
   speakerName: "Lindy",
@@ -89,4 +89,29 @@ test("reply: long answers are cut at a sentence, never mid-word", () => {
   assert.ok(out.length <= 200, `too long: ${out.length}`);
   assert.ok(/[.!?]$/.test(out), `does not end a sentence: ${out}`);
   assert.ok(!out.endsWith("..."), "should not need the word-boundary fallback here");
+});
+
+test("two cooks in one turn: nothing fires, whatever the model says", () => {
+  const choice = {
+    message: {
+      content: "Got it, done with the garlic.",
+      tool_calls: [call("done", { step_id: "s2" }), call("claim", { step_id: "s1" })],
+    },
+  };
+  const normal = parseChoice(choice, snapshot);
+  assert.equal(normal.calls.length, 2, "ordinarily both calls stand");
+
+  const shared = parseChoice(choice, snapshot, { shared: true });
+  assert.deepEqual(shared.calls, []);
+  assert.deepEqual(shared.rejected.map((r) => r.reason), ["two_speakers", "two_speakers"]);
+  // The question it asks instead still gets through.
+  assert.equal(shared.reply, "Got it, done with the garlic.");
+});
+
+test("two cooks in one turn: the model is told, in the words it reads", () => {
+  const plain = buildUserMessage(snapshot, "done with— no way, that's mine");
+  const both = buildUserMessage(snapshot, "done with— no way, that's mine", { shared: true });
+  assert.ok(!/TWO COOKS/.test(plain));
+  assert.ok(/TWO COOKS SPOKE AT ONCE/.test(both));
+  assert.ok(/Take no action/.test(both));
 });

@@ -42,7 +42,7 @@ const CHUNK_MS = 50;
 const argv = process.argv.slice(2);
 // Every flag here takes a value, so the positional argument is whatever
 // is left once each flag and the word after it are accounted for.
-const VALUED = ["keyterms", "vad", "langs", "model", "voice-focus", "min-silence", "max-silence", "name", "speed", "json"];
+const VALUED = ["keyterms", "vad", "langs", "model", "voice-focus", "min-silence", "max-silence", "max-speakers", "name", "speed", "json"];
 const flag = (name, fallback = null) => {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 && argv[i + 1] ? argv[i + 1] : fallback;
@@ -117,8 +117,18 @@ function buildParams(token, rate) {
   p.set("speech_model", model);
   p.set("format_turns", "true");
   p.set("vad_threshold", flag("vad", "0.45"));
-  p.set("min_turn_silence", flag("min-silence", "400"));
-  p.set("max_turn_silence", flag("max-silence", "1280"));
+  // With speaker_labels the server applies diarization-tuned silence
+  // defaults (640/768) so turns break at a speaker change. Ours would
+  // override those, so they stand down unless asked for by name.
+  const diarize = argv.includes("--speaker-labels");
+  const minSilence = flag("min-silence", diarize ? "" : "400");
+  const maxSilence = flag("max-silence", diarize ? "" : "1280");
+  if (minSilence) p.set("min_turn_silence", minSilence);
+  if (maxSilence) p.set("max_turn_silence", maxSilence);
+  if (diarize) {
+    p.set("speaker_labels", "true");
+    p.set("max_speakers", flag("max-speakers", "2"));
+  }
   const focus = flag("voice-focus", "far-field");
   if (focus !== "off") {
     if (model !== "universal-3-5-pro") {
@@ -141,7 +151,7 @@ const bytesPerChunk = Math.round((rate * CHUNK_MS) / 1000) * 2;
 const durationMs = (pcm.length / 2 / rate) * 1000;
 
 console.log(`${basename(file)} — ${rate} Hz mono, ${(durationMs / 1000).toFixed(1)}s`);
-console.log(`  vad ${flag("vad", "0.45")} · silence ${flag("min-silence", "400")}/${flag("max-silence", "1280")}ms · voice_focus ${flag("voice-focus", "far-field")} · langs ${flag("langs", "en,zh")}`);
+console.log(`  vad ${flag("vad", "0.45")} · voice_focus ${flag("voice-focus", "far-field")} · langs ${flag("langs", "en,zh")}${argv.includes("--speaker-labels") ? " · speaker_labels (server silence defaults)" : ` · silence ${flag("min-silence", "400")}/${flag("max-silence", "1280")}ms`}`);
 
 const tokenRes = await fetch(`${TOKEN_URL}?expires_in_seconds=60`, {
   headers: { Authorization: KEY }, // raw key: Streaming STT, not the Voice Agent
@@ -199,7 +209,8 @@ ws.onmessage = (ev) => {
       turns.push({ startMs, text, lowest, addressed, empty: !text });
 
       const mark = !text ? "·" : addressed ? "»" : " ";
-      console.log(`${clock(startMs)} ${mark} ${text || "(no words — turn ended empty)"}`);
+      const who = msg.speaker_label ? `[${msg.speaker_label}] ` : "";
+      console.log(`${clock(startMs)} ${mark} ${who}${text || "(no words — turn ended empty)"}`);
       if (text) {
         console.log(`          conf ${lowest.toFixed(2)} · ${words.length} words · turn open ${(openFor / 1000).toFixed(1)}s${addressed ? "" : " · NOT addressed"}`);
       }

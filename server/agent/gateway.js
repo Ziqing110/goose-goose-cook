@@ -30,7 +30,7 @@ export class TurnError extends Error {
  * @returns {Promise<{addressed, calls, reply, rejected, ms, model}>}
  * @throws {TurnError} with an HTTP-ish `status` the route can pass on
  */
-export async function requestTurn({ apiKey, model, text, agentName, engaged = false, snapshot, timeoutMs = 6000 }) {
+export async function requestTurn({ apiKey, model, text, agentName, engaged = false, shared = false, snapshot, timeoutMs = 6000 }) {
   // `named` is whether the agent's name was actually said. `engaged` alone
   // (answering its question) lets a turn through but is a weaker claim on
   // the agent's attention, and the caller uses the difference.
@@ -47,7 +47,7 @@ export async function requestTurn({ apiKey, model, text, agentName, engaged = fa
   const tools = buildTools(snapshot, { search });
   const messages = [
     { role: "system", content: buildSystemPrompt({ agentName, speakerName: snapshot.speakerName, search }) },
-    { role: "user", content: buildUserMessage(snapshot, text) },
+    { role: "user", content: buildUserMessage(snapshot, text, { shared }) },
   ];
 
   // A turn that never searches keeps its original budget exactly; one
@@ -79,7 +79,7 @@ export async function requestTurn({ apiKey, model, text, agentName, engaged = fa
 
   const choice = await ask();
   const lookups = (choice?.message?.tool_calls || []).filter((c) => c?.function?.name === "search_web");
-  const vetted = parseChoice(choice, snapshot);
+  const vetted = parseChoice(choice, snapshot, { shared });
 
   if (!lookups.length) {
     return { addressed: true, named, ...vetted, searched: false, ms: Date.now() - started, model };

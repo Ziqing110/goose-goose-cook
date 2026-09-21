@@ -22,11 +22,11 @@ const ANSWER_TIMEOUT_MS = 20_000;
  *   in the response applies NOW; pass the id to collectAnswer for the
  *   part it had to read up on.
  */
-export function agentTurn({ text, agentName, engaged, snapshot }) {
+export function agentTurn({ text, agentName, engaged, shared, snapshot }) {
   return apiRequest("/api/agent", "/turn", {
     method: "POST",
     signal: AbortSignal.timeout(TIMEOUT_MS),
-    body: JSON.stringify({ text, agentName, engaged, snapshot }),
+    body: JSON.stringify({ text, agentName, engaged, shared, snapshot }),
   });
 }
 
