@@ -94,6 +94,32 @@ const LATE_AFTER_SEC = 60;
 const ENGAGED_MS = 10_000;
 const MIN_VOICE_CONFIDENCE = 0.4;
 
+// Mandarin the cooks actually use mid-service, primed so the recogniser
+// writes it down rather than translating it.
+//
+// PHRASES, not single nouns, and that distinction is the whole finding.
+// Replaying the code-switching take four ways:
+//
+//   language_codes en only     Chinese content DESTROYED — "Goose, 豆腐切好了"
+//                              came back as "Goose", and "蒜蓉 done" as "Goose,,"
+//   en+zh, no Chinese keyterms 4/5 addressed, mostly translated rather than
+//                              transcribed (我来做 -> "I'll do")
+//   en+zh, noun keyterms       verbatim, but 豆腐 wrongly inserted into 4 of 5 turns
+//   en+zh, phrase keyterms     5/5 addressed, 5/5 verbatim, nothing inserted
+//
+// Short common nouns get over-applied by the keyterm bias and appear in
+// sentences nobody said them in. Phrases of three characters or more do
+// not. 蒜蓉 earns its place as the exception: without it the recogniser
+// hears the homophone 算容.
+//
+// Addressing improves too, for an unobvious reason — with the phrases
+// primed, "Goose豆腐切好了" comes back with a space after the name, so
+// "goose" is its own word and the addressing gate sees it.
+const MANDARIN_KEYTERMS = [
+  "切好了", "做好了", "弄好了", "我来做", "我来切",
+  "还要多久", "接下来做什么", "都好了", "可以上菜", "蒜蓉",
+];
+
 // How long a turn that was only the agent's name keeps the door open for
 // the rest of the sentence. Shorter than ENGAGED_MS: this is someone
 // mid-breath, not someone thinking about an answer. Measured on the
@@ -445,7 +471,7 @@ export default function LiveCookPage() {
   // agent's name, the cooks', and every step on the board.
   const keyterms = useMemo(
     () =>
-      [AGENT_NAME, ...cooks.map((c) => c.name), ...nodes.map((n) => n.label)]
+      [AGENT_NAME, ...cooks.map((c) => c.name), ...nodes.map((n) => n.label), ...MANDARIN_KEYTERMS]
         .map((t) => String(t || "").trim())
         .filter((t) => t && t.length <= 50)
         .slice(0, 100),

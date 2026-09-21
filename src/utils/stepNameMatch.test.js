@@ -67,3 +67,49 @@ test("the agent's name is not part of the step's name", () => {
   assert.equal(tofu.stepId, null);
   assert.equal(tofu.candidates.length, 2);
 });
+
+// The kitchen take has both cooks code-switching. These are the exact
+// transcripts the recogniser returned for it, so a regression shows up
+// as the sentence somebody actually said.
+test("Mandarin commands reach an intent instead of vanishing", () => {
+  const board = { tofu_cut: "Cut tofu into cubes", mince_garlic: "Mince garlic", sauce_mix: "Mix sauce & slurry" };
+  const ids = Object.keys(board);
+  const ctx = {
+    byId: Object.fromEntries(ids.map((id) => [id, { label: board[id] }])),
+    activeStepId: "tofu_cut",
+    claimable: ids,
+    ownQueue: ids,
+    agentName: "Goose",
+  };
+
+  // "the tofu is cut" — no step named, so it falls back to the one they
+  // are holding, exactly as the English "done" does.
+  assert.equal(parseCommand("Goose 豆腐切好了。", ctx).intent, "done");
+  assert.equal(parseCommand("Goose 豆腐切好了。", ctx).stepId, "tofu_cut");
+
+  // Code-switched mid-sentence: the verb is Chinese, the step is English.
+  const claim = parseCommand("Goose, 我来做 the sauce.", ctx);
+  assert.equal(claim.intent, "claim");
+  assert.equal(claim.stepId, "sauce_mix");
+
+  assert.equal(parseCommand("Goose, 还要多久?", ctx).intent, "status");
+  assert.equal(parseCommand("Goose 都好了,可以上菜", ctx).intent, "finish_run");
+  assert.equal(parseCommand("Goose 暂停", ctx).intent, "pause");
+});
+
+test("Chinese does not dilute an English step match", () => {
+  const board = { mince_garlic: "Mince garlic", tofu_cut: "Cut tofu into cubes" };
+  const ids = Object.keys(board);
+  const ctx = {
+    byId: Object.fromEntries(ids.map((id) => [id, { label: board[id] }])),
+    activeStepId: null,
+    claimable: ids,
+    ownQueue: ids,
+    agentName: "Goose",
+  };
+  // Step matching still normalises to ASCII on purpose: a Chinese token
+  // can match no English label, and counting it would only push the real
+  // match under the floor — the same way the agent's name used to.
+  const r = parseCommand("Goose, 蒜蓉 done with the garlic", ctx);
+  assert.equal(r.stepId, "mince_garlic");
+});

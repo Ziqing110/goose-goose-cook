@@ -110,3 +110,16 @@ export function matchStepName(said, candidateIds, labelOf) {
   // straight to "which one" instead of starting the search over.
   return { stepId: best.id, label: labelOf(best.id), candidates: scored.slice(1, 4).map((s) => s.id), confidence: "confirm" };
 }
+
+// Like `normalize`, but it keeps every letter rather than only a-z.
+//
+// The ASCII-only version above is right for matching a spoken name
+// against a step LABEL, because the labels are English: letting Chinese
+// characters through there would add tokens no label can ever match and
+// dilute the score, the same way the agent's name did.
+//
+// Intent detection is the opposite case. "豆腐切好了" is a completed
+// step and "还要多久" is a request for status, and stripping them leaves
+// an empty string and no intent at all.
+export const normalizeLoose = (s) =>
+  (s || "").toLowerCase().replace(/[^\p{L}\p{N}\s']/gu, " ").replace(/\s+/g, " ").trim();

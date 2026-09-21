@@ -68,7 +68,7 @@ The margin is thin, though. Two correct transcripts sit at min 0.40 and 0.44,
 within a rounding error of being thrown away. Worth watching, not worth
 changing without more takes.
 
-## Not fixed: two cooks in one turn
+## Fixed: two cooks in one turn now get asked, not guessed at
 
 Scene 8, the overlap scene, merged a line from each cook into a single turn:
 
@@ -76,35 +76,95 @@ Scene 8, the overlap scene, merged a line from each cook into a single turn:
 00:28  Goose, done with— no way, that's mine!
 ```
 
-One turn, one speaker attribution, two people. Whatever that turn is credited
-to, it is half wrong — this is the other half of "wrong cook". The speaker
-sidecar cannot fix it either, since it embeds the whole clip.
+Acted on, half of it is wrong. Two detectors were tried.
 
-Options, in order of appeal: enable `speaker_labels` on the connection (the
-server diarizes per turn, and the docs note it retunes the silence thresholds
-to break turns at speaker changes); or split the clip on the sidecar's
-embeddings before identifying. Neither is worth doing before the enrollment
-clips exist, because there is currently no way to tell whether attribution is
-right.
+**Windowing the sidecar failed.** Sliding a 1.5s window across the turn and
+identifying each one caught 1 of 5 at best, at any threshold. The voices are
+concurrent rather than sequential, so TitaNet embeds the mixture and it
+matches neither cook. `scripts/overlap-eval.mjs` is that experiment, kept
+because a negative result is worth not rediscovering.
 
-## Not fixed: Chinese comes back inconsistently
+**The streaming API's own diarization works, but not via its label.** It
+labels a merged turn with one speaker, same as before. The per-word speaker
+*confidence* is what separates them, stepping down exactly at the handover:
 
-Scene 9, with `language_codes` en+zh set:
+```
+Goose,/1.00 done/1.00 with—/1.00 no/0.63 way,/0.63 that's/0.63 mine./0.63
+```
 
-| Said | Heard |
-|---|---|
-| Goose, 豆腐切好了 | `Goose tofu切好了` |
-| Goose, I'm done with the 豆腐 | `Goose, I'm done with the tofu.` |
-| Goose, 我来做 the sauce | `Goose, I'll do the sauce.` |
-| Goose, 蒜蓉 done | `Goose,蒜蓉,蛋。` |
-| Goose, 还要多久 | `Goose, how long?` |
+Measured across four scenes: a drop of 0.37 on the merged turn, 0.00 on all
+nineteen single-speaker turns. It is the **drop** that separates, not the
+level — clean turns sit anywhere from 0.50 to 1.00, so a floor on absolute
+confidence would flag good speech all day.
 
-Addressing survives all five, which is the important part. But the model is
-**translating rather than transcribing** — 我来做 came back as "I'll do",
-还要多久 as "how long?" — and one line lost its verb entirely. For step
-matching that is a problem: the board's labels are English, so a translated
-transcript may actually match *better*. Needs its own scene and a decision
-about what we want, not a parameter tweak.
+On a turn that reads as shared, the model is told two cooks spoke and asked
+for one short question naming both, and `parseChoice` drops every tool call
+regardless. The prompt is a request; the guard is the guarantee. Against the
+real transcript it goes from firing `done(tofu_cut)` + `claim(mince_garlic)`
+blind to asking *"Which of you wanted to do the garlic, and who finished the
+tofu?"* — and since that ends in a question mark, the existing engaged window
+lets the answer come back without the name.
+
+Turning `speaker_labels` on paid for itself twice: attribution now needs no
+enrollment at all, and the diarization-tuned silence defaults it brings
+(640ms rather than our 400) **merge** the name-split from scene 4 rather than
+aggravating it.
+
+Not caught, deliberately: both cooks saying the same words in the same instant
+holds flat too. Nothing needs clarifying when they asked for the same thing.
+
+The honest limit is one merged turn in the whole corpus. The 0.25 threshold
+sits in a wide gap (0.00 against 0.37), but it is one example — a second
+overlap take would firm it up considerably.
+
+## Decided: Chinese is transcribed, not translated
+
+The take was replayed five ways and the transcripts scored by whether the app
+could act on them.
+
+| language_codes | keyterms | addressed | verbatim Chinese | spurious words |
+|---|---|---|---|---|
+| en only | English | 5/5 | **0/5 — content destroyed** | — |
+| en+zh | English | 4/5 | 1/5, rest translated | — |
+| en+zh | + Chinese nouns | 5/5 | 3/5 | 豆腐 inserted in 4 turns |
+| en+zh | + Chinese phrases | **5/5** | **5/5** | none |
+
+**English-only is the trap.** It does not fall back to English words, it
+throws the audio away: "Goose, 豆腐切好了" came back as `Goose`, and
+"Goose, 蒜蓉 done" as `Goose,,`. Anyone reaching for it to keep the pipeline
+simple would be deleting half of what the cooks said.
+
+**Keyterms must be phrases, not nouns.** Short common nouns get over-applied
+by the keyterm bias and turn up in sentences nobody said them in — 豆腐 was
+inserted into four turns out of five. Phrases of three characters or more do
+not. 蒜蓉 is the one noun kept, because without it the recogniser hears the
+homophone 算容.
+
+Priming the phrases also fixes addressing, for an unobvious reason:
+"Goose豆腐切好了" comes back with a space after the name, so "goose" is its
+own word and the gate sees it. That is the 4/5 → 5/5 above.
+
+### The fallback was blind to Chinese, and that was the real bug
+
+With a verbatim transcript, gpt-4.1 resolves every Chinese utterance —
+豆腐切好了 to `done(tofu_cut)`, 我来做 the sauce to `claim(sauce_mix)`,
+还要多久 to `status`. Four out of four.
+
+The keyword grammar resolved **none of them**, because
+`stepNameMatch.normalize()` strips everything outside `[a-z0-9]`, so a
+Mandarin command arrived as an empty string and came back "unknown". That
+matters precisely when it matters most: the keyword path is what runs when
+the model is slow or down, so a Chinese-speaking cook had no fallback at all.
+
+`normalizeLoose` keeps every letter, intent detection uses it, and the
+commands people actually use mid-service now have Chinese patterns. That path
+went from 0 of 5 to 4 of 5 — the fifth lost its verb in transcription, so
+there is no intent left to find.
+
+Step **matching** still normalises to ASCII on purpose. The labels are
+English, a Chinese token can match none of them, and counting it would only
+push the real match under the confirm floor — the same dilution the agent's
+own name used to cause.
 
 ## Confirmed working, no action
 
@@ -185,6 +245,8 @@ unnoticed.
 
 ## Next
 
-Scenes 10–12, the live takes, are the only way to test the agent's own voice
-coming back through the microphone. That is the remaining unknown and needs
-the app running, not a bench recording.
+Scenes 10-12, the live takes, are the only way to test the agent own voice
+coming back through the microphone, and nothing on this page has been
+exercised in a real cook with a real mic - every figure here comes from
+replay, unit tests or calibration against fixtures. A ten-minute live run
+would be worth more than another bench recording.
