@@ -127,23 +127,29 @@
   pointer-events: none;
 }
 .sch-stamp-honk { background: var(--sch-honk); color: #fff; }
-.sch-stamp-approved {
-  top: 6px;
-  right: 0;
+
+/* APPROVED — a small oval badge that sits *beside* the recipe title,
+   never on top of the underline. Not absolutely positioned so it never
+   forces the title-mark to reserve dead space that stretches the
+   underline past the last word. */
+.sch-title-line { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
+.sch-stamp-approved-badge {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
   padding: 4px 11px;
   border: 2px solid var(--sch-approved-border);
   border-radius: 999px;
   background: transparent;
   color: var(--sch-approved-ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 500;
   letter-spacing: 0.14em;
+  white-space: nowrap;
   transform: rotate(-7deg);
-}
-/* Reserve room to the right of the recipe title so the APPROVED stamp
-   never lands on the last word. The stamp is ~104px wide with rotation. */
-.sch-title-mark { padding-right: 112px; }
-@media (max-width: 640px) {
-  .sch-title-mark { padding-right: 0; }
-  .sch-stamp-approved { position: relative; display: inline-block; top: 0; right: 0; margin-top: 8px; }
+  pointer-events: none;
 }
 
 /* Goose speech line — one feather then a mono line, tucked under the
@@ -151,6 +157,146 @@
 .sch-goose-line { display: inline-flex; align-items: center; gap: 9px; padding-top: 6px; }
 .sch-goose-feather { flex: none; transform: rotate(-92deg); }
 .sch-goose-line-text { font-size: 13px; color: var(--ink-soft); text-wrap: pretty; }
+
+/* DINNER — the small dark stamp at the end of the timeline, tilted
+   just a hair off-square so the endpoint reads as a destination the
+   goose wrote, not a machine label. */
+.sch-endline {
+  position: absolute;
+  top: 30px;
+  bottom: 0;
+  width: 0;
+  border-left: 2px dashed var(--line-strong);
+  pointer-events: none;
+  z-index: 1;
+}
+.sch-dinner-stamp {
+  position: absolute;
+  top: 180px;
+  transform: rotate(-4deg);
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* ---------------- kitchen-ticket detail panel ----------------
+   Same content — with a ticket rail on the left (a feather + vertical
+   mono ticket number) and a warm-orange side stripe. Reads as a paper
+   docket rather than a generic details tray. Written with two-class
+   specificity so the base .sch-detail padding never wins. */
+.sch-detail.sch-ticket {
+  position: relative;
+  padding: 22px 22px 22px 66px;
+  min-height: 200px;
+  overflow: hidden;
+}
+/* Rail runs the whole height of the ticket so the vertical mono
+   TICKET NN has room to render past two characters. */
+.sch-ticket-rail {
+  position: absolute;
+  left: 10px;
+  top: 20px;
+  bottom: 20px;
+  width: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  pointer-events: none;
+}
+.sch-ticket-num {
+  flex: 1 1 auto;
+  min-height: 0;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.14em;
+  color: var(--ink-soft);
+  writing-mode: vertical-rl;
+  white-space: nowrap;
+}
+.sch-ticket-stripe {
+  position: absolute;
+  left: 48px;
+  top: 12px;
+  bottom: 12px;
+  width: 1px;
+  background: var(--crit-soft);
+  pointer-events: none;
+}
+.sch-ticket .sch-detail-close { top: 16px; right: 16px; }
+.sch-ticket .sch-detail-head { padding-right: 90px; padding-top: 2px; }
+.sch-detail-title-mark { padding-right: 0; }
+.sch-underline-ticket {
+  position: absolute;
+  left: -2px;
+  bottom: -6px;
+  display: block;
+  overflow: visible;
+  width: calc(100% + 4px);
+  height: 7px;
+  color: #9dc0d9;
+  pointer-events: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .sch-underline-ticket { color: #6a92b0; }
+  :root:not([data-theme="light"]) .sch-ticket-stripe { background: #4a2b20; }
+}
+:root[data-theme="dark"] .sch-underline-ticket { color: #6a92b0; }
+:root[data-theme="dark"] .sch-ticket-stripe { background: #4a2b20; }
+@media (max-width: 640px) {
+  .sch-ticket { padding-left: 20px; }
+  .sch-ticket-rail, .sch-ticket-stripe { display: none; }
+}
+
+/* ---------------- empty state: "no board until someone picks" ----------------
+   Sits in place of the timeline when neither mode is picked. Not gating
+   the mode cards — those stay one row above — just showing what will
+   fill the space and letting the goose ask the question out loud. */
+.sch-empty-plan {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 44px 24px 48px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card, 14px);
+  text-align: center;
+  animation: sch-rise 240ms ease-out both;
+}
+.sch-empty-speech { display: inline-flex; align-items: flex-end; gap: 10px; padding-bottom: 2px; }
+.sch-empty-goose { animation: sch-bob 4s ease-in-out infinite; transform: rotate(10deg); }
+.sch-empty-bubble {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 15px;
+  border-radius: 14px 14px 14px 3px;
+  background: #fbf7ee;
+  border: 1px solid #e6dcc6;
+  font-size: 13px;
+  color: #6b5c3d;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .sch-empty-bubble { background: #2a2418; border-color: #4a4030; color: #e8dcb5; }
+}
+:root[data-theme="dark"] .sch-empty-bubble { background: #2a2418; border-color: #4a4030; color: #e8dcb5; }
+.sch-empty-title { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+.sch-empty-body { font-size: 13.5px; color: var(--ink-soft); max-width: 440px; line-height: 1.55; text-wrap: pretty; }
+@keyframes sch-bob {
+  0%, 100% { transform: translateY(0) rotate(10deg); }
+  50% { transform: translateY(-2px) rotate(12deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sch-empty-goose { animation: none; }
+}
 
 /* ---------------- mode picker ---------------- */
 .sch-modes-wrap { display: flex; flex-direction: column; gap: 8px; animation: sch-rise 240ms 40ms ease-out both; }
@@ -244,6 +390,57 @@
 }
 .sch-tiles { display: flex; align-items: flex-start; gap: 40px; }
 .sch-tile { display: flex; flex-direction: column; gap: 2px; position: relative; }
+
+/* Tiles moved into the card header — small mono readouts framed in
+   pale paper, sitting on the right of "Who does what, when" / "The
+   opening hand", matching the design where the plan HUD is one
+   component with the card. Auto margin pushes them to the right so
+   the tools row (legend, zoom) wraps below on its own. */
+.sch-card-tiles { display: inline-flex; align-items: stretch; gap: 10px; flex: none; margin-left: auto; }
+.sch-card-tiles .sch-tile {
+  position: relative;
+  min-width: 92px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  gap: 2px;
+}
+.sch-card-tiles .sch-tile-value { font-size: 19px; line-height: 1.05; font-weight: 500; }
+.sch-card-tiles .sch-tile-label { font-size: 12px; color: var(--ink-soft); }
+.sch-card-tiles .sch-tile-highlight { padding: 8px 14px; }
+.sch-card-tiles .sch-tile-highlight .sch-stamp-honk { top: -11px; right: -13px; }
+.sch-card-head-right { display: inline-flex; align-items: center; gap: 12px; flex: none; }
+
+/* "Show/Hide the gear lanes" — sits in the card foot alongside the
+   detail ticket (or the tap hint when nothing is open). Right-aligned
+   as a soft-bordered secondary button, so it reads as a control and
+   never fights with the detail ticket for the reader's eye. */
+.sch-gear-btn {
+  align-self: flex-end;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+}
+.sch-gear-btn:hover { border-color: var(--ink-faint); background: var(--surface-sunken); }
+.sch-gear-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sch-gear-btn[aria-expanded="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-soft-ink);
+}
+@media (max-width: 720px) {
+  .sch-card-head { flex-wrap: wrap; }
+  .sch-card-tiles { order: 3; width: 100%; }
+}
 .sch-tile-value-row { display: flex; align-items: center; gap: 8px; }
 .sch-tile-value { font-size: 24px; line-height: 30px; font-weight: 500; }
 .sch-tile-label { font-size: 13px; color: var(--ink-soft); }
@@ -295,14 +492,55 @@
 .sch-card-head { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 20px; flex-wrap: wrap; }
 .sch-card-title { font-size: 18px; line-height: 24px; font-weight: 700; }
 .sch-card-meta { font-size: 14px; color: var(--ink-soft); }
-.sch-card-tools { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
-.sch-card-foot { padding: 16px 20px; }
+/* Legend on the left, zoom slider on the right — a full-width row
+   below the card title, so the two never fight for space with each
+   other or the plan HUD tiles above. */
+.sch-card-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+/* Card foot lays the tap-hint (or ticket) on the left and the
+   Show-the-gear-lanes button on the right. Detail ticket takes the
+   whole row when open. */
+.sch-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 20px;
+}
+.sch-card-foot > .sch-detail { flex: 1 1 100%; }
 .sch-card-foot .sch-detail { scroll-margin-bottom: calc(var(--voice-bar-height) + 110px); }
 
 .sch-legend { display: flex; align-items: center; gap: 20px; }
 .sch-legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-soft); }
 .sch-legend-swatch { width: 16px; height: 16px; border-radius: 4px; box-sizing: border-box; }
-.sch-legend-swatch.is-critical { background: var(--surface); border: 2px solid var(--critical); }
+/* Critical path swatch — matches the standalone design (line 368):
+   pale-blue block with mid-blue hairline and an ink under-bar,
+   mirroring the timeline's critical-selected block treatment. */
+.sch-legend-swatch.is-critical {
+  width: 18px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--cook-a-bg);
+  border: 1px solid var(--cook-a);
+  border-bottom: 3px solid var(--ink);
+}
+/* Hands on the pot — small white square with dashed accent border,
+   matches the timeline's wait cells. */
+.sch-legend-swatch.is-hands {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--surface);
+  border: 2px dashed var(--accent);
+}
+.sch-legend-feather { flex: none; transform: rotate(-92deg); }
 .sch-legend-swatch.is-wait {
   border: 1px dashed var(--ds-waiting);
   background: repeating-linear-gradient(45deg, var(--ds-chip) 0 4px, var(--surface) 4px 8px);
@@ -315,12 +553,42 @@
 /* zoom — a three-stop slider with the stop labels around it; the
    active stop reads in ink, the others in text-tertiary */
 .sch-zoom { display: inline-flex; align-items: center; gap: 10px; }
-.sch-zoom-stop { font-size: 12px; color: var(--ink-faint); transition: color 120ms ease-out; }
+/* The stops are buttons now that the bar no longer has to be dragged
+   onto them — same look as the labels they replace. */
+.sch-zoom-stop {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 12px;
+  color: var(--ink-faint);
+  cursor: pointer;
+  transition: color 120ms ease-out;
+}
 .sch-zoom-stop.is-on { color: var(--ink); }
+.ds-v4 .sch-zoom-stop:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 3px; }
+
+/* Holds the ticks against the bar, so a checkpoint's mark sits where
+   the thumb will snap to it. */
+.sch-zoom-track { position: relative; display: inline-flex; align-items: center; }
+.sch-zoom-tick {
+  position: absolute;
+  top: 50%;
+  width: 2px;
+  height: 8px;
+  margin-top: -4px;
+  /* `left` already accounts for the thumb's travel (see the JSX); this
+     only centres the 2px mark on it. */
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--line-strong, var(--line));
+  pointer-events: none;
+  transition: background 120ms ease-out;
+}
+.sch-zoom-tick.is-on { background: var(--accent); }
 .sch-zoom-slider {
   -webkit-appearance: none;
   appearance: none;
-  width: 96px;
+  width: 124px;
   height: 20px;
   margin: 0;
   background: transparent;
@@ -355,12 +623,14 @@
    Lane geometry is shared between the fixed label column and the
    scrolling track so the two stay row-aligned. */
 .sch-card {
-  /* A player lane is a 44px block zone over a 26px rail zone: hands-on
-     work up top, "cooking on its own" along the bottom. */
-  --sch-rail-zone-top: 60px;
-  --sch-rail-height: 16px;
-  --sch-rail-gap: 2px;
-  --sch-lane-height: 86px;
+  /* Player lane geometry matches the standalone design: 52px hands-on
+     block zone up top, a 34px paper-card rail zone along the bottom.
+     Block height comes from the block-height token below. */
+  --sch-block-height: 52px;
+  --sch-rail-zone-top: 68px;
+  --sch-rail-height: 34px;
+  --sch-rail-gap: 4px;
+  --sch-lane-height: 114px;
   --sch-gear-lane-height: 44px;
   --sch-group-head-height: 34px;
   --sch-ruler-height: 28px;
@@ -427,7 +697,7 @@
 .sch-block {
   position: absolute;
   top: 8px;
-  height: 44px;
+  height: var(--sch-block-height, 52px);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -447,33 +717,98 @@
 .sch-block-label { min-width: 0; font-size: 13px; line-height: 17px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sch-block-meta { min-width: 0; font-size: 12px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* Task blocks — paper-tinted in the player's colour, matching the
+   standalone Schedule design (line 442-473): pale wash for the fill,
+   1px mid-tone edge, dark ink of that colour for the title, and a
+   mono muted meta row underneath. No 4px left cap on cook-lane blocks
+   — the design reserves that stripe for the "On its own" pot blocks.
+   Selected still gets the 3px ink bottom bar (added separately below). */
 .sch-block.is-task {
-  background: var(--surface);
-  border: 2px solid;
+  background: var(--cook-a-bg);
+  border: 1px solid var(--cook-a);
+  color: var(--cook-a-ink);
   cursor: pointer;
-  transition: transform 120ms ease-out, border-color 120ms ease-out;
+  padding: 8px 11px;
+  gap: 3px;
+  border-radius: 8px;
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out;
 }
-.sch-block.is-task.is-a { border-color: var(--cook-a); }
-.sch-block.is-task.is-b { border-color: var(--cook-b); }
-.sch-block.is-task.is-critical { border-color: var(--critical); }
-/* Selected = inverted, so it reads apart from the red critical outline. */
-.sch-block.is-task.is-selected, .sch-block.is-task.is-selected.is-critical {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--bg);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+.sch-block.is-task.is-a { background: var(--cook-a-bg); border-color: var(--cook-a); color: var(--cook-a-ink); }
+.sch-block.is-task.is-b { background: var(--cook-b-bg); border-color: var(--cook-b); color: var(--cook-b-ink); }
+/* Title stays in the cook's dark ink; the meta row runs mono in a
+   softened tone so it reads as a subtitle, not another headline. */
+.sch-block.is-task .sch-block-label { color: inherit; font-weight: 600; font-size: 13px; line-height: 16px; }
+.sch-block.is-task .sch-block-meta { color: color-mix(in oklab, currentColor 70%, transparent); font-size: 11px; line-height: 14px; font-family: var(--font-mono); }
+
+/* Selected — a 3px ink bottom bar + a subtle 1px inset ring, reserved
+   for the block the user is looking at right now. Critical steps keep
+   the same block styling as anything else; the critical rail already
+   reads the timing risk on its own. */
+.sch-block.is-task.is-selected {
+  border-bottom: 3px solid var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
 }
 .sch-block.is-task.is-selected .sch-block-meta { color: inherit; }
 .sch-block.is-task:active { transform: scale(0.97); }
 .ds-v4 .sch-block.is-task:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
+/* Wait blocks — the design's "between-blocks walking" cell: no white
+   box, no dashed border. The lane's own tint shows through, and a pair
+   of goose footprints tells you nobody is doing anything here. The
+   mono duration sits as a small note. */
 .sch-block.is-wait {
-  border: 1px dashed var(--ds-waiting);
-  background: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.65) 0 6px, transparent 6px 12px);
-  color: var(--ink-soft);
+  border: none;
+  background: transparent;
+  color: var(--cook-a-ink);
   cursor: default;
+  padding: 4px 8px;
+  gap: 1px;
+  border-radius: 0;
 }
-.sch-block.is-wait .sch-block-label { font-weight: 400; }
+.sch-lane.is-a .sch-block.is-wait { color: var(--cook-a-ink); }
+.sch-lane.is-b .sch-block.is-wait { color: var(--cook-b-ink); }
+/* Wait cell — a dashed paper card with the mono duration centered.
+   A pair of paper feathers only shows when the gap is wide enough to
+   read as "walking through" without crowding the duration; narrow
+   waits just show the duration, matching the design's clean look. */
+.sch-block.is-wait {
+  padding: 4px 8px;
+  gap: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  align-items: center;
+  justify-content: center;
+}
+.sch-wait-dur {
+  position: relative;
+  z-index: 2;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.1;
+  font-weight: 500;
+  color: inherit;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.sch-block.is-wait.is-tight .sch-wait-dur { font-size: 10px; }
+.sch-wait-prints {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 0 10px;
+  pointer-events: none;
+  opacity: 0.55;
+  z-index: 0;
+}
+.sch-block.is-wait:not(.is-narrow) .sch-wait-prints { opacity: 0.7; }
+.sch-block.is-wait.is-tight .sch-wait-prints,
+.sch-block.is-wait.is-narrow .sch-wait-prints { display: none; }
+.sch-wait-print { flex: none; }
+.sch-wait-print-1 { transform: rotate(-96deg) translateY(-4px); }
+.sch-wait-print-2 { transform: rotate(-80deg) translateY(4px); }
 
 /* ---- unattended steps on a player lane: rail + moments ----
    The rail zone is a faint band along the bottom of every player lane
@@ -509,16 +844,45 @@
   animation: sch-reveal 240ms ease-out both;
 }
 .sch-rail.is-tight { padding: 0 4px; }
-.sch-rail.is-a { background: rgba(47, 125, 209, 0.26); border-color: var(--cook-a); }
-.sch-rail.is-b { background: rgba(229, 138, 31, 0.26); border-color: var(--cook-b); }
-.sch-rail.is-critical { border-width: 2px; border-color: var(--critical); }
-.sch-rail-label { min-width: 0; font-size: 12px; line-height: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* Selected wins over critical, same as blocks: the whole step goes ink. */
-.sch-rail.is-selected, .sch-rail.is-selected.is-critical {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--bg);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+/* Unattended rails — the standalone design's "On its own" block:
+   white paper card, warm 1px hairline edge, a 4px left cap in the
+   owner's colour, ink title in the block's own dark ink. No hatched
+   simmer texture: the design keeps the shelf clean and lets the ink
+   colour on the cap tell you whose pot it is. */
+.sch-rail {
+  --sch-rail-edge: #ddd0b4;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--sch-rail-edge);
+  border-left: 4px solid var(--cook-a);
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0 12px;
+  gap: 9px;
+}
+.sch-rail.is-a { border-left-color: var(--cook-a); }
+.sch-rail.is-b { border-left-color: var(--cook-b); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .sch-rail { --sch-rail-edge: #4a4030; }
+}
+:root[data-theme="dark"] .sch-rail { --sch-rail-edge: #4a4030; }
+
+.sch-rail-label {
+  min-width: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Selected — same 3px ink bottom bar + 1px inset ring as the task
+   blocks (design's under-lined selection). */
+.sch-rail.is-selected {
+  border-bottom: 3px solid var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
 }
 .ds-v4 .sch-rail:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
@@ -538,12 +902,20 @@
 .sch-moment-tick.is-b { background: var(--cook-b); }
 .sch-block.is-task.is-moment { z-index: 3; }
 .sch-block.is-task.is-moment.is-tight { padding: 4px 2px; }
-/* A 20-second check is a bare 10–26px bar at most zooms, so the kind
-   has to read without a label: Start carries a heavy left edge, Finish
-   a heavy right edge, and a Check a dot — all in the border color the
-   block already has, so critical and selected states keep working. */
-.sch-block.is-task.is-moment.is-initial { border-left-width: 5px; }
-.sch-block.is-task.is-moment.is-ending { border-right-width: 5px; }
+/* Start and finish moments are the "unsolid" markers the design puts
+   at either end of an unattended step: a white paper card with a 2px
+   dashed border in the cook's colour, no fill flourish. Reads as a
+   handoff to/from the pot rather than a hands-on block. */
+.sch-block.is-task.is-moment.is-initial,
+.sch-block.is-task.is-moment.is-ending {
+  background: var(--surface);
+  border: 2px dashed var(--cook-a);
+  border-radius: 8px;
+}
+.sch-block.is-task.is-moment.is-initial.is-b,
+.sch-block.is-task.is-moment.is-ending.is-b { border-color: var(--cook-b); }
+/* Check moments keep their filled block look — same family as the
+   other moment blocks. */
 .sch-block.is-task.is-moment.is-checkpoint.is-bare { justify-content: flex-end; }
 .sch-block.is-task.is-moment.is-checkpoint.is-bare::after {
   content: "";
@@ -554,11 +926,16 @@
   background: currentColor;
   margin-bottom: 2px;
 }
-.sch-block.is-task.is-moment.is-checkpoint.is-a { color: var(--cook-a); }
-.sch-block.is-task.is-moment.is-checkpoint.is-b { color: var(--cook-b); }
-.sch-block.is-task.is-moment.is-checkpoint.is-critical { color: var(--critical); }
-.sch-block.is-task.is-moment.is-checkpoint .sch-moment-label,
-.sch-block.is-task.is-moment.is-checkpoint .sch-block-meta { color: var(--ink); }
+/* Checkpoint moments read as the same block family as their hands-on
+   siblings — same cook ink and label font, not the brighter --cook-*
+   accent that used to jump out. */
+.sch-block.is-task.is-moment.is-checkpoint.is-a { color: var(--cook-a-ink); }
+.sch-block.is-task.is-moment.is-checkpoint.is-b { color: var(--cook-b-ink); }
+/* Critical no longer paints checkpoints red — the critical rail
+   itself carries that meaning; a moment on top of it stays in its
+   own cook ink so it reads as the same family as the other blocks. */
+.sch-block.is-task.is-moment.is-checkpoint .sch-moment-label { color: inherit; font-family: var(--font-body); }
+.sch-block.is-task.is-moment.is-checkpoint .sch-block-meta { color: color-mix(in oklab, currentColor 70%, transparent); }
 .sch-block.is-task.is-moment.is-selected,
 .sch-block.is-task.is-moment.is-selected .sch-moment-label,
 .sch-block.is-task.is-moment.is-selected .sch-block-meta { color: var(--bg); }
@@ -717,49 +1094,258 @@
 .sch-detail.is-sheet .sch-detail-grid { gap: 12px; }
 .sch-detail.is-sheet .sch-detail-close { top: 10px; }
 
-/* ---------------- opening hand (Versus) ---------------- */
-.sch-card-versus { gap: 16px; padding-bottom: 20px; }
-.sch-card-versus .sch-card-head { padding-bottom: 0; }
-.sch-intro { padding: 0 20px; max-width: 820px; }
-.sch-bundles { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 20px; }
-.sch-bundle { background: var(--surface); border-left: 3px solid; border-radius: var(--radius-control); overflow: hidden; }
-.sch-bundle.is-a { border-color: var(--cook-a); }
-.sch-bundle.is-b { border-color: var(--cook-b); }
-.sch-bundle-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
-.sch-bundle-name { flex: 1 1 auto; min-width: 0; font-size: 16px; font-weight: 500; }
-.sch-bundle-total { font-size: 14px; color: var(--ink-soft); white-space: nowrap; }
-.sch-bundle-row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 16px; border-top: 1px solid var(--line); }
-.sch-bundle-row-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
-.sch-bundle-row-label { font-size: 16px; line-height: 22px; font-weight: 500; }
-.sch-bundle-row-dish { font-size: 13px; color: var(--ink-soft); }
-.sch-bundle-row-dur { font-size: 14px; color: var(--ink-soft); }
-.sch-bundle-row-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* ---------------- opening hand (Versus) ----------------
+   Paper-ticket bundle cards, mono duration line-up on the right, and
+   the "not yet" chips wobble to say "waiting on you two". Colours run
+   through the cook-* tokens so a and b stay in identity all the way
+   down the card. */
+:root {
+  --sch-versus-paper: #fffdf7;
+  --sch-versus-edge: #e6dcc6;
+  --sch-versus-shadow: #eee7d7;
+  --sch-versus-divider-a: #9dc0d9;
+  --sch-versus-divider-b: #e3b7a4;
+  --sch-versus-row-line: #f1e9d8;
+  --sch-versus-punch: #f2ead8;
+  --sch-versus-locked-bg: #fff;
+  --sch-versus-locked-edge: #eceae4;
+  --sch-versus-locked-lip: #d0cbc1;
+  --sch-versus-locked-ledge: #e4e1da;
+  --sch-versus-timed-border: #c2bdb2;
+  --sch-versus-timed-ink: #4a4845;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --sch-versus-paper: #2a251c;
+    --sch-versus-edge: #3d3628;
+    --sch-versus-shadow: #1c1912;
+    --sch-versus-divider-a: #4a6a86;
+    --sch-versus-divider-b: #6a4a3a;
+    --sch-versus-row-line: #3a3428;
+    --sch-versus-punch: #1e1a12;
+    --sch-versus-locked-bg: #2a251c;
+    --sch-versus-locked-edge: #3d3628;
+    --sch-versus-locked-lip: #4a4530;
+    --sch-versus-locked-ledge: #1e1a12;
+    --sch-versus-timed-border: #4a4530;
+    --sch-versus-timed-ink: #b6ac9a;
+  }
+}
+:root[data-theme="dark"] {
+  --sch-versus-paper: #2a251c;
+  --sch-versus-edge: #3d3628;
+  --sch-versus-shadow: #1c1912;
+  --sch-versus-divider-a: #4a6a86;
+  --sch-versus-divider-b: #6a4a3a;
+  --sch-versus-row-line: #3a3428;
+  --sch-versus-punch: #1e1a12;
+  --sch-versus-locked-bg: #2a251c;
+  --sch-versus-locked-edge: #3d3628;
+  --sch-versus-locked-lip: #4a4530;
+  --sch-versus-locked-ledge: #1e1a12;
+  --sch-versus-timed-border: #4a4530;
+  --sch-versus-timed-ink: #b6ac9a;
+}
 
-.sch-grabs { display: flex; flex-direction: column; gap: 12px; margin: 0 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+.sch-card-versus { gap: 18px; padding-bottom: 20px; }
+.sch-card-versus .sch-card-head { padding-bottom: 0; }
+.sch-intro { padding: 0 22px; max-width: 820px; }
+
+/* Bundle cards — cream paper stock with a subtle bottom ledge, four
+   punch holes down the left rail, and a slight per-side tilt so the
+   two decks read as different pieces of paper, not one grid cell. */
+.sch-bundles { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 22px; }
+.sch-bundle {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--sch-versus-paper);
+  border: 1px solid var(--sch-versus-edge);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 0 var(--sch-versus-shadow);
+}
+.sch-bundle.is-a { transform: rotate(-0.5deg); }
+.sch-bundle.is-b { transform: rotate(0.5deg); }
+/* Punch holes down the left side — a tally-mark ledger feel. */
+.sch-bundle::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 14px;
+  bottom: 14px;
+  width: 8px;
+  background-image: radial-gradient(circle, var(--sch-versus-punch) 3px, transparent 3.6px);
+  background-repeat: repeat-y;
+  background-size: 8px 22px;
+  pointer-events: none;
+  z-index: 1;
+}
+/* Head — avatar, name on the left; "hands-on to open" mono on the
+   right. Divider carries the cook colour so the deck belongs to
+   someone at a glance. */
+.sch-bundle-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 14px 16px 14px 30px;
+  border-bottom: 2px solid var(--sch-versus-divider-a);
+}
+.sch-bundle.is-b .sch-bundle-head { border-bottom-color: var(--sch-versus-divider-b); }
+.sch-bundle-name { flex: 1 1 auto; min-width: 0; font-size: 16px; font-weight: 600; color: var(--ink); }
+.sch-bundle-total {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+/* Feather bullet before the "hands-on to open" mono line — same
+   speaking mark used on the Home page and the recipe header. */
+.sch-bundle-total::before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 13px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 28' fill='none'><path d='M13 3.2c1.6 0 2.2 1.6 2.4 3.4l.5 4.6c.1 1.2 1 1.6 2 1.1l3.6-1.8c1.6-.8 2.8.6 1.7 2L14.9 25c-1 1.3-2.6 1.3-3.5 0L2.9 12.6c-1-1.4.2-2.8 1.8-2l3.5 1.8c1 .5 1.9.1 2-1.1l.5-4.6C10.9 4.8 11.4 3.2 13 3.2Z' fill='%23f2ede1' stroke='%23b7ab93' stroke-width='2.2' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-size: contain;
+  transform: rotate(-92deg);
+}
+
+/* Task rows — bold title with an optional Timed pill, subtitle (dish
+   name) muted, mono duration flushed right. Rows separated by a
+   warm-paper hairline. */
+.sch-bundle-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 16px 12px 30px;
+  border-top: 1px solid var(--sch-versus-row-line);
+  min-height: 0;
+}
+.sch-bundle-row-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.sch-bundle-row-title { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.sch-bundle-row-label { font-size: 15px; line-height: 20px; font-weight: 600; color: var(--ink); }
+.sch-bundle-row-dish { font-size: 13px; color: var(--ink-soft); }
+.sch-bundle-row-dur {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-soft);
+  flex: none;
+  padding-top: 2px;
+}
+/* Tending chip inside a Versus row reads as a Timed pill. */
+.sch-bundle-row .sch-tending-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border: 1px solid var(--sch-versus-timed-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sch-versus-timed-ink);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* ---- Up for grabs ---- */
+.sch-grabs {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 4px 22px 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--sch-versus-edge);
+}
 .sch-grabs-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.sch-grabs-total { font-weight: 500; }
+.sch-card-title .sch-grabs-total { font-family: var(--font-mono); font-weight: 500; }
+.sch-grabs-total { font-family: var(--font-mono); font-weight: 500; }
 .sch-grabs-group { display: flex; flex-direction: column; gap: 8px; }
 .sch-eyebrow.is-ready { color: var(--ink); }
 .sch-eyebrow.is-locked { color: var(--ink-faint); }
-.sch-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ds-waiting); }
+.sch-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ds-waiting); }
 .sch-eyebrow.is-ready .sch-dot { background: var(--success); }
+.sch-eyebrow.is-locked .sch-dot { background: var(--ink-faint); }
+
+/* Chips */
 .sch-chips { display: flex; flex-wrap: wrap; gap: 10px; }
 .sch-chip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 36px;
+  gap: 9px;
+  height: 34px;
   padding: 0 14px;
   border-radius: 999px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
 }
-.sch-chip.is-ready { background: var(--surface); border: 1px solid var(--ink); color: var(--ink); }
-.sch-chip-dur { color: var(--ink-soft); }
-.sch-chip.is-locked { height: 32px; padding: 0 12px; background: var(--ds-chip); border: 1px dashed var(--line); color: var(--ink-faint); font-weight: 400; }
+.sch-chip.is-ready {
+  background: var(--surface);
+  border: 1px solid var(--sch-versus-locked-lip);
+  color: var(--ink);
+}
+.sch-chip-dur { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-soft); }
+
+/* Not-yet chips — small paper tags with a paused "||" bar, dropped a
+   shade toward ink-faint, and each tilted a hair off-square with a
+   staggered timid wobble so they read as items nervously waiting for
+   their turn. Delays and durations are randomised per chip below. */
+.sch-chip.is-locked {
+  height: 32px;
+  padding: 0 13px;
+  border-radius: 7px;
+  background: var(--sch-versus-locked-bg);
+  border: 1px solid var(--sch-versus-locked-edge);
+  border-left: 3px solid var(--sch-versus-locked-lip);
+  box-shadow: 0 1px 0 var(--sch-versus-locked-ledge);
+  color: var(--ink-faint);
+  font-weight: 500;
+  animation: sch-timid 3.2s ease-in-out infinite;
+  animation-delay: calc(var(--sch-locked-index, 0) * 0.17s);
+  transform-origin: center;
+}
+.sch-chip.is-locked::before {
+  content: "";
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  width: 6px;
+  height: 10px;
+  background-image:
+    linear-gradient(var(--ink-faint), var(--ink-faint)),
+    linear-gradient(var(--ink-faint), var(--ink-faint));
+  background-size: 2px 10px, 2px 10px;
+  background-position: 0 0, 4px 0;
+  background-repeat: no-repeat;
+  border-radius: 1px;
+  flex: none;
+}
+.sch-chip.is-locked .sch-tending-chip.is-plain {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+/* Timid wobble — tiny pixel-scale twitches, spaced far apart, so a row
+   of chips reads as nervous rather than restless. */
+@keyframes sch-timid {
+  0%, 84%, 100% { transform: translateX(0) rotate(var(--sch-locked-tilt, 0deg)); }
+  88% { transform: translateX(-1.3px) rotate(var(--sch-locked-tilt, 0deg)); }
+  92% { transform: translateX(1.3px) rotate(var(--sch-locked-tilt, 0deg)); }
+  96% { transform: translateX(-0.7px) rotate(var(--sch-locked-tilt, 0deg)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sch-chip.is-locked { animation: none; transform: none; }
+}
 
 /* ---------------- footer band ----------------
-   Sticky above the fixed VoiceBar so "Go live" is always reachable. */
+   Sticky above the fixed VoiceBar so the CTA is always reachable.
+   Painted as a paper card in-line with the plan cards above, with a
+   goose walk (footprints) leading up to the weighted-key CTA. */
 .sch-footer {
   position: sticky;
   bottom: var(--voice-bar-height);
@@ -769,15 +1355,64 @@
   justify-content: space-between;
   gap: 24px;
   margin-top: 4px;
-  padding: 16px 0;
-  background: var(--bg);
-  border-top: 1px solid var(--line);
+  padding: 16px 22px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
 }
+.sch-footer-copy { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.sch-footer-title { font-size: 15px; font-weight: 600; color: var(--ink); }
+.sch-footer-sub { font-size: 12.5px; color: var(--ink-soft); }
 .sch-footer-tag { font-size: 14px; color: var(--ink); }
 .sch-footer-hint { font-size: 15px; color: var(--ink-soft); }
-.sch-footer-actions { display: flex; align-items: center; gap: 12px; }
+.sch-footer-actions { display: flex; align-items: center; gap: 12px; flex: none; }
 .ds-v4 .sch-btn-abandon { color: var(--critical); }
 .ds-v4 .sch-btn-abandon:hover { background: var(--crit-soft); color: var(--critical); }
+
+/* Footprints trailing up to the CTA — same recipe as the Home page's
+   Start-the-run lane, but tucked to the right so they lead into the
+   button rather than out of it. */
+.sch-go-lane { display: inline-flex; align-items: center; gap: 0; }
+.sch-go-prints {
+  position: relative;
+  flex: none;
+  width: 92px;
+  height: 44px;
+  margin-right: 6px;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+/* Weighted-key CTA — 4px ink-shadow bottom edge collapses on press, so
+   the button feels like a physical key. Kept scoped to the schedule
+   footer so it doesn't override every primary button. */
+.sch-btn-key {
+  position: relative;
+  border-radius: 10px;
+  padding: 0 30px;
+  height: 54px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  box-shadow: 0 4px 0 var(--kp-accent-shadow, #a03d17);
+  transition: transform 90ms ease, box-shadow 90ms ease, background 140ms ease;
+}
+.sch-btn-key:hover:not(:disabled) { background: var(--kp-accent-hover, #c64e26); }
+.sch-btn-key:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 var(--kp-accent-shadow, #a03d17);
+}
+.sch-btn-key:disabled { box-shadow: none; opacity: 0.55; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) {
+  .sch-btn-key,
+  .sch-btn-key:hover,
+  .sch-btn-key:active { transform: none; box-shadow: 0 4px 0 var(--kp-accent-shadow, #a03d17); }
+}
+
+@media (max-width: 640px) {
+  .sch-go-prints { display: none; }
+  .sch-btn-key { padding: 0 20px; font-size: 15px; }
+}
 
 /* ---------------- abandon modal ---------------- */
 .modal-panel.sch-modal {
