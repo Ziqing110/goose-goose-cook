@@ -626,18 +626,18 @@ export default function VoiceBindingPage() {
   return (
     <section className="page voice-binding-page">
       <header className="vb-title-row">
-        <span className="vb-eyebrow mono">Tonight&rsquo;s run</span>
+        <span className="ds-run-eyebrow">Tonight&rsquo;s run</span>
         <div className="vb-title-line">
-          <span className="vb-title-mark">
+          <span className="ds-title-mark">
             <h1>Who&rsquo;s in the kitchen?</h1>
-            <svg className="vb-underline vb-underline-title" viewBox="0 0 430 10" preserveAspectRatio="none" fill="none" aria-hidden="true">
+            <svg className="ds-underline ds-underline-title" viewBox="0 0 430 10" preserveAspectRatio="none" fill="none" aria-hidden="true">
               <path d="M2 7c68-4 144 1 220-2 58-2.5 134 3 206 .5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
             </svg>
           </span>
           <BoundStamp bound={boundCount} total={cooks.length} nonce={stampNonce} />
         </div>
         <p className="vb-sub">Two cooks max · different names · voices stay on this device</p>
-        <span className="vb-aside">
+        <span className="ds-aside">
           <GoosePrint />
           <span className="mono">A bird, a name, one line read out loud. That&rsquo;s how I know who&rsquo;s shouting &ldquo;done&rdquo;.</span>
         </span>
@@ -688,9 +688,9 @@ export default function VoiceBindingPage() {
       ) : (
         <div className="vb-panel">
           <div className="vb-panel-head">
-            <span className="vb-title-mark vb-panel-title">
+            <span className="ds-title-mark vb-panel-title">
               The line-up
-              <svg className="vb-underline vb-underline-section" viewBox="0 0 120 8" preserveAspectRatio="none" fill="none" aria-hidden="true">
+              <svg className="ds-underline ds-underline-section" viewBox="0 0 120 8" preserveAspectRatio="none" fill="none" aria-hidden="true">
                 <path d="M2 5c22-2.4 44 1.4 66-.8 16-1.6 36 1.8 50 .4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.85" />
               </svg>
             </span>
@@ -768,7 +768,7 @@ export default function VoiceBindingPage() {
                         })}
                       </div>
 
-                      <span className="vb-aside cook-drawer-aside">
+                      <span className="ds-aside cook-drawer-aside">
                         <GoosePrint />
                         <span className="mono">Tap one, or let the dice pick :)</span>
                       </span>
@@ -915,7 +915,7 @@ export default function VoiceBindingPage() {
       <div className="vb-footer">
         <span className={`vb-note mono ${noteClass}`}>{note}</span>
         <span className="vb-footer-go">
-          <span className="vb-footer-tracks" aria-hidden="true">
+          <span className="ds-tracks" aria-hidden="true">
             <GoosePrint depth="pale" size={16} rotate={78} style={{ position: "absolute", left: 4, bottom: 4 }} />
             <GoosePrint depth="deep" size={19} rotate={98} style={{ position: "absolute", left: 34, bottom: 16 }} />
           </span>

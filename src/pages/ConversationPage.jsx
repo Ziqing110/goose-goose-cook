@@ -8,10 +8,9 @@ import { ELICITATION_QUESTIONS } from "../data/dishes.js";
 import { conversationSlots, echoFor, interpretAnswer } from "../utils/understanding.js";
 import { readAnswer } from "../api/understanding.js";
 import { UNCLAIMED_AVATAR } from "../utils/cooks.js";
-import Icon from "../components/Icon.jsx";
 import VoiceInput from "../components/VoiceInput.jsx";
 import UnderstandingSidecar from "../components/UnderstandingSidecar.jsx";
-import { GooseProfile } from "../components/GooseMarks.jsx";
+import { GooseProfile, GoosePrint } from "../components/GooseMarks.jsx";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 import "./ConversationPage.css";
 
@@ -133,6 +132,10 @@ export default function ConversationPage() {
   // nothing left to ask, so treat it as done rather than rendering an
   // answer bar for a question that no longer exists.
   const isComplete = complete || !currentQuestion;
+  const slots = conversationSlots(conversation);
+  // Readings the agent is not sure of. The footer names them rather than
+  // repeating the tally the progress bar and the notes rail both carry.
+  const lowReadings = slots.filter((s) => s.status === "low-confidence").length;
 
   useEffect(() => {
     if (transcript.length === 0) {
@@ -369,10 +372,20 @@ export default function ConversationPage() {
   return (
     <section className="page conversation-page">
       <header className="convo-title-row">
-        <div className="convo-title">
+        <span className="ds-run-eyebrow">Tonight&rsquo;s run</span>
+        <span className="ds-title-mark convo-title-mark">
           <h1>What are we cooking tonight?</h1>
-          <p className="convo-sub">Feed me answers. I&rsquo;ll spit out a graph.</p>
-        </div>
+          <svg className="ds-underline ds-underline-title" viewBox="0 0 430 10" preserveAspectRatio="none" fill="none" aria-hidden="true">
+            <path d="M2 7c68-4 144 1 220-2 58-2.5 134 3 206 .5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+          </svg>
+        </span>
+        <p className="convo-sub">
+          {total} questions &middot; answer out loud or type &middot; correct me in the notes
+        </p>
+        <span className="ds-aside">
+          <GoosePrint />
+          <span className="mono">Feed me answers. I&rsquo;ll spit out a graph.</span>
+        </span>
       </header>
 
       {/* Transcript column (progress, panel, answer row) beside the
@@ -513,7 +526,7 @@ export default function ConversationPage() {
         </div>
 
         <UnderstandingSidecar
-          slots={conversationSlots(conversation)}
+          slots={slots}
           locked={readingsLocked}
           onConfirm={confirmReading}
           onCorrect={correctReading}
@@ -522,16 +535,24 @@ export default function ConversationPage() {
         <div className="convo-footer">
           {isComplete ? (
             <>
-              <span className="convo-done">
-                <Icon glyph="checkmark-burst" size={20} />
-                Conversation complete
+              {/* The green "all answered" line already sits on the
+                  progress bar, so this says the thing that bar cannot:
+                  whether anything still wants a second look. */}
+              <span className="convo-done mono">
+                {lowReadings
+                  ? `${lowReadings} note${lowReadings > 1 ? "s" : ""} still need a look. Or don’t. I’ll guess.`
+                  : `${total} for ${total}. Graph’s on the way.`}
               </span>
               <div className="convo-done-actions">
                 <button className="btn btn-ghost" onClick={restart}>
                   Start over
                 </button>
-                <button className="btn btn-primary btn-lg" onClick={() => navigate("/session/inventory")}>
-                  Check the inventory &rarr;
+                <span className="ds-tracks" aria-hidden="true">
+                  <GoosePrint depth="pale" size={16} rotate={78} style={{ position: "absolute", left: 4, bottom: 4 }} />
+                  <GoosePrint depth="deep" size={19} rotate={98} style={{ position: "absolute", left: 34, bottom: 16 }} />
+                </span>
+                <button className="btn btn-primary btn-lg btn-key" onClick={() => navigate("/session/inventory")}>
+                  Check the inventory
                 </button>
               </div>
             </>

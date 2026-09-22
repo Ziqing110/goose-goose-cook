@@ -24,36 +24,6 @@
   color: var(--ink-faint);
 }
 
-/* ---------------- goose marks (cooks) ----------------
-   The same crooked orange the home and schedule pages use for their
-   titles, through this page's own token so a theme pass can move it. */
-:root { --vb-honk: #b8461f; }
-
-.vb-title-mark { position: relative; display: inline-block; width: fit-content; }
-.vb-title-mark > .vb-underline { color: var(--vb-honk); }
-.vb-underline {
-  position: absolute;
-  left: -2px;
-  display: block;
-  width: calc(100% + 4px);
-  overflow: visible;
-  pointer-events: none;
-}
-.vb-underline-title { bottom: -9px; height: 9px; }
-.vb-underline-section { bottom: -6px; height: 7px; }
-
-/* A line of Chef Goose's own commentary: one footprint, then mono copy.
-   Used under the title and inside the drawer. */
-.vb-aside {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  padding-top: 6px;
-  font-size: 13px;
-  line-height: 18px;
-  color: var(--ink-soft);
-}
-
 /* ---------------- title row ---------------- */
 .vb-title-row {
   display: flex;
@@ -62,7 +32,6 @@
   padding: 26px 0 22px;
   animation: vb-rise 240ms ease-out both;
 }
-.vb-title-row .vb-eyebrow { font-size: 11.5px; letter-spacing: 0.12em; color: var(--ink-soft); }
 .vb-title-line { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
 .vb-title-row h1 { margin: 0; font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.01em; }
 .vb-sub { margin: 0; max-width: 62ch; font-size: 13px; line-height: 18px; color: var(--ink-soft); text-wrap: pretty; }
@@ -250,7 +219,7 @@
   top: -6px;
   padding: 3px 8px;
   border-radius: 999px;
-  background: var(--vb-honk);
+  background: var(--ds-honk);
   color: #ffffff;
   font-size: 10px;
   line-height: 1;
@@ -576,9 +545,6 @@
 .vb-note.is-accent { color: var(--accent); }
 .vb-note.is-crit { color: var(--crit); }
 .vb-footer-go { display: inline-flex; align-items: center; gap: 14px; }
-/* The bird has walked up to the button. Purely decorative, so it is the
-   first thing to go when the row runs out of width. */
-.vb-footer-tracks { position: relative; width: 64px; height: 40px; opacity: 0.7; flex: none; }
 
 /* ---------------- motion ---------------- */
 @keyframes vb-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -670,8 +636,6 @@
   .cook-slot { min-height: 0; }
   .cook-invite { min-height: 120px; }
   .chef-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .vb-underline { display: none; }
-  .vb-footer-tracks { display: none; }
 }
 @media (max-width: 480px) {
   .vb-footer-go { width: 100%; }
