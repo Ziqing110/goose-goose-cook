@@ -90,7 +90,7 @@
 .sch-mode.is-selected .sch-mode-glyph { color: var(--accent); }
 .sch-mode-glyph { color: var(--ink); }
 .sch-mode-title { font-size: 18px; line-height: 24px; font-weight: 700; }
-.sch-mode-body { font-size: 13px; line-height: 18px; color: var(--ink-soft); max-width: 440px; }
+.sch-mode-body { font-size: 15px; line-height: 22px; color: var(--ink-soft); max-width: 440px; }
 .sch-mode-chip {
   position: absolute;
   top: 16px;
@@ -698,7 +698,7 @@
   .sch-modes { gap: 8px; }
   .sch-mode { padding: 14px 12px; min-height: 44px; gap: 6px; }
   .sch-mode-title { font-size: 16px; line-height: 20px; }
-  .sch-mode-body { font-size: 12px; line-height: 16px; }
+  .sch-mode-body { font-size: 14px; line-height: 20px; }
   .sch-mode-chip { top: 10px; right: 10px; height: 28px; width: 28px; padding: 0; justify-content: center; }
   .sch-mode-chip-text { display: none; }
   .sch-hud { padding: 16px; }
@@ -724,8 +724,8 @@
   /* One row, so the sticky footer plus the VoiceBar stay under a
      quarter of a phone screen. */
   .sch-footer { gap: 12px; padding: 10px 0; }
-  .sch-footer-actions { flex: 1 1 auto; justify-content: flex-end; gap: 8px; }
-  .sch-footer .btn-lg { flex: 1 1 auto; padding-inline: 14px; font-size: 15px; white-space: nowrap; }
+  .sch-footer-actions { flex: 1 1 auto; min-width: 0; justify-content: flex-end; gap: 8px; }
+  .sch-footer .btn-lg { flex: 1 1 auto; min-width: 0; padding-inline: 14px; font-size: 15px; white-space: nowrap; }
   .sch-footer .sch-btn-abandon { padding-inline: 10px; font-size: 14px; white-space: nowrap; }
   .sch-detail-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 }

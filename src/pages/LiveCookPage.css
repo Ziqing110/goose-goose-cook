@@ -438,7 +438,7 @@
   gap: 12px;
   padding: 16px 16px 10px 20px;
 }
-.lc-card-name { flex: 1; min-width: 0; font-size: 22px; line-height: 28px; font-weight: 700; }
+.lc-card-name { flex: 1; min-width: 0; font-size: 20px; line-height: 24px; font-weight: 700; }
 /* Versus: the name with its state on the line under it, and the score
    at 44 on the right — where "+20" lands and the counter rolls. */
 .lc-card-head.is-scored { padding-right: 16px; }
@@ -493,11 +493,11 @@
 .lc-eyebrow.is-due .lc-eyebrow-dot { animation: lc-dot 1.6s ease-in-out infinite; }
 
 .lc-card-body { position: relative; display: flex; flex-direction: column; gap: 12px; flex: 1; padding: 0 20px 8px; }
-.lc-step-title { margin: 0; font-size: 26px; line-height: 32px; font-weight: 700; letter-spacing: -0.01em; text-wrap: pretty; }
-.lc-step-desc { margin: 0; font-size: 16px; line-height: 22px; color: var(--ink-soft); }
+.lc-step-title { margin: 0; font-size: 20px; line-height: 26px; font-weight: 700; letter-spacing: -0.01em; text-wrap: pretty; }
+.lc-step-desc { margin: 0; font-size: 15px; line-height: 22px; color: var(--ink-soft); }
 /* The instruction: full ink, a step up from meta — it is what the cook
    reads; everything under it is bookkeeping. */
-.lc-step-desc.is-instruction { font-size: 17px; line-height: 24px; color: var(--ink); text-wrap: pretty; }
+.lc-step-desc.is-instruction { font-size: 15px; line-height: 22px; color: var(--ink); text-wrap: pretty; }
 .lc-step-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 /* Phase chip: system Chip in the player's color, the one thing that
    has to read from across the kitchen (with the eyebrow saying it too). */
@@ -583,7 +583,7 @@
   transform: rotate(-2deg);
   box-shadow: 6px 7px 0 color-mix(in srgb, var(--ink) 16%, transparent);
 }
-.lc-offer .lc-step-title { font-size: 24px; line-height: 30px; }
+.lc-offer .lc-step-title { font-size: 20px; line-height: 26px; }
 /* One fact line — how long · what it needs — with the points on the
    right, where the score they'd add to also sits. */
 .lc-offer-meta { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -875,7 +875,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 16px;
+  font-size: 15px;
   animation: lc-rise 240ms ease-out both;
 }
 .lc-toque-line-text.is-agent { color: var(--ai); }
@@ -924,11 +924,10 @@
   border-top: 2px solid var(--ink);
 }
 /* Everything done: the band becomes a dark piece like the strip — the
-   run's two cabinet edges now hold "Dinner's up" between them. */
+   run's two cabinet edges now hold "Dinner's up" between them. Keep it
+   in flow after Toque: pinning this footer made it cover Toque's line
+   when the bottom of the board was scrolled into view. */
 .lc-footer.is-final {
-  position: sticky;
-  bottom: calc(var(--voice-bar-height) + 12px);
-  z-index: 5;
   padding: 14px 20px;
   border-top: none;
   color: #fff;
@@ -1167,7 +1166,7 @@
   .lc-card-secondary .lc-btn-undo { margin-left: 0; }
   .lc-goose { right: 4px; bottom: 6px; }
   .lc-cooking { margin: 0 106px 16px 16px; }
-  .lc-step-title { font-size: 22px; line-height: 28px; }
+  .lc-step-title { font-size: 20px; line-height: 26px; }
   .lc-step-desc { font-size: 15px; line-height: 22px; }
   .lc-goose .kp-baby-goose { width: 92px !important; height: 92px !important; }
   .lc-card.is-state-due { animation: none; }

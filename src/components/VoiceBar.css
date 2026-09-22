@@ -39,13 +39,13 @@
   gap: 3px;
 }
 .voice-transcript-label {
-  font-size: 0.68rem;
+  font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--vb-fg) 55%, transparent);
 }
 .voice-transcript-text {
-  font-size: 1rem;
+  font-size: 15px;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -53,7 +53,7 @@
 }
 
 .voice-transcript-sub {
-  font-size: 0.85rem;
+  font-size: 13px;
   color: var(--ai);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -109,7 +109,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.8rem;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.02em;
 }
@@ -142,7 +142,7 @@
   color: var(--vb-fg);
   font: inherit;
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: 13px;
   cursor: pointer;
   transition: background 0.15s ease;
 }
@@ -157,6 +157,7 @@
   left: auto;
   right: 16px;
   bottom: 12px;
+  z-index: 51;
   width: auto;
   height: 52px;
   padding: 4px;

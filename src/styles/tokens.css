@@ -75,9 +75,12 @@
      they never cover (or steal clicks from) the voice bar. */
   --voice-bar-height: 88px;
 
-  --font-display: "Figtree", ui-sans-serif, system-ui, sans-serif;
-  --font-body: "Figtree", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  /* One type system across every route. v4 pages used to switch from
+     Figtree/IBM Plex Mono to Inter/JetBrains Mono halfway through the
+     session, so shared chrome visibly changed between pages. */
+  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   color-scheme: light;
 }

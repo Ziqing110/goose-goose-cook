@@ -12,6 +12,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import BabyGoose from "./BabyGoose.jsx";
+import { chefAvatar } from "../utils/cooks.js";
 import "./VersusCountdown.css";
 
 // Each beat holds this long; GO holds a touch less before the play
@@ -105,11 +106,12 @@ export default function VersusCountdown({ cooks, title, nodes = [], opening, onC
         {cooks.slice(0, 2).map((cook, i) => {
           const key = i === 0 ? "a" : "b";
           const opens = opener(cook);
+          const avatar = chefAvatar(cook.avatar);
           return (
             <article key={cook.id} className={`vs-card is-${key}`}>
               <div className="vs-card-head">
-                <span className={`vs-avatar is-${key}`} aria-hidden="true">
-                  {cook.name?.[0]?.toUpperCase() || "?"}
+                <span className={`vs-avatar is-${key}`} style={{ "--vs-avatar-bg": avatar.bg }} aria-hidden="true">
+                  <img src={avatar.src} alt="" />
                 </span>
                 <span className="vs-card-id">
                   <span className="vs-card-name">{cook.name}</span>

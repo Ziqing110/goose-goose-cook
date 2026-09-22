@@ -30,6 +30,8 @@ import { useStepEditing } from "../state/useStepEditing.js";
 import { buildInventory, formatClock, formatStepDuration, PHASE_LABELS } from "../utils/inventory.js";
 import dishMapoTofu from "../assets/dish-mapo-tofu.png";
 import dishNoodleSoup from "../assets/dish-noodle-soup.png";
+import inventoryFallbackLeft from "../assets/inventory-fallback-left-v1.png";
+import inventoryFallbackRight from "../assets/inventory-fallback-right-v1.png";
 import "./InventoryPage.css";
 
 // How long the thumbs-up frame holds once the recipes land.
@@ -884,6 +886,13 @@ export default function InventoryPage() {
           <span className="inv-dish-marks" aria-hidden="true">
             {dishMarks.map((d, i) => (
               <img key={d.title} src={d.src} alt="" className="inv-dish-mark" style={{ animationDelay: `${120 + i * 80}ms` }} />
+            ))}
+          </span>
+        )}
+        {dishMarks.length === 0 && (
+          <span className="inv-inventory-fallbacks" aria-hidden="true">
+            {[inventoryFallbackLeft, inventoryFallbackRight].map((src, i) => (
+              <img key={src} src={src} alt="" className="inv-inventory-fallback" style={{ animationDelay: `${120 + i * 80}ms` }} />
             ))}
           </span>
         )}

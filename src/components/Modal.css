@@ -15,6 +15,13 @@
   animation: modal-fade 0.15s ease both;
 }
 
+/* Live Cook collapses the muted voice bar to a floating Unmute button.
+   In that state there is no full-width bar to reserve space for, so let
+   the modal scrim cover the viewport instead of exposing an 88px strip. */
+body:has(.voice-bar.is-live-cook.is-muted) .modal-scrim {
+  bottom: 0;
+}
+
 @keyframes modal-fade {
   from { opacity: 0; }
   to { opacity: 1; }
