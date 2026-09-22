@@ -3,22 +3,29 @@
 //
 // Two stages, deliberately separated:
 //
-//  1. WHEN each step runs â€” branch-and-bound over activity orderings,
-//     minimising the finish time. Cooks are modelled as a pooled
-//     resource of capacity N (they're interchangeable), alongside each
-//     equipment type at its kitchen capacity. Unattended steps ask for
-//     equipment only. With ~20 fixed steps the
-//     search proves optimality rather than guessing, falling back to
-//     the best found so far if it hits its node budget.
-//  2. WHO does each step â€” the schedule above fixes the start times,
+//  1. WHEN each step runs — branch-and-bound over activity orderings,
+//     minimising the finish time, against each equipment type at its
+//     kitchen capacity and against the cooks themselves. With ~20 fixed
+//     steps the search proves optimality rather than guessing, falling
+//     back to the best found so far if it hits its node budget.
+//  2. WHO does each step — the schedule above fixes the start times,
 //     and any assignment that never double-books a cook is equally
 //     fast, so that freedom is spent evening out each cook's workload
 //     (the greedy this replaced piled ~3x the work on one cook).
 //
-// Steps carry `attended`. An attended step needs a cook for its whole
-// duration; an unattended one — a simmer left alone, a chill, a rest —
-// occupies its EQUIPMENT and nobody. It still has an owner, because
-// somebody has to start it, but it never books their time.
+// An attended step needs a cook for its whole duration. An unattended
+// one — a simmer, a chill, a rest — holds its EQUIPMENT throughout but
+// needs a cook only at its own moments: starting it, any checkpoints,
+// and taking it off. Those moments are real work and are scheduled as
+// such; the long gap between them is not, and is what lets the other
+// cook get on with something else.
+//
+// Stage 1 picks a cook as it places each step, rather than checking a
+// pooled count and leaving identity to stage 2. It has to: an
+// unattended step's moments all belong to whoever started it, and that
+// grouping means "somebody was spare at each moment" does not imply
+// anyone can actually cover them all. Asking the pooled question
+// produced timelines no division of the work could staff.
 import { EQUIPMENT_OPTIONS } from "../data/dishes.js";
 import { isAttended } from "./tending.js";
 
@@ -104,18 +111,74 @@ function resourceCapacities(cooks, kitchenProfile) {
 export { isAttended };
 
 /**
- * What a step occupies while it runs.
+ * What a step occupies, and WHEN within its own span.
  *
- * An unattended step demands its EQUIPMENT and no cook. The pot is busy
- * for forty minutes; the person who set it going is not. Charging a cook
- * for it — which this did for every step — made the planner believe two
- * people were flat out for 48 minutes on a congee run that contains 21
- * minutes of actual hands-on work.
+ * A claim is one resource held over one interval. Equipment is always
+ * held for the step's whole span — the pot is busy for the entire
+ * simmer. A cook is not: an attended step holds one for its whole span,
+ * while an unattended step holds one only for the moments somebody has
+ * to be there, the initial/checkpoint/ending windows, and nobody in
+ * between.
+ *
+ * Those brief windows are the whole reason this returns intervals
+ * rather than a flat list of resource names. Charging a cook for an
+ * unattended step's FULL span made the planner believe two people were
+ * flat out for 48 minutes on a congee run containing 21 minutes of
+ * hands-on work. But charging nothing at all — which is what replaced
+ * it — let the planner put three simultaneous must-be-there moments in
+ * a two-cook kitchen, because taking a pot off the heat looked free.
+ * Both are wrong in the same place; only the interval says so.
  */
-const demandOf = (node) => [
-  ...(isAttended(node) ? [COOK_RESOURCE] : []),
-  ...new Set(node.required_equipment || []),
-];
+function claimsOf(node, startSec) {
+  const endSec = startSec + node.estimated_duration_sec;
+  const claims = [...new Set(node.required_equipment || [])].map((resource) => ({ resource, startSec, endSec }));
+  if (isAttended(node)) {
+    claims.push({ resource: COOK_RESOURCE, startSec, endSec });
+  } else {
+    unattendedEvents(node, startSec).forEach((m) => {
+      claims.push({ resource: COOK_RESOURCE, startSec: m.atSec, endSec: m.endSec });
+    });
+  }
+  return claims;
+}
+
+/** Every interval already claimed on one resource by what's been placed. */
+function claimedOn(placed, resource, skipId = null) {
+  const out = [];
+  placed.forEach((p) => {
+    if (p.id === skipId) return;
+    p.claims.forEach((c) => {
+      if (c.resource === resource) out.push([c.startSec, c.endSec]);
+    });
+  });
+  return out;
+}
+
+/**
+ * The most that overlap at any one instant inside [from, to).
+ *
+ * A plain pairwise count — what this used to do — asks "how many things
+ * touch my span", which is a different and stricter question: two short
+ * claims at either end of a long simmer both touch it without ever
+ * coinciding. With a cook's time now arriving in fragments, that
+ * distinction decides whether a plan is called impossible or merely busy.
+ */
+function maxConcurrent(intervals, from, to) {
+  const edges = [];
+  intervals.forEach(([s, e]) => {
+    const start = Math.max(s, from);
+    const end = Math.min(e, to);
+    if (start < end) edges.push([start, 1], [end, -1]);
+  });
+  edges.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  let open = 0;
+  let peak = 0;
+  edges.forEach(([, delta]) => {
+    open += delta;
+    if (open > peak) peak = open;
+  });
+  return peak;
+}
 
 /** Topological order, ignoring references to nodes outside this set.
  *  Anything left over sits in a dependency cycle and can't be ordered. */
@@ -168,36 +231,72 @@ export function computeTails(nodes, byId) {
  *  a free unit for its whole duration. Candidate times are `earliest`
  *  plus the finish time of anything already placed â€” a schedule only
  *  ever becomes feasible when something else releases. */
-function earliestFeasibleStart(node, earliest, placed, caps) {
-  const duration = node.estimated_duration_sec;
-  const needs = demandOf(node);
-  const candidates = [earliest];
-  placed.forEach((p) => {
-    if (p.endSec > earliest) candidates.push(p.endSec);
-  });
-  candidates.sort((a, b) => a - b);
+function earliestFeasibleStart(node, earliest, placed, caps, cookCount) {
+  const candidates = new Set([earliest]);
+  placed.forEach((p) =>
+    p.claims.forEach((c) => {
+      if (c.endSec > earliest) candidates.add(c.endSec);
+    })
+  );
+  const times = [...candidates].sort((a, b) => a - b);
 
-  for (const t of candidates) {
-    const feasible = needs.every((r) => {
-      const cap = caps[r] ?? 1;
-      let inUse = 0;
-      for (const p of placed) {
-        if (!p.needs.includes(r)) continue;
-        if (p.startSec < t + duration && t < p.endSec) inUse++;
-        if (inUse + 1 > cap) return false;
-      }
-      return true;
+  // What each cook is already holding, by the index they were placed
+  // under. Read off `placed` rather than carried alongside it, so the
+  // search's push/pop of a placement undoes its cook too, for free.
+  const heldBy = (k) => {
+    const out = [];
+    placed.forEach((p) => {
+      if (p.cookIndex !== k) return;
+      p.claims.forEach((c) => {
+        if (c.resource === COOK_RESOURCE) out.push([c.startSec, c.endSec]);
+      });
     });
-    if (feasible) return t;
+    return out;
+  };
+  const loadOf = (k) =>
+    placed.reduce(
+      (sum, p) =>
+        p.cookIndex === k
+          ? sum + p.claims.reduce((s, c) => (c.resource === COOK_RESOURCE ? s + (c.endSec - c.startSec) : s), 0)
+          : sum,
+      0
+    );
+
+  for (const t of times) {
+    const claims = claimsOf(node, t);
+    const equipmentOk = claims.every((c) => {
+      if (c.resource === COOK_RESOURCE) return true;
+      const cap = caps[c.resource] ?? 1;
+      return maxConcurrent(claimedOn(placed, c.resource), c.startSec, c.endSec) + 1 <= cap;
+    });
+    if (!equipmentOk) continue;
+
+    // A named cook has to be able to take EVERY moment this step needs
+    // one for, not just "some cook was spare at each moment" — all of an
+    // unattended step's moments belong to whoever started it. Asking the
+    // pooled question instead let this hand back timelines that no
+    // division of the work could actually staff.
+    const wants = claims.filter((c) => c.resource === COOK_RESOURCE);
+    if (wants.length === 0) return { startSec: t, cookIndex: null };
+    const fits = [];
+    for (let k = 0; k < cookCount; k++) {
+      const held = heldBy(k);
+      if (held.every(([hs, he]) => wants.every((c) => he <= c.startSec || c.endSec <= hs))) fits.push(k);
+    }
+    if (fits.length === 0) continue;
+    // Least-loaded of those that fit, so the timeline it hands on is
+    // already roughly even and assignCooks has less to undo.
+    fits.sort((a, b) => loadOf(a) - loadOf(b) || a - b);
+    return { startSec: t, cookIndex: fits[0] };
   }
-  return candidates[candidates.length - 1];
+  return { startSec: times[times.length - 1], cookIndex: 0 };
 }
 
 /** Serial schedule generation: place activities in the given order, each
  *  at its earliest feasible time. Produces an "active" schedule, and for
  *  a regular objective like makespan an optimal schedule is always among
  *  these â€” which is what makes searching over orderings exhaustive. */
-function buildSchedule(order, byId, caps) {
+function buildSchedule(order, byId, caps, cookCount) {
   const placed = [];
   const finishById = new Map();
   order.forEach((id) => {
@@ -205,9 +304,9 @@ function buildSchedule(order, byId, caps) {
     const depReady = (node.depends_on || [])
       .filter((d) => byId[d])
       .reduce((max, d) => Math.max(max, finishById.get(d) ?? 0), 0);
-    const startSec = earliestFeasibleStart(node, depReady, placed, caps);
+    const { startSec, cookIndex } = earliestFeasibleStart(node, depReady, placed, caps, cookCount);
     const endSec = startSec + node.estimated_duration_sec;
-    placed.push({ id, startSec, endSec, needs: demandOf(node), dependsReadySec: depReady });
+    placed.push({ id, startSec, endSec, cookIndex, claims: claimsOf(node, startSec), dependsReadySec: depReady });
     finishById.set(id, endSec);
   });
   return placed;
@@ -222,7 +321,7 @@ const makespanOf = (placed) => placed.reduce((max, p) => Math.max(max, p.endSec)
  * activity's own earliest start plus its longest path to the end).
  * Returns the best ordering found and whether the search was exhaustive.
  */
-function searchBestOrder(nodes, byId, caps, seedOrder, nodeBudget = SEARCH_NODE_BUDGET, timeBudgetMs = SEARCH_TIME_BUDGET_MS) {
+function searchBestOrder(nodes, byId, caps, cookCount, seedOrder, nodeBudget = SEARCH_NODE_BUDGET, timeBudgetMs = SEARCH_TIME_BUDGET_MS) {
   const tails = computeTails(nodes, byId);
   const total = nodes.length;
   const preds = new Map(nodes.map((n) => [n.id, (n.depends_on || []).filter((d) => byId[d])]));
@@ -231,12 +330,22 @@ function searchBestOrder(nodes, byId, caps, seedOrder, nodeBudget = SEARCH_NODE_
   // queued on any single piece of equipment. Reaching the floor proves
   // optimality outright; otherwise it's how close the answer is known to be.
   const criticalPath = Math.max(0, ...nodes.map((n) => tails.get(n.id)));
-  // Only attended steps occupy a cook — an unattended step's duration
-  // belongs to its equipment, not the cook pool, so it must not inflate
-  // this floor. Counting it here made the bound exceed schedules that
-  // are provably achievable, which stops the search from ever declaring
-  // victory early on recipes with real unattended time in them.
-  const totalCookWork = nodes.filter(isAttended).reduce((sum, n) => sum + n.estimated_duration_sec, 0);
+  // An attended step charges the cook pool its whole duration; an
+  // unattended one charges only the moments somebody has to be there.
+  // Charging its full duration made the bound exceed schedules that are
+  // provably achievable, so the search never declared victory on
+  // recipes with real unattended time in them — but charging nothing
+  // understates work the kitchen genuinely has to staff. The hands-on
+  // seconds inside it are the honest figure, and they keep the floor a
+  // floor: it is time somebody must spend, however it is arranged.
+  const totalCookWork = nodes.reduce(
+    (sum, n) =>
+      sum +
+      (isAttended(n)
+        ? n.estimated_duration_sec
+        : unattendedEvents(n, 0).reduce((inner, m) => inner + (m.endSec - m.atSec), 0)),
+    0
+  );
   let floor = Math.max(criticalPath, Math.ceil(totalCookWork / Math.max(1, caps[COOK_RESOURCE])));
   EQUIPMENT_OPTIONS.forEach((type) => {
     const work = nodes
@@ -245,7 +354,7 @@ function searchBestOrder(nodes, byId, caps, seedOrder, nodeBudget = SEARCH_NODE_
     floor = Math.max(floor, Math.ceil(work / Math.max(1, caps[type] ?? 1)));
   });
 
-  const seedPlaced = buildSchedule(seedOrder, byId, caps);
+  const seedPlaced = buildSchedule(seedOrder, byId, caps, cookCount);
   let bestOrder = seedOrder;
   let bestMakespan = makespanOf(seedPlaced);
   let explored = 0;
@@ -294,12 +403,12 @@ function searchBestOrder(nodes, byId, caps, seedOrder, nodeBudget = SEARCH_NODE_
 
     for (const n of ordered) {
       const depReady = preds.get(n.id).reduce((max, d) => Math.max(max, finishById.get(d) ?? 0), 0);
-      const startSec = earliestFeasibleStart(n, depReady, placed, caps);
+      const { startSec, cookIndex } = earliestFeasibleStart(n, depReady, placed, caps, cookCount);
       const endSec = startSec + n.estimated_duration_sec;
       // The finish only ever grows, so if placing this already matches
       // the incumbent, nothing below this branch can beat it.
       if (endSec >= bestMakespan) continue;
-      placed.push({ id: n.id, startSec, endSec, needs: demandOf(n), dependsReadySec: depReady });
+      placed.push({ id: n.id, startSec, endSec, cookIndex, claims: claimsOf(n, startSec), dependsReadySec: depReady });
       finishById.set(n.id, endSec);
       scheduled.add(n.id);
       order.push(n.id);
@@ -319,6 +428,64 @@ function searchBestOrder(nodes, byId, caps, seedOrder, nodeBudget = SEARCH_NODE_
 }
 
 /**
+ * The windows during which a step's owner actually has to be there.
+ *
+ * An attended step is one window, its whole span. An unattended step is
+ * several brief ones — the initial/checkpoint/ending moments from
+ * `unattendedEvents` — with nothing reserved in between, because that
+ * gap is exactly the point of calling it unattended.
+ */
+function ownerWindows(node, task) {
+  if (isAttended(node)) return [[task.startSec, task.endSec]];
+  return unattendedEvents(node, task.startSec).map((m) => [m.atSec, m.endSec]);
+}
+
+// How many assignments the backtracking search below will try before it
+// concedes. Reached only when the greedy passes have already failed, so
+// this bounds a rare case, not the common path.
+const ASSIGN_SEARCH_BUDGET = 40000;
+
+/**
+ * Find ANY assignment of steps to cooks that double-books nobody.
+ *
+ * Backtracking over cooks per step, in start order. This exists because
+ * an unattended step's moments all belong to one cook, which turns the
+ * assignment from interval colouring — where first-fit always works —
+ * into something that can need two steps to swap cooks together. Returns
+ * null if it proves there is none, or runs out of budget: some timelines
+ * genuinely cannot be staffed however the work is shared out, and saying
+ * so is better than pretending.
+ */
+function searchAssignment(ordered, cooks, byId) {
+  const windows = new Map(ordered.map((t) => [t.id, ownerWindows(byId[t.id], t)]));
+  const held = new Map(cooks.map((c) => [c.id, []]));
+  const chosen = new Map();
+  let tried = 0;
+
+  const fits = (cookId, wins) =>
+    held.get(cookId).every(([hs, he]) => wins.every(([s, e]) => he <= s || e <= hs));
+
+  const place = (i) => {
+    if (i === ordered.length) return true;
+    if (tried++ > ASSIGN_SEARCH_BUDGET) return false;
+    const task = ordered[i];
+    const wins = windows.get(task.id);
+    for (const c of cooks) {
+      if (!fits(c.id, wins)) continue;
+      const before = held.get(c.id);
+      held.set(c.id, [...before, ...wins]);
+      chosen.set(task.id, c.id);
+      if (place(i + 1)) return true;
+      held.set(c.id, before);
+      chosen.delete(task.id);
+    }
+    return false;
+  };
+
+  return place(0) ? chosen : null;
+}
+
+/**
  * Hand the fixed timeline to specific cooks. Any assignment that never
  * double-books a cook finishes at the same time, so the choice is spent
  * on balance: each step goes to the least-loaded cook who is free,
@@ -332,8 +499,24 @@ function assignCooks(placed, cooks, byId) {
   const busy = new Map(cooks.map((c) => [c.id, 0]));
   const intervals = new Map(cooks.map((c) => [c.id, []]));
 
-  const freeFor = (cookId, task, skipTaskId = null) =>
-    intervals.get(cookId).every((iv) => iv.id === skipTaskId || iv.endSec <= task.startSec || task.endSec <= iv.startSec);
+  // Free for EVERY window the task needs its owner present for — not
+  // just its outer span. An unattended step's owner only has to be free
+  // at its initial/checkpoint/ending moments, and everyone else's
+  // hands-on work is checked against those same moments, not the whole
+  // simmer, so a burner minute in the middle of it is never mistaken for
+  // a cook minute.
+  const freeFor = (cookId, task, skipTaskId = null) => {
+    const windows = ownerWindows(byId[task.id], task);
+    return intervals
+      .get(cookId)
+      .every((iv) => iv.id === skipTaskId || windows.every(([s, e]) => iv.endSec <= s || e <= iv.startSec));
+  };
+
+  const reserve = (cookId, task) => {
+    ownerWindows(byId[task.id], task).forEach(([s, e]) => {
+      intervals.get(cookId).push({ id: task.id, startSec: s, endSec: e });
+    });
+  };
 
   ordered.forEach((task) => {
     const depOwners = new Set(
@@ -350,16 +533,75 @@ function assignCooks(placed, cooks, byId) {
     });
     const chosen = pool[0];
     assignment.set(task.id, chosen.id);
-    // An unattended step still gets an owner — somebody has to put the
-    // pot on, and cooperation mode needs it in a queue — but it does NOT
-    // reserve their time or count toward how busy they are. Booking it
-    // would re-create the thing this whole change removes: a cook shown
-    // as occupied for forty minutes by a simmer.
+    // An unattended step's owner still has its initial/checkpoint/ending
+    // moments reserved (above), so nothing else lands on them, but the
+    // step does NOT count toward how busy that cook is — the load
+    // balancer is about the free stretch in between, which is exactly
+    // what makes it unattended. Charging the full span for it would
+    // re-create the thing this whole change removes: a cook shown as
+    // occupied for forty minutes by a simmer.
+    reserve(chosen.id, task);
     if (isAttended(byId[task.id])) {
       busy.set(chosen.id, busy.get(chosen.id) + (task.endSec - task.startSec));
-      intervals.get(chosen.id).push({ id: task.id, startSec: task.startSec, endSec: task.endSec });
     }
   });
+
+  const move = (task, toCookId) => {
+    const from = assignment.get(task.id);
+    intervals.set(from, intervals.get(from).filter((iv) => iv.id !== task.id));
+    reserve(toCookId, task);
+    assignment.set(task.id, toCookId);
+    if (isAttended(byId[task.id])) {
+      const duration = task.endSec - task.startSec;
+      busy.set(from, busy.get(from) - duration);
+      busy.set(toCookId, busy.get(toCookId) + duration);
+    }
+  };
+
+  // Repair. First-fit by start time is optimal for plain intervals, but
+  // an unattended step's moments must all go to ONE cook, and that
+  // grouping is enough to let the pass above paint itself into a corner:
+  // it can hand a cook's middle to somebody and only then meet the step
+  // that needed that cook at both ends. So where somebody is
+  // double-booked, first try simply moving one of the overlapping steps
+  // to a cook it fits on, repeatedly, since freeing one cook is often
+  // what makes the next move possible.
+  for (let pass = 0; pass < 8; pass++) {
+    const stuck = ordered.filter((t) => !freeFor(assignment.get(t.id), t, t.id));
+    if (stuck.length === 0) break;
+    let moved = false;
+    for (const task of stuck) {
+      const to = cooks.find((c) => c.id !== assignment.get(task.id) && freeFor(c.id, task));
+      if (!to) continue;
+      move(task, to.id);
+      moved = true;
+    }
+    if (!moved) break;
+  }
+
+  // Still stuck means no sequence of single moves gets there, which does
+  // not prove no assignment does: with the grouping above this is not
+  // interval colouring any more, and a conflict can need two steps to
+  // trade cooks at once. Search for a whole consistent assignment before
+  // giving up. Only reached when the cheap passes failed, and bounded,
+  // because with the grouping the problem is NP-hard in general.
+  if (ordered.some((t) => !freeFor(assignment.get(t.id), t, t.id))) {
+    const found = searchAssignment(ordered, cooks, byId);
+    if (found) {
+      cooks.forEach((c) => {
+        intervals.set(c.id, []);
+        busy.set(c.id, 0);
+      });
+      ordered.forEach((task) => {
+        const cookId = found.get(task.id);
+        assignment.set(task.id, cookId);
+        reserve(cookId, task);
+        if (isAttended(byId[task.id])) {
+          busy.set(cookId, busy.get(cookId) + (task.endSec - task.startSec));
+        }
+      });
+    }
+  }
 
   // Local improvement: move a step off the busiest cook whenever some
   // other cook is free for it and ends up no busier than the one we
@@ -378,15 +620,14 @@ function assignCooks(placed, cooks, byId) {
         const before = spread();
         busy.set(from, busy.get(from) - duration);
         busy.set(c.id, busy.get(c.id) + duration);
-        if (spread() < before) {
-          intervals.set(from, intervals.get(from).filter((iv) => iv.id !== task.id));
-          intervals.get(c.id).push({ id: task.id, startSec: task.startSec, endSec: task.endSec });
-          assignment.set(task.id, c.id);
+        const better = spread() < before;
+        busy.set(from, busy.get(from) + duration);
+        busy.set(c.id, busy.get(c.id) - duration);
+        if (better) {
+          move(task, c.id);
           improved = true;
           break;
         }
-        busy.set(from, busy.get(from) + duration);
-        busy.set(c.id, busy.get(c.id) - duration);
       }
     }
     if (!improved) break;
@@ -417,16 +658,14 @@ function deriveStartCause(task, placed, byId, assignment, caps) {
   // Something was saturated right up to the moment it started; whichever
   // resource released at exactly that time is the one it waited on.
   const justBefore = task.startSec - 1;
-  const releasedAtStart = placed.filter((p) => p.id !== task.id && p.endSec === task.startSec);
-  const needs = demandOf(node);
-  for (const r of needs) {
-    if (r === COOK_RESOURCE) continue;
+  const holds = (p, r, at) => p.claims.some((c) => c.resource === r && c.startSec <= at && c.endSec > at);
+  const releasedAtStart = placed.filter((p) => p.id !== task.id && p.claims.some((c) => c.endSec === task.startSec));
+  const equipment = [...new Set(task.claims.map((c) => c.resource))].filter((r) => r !== COOK_RESOURCE);
+  for (const r of equipment) {
     const cap = caps[r] ?? 1;
-    const holding = placed.filter(
-      (p) => p.id !== task.id && p.needs.includes(r) && p.startSec <= justBefore && p.endSec > justBefore
-    );
+    const holding = placed.filter((p) => p.id !== task.id && holds(p, r, justBefore));
     if (holding.length >= cap) {
-      const ref = releasedAtStart.find((p) => p.needs.includes(r)) || holding[0];
+      const ref = releasedAtStart.find((p) => p.claims.some((c) => c.resource === r)) || holding[0];
       return { type: "equipment", time: task.startSec, refStepId: ref?.id ?? null, equipmentType: r };
     }
   }
@@ -450,8 +689,8 @@ export function scheduleSteps(nodes, cooks, kitchenProfile, { nodeBudget, timeBu
     return { steps: [], makespanSec: 0, criticalStepIds: new Set(), unscheduledIds: unordered, optimal: true, lowerBoundSec: 0 };
   }
 
-  const { order, optimal, lowerBoundSec } = searchBestOrder(schedulable, byId, caps, topo, nodeBudget, timeBudgetMs);
-  const placed = buildSchedule(order, byId, caps);
+  const { order, optimal, lowerBoundSec } = searchBestOrder(schedulable, byId, caps, cooks.length, topo, nodeBudget, timeBudgetMs);
+  const placed = buildSchedule(order, byId, caps, cooks.length);
   const assignment = assignCooks(placed, cooks, byId);
 
   const stepById = new Map();
