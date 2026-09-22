@@ -332,6 +332,8 @@
 }
 .lc-paused .kp-icon { flex: none; }
 
+.ds-v4 .lc-btn-plan { color: var(--ink-soft); }
+
 /* ---------------- the arena ----------------
    One column in both modes: cards ×2, (Versus) the board, Toque's line.
    Toque's full panel lives in the drawer. */

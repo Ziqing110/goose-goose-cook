@@ -148,6 +148,32 @@
 }
 .voice-mute-btn:hover { background: color-mix(in srgb, var(--vb-fg) 10%, transparent); }
 
+/* Live cook needs the bottom of each player card for unattended pots.
+   A muted microphone has no transcript or level to monitor, so keeping
+   the full fixed bar only hides the live work. Collapse it to the one
+   available action at every viewport size; unmuting restores the full
+   voice surface. */
+.voice-bar.is-live-cook.is-muted {
+  left: auto;
+  right: 16px;
+  bottom: 12px;
+  width: auto;
+  height: 52px;
+  padding: 4px;
+  border-radius: var(--radius-pill);
+}
+.voice-bar.is-live-cook.is-muted .voice-avatar,
+.voice-bar.is-live-cook.is-muted .voice-transcript,
+.voice-bar.is-live-cook.is-muted .voice-meter,
+.voice-bar.is-live-cook.is-muted .voice-status-pill {
+  display: none;
+}
+.voice-bar.is-live-cook.is-muted .voice-mute-btn {
+  height: 44px;
+  padding-inline: 18px;
+  background: color-mix(in srgb, var(--vb-fg) 8%, transparent);
+}
+
 @media (max-width: 720px) {
   .voice-bar { padding: 0 16px; gap: 12px; }
   .voice-meter { display: none; }
@@ -158,4 +184,5 @@
   .voice-avatar { display: none; }
   .voice-transcript-label { display: none; }
   .voice-status-pill { font-size: 0; gap: 0; }
+
 }

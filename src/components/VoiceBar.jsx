@@ -431,8 +431,14 @@ export default function VoiceBar() {
   // across bars — otherwise normal talking barely lifts the first one.
   const litBars = Math.round(Math.min(1, level * 2.2) * METER_BARS);
 
+  const isLiveCook = pathname === "/session/live-cook";
+
   return (
-    <div className="voice-bar" role="status" aria-label="Voice agent status">
+    <div
+      className={`voice-bar${isLiveCook ? " is-live-cook" : ""}${muted ? " is-muted" : ""}`}
+      role="status"
+      aria-label="Voice agent status"
+    >
       <div className="voice-bar-inner">
         <span className="voice-avatar" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none">

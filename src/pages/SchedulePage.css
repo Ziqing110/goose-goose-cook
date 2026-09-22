@@ -38,7 +38,8 @@
   color: var(--ink-soft);
 }
 
-/* PlayerAvatar — the system's colored circle with the name's first letter. */
+/* PlayerAvatar — the chef picked on Cooks; legacy sessions without a
+   selection keep the player-colour initial as a safe fallback. */
 .sch-avatar {
   flex: 0 0 auto;
   display: inline-flex;
@@ -50,6 +51,12 @@
 }
 .sch-avatar.is-a { background: var(--cook-a); }
 .sch-avatar.is-b { background: var(--cook-b); }
+.sch-avatar.has-chef {
+  border: 1px solid var(--line);
+  background-repeat: no-repeat;
+  background-position: center 52%;
+  background-size: 96%;
+}
 .sch-avatar-20 { width: 20px; height: 20px; font-size: 11px; }
 .sch-avatar-24 { width: 24px; height: 24px; font-size: 12px; }
 .sch-avatar-32 { width: 32px; height: 32px; font-size: 14px; }

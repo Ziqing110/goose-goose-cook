@@ -694,6 +694,14 @@ export default function LiveCookPage() {
     }
   };
 
+  const openPlan = () => {
+    if (!paused) {
+      const at = new Date().toISOString();
+      commit(say(applyPause({ run, at }), "Paused while you check the plan. Resume here when you're ready."));
+    }
+    navigate("/session/schedule");
+  };
+
   const doFinish = (base = run) => {
     if (!complete) {
       if (base !== run) commit(base);
@@ -1041,8 +1049,8 @@ export default function LiveCookPage() {
             <button type="button" className={`btn ${paused ? "btn-primary" : "btn-ghost lc-btn-accent"}`} onClick={() => togglePause()}>
               {paused ? "Resume" : "Pause"}
             </button>
-            <button type="button" className="btn btn-ghost lc-btn-accent" onClick={() => navigate("/session/schedule")}>
-              The plan
+            <button type="button" className="btn btn-ghost lc-btn-plan" onClick={openPlan} title="Pauses the cook before opening the plan">
+              View plan
             </button>
           </div>
         )}

@@ -27,6 +27,7 @@ import { CONFIRM_YES_PATTERN, CONFIRM_NO_PATTERN } from "../utils/navCommands.js
 import { matchStepName } from "../utils/stepNameMatch.js";
 import { tendingOf, TENDING } from "../utils/tending.js";
 import { formatClock } from "../utils/inventory.js";
+import { chefAvatar } from "../utils/cooks.js";
 import KpIcon from "../components/KpIcon.jsx";
 import Modal from "../components/Modal.jsx";
 import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
@@ -137,9 +138,14 @@ function TendingChip({ node, className = "" }) {
 }
 
 function PlayerAvatar({ cook, index, size = 32 }) {
+  const chef = cook?.avatar ? chefAvatar(cook.avatar) : null;
   return (
-    <span className={`sch-avatar is-${playerKey(index)} sch-avatar-${size}`} aria-hidden="true">
-      {cook?.name?.[0]?.toUpperCase() || "?"}
+    <span
+      className={`sch-avatar is-${playerKey(index)} sch-avatar-${size}${chef ? " has-chef" : ""}`}
+      style={chef ? { backgroundColor: chef.bg, backgroundImage: `url(${chef.src})` } : undefined}
+      aria-hidden="true"
+    >
+      {!chef && (cook?.name?.[0]?.toUpperCase() || "?")}
     </span>
   );
 }
