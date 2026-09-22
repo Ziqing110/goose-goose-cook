@@ -1383,46 +1383,8 @@
   opacity: 0.85;
 }
 
-/* Weighted-key CTA — the same key as the Home page's "Resume the run":
-   a 4px ink-shadow bottom edge that collapses on press, so the button
-   feels like something with weight behind it.
-
-   Written at `.ds-v4 .btn.sch-btn-key` because the design-system rules
-   it has to beat are themselves scoped to `.ds-v4 .btn`. At a plain
-   `.sch-btn-key` this whole block lost the cascade and did nothing: the
-   button kept the flat primary's no-shadow and the base's
-   scale-on-press, which is the opposite of a key going down.
-
-   Size is left to `.btn-lg` — 56px, 18px, 28px sides — which already
-   matches the Home key exactly, so the two read as the same control. */
-.ds-v4 .btn.sch-btn-key {
-  position: relative;
-  border-radius: 10px;
-  letter-spacing: -0.005em;
-  box-shadow: 0 4px 0 var(--kp-accent-shadow, #a03d17);
-  transition: transform 90ms ease, box-shadow 90ms ease, background 140ms ease;
-}
-/* Held flat on hover: the press is the only movement this key makes. */
-.ds-v4 .btn.sch-btn-key:hover:not(:disabled) {
-  transform: none;
-  background: var(--kp-accent-hover, #c64e26);
-}
-.ds-v4 .btn.sch-btn-key:active:not(:disabled) {
-  transform: translateY(4px);
-  box-shadow: 0 0 0 var(--kp-accent-shadow, #a03d17);
-}
-/* Nothing to press when there is nothing to start — the edge goes too,
-   so the key reads as flat against the page. */
-.ds-v4 .btn.sch-btn-key:disabled { box-shadow: none; opacity: 0.55; cursor: not-allowed; }
-@media (prefers-reduced-motion: reduce) {
-  .ds-v4 .btn.sch-btn-key,
-  .ds-v4 .btn.sch-btn-key:hover,
-  .ds-v4 .btn.sch-btn-key:active { transform: none; box-shadow: 0 4px 0 var(--kp-accent-shadow, #a03d17); }
-}
-
 @media (max-width: 640px) {
   .sch-go-prints { display: none; }
-  .ds-v4 .btn.sch-btn-key { min-width: 0; padding: 0 20px; font-size: 15px; }
 }
 
 /* ---------------- abandon modal ---------------- */
