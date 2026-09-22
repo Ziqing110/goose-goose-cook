@@ -919,7 +919,7 @@ export default function VoiceBindingPage() {
             <GoosePrint depth="pale" size={16} rotate={78} style={{ position: "absolute", left: 4, bottom: 4 }} />
             <GoosePrint depth="deep" size={19} rotate={98} style={{ position: "absolute", left: 34, bottom: 16 }} />
           </span>
-          <button className="btn btn-primary btn-lg" disabled={!ready && !locked} onClick={() => navigate("/session/schedule")}>
+          <button className="btn btn-primary btn-lg btn-key" disabled={!ready && !locked} onClick={() => navigate("/session/schedule")}>
             Continue to scheduling
           </button>
         </span>
