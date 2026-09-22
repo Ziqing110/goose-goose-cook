@@ -445,7 +445,7 @@ export default function ConversationPage() {
                 <Fragment key={i}>
                   {before}
                   <div className="chat-row chat-agent">
-                    <GooseProfile size={40} delay={(turn % 2) * 300} aria-hidden="true" />
+                    <GooseProfile size={36} delay={(turn % 2) * 300} aria-hidden="true" />
                     <div className="chat-msg">
                       <span className="chat-who">Goose</span>
                       {/* The tilt goes on a wrapper so the HONK pill rides
@@ -498,7 +498,7 @@ export default function ConversationPage() {
                 is doing ("Listening…", "Reading…"). */}
             {reading && (
               <div className="chat-row chat-agent" aria-live="polite" aria-label="Goose is thinking">
-                <GooseProfile size={40} aria-hidden="true" />
+                <GooseProfile size={36} aria-hidden="true" />
                 <div className="chat-msg">
                   <span className="chat-who">Goose</span>
                   <p className="chat-bubble typing-bubble" aria-hidden="true">

@@ -1,0 +1,3 @@
+# Kitchen recordings are big and personal; they live on disk, not in git.
+*
+!.gitignore

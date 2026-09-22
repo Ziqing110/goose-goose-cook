@@ -45,11 +45,38 @@ const ABANDON_PHRASE = "I want to abandon this cook";
 const PLAYER_KEYS = ["a", "b"];
 const playerKey = (index) => PLAYER_KEYS[index % PLAYER_KEYS.length];
 
-// Zoom is a three-stop slider (Fit · 1× · 2×), no pixel readout. "Fit"
-// is the real thing — measured from the track's width so the whole plan
-// is on screen — while 1× and 2× are the design's fixed densities.
-const ZOOM_STOPS = ["Fit", "1×", "2×"];
-const ZOOM_PX_PER_MIN = { "1×": 78, "2×": 108 };
+// Zoom is a free slider in pixels-per-minute with two fixed checkpoints
+// on it. "Fit" is the real thing — measured from the track's width so
+// the whole plan is on screen.
+// 1× and 2× are the design's two densities. They are checkpoints on
+// the bar, not the only places it can stop: the thumb moves freely and
+// snaps onto them when it comes close, so those two remain exactly
+// reachable while everything between stays available.
+const ZOOM_1X = 78;
+const ZOOM_2X = 108;
+const ZOOM_CHECKPOINTS = [ZOOM_1X, ZOOM_2X];
+const ZOOM_MIN_PX_PER_MIN = 28;
+const ZOOM_MAX_PX_PER_MIN = 168;
+// How near the thumb has to come before a checkpoint claims it. Wide
+// enough to be hard to miss by hand, narrow enough that the densities
+// either side of one are still selectable.
+const ZOOM_SNAP_PX = 4;
+// One "zoom in" / "zoom out" by voice, where there is no thumb to drag.
+const ZOOM_VOICE_STEP_PX = 12;
+// Fit is measured from the track, so unlike the two checkpoints its
+// density depends on the plan. It sits beside the bar rather than on it.
+const ZOOM_FIT = "Fit";
+
+const clampZoom = (px) => Math.min(ZOOM_MAX_PX_PER_MIN, Math.max(ZOOM_MIN_PX_PER_MIN, px));
+const snapZoom = (px) => ZOOM_CHECKPOINTS.find((c) => Math.abs(px - c) <= ZOOM_SNAP_PX) ?? Math.round(px);
+// Named at the checkpoints, a percentage of 1× between them — saying
+// "1.4×" for a density the same bar calls 2× would only confuse.
+const zoomLabel = (zoom) => {
+  if (zoom === ZOOM_FIT) return "Fit";
+  if (zoom === ZOOM_1X) return "1×";
+  if (zoom === ZOOM_2X) return "2×";
+  return `${Math.round((zoom / ZOOM_1X) * 100)}%`;
+};
 const FIT_FALLBACK_PX_PER_MIN = 56;
 // On a phone a true fit is ~7px/min — every block a bare sliver — so
 // "Fit" bottoms out here and scrolls a little instead.
@@ -137,6 +164,10 @@ function TendingChip({ node, className = "" }) {
   return <span className={`sch-tending-chip ${className}`}>{label}</span>;
 }
 
+// Same identity contract as Cooks / Live Cook: the bird the player
+// picked on the Cooks page carries their identity, ringed in their
+// player colour on the schedule. Initial-in-a-circle is the fallback for
+// runs that predate avatars.
 function PlayerAvatar({ cook, index, size = 32 }) {
   const chef = cook?.avatar ? chefAvatar(cook.avatar) : null;
   return (
@@ -169,7 +200,7 @@ export default function SchedulePage() {
   const kitchenProfile = state.kitchenProfiles.find((p) => p.id === state.session.kitchenProfileId) || null;
 
   // 1× by default: "Fit" squeezes a 40-minute plan into bare slivers.
-  const [zoom, setZoom] = useState("1×");
+  const [zoom, setZoom] = useState(ZOOM_1X);
   const [selectedStepId, setSelectedStepId] = useState(null);
   const [confirmAbandon, setConfirmAbandon] = useState(false);
   const [editingKitchen, setEditingKitchen] = useState(false);
@@ -489,17 +520,20 @@ export default function SchedulePage() {
     // ---- Co-op timeline: zoom, details, free time ----
     const zoomBy = (delta) => () => {
       if (!isCoop) return needsCoop("Zoom");
-      const next = ZOOM_STOPS[Math.min(ZOOM_STOPS.length - 1, Math.max(0, ZOOM_STOPS.indexOf(zoom) + delta))];
+      // From Fit, a nudge lands on the nearest checkpoint rather than on
+      // whatever density the plan happened to need.
+      const from = zoom === ZOOM_FIT ? (delta > 0 ? ZOOM_1X : ZOOM_2X) : zoom + delta * ZOOM_VOICE_STEP_PX;
+      const next = snapZoom(clampZoom(from));
       if (next === zoom) return delta > 0 ? "Already at the closest zoom." : "Already zoomed all the way out.";
       setZoom(next);
-      return next === "Fit" ? "Fit to screen." : `Zoom ${next}.`;
+      return `Zoom ${zoomLabel(next)}.`;
     };
     commands.push(
       {
         phrases: [/\bzoom (?:to )?fit\b/, /\bfit (?:the )?(?:timeline|plan|schedule|screen)\b/, /^fit$/, /\breset zoom\b/],
         run: () => {
           if (!isCoop) return needsCoop("Zoom");
-          setZoom("Fit");
+          setZoom(ZOOM_FIT);
           return "Fit to screen.";
         },
       },
@@ -594,10 +628,15 @@ export default function SchedulePage() {
           cookIndex: cookIndexById[selectedStep.cookId],
           isCritical: schedule.criticalStepIds.has(selectedStep.id),
           waitLabel: selectedStep.startSec > selectedStep.dependsReadySec ? waitLabelFor(selectedStep.startCause) : null,
+          // A stable number down the plan's step order, so the same step
+          // keeps the same ticket every time you open it.
+          ticketNumber: schedule.steps.findIndex((s) => s.id === selectedStep.id) + 1,
         }
       : null;
 
-  const metaBits = [approved.title];
+  // Title moved to the h1 above; the meta below carries the remaining
+  // trip-band: servings, steps, kitchen.
+  const metaBits = [];
   if (approved.servings != null) metaBits.push(<><Mono>{approved.servings}</Mono> servings</>);
   metaBits.push(<><Mono>{nodes.length}</Mono> steps</>);
   if (kitchenProfile?.name) metaBits.push(kitchenProfile.name);
@@ -615,7 +654,33 @@ export default function SchedulePage() {
         />
       )}
       <header className="sch-title-row">
-        <h1>Schedule</h1>
+        <span className="sch-eyebrow sch-run-eyebrow">Tonight&rsquo;s run</span>
+        <span className="sch-title-line">
+          <span className="sch-title-mark">
+            <h1>{approved.title}</h1>
+            {/* Crooked hand-drawn underline — same voice as the Home
+                page's titles, sized to the text width so it never
+                trails past the last word. */}
+            <svg
+              className="sch-underline sch-underline-title"
+              viewBox="0 0 430 10"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+              fill="none"
+            >
+              <path
+                d="M2 7c68-4 144 1 220-2 58-2.5 134 3 206 .5"
+                stroke="currentColor"
+                strokeWidth="2.6"
+                strokeLinecap="round"
+              />
+            </svg>
+          </span>
+          {/* APPROVED stamp — sits beside the title, not on top of the
+              underline. Same stamp language as the Home page's IN
+              PROGRESS. */}
+          <span className="sch-stamp-approved-badge" aria-hidden="true">APPROVED</span>
+        </span>
         <span className="sch-meta">
           {metaBits.map((bit, i) => (
             <span key={i}>
@@ -623,6 +688,18 @@ export default function SchedulePage() {
               {bit}
             </span>
           ))}
+        </span>
+        <span className="sch-goose-line">
+          {/* A single feather is the goose's speaking mark — same one the
+              Home page uses on the fastest run. */}
+          <svg viewBox="0 0 26 28" width="13" height="14" fill="none" aria-hidden="true" className="sch-goose-feather">
+            <path d="M13 3.2c1.6 0 2.2 1.6 2.4 3.4l.5 4.6c.1 1.2 1 1.6 2 1.1l3.6-1.8c1.6-.8 2.8.6 1.7 2L14.9 25c-1 1.3-2.6 1.3-3.5 0L2.9 12.6c-1-1.4.2-2.8 1.8-2l3.5 1.8c1 .5 1.9.1 2-1.1l.5-4.6C10.9 4.8 11.4 3.2 13 3.2Z" fill="#f6cfa6" stroke="#b08a63" strokeWidth="2.2" strokeLinejoin="round" />
+          </svg>
+          <Mono className="sch-goose-line-text">
+            {mode
+              ? "I ran this 37 ways. This one gets you fed first — and nobody stands around holding a spoon."
+              : "Recipe's settled. Now tell me — are you helping each other, or racing?"}
+          </Mono>
         </span>
       </header>
 
@@ -649,60 +726,27 @@ export default function SchedulePage() {
         {run && <span className="sch-meta">{runEnded ? "This cook is finished — the mode is part of its record." : "Mode is locked while a cook is in progress."}</span>}
       </div>
 
+      {!mode && !run && (
+        // "No board until someone picks" — the same empty-state goose
+        // speech the design shows when neither mode has been chosen. The
+        // bird nudges the choice without gating any control.
+        <div className="sch-empty-plan">
+          <span className="sch-empty-speech">
+            <svg viewBox="0 0 46 76" width="26" height="43" fill="none" aria-hidden="true" className="sch-empty-goose">
+              <path d="M33 5c6 16 3 33-6 44-4 5-9 9-13 11 1-13 4-24 8-33" fill="#f6cfa6" stroke="#8a5b34" strokeWidth="2.6" strokeLinejoin="round" />
+              <path d="M33 5c-7 12-13 24-16 35-2 8-3 15-3 20" fill="#fffdf7" stroke="#8a5b34" strokeWidth="2.6" strokeLinejoin="round" />
+            </svg>
+            <Mono className="sch-empty-bubble">Waiting on you two.</Mono>
+          </span>
+          <span className="sch-empty-title">No board until someone picks</span>
+          <span className="sch-empty-body">
+            Co-op and I deal every step to a cook. Versus and I deal an opening hand, then you two fight over the rest.
+          </span>
+        </div>
+      )}
+
       {mode && (
         <>
-          {/* ---- Plan HUD ---- */}
-          <div className="sch-hud">
-            <div className="sch-tiles">
-              {isCoop ? (
-                <>
-                  <div className="sch-tile sch-roll">
-                    <span className="sch-tile-value-row">
-                      <KpIcon glyph="timer" size={20} />
-                      <Mono className="sch-tile-value">{finish}</Mono>
-                    </span>
-                    <span className="sch-tile-label">finish in</span>
-                  </div>
-                  {schedule.savedSec > 0 && (
-                    <div className="sch-tile sch-roll" style={{ animationDelay: "60ms" }}>
-                      <Mono className="sch-tile-value">{formatClock(schedule.savedSec)}</Mono>
-                      <span className="sch-tile-label">faster than solo</span>
-                    </div>
-                  )}
-                  <div className="sch-tile sch-roll" style={{ animationDelay: "120ms" }}>
-                    <Mono className="sch-tile-value">{schedule.steps.length}</Mono>
-                    <span className="sch-tile-label">steps</span>
-                  </div>
-                </>
-              ) : (
-                <div className="sch-tile sch-roll">
-                  <Mono className="sch-tile-value">{opening.poolIds.length + opening.lockedIds.length}</Mono>
-                  <span className="sch-tile-label">steps up for grabs</span>
-                </div>
-              )}
-            </div>
-            <div className="sch-player-chips">
-              {lanes.map(({ cook, index, steps, busySec }) => {
-                const bundle = opening.bundles.find((b) => b.cookId === cook.id);
-                return (
-                  <span className="sch-player-chip" key={cook.id}>
-                    <PlayerAvatar cook={cook} index={index} size={20} />
-                    <span className="sch-player-chip-name">{cook.name}</span>
-                    <Mono className="sch-player-chip-meta">
-                      {isCoop ? (
-                        <>
-                          {steps.length} steps · {formatClock(busySec)}
-                        </>
-                      ) : (
-                        <>{formatClock(bundle?.totalSec || 0)} hands-on to open</>
-                      )}
-                    </Mono>
-                  </span>
-                );
-              })}
-            </div>
-          </div>
-
           {/* ---- Warnings ---- */}
           {lacking.length > 0 && (
             <div className="sch-notice is-warning" role="status">
@@ -743,37 +787,95 @@ export default function SchedulePage() {
               onSelect={(id) => setSelectedStepId((cur) => (cur === id ? null : id))}
               selected={selected}
               onClose={() => setSelectedStepId(null)}
+              headerTiles={
+                <div className="sch-card-tiles">
+                  <div className="sch-tile sch-roll">
+                    <Mono className="sch-tile-value">{finish}</Mono>
+                    <span className="sch-tile-label">finish in</span>
+                  </div>
+                  {schedule.savedSec > 0 && (
+                    <div className="sch-tile sch-tile-highlight sch-roll" style={{ animationDelay: "60ms" }}>
+                      <Mono className="sch-tile-value sch-tile-value-hot">{formatClock(schedule.savedSec)}</Mono>
+                      <span className="sch-tile-label">faster than solo</span>
+                      <span className="sch-stamp sch-stamp-honk" aria-hidden="true">HONK</span>
+                    </div>
+                  )}
+                </div>
+              }
             />
           ) : (
-            <OpeningHand opening={opening} cooks={cooks} byId={byId} dishOf={dishOf} />
+            <OpeningHand
+              opening={opening}
+              cooks={cooks}
+              byId={byId}
+              dishOf={dishOf}
+              headerTiles={
+                <div className="sch-card-tiles">
+                  <div className="sch-tile sch-roll">
+                    <Mono className="sch-tile-value">{opening.poolIds.length + opening.lockedIds.length}</Mono>
+                    <span className="sch-tile-label">steps to claim</span>
+                  </div>
+                </div>
+              }
+            />
           )}
         </>
       )}
 
       {/* ---- Footer band ---- */}
       <div className="sch-footer">
-        {mode ? (
-          <Mono className="sch-footer-tag">
-            {isCoop ? `Co-op · finish in ${finish}` : `Versus · ${opening.poolIds.length + opening.lockedIds.length} steps to claim`}
-          </Mono>
-        ) : (
-          <span className="sch-footer-hint">Pick Co-op or Versus to go live.</span>
-        )}
+        <div className="sch-footer-copy">
+          {mode ? (
+            <>
+              <span className="sch-footer-title">
+                {isCoop
+                  ? `Co-op · finish in ${finish}`
+                  : `Versus · ${opening.poolIds.length + opening.lockedIds.length} steps to claim`}
+              </span>
+              <Mono className="sch-footer-sub">
+                {isCoop ? "Lindy fills the pot first. I'll call it out." : "Four dealt, the rest go to whoever says it first."}
+              </Mono>
+            </>
+          ) : (
+            <>
+              <span className="sch-footer-title">No mode yet</span>
+              <Mono className="sch-footer-sub">Pick Co-op or Versus and I&rsquo;ll deal the board.</Mono>
+            </>
+          )}
+        </div>
         <div className="sch-footer-actions">
           {run && !runEnded && (
             <button type="button" className="btn btn-ghost sch-btn-abandon" onClick={() => setConfirmAbandon(true)}>
               Abandon this cook
             </button>
           )}
-          {run ? (
-            <button type="button" className="btn btn-primary btn-lg" onClick={() => navigate("/session/live-cook")}>
-              {runEnded ? "See the result" : "Back to the cook"} &rarr;
-            </button>
-          ) : (
-            <button type="button" className="btn btn-primary btn-lg" disabled={!canStart} onClick={goLive}>
-              Go live &rarr;
-            </button>
-          )}
+          {/* Weighted-key CTA in the same 3a language as the Home
+              page's "Start the run" — footprints walking up to the
+              button, a 4px hard bottom edge that collapses on press. */}
+          <span className="sch-go-lane">
+            {!run && canStart && (
+              <span className="sch-go-prints" aria-hidden="true">
+                <svg viewBox="0 0 26 28" width="12" height="13" fill="none" style={{ position: "absolute", left: "2px", bottom: "4px", transform: "rotate(-97deg)" }}>
+                  <path d="M13 3.2c1.6 0 2.2 1.6 2.4 3.4l.5 4.6c.1 1.2 1 1.6 2 1.1l3.6-1.8c1.6-.8 2.8.6 1.7 2L14.9 25c-1 1.3-2.6 1.3-3.5 0L2.9 12.6c-1-1.4.2-2.8 1.8-2l3.5 1.8c1 .5 1.9.1 2-1.1l.5-4.6C10.9 4.8 11.4 3.2 13 3.2Z" fill="#fdeada" stroke="#d2b79c" strokeWidth="2.2" strokeLinejoin="round" />
+                </svg>
+                <svg viewBox="0 0 26 28" width="14" height="15" fill="none" style={{ position: "absolute", left: "28px", bottom: "24px", transform: "rotate(-79deg)" }}>
+                  <path d="M13 3.2c1.6 0 2.2 1.6 2.4 3.4l.5 4.6c.1 1.2 1 1.6 2 1.1l3.6-1.8c1.6-.8 2.8.6 1.7 2L14.9 25c-1 1.3-2.6 1.3-3.5 0L2.9 12.6c-1-1.4.2-2.8 1.8-2l3.5 1.8c1 .5 1.9.1 2-1.1l.5-4.6C10.9 4.8 11.4 3.2 13 3.2Z" fill="#faddbe" stroke="#c2a081" strokeWidth="2.2" strokeLinejoin="round" />
+                </svg>
+                <svg viewBox="0 0 26 28" width="17" height="18" fill="none" style={{ position: "absolute", left: "58px", bottom: "2px", transform: "rotate(-98deg)" }}>
+                  <path d="M13 3.2c1.6 0 2.2 1.6 2.4 3.4l.5 4.6c.1 1.2 1 1.6 2 1.1l3.6-1.8c1.6-.8 2.8.6 1.7 2L14.9 25c-1 1.3-2.6 1.3-3.5 0L2.9 12.6c-1-1.4.2-2.8 1.8-2l3.5 1.8c1 .5 1.9.1 2-1.1l.5-4.6C10.9 4.8 11.4 3.2 13 3.2Z" fill="#f6cfa6" stroke="#b08a63" strokeWidth="2.2" strokeLinejoin="round" />
+                </svg>
+              </span>
+            )}
+            {run ? (
+              <button type="button" className="btn btn-primary btn-lg sch-btn-key" onClick={() => navigate("/session/live-cook")}>
+                {runEnded ? "See the result" : "Back to the cook"} &rarr;
+              </button>
+            ) : (
+              <button type="button" className="btn btn-primary btn-lg sch-btn-key" disabled={!canStart} onClick={goLive}>
+                Start cooking &rarr;
+              </button>
+            )}
+          </span>
         </div>
       </div>
 
@@ -826,10 +928,10 @@ function ModeCard({ glyph, title, body, selected, locked, onSelect }) {
       onClick={onSelect}
     >
       {selected && (
-        <span className="sch-mode-chip" aria-hidden="true">
-          <KpIcon glyph="checkmark-burst" size={16} />
-          <span className="sch-mode-chip-text">Selected</span>
-        </span>
+        // GOOSE PICKS stamp — same recipe as the Home page's HONK / IN
+        // PROGRESS: mono, tilted, orange. Signals authorship rather than
+        // a neutral "Selected" chip.
+        <span className="sch-mode-stamp" aria-hidden="true">GOOSE PICKS</span>
       )}
       <KpIcon glyph={glyph} size={24} className="sch-mode-glyph" />
       <span className="sch-mode-title">{title}</span>
@@ -848,9 +950,14 @@ function pickTickStepMinutes(pxPerMin) {
   return TICK_STEPS_MIN.find((s) => s * pxPerMin >= TICK_MIN_PX) || TICK_STEPS_MIN[TICK_STEPS_MIN.length - 1];
 }
 
-function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepIds, zoom, onZoom, selectedStepId, onSelect, selected, onClose }) {
+function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepIds, zoom, onZoom, selectedStepId, onSelect, selected, onClose, headerTiles }) {
   const scrollRef = useRef(null);
   const [fitPxPerMin, setFitPxPerMin] = useState(FIT_FALLBACK_PX_PER_MIN);
+  // The gear lanes duplicate the same steps against equipment rather
+  // than cooks — useful, but noise when reading who's doing what. Start
+  // hidden and let the reader ask for them.
+  const [showGear, setShowGear] = useState(false);
+  const gearLanesShown = showGear ? gearLanes : [];
   const makespanMin = Math.max(makespanSec / 60, 1);
 
   // "Fit" means the whole plan is visible: measure the scroll container
@@ -868,7 +975,7 @@ function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepId
     return () => ro.disconnect();
   }, [makespanMin]);
 
-  const pxPerMin = zoom === "Fit" ? fitPxPerMin : ZOOM_PX_PER_MIN[zoom];
+  const pxPerMin = zoom === ZOOM_FIT ? fitPxPerMin : zoom;
   const pxFor = (sec) => (sec / 60) * pxPerMin;
   const trackWidth = Math.round(pxFor(makespanSec)) + TRACK_END_PADDING;
   const tickStep = pickTickStepMinutes(pxPerMin);
@@ -881,37 +988,100 @@ function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepId
   return (
     <div className="sch-card">
       <div className="sch-card-head">
-        <span className="sch-card-title">Who does what, when</span>
+        <span className="sch-card-title sch-title-mark">
+          Who does what, when
+          <svg
+            className="sch-underline sch-underline-section"
+            viewBox="0 0 250 10"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+            fill="none"
+          >
+            <path
+              d="M2 7c40-4 84 1 128-2 34-2.5 78 3 118 .5"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+            />
+          </svg>
+        </span>
+        {headerTiles}
         <div className="sch-card-tools">
+          {/* Legend — matches the standalone design's three-swatch
+              key (schedule design line 368-370): a critical-path block
+              with an ink under-bar, a paper feather for "Free to
+              wander" (the same feather used on wait cells), and a
+              small dashed square for "Hands on the pot". */}
           <span className="sch-legend">
             <span className="sch-legend-item">
               <span className="sch-legend-swatch is-critical" /> Critical path
             </span>
             <span className="sch-legend-item">
-              <span className="sch-legend-swatch is-wait" /> Waiting
+              <svg viewBox="0 0 26 28" width="11" height="12" fill="none" className="sch-legend-feather" aria-hidden="true">
+                <path d="M13 3.2c1.6 0 2.2 1.6 2.4 3.4l.5 4.6c.1 1.2 1 1.6 2 1.1l3.6-1.8c1.6-.8 2.8.6 1.7 2L14.9 25c-1 1.3-2.6 1.3-3.5 0L2.9 12.6c-1-1.4.2-2.8 1.8-2l3.5 1.8c1 .5 1.9.1 2-1.1l.5-4.6C10.9 4.8 11.4 3.2 13 3.2Z" fill="#f2ede1" stroke="#b7ab93" strokeWidth="2.2" strokeLinejoin="round" />
+              </svg>
+              Free to wander
             </span>
             <span className="sch-legend-item">
-              <span className="sch-legend-swatch is-rail" /> Cooking on its own
-            </span>
-            <span className="sch-legend-item">
-              <span className="sch-legend-swatch is-moment" /> Hands-on moment
+              <span className="sch-legend-swatch is-hands" /> Hands on the pot
             </span>
           </span>
           <span className="sch-zoom">
-            <span className={`mono sch-zoom-stop ${zoom === "Fit" ? "is-on" : ""}`}>Fit</span>
-            <input
-              type="range"
-              className="sch-zoom-slider"
-              min={0}
-              max={ZOOM_STOPS.length - 1}
-              step={1}
-              value={ZOOM_STOPS.indexOf(zoom)}
-              onChange={(e) => onZoom(ZOOM_STOPS[Number(e.target.value)])}
-              aria-label="Timeline zoom"
-              aria-valuetext={zoom}
-            />
-            <span className={`mono sch-zoom-stop ${zoom === "1×" ? "is-on" : ""}`}>1×</span>
-            <span className={`mono sch-zoom-stop ${zoom === "2×" ? "is-on" : ""}`}>2×</span>
+            {/* Fit is off the bar because its density is whatever the
+                plan needs, not a point on a fixed scale — but it still
+                has to be clickable, so it is a button, as are the two
+                checkpoints. */}
+            <button
+              type="button"
+              className={`mono sch-zoom-stop ${zoom === ZOOM_FIT ? "is-on" : ""}`}
+              onClick={() => onZoom(ZOOM_FIT)}
+              aria-pressed={zoom === ZOOM_FIT}
+            >
+              Fit
+            </button>
+            <span className="sch-zoom-track">
+              <input
+                type="range"
+                className="sch-zoom-slider"
+                min={ZOOM_MIN_PX_PER_MIN}
+                max={ZOOM_MAX_PX_PER_MIN}
+                step={1}
+                // On Fit the thumb parks at the density Fit worked out
+                // to, so the bar agrees with what is on screen — pinned
+                // to the low end when the plan is long enough that Fit
+                // falls below the bar's own minimum.
+                value={Math.round(clampZoom(zoom === ZOOM_FIT ? fitPxPerMin : zoom))}
+                onChange={(e) => onZoom(snapZoom(Number(e.target.value)))}
+                aria-label="Timeline zoom"
+                aria-valuetext={zoomLabel(zoom)}
+              />
+              {ZOOM_CHECKPOINTS.map((stop) => (
+                <span
+                  key={stop}
+                  className={`sch-zoom-tick ${zoom === stop ? "is-on" : ""}`}
+                  // The thumb is 16px wide and its centre travels from
+                  // 8px to width-8px, so a mark at a plain percentage of
+                  // the track would sit beside the checkpoint, not on it.
+                  style={{
+                    left: `calc(8px + ${
+                      (stop - ZOOM_MIN_PX_PER_MIN) / (ZOOM_MAX_PX_PER_MIN - ZOOM_MIN_PX_PER_MIN)
+                    } * (100% - 16px))`,
+                  }}
+                  aria-hidden="true"
+                />
+              ))}
+            </span>
+            {ZOOM_CHECKPOINTS.map((stop) => (
+              <button
+                key={stop}
+                type="button"
+                className={`mono sch-zoom-stop ${zoom === stop ? "is-on" : ""}`}
+                onClick={() => onZoom(stop)}
+                aria-pressed={zoom === stop}
+              >
+                {zoomLabel(stop)}
+              </button>
+            ))}
           </span>
         </div>
       </div>
@@ -932,12 +1102,12 @@ function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepId
             </div>
           ))}
 
-          {gearLanes.length > 0 && (
+          {gearLanesShown.length > 0 && (
             <div className="sch-lane-group-head">
               <span className="sch-eyebrow">Equipment</span>
             </div>
           )}
-          {gearLanes.map((lane) => (
+          {gearLanesShown.map((lane) => (
             <div className="sch-lane-label is-equipment" key={`${lane.type}-${lane.index}`} title={lane.label}>
               <KpIcon glyph={EQUIPMENT_GLYPHS[lane.type] || "timer"} size={20} className="sch-lane-glyph" />
               <span className="sch-lane-name sch-long">{capitalize(lane.label)}</span>
@@ -959,6 +1129,11 @@ function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepId
                 {formatClock(makespanSec)}
               </span>
             </div>
+            {/* DINNER anchor at the makespan — a small dark pill and a
+                dashed line so the endpoint reads as a destination, not
+                just a number on a ruler. */}
+            <div className="sch-endline" style={{ left: Math.round(pxFor(makespanSec)) }} aria-hidden="true" />
+            <span className="sch-dinner-stamp" style={{ left: Math.round(pxFor(makespanSec)) + 8 }} aria-hidden="true">DINNER</span>
 
             {lanes.map(({ cook, index, blocks, railRows }) => (
               <div className={`sch-lane is-${playerKey(index)}`} key={cook.id} style={{ "--sch-rail-rows": railRows }}>
@@ -970,17 +1145,36 @@ function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepId
                   const delay = `${i * 40}ms`;
                   const style = { left, width, animationDelay: delay };
                   if (b.kind === "wait") {
+                    // Wait cell — same voice as the standalone design's
+                    // between-block walking spaces: a dashed paper card
+                    // with a pair of goose footprints walking through
+                    // and the mono duration tucked in a corner. No fake
+                    // "fill pot" copy — the tooltip and aria-label carry
+                    // the actual reason.
+                    const showPrints = width >= 40;
                     return (
                       <div
                         className={`sch-block is-wait ${width < 96 ? "is-narrow" : ""} ${width < 64 ? "is-tight" : ""}`}
                         key={b.id}
                         style={style}
-                        title={b.label}
+                        title={`${b.label} · ${formatClock(durationSec)}`}
                         role="img"
                         aria-label={`${b.label} · ${formatClock(durationSec)}`}
                       >
-                        {width >= RUNG_WAIT_PX && <span className="sch-block-label">{b.label}</span>}
-                        {width < RUNG_WAIT_PX && width >= RUNG_DURATION_PX && <span className="sch-block-label">Waiting</span>}
+                        {/* Just the goose's footprints — the wait
+                            duration lives in the tooltip and aria-label
+                            so the visual stays clean and never clashes
+                            with the feathers. */}
+                        {showPrints && (
+                          <span className="sch-wait-prints" aria-hidden="true">
+                            <svg viewBox="0 0 26 28" width="12" height="13" fill="none" className="sch-wait-print sch-wait-print-1">
+                              <path d="M13 3.2c1.6 0 2.2 1.6 2.4 3.4l.5 4.6c.1 1.2 1 1.6 2 1.1l3.6-1.8c1.6-.8 2.8.6 1.7 2L14.9 25c-1 1.3-2.6 1.3-3.5 0L2.9 12.6c-1-1.4.2-2.8 1.8-2l3.5 1.8c1 .5 1.9.1 2-1.1l.5-4.6C10.9 4.8 11.4 3.2 13 3.2Z" fill="#f2ede1" stroke="#b7ab93" strokeWidth="2.2" strokeLinejoin="round" />
+                            </svg>
+                            <svg viewBox="0 0 26 28" width="14" height="15" fill="none" className="sch-wait-print sch-wait-print-2">
+                              <path d="M13 3.2c1.6 0 2.2 1.6 2.4 3.4l.5 4.6c.1 1.2 1 1.6 2 1.1l3.6-1.8c1.6-.8 2.8.6 1.7 2L14.9 25c-1 1.3-2.6 1.3-3.5 0L2.9 12.6c-1-1.4.2-2.8 1.8-2l3.5 1.8c1 .5 1.9.1 2-1.1l.5-4.6C10.9 4.8 11.4 3.2 13 3.2Z" fill="#f2ede1" stroke="#b7ab93" strokeWidth="2.2" strokeLinejoin="round" />
+                            </svg>
+                          </span>
+                        )}
                       </div>
                     );
                   }
@@ -1029,8 +1223,8 @@ function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepId
               </div>
             ))}
 
-            {gearLanes.length > 0 && <div className="sch-lane-group-head-track" aria-hidden="true" />}
-            {gearLanes.map((lane) => (
+            {gearLanesShown.length > 0 && <div className="sch-lane-group-head-track" aria-hidden="true" />}
+            {gearLanesShown.map((lane) => (
               <div className="sch-lane is-equipment" key={`${lane.type}-${lane.index}`}>
                 {lane.steps.map((s, i) => {
                   const left = Math.round(pxFor(s.startSec));
@@ -1081,6 +1275,19 @@ function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepId
         {/* On a phone the panel is a bottom sheet, portaled past .page's
             transform so `position: fixed` is measured from the viewport. */}
         {selected && isMobile && createPortal(<TaskDetail {...selected} sheet onClose={onClose} />, document.body)}
+        {/* Show/Hide the gear lanes — the same "who has the wok at 9:00"
+            view drawn against equipment instead of cooks. Off by default;
+            a planner who wants tool contention can flip it open. */}
+        {gearLanes.length > 0 && (
+          <button
+            type="button"
+            className="sch-gear-btn"
+            onClick={() => setShowGear((v) => !v)}
+            aria-expanded={showGear}
+          >
+            {showGear ? "Hide the gear lanes" : "Show the gear lanes"}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1156,7 +1363,7 @@ function UnattendedStep({ block, player, pxFor, delay, isCritical, isSelected, o
   );
 }
 
-function TaskDetail({ step, node, dish, cook, cookIndex, isCritical, waitLabel, sheet = false, scrollIntoView = false, onClose }) {
+function TaskDetail({ step, node, dish, cook, cookIndex, isCritical, waitLabel, sheet = false, scrollIntoView = false, onClose, ticketNumber }) {
   const flames = DIFFICULTY_FLAMES[node.difficulty] || 1;
   const durationSec = step.endSec - step.startSec;
   // "Takes" stays the whole span; the free-time line under the moments
@@ -1186,15 +1393,38 @@ function TaskDetail({ step, node, dish, cook, cookIndex, isCritical, waitLabel, 
   }, [sheet, onClose]);
 
   const panel = (
-    <div ref={rootRef} className={`sch-detail ${sheet ? "is-sheet" : ""}`} role={sheet ? "dialog" : undefined} aria-modal={sheet || undefined} aria-label={node.label}>
+    <div ref={rootRef} className={`sch-detail sch-ticket ${sheet ? "is-sheet" : ""}`} role={sheet ? "dialog" : undefined} aria-modal={sheet || undefined} aria-label={node.label}>
       {sheet && <span className="sch-sheet-handle" aria-hidden="true" />}
+      {/* Ticket rail — a feather and a vertical mono ticket number
+          punched down the left side of the panel, borrowing the
+          Conversation page's paper-ticket voice. */}
+      <span className="sch-ticket-rail" aria-hidden="true">
+        <svg viewBox="0 0 26 28" width="13" height="14" fill="none" style={{ transform: "rotate(-92deg)" }}>
+          <path d="M13 3.2c1.6 0 2.2 1.6 2.4 3.4l.5 4.6c.1 1.2 1 1.6 2 1.1l3.6-1.8c1.6-.8 2.8.6 1.7 2L14.9 25c-1 1.3-2.6 1.3-3.5 0L2.9 12.6c-1-1.4.2-2.8 1.8-2l3.5 1.8c1 .5 1.9.1 2-1.1l.5-4.6C10.9 4.8 11.4 3.2 13 3.2Z" fill="#f2ede1" stroke="#b7ab93" strokeWidth="2.2" strokeLinejoin="round" />
+        </svg>
+        <span className="sch-ticket-num mono">TICKET {String(ticketNumber ?? 1).padStart(2, "0")}</span>
+      </span>
+      <span className="sch-ticket-stripe" aria-hidden="true" />
       <button ref={closeRef} type="button" className="btn btn-ghost sch-detail-close" onClick={onClose}>
         Close
       </button>
       <div className="sch-detail-head">
-        <span className="sch-eyebrow">{dish || "Step"}</span>
+        <span className="sch-eyebrow">{[dish, cook?.name].filter(Boolean).join(" · ") || "Step"}</span>
         <span className="sch-detail-title-row">
-          <span className="sch-detail-title">{node.label}</span>
+          <span className="sch-title-mark sch-detail-title-mark">
+            <span className="sch-detail-title">{node.label}</span>
+            {/* A softer underline than the page-title stroke — same hand
+                still, but blue like a printed ticket's ruling. */}
+            <svg
+              className="sch-underline sch-underline-ticket"
+              viewBox="0 0 120 8"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+              fill="none"
+            >
+              <path d="M2 5c22-2 46 1 70-1 18-1.5 34 2 46 .4" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+            </svg>
+          </span>
           <TendingChip node={node} />
         </span>
         {node.description && <span className="sch-detail-desc">{node.description}</span>}
@@ -1274,7 +1504,7 @@ function TaskDetail({ step, node, dish, cook, cookIndex, isCritical, waitLabel, 
 // Versus → opening hand
 // ---------------------------------------------------------------
 
-function OpeningHand({ opening, cooks, byId, dishOf }) {
+function OpeningHand({ opening, cooks, byId, dishOf, headerTiles }) {
   const { bundles, poolIds, lockedIds, contested, skewSec } = opening;
   const durationOf = (id) => byId[id]?.estimated_duration_sec || 0;
   const grabsTotalSec = [...poolIds, ...lockedIds].reduce((sum, id) => sum + durationOf(id), 0);
@@ -1282,8 +1512,27 @@ function OpeningHand({ opening, cooks, byId, dishOf }) {
   return (
     <div className="sch-card sch-card-versus">
       <div className="sch-card-head">
-        <span className="sch-card-title">Opening hand</span>
-        {!contested && skewSec > 0 && <Mono className="sch-card-meta">{formatClock(skewSec)} apart at the start</Mono>}
+        <span className="sch-card-title sch-title-mark">
+          The opening hand
+          <svg
+            className="sch-underline sch-underline-section"
+            viewBox="0 0 200 10"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+            fill="none"
+          >
+            <path
+              d="M2 7c34-4 70 1 108-2 28-2.5 64 3 88 .5"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+            />
+          </svg>
+        </span>
+        <div className="sch-card-head-right">
+          {!contested && skewSec > 0 && <Mono className="sch-card-meta">{formatClock(skewSec)} apart at the start</Mono>}
+          {headerTiles}
+        </div>
       </div>
 
       {contested ? (
@@ -1363,12 +1612,23 @@ function OpeningHand({ opening, cooks, byId, dishOf }) {
               <span className="sch-dot" /> Not yet · {lockedIds.length}
             </span>
             <div className="sch-chips">
-              {lockedIds.map((id) => (
-                <span className="sch-chip is-locked" key={id}>
-                  {byId[id]?.label}
-                  <TendingChip node={byId[id]} className="is-plain" />
-                </span>
-              ))}
+              {lockedIds.map((id, i) => {
+                // The wobble uses the row's own index for delay and its
+                // pseudo-random tilt derived from the id so each chip
+                // reads as its own nervous item, not a rehearsed line.
+                const hash = String(id).split("").reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 5381);
+                const tiltDeg = ((hash % 26) - 13) / 10; // -1.3 … +1.3 degrees
+                return (
+                  <span
+                    className="sch-chip is-locked"
+                    key={id}
+                    style={{ "--sch-locked-index": i, "--sch-locked-tilt": `${tiltDeg}deg` }}
+                  >
+                    {byId[id]?.label}
+                    <TendingChip node={byId[id]} className="is-plain" />
+                  </span>
+                );
+              })}
             </div>
           </div>
         )}

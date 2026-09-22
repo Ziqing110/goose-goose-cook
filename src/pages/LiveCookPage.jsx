@@ -42,11 +42,12 @@ import { parseCommand, HELP_TEXT } from "../utils/voiceCommands.js";
 import { matchConfirmation } from "../utils/navCommands.js";
 import { registerVoiceDictation } from "../utils/voicePageCommands.js";
 import { buildAgentSnapshot } from "../utils/agentSnapshot.js";
-import { agentTurn } from "../api/agent.js";
+import { agentTurn, collectAnswer } from "../api/agent.js";
 import { AGENT_NAME, speak } from "../voice/agentVoice.js";
 import { audioTap } from "../voice/audioTap.js";
 import { identifySpeaker } from "../api/speaker.js";
-import { decideSpeaker } from "../utils/speakerMatch.js";
+import { decideSpeaker, hasHandover } from "../utils/speakerMatch.js";
+import { isNameOnlyTurn } from "../utils/addressing.js";
 import { buildSummary } from "../utils/summaryCard.js";
 import { chefAvatar } from "../utils/cooks.js";
 import KpIcon from "../components/KpIcon.jsx";
@@ -92,6 +93,38 @@ const LATE_AFTER_SEC = 60;
 // short commands sat above 0.9.
 const ENGAGED_MS = 10_000;
 const MIN_VOICE_CONFIDENCE = 0.4;
+
+// Mandarin the cooks actually use mid-service, primed so the recogniser
+// writes it down rather than translating it.
+//
+// PHRASES, not single nouns, and that distinction is the whole finding.
+// Replaying the code-switching take four ways:
+//
+//   language_codes en only     Chinese content DESTROYED — "Goose, 豆腐切好了"
+//                              came back as "Goose", and "蒜蓉 done" as "Goose,,"
+//   en+zh, no Chinese keyterms 4/5 addressed, mostly translated rather than
+//                              transcribed (我来做 -> "I'll do")
+//   en+zh, noun keyterms       verbatim, but 豆腐 wrongly inserted into 4 of 5 turns
+//   en+zh, phrase keyterms     5/5 addressed, 5/5 verbatim, nothing inserted
+//
+// Short common nouns get over-applied by the keyterm bias and appear in
+// sentences nobody said them in. Phrases of three characters or more do
+// not. 蒜蓉 earns its place as the exception: without it the recogniser
+// hears the homophone 算容.
+//
+// Addressing improves too, for an unobvious reason — with the phrases
+// primed, "Goose豆腐切好了" comes back with a space after the name, so
+// "goose" is its own word and the addressing gate sees it.
+const MANDARIN_KEYTERMS = [
+  "切好了", "做好了", "弄好了", "我来做", "我来切",
+  "还要多久", "接下来做什么", "都好了", "可以上菜", "蒜蓉",
+];
+
+// How long a turn that was only the agent's name keeps the door open for
+// the rest of the sentence. Shorter than ENGAGED_MS: this is someone
+// mid-breath, not someone thinking about an answer. Measured on the
+// kitchen recordings the gap between "Goose." and the command ran 2-3s.
+const NAME_CARRY_MS = 5_000;
 
 /**
  * Hook point for the voice API: fired once per moment as it becomes
@@ -438,7 +471,7 @@ export default function LiveCookPage() {
   // agent's name, the cooks', and every step on the board.
   const keyterms = useMemo(
     () =>
-      [AGENT_NAME, ...cooks.map((c) => c.name), ...nodes.map((n) => n.label)]
+      [AGENT_NAME, ...cooks.map((c) => c.name), ...nodes.map((n) => n.label), ...MANDARIN_KEYTERMS]
         .map((t) => String(t || "").trim())
         .filter((t) => t && t.length <= 50)
         .slice(0, 100),
@@ -879,7 +912,7 @@ export default function LiveCookPage() {
     }
   };
 
-  const askAgent = (text, cookId, { engaged = true, clip = null } = {}) => {
+  const askAgent = (text, cookId, { engaged = true, clip = null, shared = false } = {}) => {
     agentQueueRef.current = agentQueueRef.current.then(async () => {
       const heardAs = await whoSpoke(clip);
       if (heardAs && heardAs !== cookId) {
@@ -895,6 +928,9 @@ export default function LiveCookPage() {
           // must say its name (checked on the server) unless it just
           // asked a question.
           engaged,
+          // Two voices ended up in this one turn, so the words cannot be
+          // trusted to belong to one person asking for one thing.
+          shared,
           snapshot: buildAgentSnapshot({ run: latestRunRef.current, nodes, cooks, speakerId: cookId, paused: isPaused(latestRunRef.current) }),
         });
       } catch (err) {
@@ -910,7 +946,38 @@ export default function LiveCookPage() {
         return;
       }
       applyAgentTurn(turn, text, cookId);
+      // The agent is reading something up. Collect it OUTSIDE this
+      // queue: the whole point is that the next command does not wait
+      // behind a question. Deliberately not awaited here.
+      if (turn.pendingId) awaitAnswer(turn.pendingId, cookId);
     });
+  };
+
+  /**
+   * A looked-up answer, spoken whenever it arrives.
+   *
+   * It is reply-only by the time it gets here — the server drops any
+   * action the model proposed on the second pass, because the board has
+   * had several seconds to move on and acting on a stale snapshot is
+   * worse than not acting. So this just says the thing and logs it.
+   */
+  const awaitAnswer = async (pendingId, cookId) => {
+    let answer;
+    try {
+      answer = await collectAnswer(pendingId);
+    } catch (err) {
+      // Expired, failed, or the search timed out. Goose simply has
+      // nothing to add; it already said it would look.
+      console.info("[agent] no answer came back:", err.message);
+      return;
+    }
+    const line = answer?.reply?.trim();
+    if (!line) return;
+    // latestRunRef, not `run`: this resolves long after the closure that
+    // started it, and the cook has very likely done something since.
+    commit(say(latestRunRef.current, line));
+    speak(line);
+    console.info(`[agent] answered after ${answer.ms}ms`, { cookId });
   };
 
   // An open question ("did you mean…?") is answered by the keyword path,
@@ -931,6 +998,16 @@ export default function LiveCookPage() {
       return;
     }
     if (pendingConfirm) return submitKeywordUtterance(text);
+    // "Goose." on its own is somebody getting the agent's attention before
+    // saying the thing. The recogniser ends the turn in that pause, so the
+    // instruction lands in the NEXT turn with no name on it — and would be
+    // thrown away as kitchen chatter. Hold the door open instead of acting
+    // on a turn that asked for nothing.
+    if (isNameOnlyTurn(text, AGENT_NAME)) {
+      engagedUntilRef.current = Date.now() + NAME_CARRY_MS;
+      console.info("[voice] name only, waiting for the rest:", text);
+      return;
+    }
     // This turn's audio, cut out by its word timestamps with a little
     // room either side, for the speaker check.
     const words = turn?.words || [];
@@ -938,7 +1015,12 @@ export default function LiveCookPage() {
     // One unnamed answer per question: the window closes once used.
     const engaged = Date.now() < engagedUntilRef.current;
     if (engaged) engagedUntilRef.current = 0;
-    askAgent(text, speaker, { engaged, clip });
+    // Two cooks inside one turn. Whatever this gets credited to, half of
+    // it is wrong, so nothing is acted on: the agent is told what
+    // happened and asks which of them meant it.
+    const shared = hasHandover(turn?.words);
+    if (shared) console.info("[voice] two cooks in one turn:", text);
+    askAgent(text, speaker, { engaged, clip, shared });
   };
 
   const submitKeywordUtterance = (text) => {
@@ -965,7 +1047,7 @@ export default function LiveCookPage() {
     const ownQueue = isVersus
       ? claimSuggestions({ nodes, run, cookId })
       : [assignments?.byCook[cookId]?.stepId].filter(Boolean);
-    const result = parseCommand(text, { byId, activeStepId, claimable: ready, ownQueue });
+    const result = parseCommand(text, { byId, activeStepId, claimable: ready, ownQueue, agentName: AGENT_NAME });
 
     const heard = appendTranscript(run, { at: new Date().toISOString(), speaker: cookId, text });
 

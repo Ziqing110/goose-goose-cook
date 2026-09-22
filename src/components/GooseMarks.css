@@ -9,9 +9,20 @@
 ----------------------------------------------------------------*/
 
 /* The profile picture: a round, ringed frame with a slight wiggle. The
-   wiggle is on the frame and the flip on the picture, so the two don't
-   fight. The picture is already cropped to the head, and the art faces
-   left, so it is flipped to look toward the words beside it. */
+   source art is a goose head with its own circle drawn around it —
+   background-size/position zoom past that circle, inside its drawn
+   line, so the frame's own CSS border is the only ring that shows; the
+   art's own circle is cropped away rather than landing just inside the
+   frame edge. This art already faces right toward the words beside it,
+   unlike the earlier art it replaced, so it is shown unflipped — check
+   that before copying this rule to a new image. The size/position
+   numbers are measured against the source PNG's own pixels (1254x1254
+   square, drawn circle centered ~618,623 at r~322, cropped here to
+   r~278; the art's own ring starts showing past r~300, so that's this
+   crop's ceiling) and only hold for that file — a new crop needs new
+   numbers. To make the photo look smaller, shrink the `size` prop
+   (below the frame's own diameter) rather than zooming further — past
+   r~300 the art's ring reappears no matter how small the frame is. */
 .goose-profile {
   flex: none;
   display: block;
@@ -25,8 +36,9 @@
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  transform: scaleX(-1);
+  background-repeat: no-repeat;
+  background-size: 225.5% 225.5%;
+  background-position: 48.71% 49.43%;
 }
 
 @keyframes gs-wiggle {

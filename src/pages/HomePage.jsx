@@ -8,7 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
 import KpIcon from "../components/KpIcon.jsx";
-import welcomeBand from "../assets/home-welcome-band.png";
+import welcomeBand from "../assets/home-welcome-band-trim.webp";
 import {
   formatClock,
   formatShortDate,
@@ -109,6 +109,54 @@ function PhaseBar({ counts }) {
   );
 }
 
+// A stable pseudo-random from a string, so a row's footprints stay put
+// across renders rather than jittering every re-mount.
+function hashSeed(str) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h;
+}
+function seededRand(seed, index) {
+  const x = Math.sin(seed + index * 9301) * 43758.5453;
+  return x - Math.floor(x);
+}
+// Two footprints walking out of an abandoned row. Each row gets its own
+// gait — angle, x-offset, y-offset — seeded from its id so it never
+// reads as a repeated stamp down the list.
+function Footprints({ seed }) {
+  const h = hashSeed(String(seed));
+  const r1 = seededRand(h, 0);
+  const r2 = seededRand(h, 1);
+  const r3 = seededRand(h, 2);
+  const r4 = seededRand(h, 3);
+  const r5 = seededRand(h, 4);
+  const r6 = seededRand(h, 5);
+  const r7 = seededRand(h, 6);
+  // rot1 in [-115, -80], rot2 in [-95, -60]. left/bottom vary a few px.
+  const rot1 = -115 + r1 * 35;
+  const rot2 = -95 + r2 * 35;
+  const left1 = 2 + r3 * 6;
+  const left2 = 28 + r4 * 8;
+  const bot1 = 2 + r5 * 8;
+  const bot2 = 12 + r6 * 12;
+  // Shift the whole pair sideways row-to-row so the marks don't line up
+  // in a single column down the list — a real trail wanders across.
+  const shift = -8 + r7 * 40;
+  return (
+    <span className="hp-footprints" aria-hidden="true" style={{ transform: `translateX(${shift}px)` }}>
+      <svg viewBox="0 0 26 28" width="16" height="17" fill="none" className="hp-footprint" style={{ left: `${left1}px`, bottom: `${bot1}px`, transform: `rotate(${rot1}deg)` }}>
+        <path d="M13 3.2c1.6 0 2.2 1.6 2.4 3.4l.5 4.6c.1 1.2 1 1.6 2 1.1l3.6-1.8c1.6-.8 2.8.6 1.7 2L14.9 25c-1 1.3-2.6 1.3-3.5 0L2.9 12.6c-1-1.4.2-2.8 1.8-2l3.5 1.8c1 .5 1.9.1 2-1.1l.5-4.6C10.9 4.8 11.4 3.2 13 3.2Z" fill="var(--kp-footprint-fill, #fdeada)" stroke="var(--kp-footprint-ink, #d2b79c)" strokeWidth="2.2" strokeLinejoin="round" />
+      </svg>
+      <svg viewBox="0 0 26 28" width="19" height="20" fill="none" className="hp-footprint" style={{ left: `${left2}px`, bottom: `${bot2}px`, transform: `rotate(${rot2}deg)` }}>
+        <path d="M13 3.2c1.6 0 2.2 1.6 2.4 3.4l.5 4.6c.1 1.2 1 1.6 2 1.1l3.6-1.8c1.6-.8 2.8.6 1.7 2L14.9 25c-1 1.3-2.6 1.3-3.5 0L2.9 12.6c-1-1.4.2-2.8 1.8-2l3.5 1.8c1 .5 1.9.1 2-1.1l.5-4.6C10.9 4.8 11.4 3.2 13 3.2Z" fill="var(--kp-footprint-fill-2, #f6cfa6)" stroke="var(--kp-footprint-ink-2, #b08a63)" strokeWidth="2.2" strokeLinejoin="round" />
+      </svg>
+    </span>
+  );
+}
+
 function LoadoutChips({ profile, delayBase = 0 }) {
   const items = [
     { glyph: "burner", value: profile.burners },
@@ -119,12 +167,19 @@ function LoadoutChips({ profile, delayBase = 0 }) {
   ].filter(Boolean);
   return (
     <span className="hp-loadout">
-      {items.map((it, i) => (
-        <Chip key={it.glyph} className="hp-chip-equipment hp-pop" style={{ animationDelay: `${delayBase + i * 40}ms` }}>
-          <KpIcon glyph={it.glyph} size={16} />
-          {typeof it.value === "number" ? <span className="mono">{it.value}</span> : it.value}
-        </Chip>
-      ))}
+      {items.map((it, i) => {
+        const isCount = typeof it.value === "number";
+        return (
+          <Chip
+            key={it.glyph}
+            className={`hp-chip-equipment hp-pop${isCount ? " hp-chip-count" : ""}`}
+            style={{ animationDelay: `${delayBase + i * 40}ms` }}
+          >
+            <KpIcon glyph={it.glyph} size={16} />
+            {isCount ? <span className="mono hp-chip-num">{it.value}</span> : it.value}
+          </Chip>
+        );
+      })}
     </span>
   );
 }
@@ -287,7 +342,19 @@ export default function HomePage() {
       ]);
     }
     if (heroState === "ready") {
-      return registerVoiceCommands([
+      // Hitting Enter kicks off the run, matching the "↵ or hit enter"
+      // hint next to the CTA. Ignored while the user is typing in a
+      // control so the modal form and voice input aren't disturbed.
+      const onKey = (e) => {
+        if (e.key !== "Enter") return;
+        const t = e.target;
+        const tag = t?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return;
+        e.preventDefault();
+        handleStartClick();
+      };
+      window.addEventListener("keydown", onKey);
+      const cleanupVoice = registerVoiceCommands([
         {
           // Only when there's no ambiguity about which kitchen. With
           // several profiles this opens a picker, and a voice command
@@ -299,6 +366,10 @@ export default function HomePage() {
         },
         addKitchen,
       ]);
+      return () => {
+        window.removeEventListener("keydown", onKey);
+        cleanupVoice();
+      };
     }
     // Loading, error, no-kitchen: no run to act on, but you can still
     // add a kitchen, so that one stays registered.
@@ -413,7 +484,24 @@ export default function HomePage() {
       case "picker":
         return (
           <div className="hp-hero-state">
-            <span className="hp-section-title">Which kitchen?</span>
+            <span className="hp-section-title hp-title-mark">
+              Which kitchen?
+              <svg
+                className="hp-underline hp-underline-section"
+                viewBox="0 0 120 8"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+                fill="none"
+              >
+                <path
+                  d="M2 5c22-2.4 44 1.4 66-.8 16-1.6 36 1.8 50 .4"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  opacity="0.85"
+                />
+              </svg>
+            </span>
             <div className="hp-btn-row">
               {profiles.map((p) => (
                 <button type="button" key={p.id} className="hp-btn hp-btn-secondary" onClick={() => handleStartSession(p.id)}>
@@ -447,9 +535,18 @@ export default function HomePage() {
         return (
           <div className="hp-hero-state">
             {profiles.length === 1 && <span className="hp-meta">Cooking in {profiles[0].name}</span>}
-            <button type="button" className="hp-btn hp-btn-primary hp-btn-lg" onClick={handleStartClick}>
-              Start the run
-            </button>
+            <div className="hp-start-row">
+              {/* Weighted-key CTA (3a): a real bottom edge that presses
+                  in on click. Enter is bound in the ready-state effect
+                  below so the hint isn't a lie. */}
+              <button type="button" className="hp-btn hp-btn-primary hp-btn-lg hp-btn-start-key" onClick={handleStartClick}>
+                Start the run
+              </button>
+              <span className="hp-start-hint">
+                <kbd className="hp-kbd">↵</kbd>
+                <span className="mono">or hit enter</span>
+              </span>
+            </div>
           </div>
         );
 
@@ -468,7 +565,7 @@ export default function HomePage() {
     const stages = runStages(session);
 
     return (
-      <div className="hp-run">
+      <div className="hp-run hp-run-tilt">
         <div className="hp-run-body">
           <div className="hp-run-title-row">
             <span className="hp-section-title">{runTitle(session)}</span>
@@ -509,9 +606,15 @@ export default function HomePage() {
         </div>
 
         <div className="hp-run-actions">
-          <button type="button" className="hp-btn hp-btn-primary hp-btn-lg" onClick={() => navigate("/session")}>
-            Resume the run
-          </button>
+          <span className="hp-stamp-wrap">
+            <button type="button" className="hp-btn hp-btn-primary hp-btn-lg hp-btn-start-key" onClick={() => navigate("/session")}>
+              Resume the run
+            </button>
+            {/* HONK-style stamp — same voice as the Conversation page's
+                pill: mono, tilted, orange, one signal that the run is
+                still warm underneath. */}
+            <span className="hp-stamp" aria-hidden="true">IN PROGRESS</span>
+          </span>
           <button type="button" className="hp-btn hp-btn-ghost hp-btn-abandon" onClick={handleAbandon}>
             Abandon run
           </button>
@@ -526,7 +629,26 @@ export default function HomePage() {
     <section className="home-v4">
       <header className="hp-title-row hp-reveal">
         <div className="hp-title-text">
-          <h1>Tonight&rsquo;s run</h1>
+          <span className="hp-title-mark">
+            <h1>Tonight&rsquo;s run</h1>
+            {/* Crooked hand-drawn underline — an occasional pen mark under
+                the title so the page reads as authored, not laid out. */}
+            <svg
+              className="hp-underline hp-underline-title"
+              viewBox="0 0 200 10"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+              fill="none"
+            >
+              <path
+                d="M2 6.5c34-3.2 70 1.8 104-1.4 26-2.4 60 2.6 92 .6"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                opacity="0.85"
+              />
+            </svg>
+          </span>
           <span className="hp-sub">{kitchenTagline(taglineKitchen)}</span>
         </div>
         <img src={welcomeBand} alt="" aria-hidden="true" className="hp-band" />
@@ -538,8 +660,23 @@ export default function HomePage() {
 
       <section className="hp-card hp-reveal" style={{ animationDelay: "160ms" }} aria-labelledby="hp-kitchens-title">
         <div className="hp-card-head">
-          <span id="hp-kitchens-title" className="hp-section-title">
+          <span id="hp-kitchens-title" className="hp-section-title hp-title-mark">
             Your kitchens
+            <svg
+              className="hp-underline hp-underline-section"
+              viewBox="0 0 120 8"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+              fill="none"
+            >
+              <path
+                d="M2 5c22-2.4 44 1.4 66-.8 16-1.6 36 1.8 50 .4"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                opacity="0.85"
+              />
+            </svg>
           </span>
           <button type="button" className="hp-btn hp-btn-secondary" onClick={() => openAddProfileModal(false)}>
             Add kitchen
@@ -583,8 +720,23 @@ export default function HomePage() {
 
       <section className="hp-card hp-reveal" style={{ animationDelay: "240ms" }} aria-labelledby="hp-runs-title">
         <div className="hp-card-head">
-          <span id="hp-runs-title" className="hp-section-title">
+          <span id="hp-runs-title" className="hp-section-title hp-title-mark">
             Recent runs
+            <svg
+              className="hp-underline hp-underline-section"
+              viewBox="0 0 110 8"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+              fill="none"
+            >
+              <path
+                d="M2 5.4c20-2.6 40 1.2 60-1 14-1.4 32 2 46 .6"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                opacity="0.85"
+              />
+            </svg>
           </span>
           {runLog.rows.length > 0 && <span className="mono hp-record">{runLog.line}</span>}
         </div>
@@ -606,9 +758,10 @@ export default function HomePage() {
                 ) : null,
                 r.endedAt ? <span className="mono">{formatShortDate(r.endedAt)}</span> : null,
               ].filter(Boolean);
+              const isAbandoned = r.status !== "completed";
               return (
                 <li
-                  className={`hp-row hp-row-run hp-reveal${r.hasCard ? "" : " has-no-card"}`}
+                  className={`hp-row hp-row-run hp-reveal${r.hasCard ? "" : " has-no-card"}${isBest ? " is-best" : ""}${isAbandoned ? " is-abandoned" : ""}`}
                   style={{ animationDelay: `${300 + i * 60}ms` }}
                   key={r.id}
                 >
@@ -629,6 +782,22 @@ export default function HomePage() {
                     <span className="hp-row-title-line">
                       <span className="hp-row-title">{r.title}</span>
                       {isBest && <KpIcon glyph="trophy" size={20} className="hp-trophy" aria-label="Fastest run" />}
+                      {isBest && (
+                        // A single feather beside the trophy — a small
+                        // mark, in the goose's own hand.
+                        <svg
+                          className="hp-feather"
+                          viewBox="0 0 46 76"
+                          width="16"
+                          height="26"
+                          fill="none"
+                          aria-hidden="true"
+                        >
+                          <path d="M33 5c6 16 3 33-6 44-4 5-9 9-13 11 1-13 4-24 8-33" fill="var(--kp-feather-fill, #f7f2e6)" stroke="var(--kp-feather-ink, #8a7a58)" strokeWidth="2.4" strokeLinejoin="round" />
+                          <path d="M33 5c-7 12-13 24-16 35-2 8-3 15-3 20" fill="var(--kp-feather-vane, #fffdf7)" stroke="var(--kp-feather-ink, #8a7a58)" strokeWidth="2.4" strokeLinejoin="round" />
+                          <path d="M33 5 14 60v12" stroke="var(--kp-feather-ink, #8a7a58)" strokeWidth="2.4" strokeLinecap="round" />
+                        </svg>
+                      )}
                     </span>
                     <span className="hp-meta">
                       {metaBits.map((bit, j) => (
@@ -639,6 +808,7 @@ export default function HomePage() {
                       ))}
                     </span>
                   </span>
+                  {isAbandoned && <Footprints seed={r.id} />}
                   {r.durationSec != null && (
                     <span className={`mono hp-duration ${r.status === "completed" ? "" : "is-muted"}`}>{formatClock(r.durationSec)}</span>
                   )}

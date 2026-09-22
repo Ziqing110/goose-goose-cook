@@ -24,3 +24,16 @@ test("snapshot lists open steps with readiness and holders, and drops finished o
   assert.equal(snap.steps.find((s) => s.id === "c").holder, "Zeina");
   assert.equal(snap.mode, "coop");
 });
+
+test("snapshot carries the recipe's own instruction, when there is one", () => {
+  const run = { mode: "coop", steps: { a: { status: "pending" }, b: { status: "pending" } }, transcript: [] };
+  const nodes = [
+    { id: "a", label: "Mince ginger & scallion", description: "Fine-mince ginger; separate scallion whites from greens.", depends_on: [] },
+    { id: "b", label: "Plate up", depends_on: [] },
+  ];
+  const snap = buildAgentSnapshot({ run, nodes, cooks: [{ id: "c1", name: "Lindy" }], speakerId: "c1" });
+  assert.equal(snap.steps[0].how, "Fine-mince ginger; separate scallion whites from greens.");
+  // No description, no key: the model should not see an empty field and
+  // conclude the recipe said nothing worth saying.
+  assert.equal("how" in snap.steps[1], false);
+});

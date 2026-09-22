@@ -11,7 +11,7 @@
 // nodes: the graph is what an LLM will generate, and where someone
 // dragged a card isn't part of the recipe. Anything never dragged falls
 // back to its dependency-depth slot, so a fresh session opens tidy.
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { formatMinutes } from "../utils/inventory.js";
 import { autoPositions, boxOf, cardSize, edgePath, resolvePositions, settle, CARD_W, CARD_H, PAD } from "../utils/boardLayout.js";
 import "./RecipeBoard.css";
@@ -73,11 +73,13 @@ const RecipeBoard = forwardRef(function RecipeBoard({
     };
     return Object.fromEntries(nodes.map((n) => [n.id, cardSize(n.label, measure)]));
   }, [nodes]);
-  const sizeOf = (node) => sizes[node.id] || { w: CARD_W, h: CARD_H };
+  // Memoised so the layout below can depend on the function itself
+  // rather than on `sizes` and a promise that the two stay in step.
+  const sizeOf = useCallback((node) => sizes[node.id] || { w: CARD_W, h: CARD_H }, [sizes]);
 
-  const auto = useMemo(() => autoPositions(nodes, sizeOf), [nodes, sizes]);
+  const auto = useMemo(() => autoPositions(nodes, sizeOf), [nodes, sizeOf]);
   // What gets drawn: stored where it's usable, nudged where it isn't.
-  const resolved = useMemo(() => resolvePositions(nodes, positions, auto, sizeOf), [nodes, positions, auto, sizes]);
+  const resolved = useMemo(() => resolvePositions(nodes, positions, auto, sizeOf), [nodes, positions, auto, sizeOf]);
   const posOf = (id) => (drag?.id === id && ghost) || resolved[id] || { x: PAD, y: PAD };
 
   const boxes = useMemo(() => {

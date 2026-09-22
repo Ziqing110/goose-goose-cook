@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Recording prompter</title>
+<!--
+  Paces a recording take so nobody has to count seconds.
+
+  You press the key when you have finished saying a line; the prompter
+  times the pause that follows and shows the next line when it is over.
+  That is the right way round: how long you take to speak is yours, how
+  long the silence lasts is the test, and only one of those is worth
+  making a human measure.
+
+  Self-contained on purpose — open it straight off disk if the dev server
+  is not running. Scene text mirrors docs/VOICE_RECORDING_SCRIPTS.md.
+-->
+<style>
+  :root {
+    --bg: #17140f;
+    --panel: #221d16;
+    --line: #37301f;
+    --ink: #f3ece0;
+    --dim: #a89b85;
+    --a: #7fb069;
+    --b: #e8985e;
+    --hot: #c8553d;
+    --ok: #7fb069;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: .02em; }
+  select, button {
+    font: inherit; color: var(--ink); background: #2c2519;
+    border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer;
+  }
+  button:hover, select:hover { border-color: var(--dim); }
+  button.primary { background: var(--a); color: #16210f; border-color: transparent; font-weight: 600; }
+  .clock { font-variant-numeric: tabular-nums; color: var(--dim); font-size: 14px; }
+  .meter { margin-left: auto; width: 120px; height: 10px; border-radius: 99px; background: #2c2519; overflow: hidden; flex: none; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--ok); transition: width .08s linear; }
+  .meter.hot i { background: var(--hot); }
+  /* A recording take gets a red rim, so nobody talks over a live file. */
+  body.rec header { box-shadow: inset 0 2px 0 var(--hot); }
+  body.rec .clock::before { content: "CF "; color: var(--hot); }
+  .warn { color: var(--hot); font-size: 14px; max-width: 46ch; }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--dim); cursor: pointer; }
+
+  main { flex: 1; display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } .rail { display: none; } }
+
+  .stage {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 28px; padding: 40px 32px; text-align: center; min-height: 0;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-size: 15px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+    padding: 7px 16px; border-radius: 999px; border: 2px solid currentColor;
+  }
+  .badge.a { color: var(--a); }
+  .badge.b { color: var(--b); }
+  .badge.room { color: var(--dim); }
+  .line {
+    font-size: clamp(30px, 5.2vw, 62px); line-height: 1.22; font-weight: 600;
+    max-width: 17ch; margin: 0; text-wrap: balance;
+  }
+  .line.room { color: var(--dim); font-weight: 500; max-width: 22ch; font-size: clamp(22px, 3.4vw, 38px); }
+  .direction { color: var(--b); font-size: clamp(15px, 1.9vw, 21px); max-width: 40ch; margin: -14px 0 0; }
+  .hint { color: var(--dim); font-size: 15px; min-height: 22px; }
+  .hint kbd {
+    background: #2c2519; border: 1px solid var(--line); border-bottom-width: 2px;
+    border-radius: 6px; padding: 2px 8px; font: inherit; font-size: 13px;
+  }
+
+  .timer { font-size: clamp(56px, 11vw, 132px); font-weight: 700; font-variant-numeric: tabular-nums; color: var(--b); line-height: 1; }
+  .timer.go { color: var(--ok); }
+  .bar { width: min(560px, 80vw); height: 8px; border-radius: 99px; background: #2c2519; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--b); width: 0; }
+
+  .rail { border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; padding: 16px; }
+  .rail h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); margin: 0 0 10px; }
+  .setup { font-size: 14px; color: var(--dim); margin: 0 0 16px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+  .setup b { color: var(--hot); }
+  ol.script { list-style: none; margin: 0; padding: 0; font-size: 13.5px; }
+  ol.script li { padding: 7px 10px; border-radius: 7px; color: var(--dim); display: flex; gap: 9px; }
+  ol.script li.done { opacity: .45; }
+  ol.script li.at { background: #2c2519; color: var(--ink); }
+  ol.script li .w { font-weight: 700; flex: none; width: 1.2em; }
+  ol.script li.a .w { color: var(--a); }
+  ol.script li.b .w { color: var(--b); }
+  .sheet { width: 100%; height: 190px; margin-top: 12px; background: #16120d; color: var(--ink);
+           border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: 12px/1.5 ui-monospace, monospace; resize: vertical; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Recording prompter</h1>
+  <select id="scene"></select>
+  <button id="start" class="primary">Start take</button>
+  <button id="again">Restart</button>
+  <label class="toggle"><input type="checkbox" id="promptOnly" /> Prompt only</label>
+  <button id="folder" title="Where takes are written">Folder: Downloads</button>
+  <select id="mic" title="Microphone"><option value="">Default mic</option></select>
+  <span class="meter" id="meter" title="Input level"><i></i></span>
+  <span class="clock" id="clock">00:00</span>
+</header>
+
+<main>
+  <section class="stage" id="stage">
+    <p class="hint">Pick a scene and press <kbd>Start take</kbd>. Hit record on the phone first.</p>
+  </section>
+
+  <aside class="rail">
+    <h2>Setup</h2>
+    <p class="setup" id="setup"></p>
+    <h2>Lines</h2>
+    <ol class="script" id="script"></ol>
+    <h2 style="margin-top:18px">Timing sheet</h2>
+    <button id="saveSheet" class="primary">Save sheet</button>
+    <textarea class="sheet" id="sheet" spellcheck="false"
+      placeholder="Fills in as you go. Correct anything you said differently, then save it next to the WAV."></textarea>
+  </aside>
+</main>
+
+<script>
+// A line is either something someone says, or a stretch of nothing. The
+// difference matters: a spoken line waits for you, a silent one is timed.
+//   who:  "A" | "B" | "AB" (together) | null (nobody speaks)
+//   pause: seconds of silence AFTER the line, timed by the prompter
+//   hold:  seconds of silence with nobody speaking (for a null line)
+const SCENES = [
+  {
+    id: 1, name: "1 — Clean handoff",
+    setup: "Fan <b>off</b>. Phone on the counter, 1–2 m away. Two takes.",
+    lines: [
+      { who: "A", text: "Goose, I'll take the tofu.", pause: 2 },
+      { who: "A", text: "Goose, starting on it now.", pause: 4 },
+      { who: "B", text: "Goose, I'm on the garlic.", pause: 3 },
+      { who: "B", text: "Goose, done with the garlic.", pause: 2 },
+      { who: "A", text: "Goose, tofu's cut.", pause: 3 },
+      { who: "A", text: "Goose, what's next?", pause: 3 },
+      { who: "B", text: "Goose, I'll take the ginger and scallion.", pause: 5 },
+      { who: "B", text: "Goose, that's done.", pause: 3 },
+    ],
+  },
+  {
+    id: 2, name: "2 — The name, mangled",
+    setup: "Fan <b>off</b>. Say the name in your ordinary accent — do not perform a mispronunciation. This is the most important scene.",
+    lines: [
+      { who: "A", text: "Goose, I'm done with the tofu.", dir: "Normal.", pause: 2 },
+      { who: "A", text: "Goose I'm done with the tofu.", dir: "No comma — run it together.", pause: 2 },
+      { who: "A", text: "goose done with the tofu", dir: "Fast and clipped.", pause: 2 },
+      { who: "A", text: "Hey Goose, done with the tofu.", pause: 2 },
+      { who: "A", text: "Goose, done with the tofu.", dir: "Turned away from the phone.", pause: 2 },
+      { who: "B", text: "Goose, I'm done with the tofu.", dir: "Same line, other voice.", pause: 2 },
+      { who: "B", text: "Goose! Done with the tofu!", dir: "Called from across the room.", pause: 3 },
+    ],
+  },
+  {
+    id: 3, name: "3 — Talk that is not for Goose",
+    setup: "Fan <b>off</b>. Nothing here may move the board. Say it like real kitchen chat, not like a test.",
+    lines: [
+      { who: "A", text: "Can you pass me the cutting board?", pause: 2 },
+      { who: "B", text: "Yeah, hold on, I'm done with this.", pause: 2 },
+      { who: "A", text: "I think we should start the rice.", pause: 2 },
+      { who: "B", text: "Did you take the garlic already?", pause: 2 },
+      { who: "A", text: "This is way too spicy.", pause: 2 },
+      { who: "B", text: "You always skip the blanching.", dir: "To A, laughing.", pause: 3 },
+      { who: "A", text: "Goose, ignore us. Sorry.", pause: 3 },
+    ],
+  },
+  {
+    id: 4, name: "4 — Near-identical step names",
+    setup: "Fan <b>off</b>. The gaps after the ambiguous lines are where Goose would ask which step you mean — leave them empty.",
+    lines: [
+      { who: "A", text: "Goose, I'm done with the mincing.", dir: "Goose should ask which one.", pause: 4 },
+      { who: "A", text: "The garlic one.", pause: 3 },
+      { who: "B", text: "Goose, start the mince.", pause: 4 },
+      { who: "B", text: "Yes.", pause: 3 },
+      { who: "A", text: "Goose, done with the ginger.", pause: 2 },
+      { who: "A", text: "Goose, done with the ginger and scallion.", pause: 3 },
+    ],
+  },
+  {
+    id: 5, name: "5 — Noisy kitchen, real commands",
+    setup: "Fan <b>ON</b>, plus running water and a sizzling pan if you can manage it.",
+    lines: [
+      { who: null, text: "Just the noise. Nobody speaks.", hold: 10 },
+      { who: "A", text: "Goose, I'm done with the tofu.", pause: 3 },
+      { who: "B", text: "Goose, take the sauce!", dir: "Raised voice, over the sizzle.", pause: 3 },
+      { who: "A", text: "Goose, blanch is done.", dir: "Normal volume — do not raise it.", pause: 3 },
+      { who: "B", text: "Goose, done with the sauce.", dir: "Mumbled, half turned away.", pause: 5 },
+      { who: "A", text: "Goose, status.", pause: 3 },
+    ],
+  },
+  {
+    id: 6, name: "6 — The empty-turn watchdog",
+    setup: "Fan <b>ON</b>. Make noise that sounds vaguely vocal — water, a pot lid, a wok scraped, a chair dragged. <b>No words at all</b> during the silent stretches.",
+    lines: [
+      { who: null, text: "Kitchen noise. Not one word.", hold: 25 },
+      { who: "A", text: "Goose, status.", pause: 5 },
+      { who: null, text: "More noise. Still not one word.", hold: 20 },
+      { who: "B", text: "Goose, what's next?", pause: 3 },
+    ],
+  },
+  {
+    id: 7, name: "7 — Several things in one breath",
+    setup: "Fan <b>off</b>. Each line is one breath — do not pause in the middle of them.",
+    lines: [
+      { who: "A", text: "Goose, done with the onions, start the garlic.", pause: 4 },
+      { who: "B", text: "Goose, I'll take the sauce and the blanching.", pause: 4 },
+      { who: "A", text: "Goose, I'm done here — what should I pick up next?", pause: 4 },
+      { who: "B", text: "Goose, drop the sauce, give it to A.", dir: "Use A's real name.", pause: 4 },
+      { who: "A", text: "Goose, actually undo that.", pause: 3 },
+    ],
+  },
+  {
+    id: 8, name: "8 — Both talking at once",
+    setup: "Fan <b>ON</b>. Overlap on purpose. We are sizing the problem here, not passing it.",
+    lines: [
+      { who: "A", text: "Goose, I'm done with the tofu —", dir: "B cuts in about a second in.", pause: 0 },
+      { who: "B", text: "Goose, I'll take the garlic.", dir: "Start while A is still talking.", pause: 4 },
+      { who: "AB", text: "Goose, status.", dir: "Both of you, the same moment.", pause: 4 },
+      { who: "A", text: "Goose, done with —", dir: "B cuts you off.", pause: 0 },
+      { who: "B", text: "— no wait, that's mine.", pause: 4 },
+      { who: "A", text: "Goose, ignore that last bit.", pause: 3 },
+    ],
+  },
+  {
+    id: 9, name: "9 — Mixed Chinese and English",
+    setup: "Fan <b>off</b>. Speak the way you actually would at home.",
+    lines: [
+      { who: "A", text: "Goose, 豆腐切好了.", pause: 3 },
+      { who: "A", text: "Goose, I'm done with the 豆腐.", pause: 3 },
+      { who: "B", text: "Goose, 我来做 the sauce.", pause: 3 },
+      { who: "B", text: "Goose, 蒜蓉 done.", pause: 3 },
+      { who: "A", text: "Goose, 还要多久?", pause: 3 },
+    ],
+  },
+  {
+    id: 10, name: "10 — Goose talking over you  (live take)",
+    setup: "<b>Live take</b> — the app must be running, speakers on at real volume, not headphones. Fan off. Make Goose talk with <code>goose.ramble()</code> in the browser console.",
+    lines: [
+      { who: "A", text: "Goose, status.", dir: "Or run goose.ramble() in the console.", pause: 2 },
+      { who: "A", text: "Goose, stop — I'm done with the tofu.", dir: "Cut in the moment Goose starts talking.", pause: 4 },
+      { who: "B", text: "Goose, score.", dir: "Let it finish completely this time.", pause: 6 },
+      { who: "B", text: "Goose, start the simmer.", pause: 4 },
+      { who: "A", text: "Goose, what's next?", dir: "Then say nothing — let it talk itself out.", pause: 10 },
+    ],
+  },
+  {
+    id: 11, name: "11 — A long real stretch  (live take)",
+    setup: "<b>Live take</b>. Fan <b>ON</b>. 6–8 minutes. Actually cook, or mime it. The long quiet stretches are the test.",
+    lines: [
+      { who: "A", text: "Goose, I'll take the tofu.", pause: 3 },
+      { who: null, text: "Cook normally. Talk to each other. Do not address Goose.", hold: 150 },
+      { who: "B", text: "Goose, still there?", pause: 3 },
+      { who: null, text: "More ordinary cooking talk.", hold: 90 },
+      { who: "A", text: "Goose, status.", pause: 3 },
+      { who: null, text: "Another quiet stretch.", hold: 150 },
+      { who: "B", text: "Goose, we're nearly there.", pause: 3 },
+    ],
+  },
+  {
+    id: 12, name: "12 — Finishing, and the \"done\" collision",
+    setup: "<b>Live take</b>, fan off, so the confirmation is real. Only the last line may end the cook.",
+    lines: [
+      { who: "A", text: "Goose, I'm done.", pause: 4 },
+      { who: "A", text: "Goose, done with the garnish.", pause: 4 },
+      { who: "B", text: "Goose, we're done.", dir: "Expect Goose to ask for a confirmation.", pause: 4 },
+      { who: "B", text: "No, not yet.", pause: 3 },
+      { who: "A", text: "Goose, plate it up, I'm done with the plating.", pause: 4 },
+      { who: "B", text: "Goose, we're all done. Dinner's up.", pause: 3 },
+      { who: "B", text: "Yes.", pause: 3 },
+    ],
+  },
+];
+
+const $ = (id) => document.getElementById(id);
+const stage = $("stage");
+const pad = (n) => String(n).padStart(2, "0");
+const mmss = (ms) => `${pad(Math.floor(ms / 60000))}:${pad(Math.floor((ms % 60000) / 1000))}`;
+
+let scene = SCENES[0];
+let idx = -1;
+let phase = "idle";     // idle | leadin | speak | pause | done
+let t0 = 0;
+let sheet = [];
+let timer = null;
+let takeNo = 1;
+// Set when the take is being captured elsewhere (a phone, or the app
+// itself for the live scenes) and this page is only keeping time.
+let promptOnly = false;
+// The name the last finished take was saved under, so the sheet lands
+// beside its WAV however long afterwards it gets corrected.
+let lastTakeName = null;
+
+// A short tick so the speaker knows a line has come up without looking.
+// Silenced while a take is recording: it comes out of the laptop speakers
+// and straight back into the microphone, and a beep in the middle of a
+// turn is exactly the kind of thing the recogniser tries to make a word
+// out of.
+let audio = null;
+function tick(freq = 660, ms = 70) {
+  if (rec.active) return;
+  try {
+    audio ??= new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audio.createOscillator();
+    const gain = audio.createGain();
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.06, audio.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + ms / 1000);
+    osc.connect(gain).connect(audio.destination);
+    osc.start();
+    osc.stop(audio.currentTime + ms / 1000);
+  } catch { /* no audio, no tick */ }
+}
+
+// ---------------------------------------------------------------------
+// Recording.
+//
+// The take is captured here rather than on a phone, for one reason: the
+// clock the prompter shows and the clock inside the WAV become the same
+// clock. A timing sheet that says 00:41 then means 41 seconds into the
+// file, which is what makes a bad turn findable later.
+//
+// Raw PCM, not MediaRecorder: MediaRecorder gives webm/opus, and we want
+// the bytes the browser would have sent — 48 kHz mono 16-bit — with no
+// lossy round trip and no conversion step.
+const REC_RATE = 48000;
+const rec = { stream: null, ctx: null, node: null, src: null, chunks: [], frames: 0, active: false, peak: 0, clipped: false };
+
+async function listMics() {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const mics = devices.filter((d) => d.kind === "audioinput");
+    // Labels are empty until permission has been granted once, so this is
+    // worth calling again after the first take.
+    $("mic").innerHTML = `<option value="">Default mic</option>` +
+      mics.map((d, i) => `<option value="${d.deviceId}">${escape(d.label || `Microphone ${i + 1}`)}</option>`).join("");
+  } catch { /* no device access yet */ }
+}
+
+async function startRecording() {
+  const deviceId = $("mic").value;
+  rec.stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      deviceId: deviceId ? { exact: deviceId } : undefined,
+      channelCount: 1,
+      // The same three the app turns on in useStreamingTranscript. A take
+      // recorded with them off is not the audio the live cook would hear,
+      // and echo cancellation in particular changes what the far end of
+      // the kitchen sounds like.
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    },
+  });
+  rec.ctx = new AudioContext({ sampleRate: REC_RATE });
+  if (rec.ctx.state === "suspended") await rec.ctx.resume();
+  rec.src = rec.ctx.createMediaStreamSource(rec.stream);
+  rec.chunks = [];
+  rec.frames = 0;
+  rec.peak = 0;
+  rec.clipped = false;
+
+  const take = (samples) => {
+    rec.chunks.push(samples);
+    rec.frames += samples.length;
+    let peak = 0;
+    for (let i = 0; i < samples.length; i += 8) peak = Math.max(peak, Math.abs(samples[i]));
+    rec.peak = Math.max(rec.peak * 0.85, peak);
+    if (peak >= 0.999) rec.clipped = true;
+  };
+
+  try {
+    // Inline worklet via a blob, so this file stays one file.
+    const src = `class Cap extends AudioWorkletProcessor {
+      process(inputs) { const ch = inputs[0] && inputs[0][0]; if (ch) this.port.postMessage(new Float32Array(ch)); return true; }
+    } registerProcessor("cap", Cap);`;
+    const url = URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
+    await rec.ctx.audioWorklet.addModule(url);
+    URL.revokeObjectURL(url);
+    rec.node = new AudioWorkletNode(rec.ctx, "cap");
+    rec.node.port.onmessage = ({ data }) => take(data);
+  } catch {
+    // Older path. Deprecated, still universally present, and a recording
+    // tool that refuses to record is worse than one using an old API.
+    rec.node = rec.ctx.createScriptProcessor(4096, 1, 1);
+    rec.node.onaudioprocess = (e) => take(new Float32Array(e.inputBuffer.getChannelData(0)));
+  }
+
+  const sink = rec.ctx.createGain();
+  sink.gain.value = 0; // never play the mic back into the room
+  rec.src.connect(rec.node);
+  rec.node.connect(sink).connect(rec.ctx.destination);
+  rec.active = true;
+  document.body.classList.add("rec");
+  meterLoop();
+  listMics(); // labels exist now that permission has been granted
+}
+
+function meterLoop() {
+  if (!rec.active) { $("meter").firstElementChild.style.width = "0"; return; }
+  const el = $("meter");
+  el.firstElementChild.style.width = `${Math.min(100, rec.peak * 140)}%`;
+  el.classList.toggle("hot", rec.peak >= 0.95);
+  requestAnimationFrame(meterLoop);
+}
+
+function stopRecording() {
+  if (!rec.active) return null;
+  rec.active = false;
+  document.body.classList.remove("rec");
+  try { rec.node.disconnect(); rec.src.disconnect(); } catch { /* already gone */ }
+  if (rec.node.port) rec.node.port.onmessage = null; else rec.node.onaudioprocess = null;
+  rec.stream.getTracks().forEach((t) => t.stop());
+  rec.ctx.close().catch(() => {});
+  const wav = encodeWav(rec.chunks, rec.frames, REC_RATE);
+  return { blob: wav, seconds: rec.frames / REC_RATE, clipped: rec.clipped };
+}
+
+/** Float32 chunks -> a 16-bit PCM WAV, the one format the harness reads. */
+function encodeWav(chunks, frames, rate) {
+  const buf = new ArrayBuffer(44 + frames * 2);
+  const view = new DataView(buf);
+  const ascii = (at, str) => { for (let i = 0; i < str.length; i++) view.setUint8(at + i, str.charCodeAt(i)); };
+  ascii(0, "RIFF"); view.setUint32(4, 36 + frames * 2, true); ascii(8, "WAVE");
+  ascii(12, "fmt "); view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true);
+  view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  ascii(36, "data"); view.setUint32(40, frames * 2, true);
+  let at = 44;
+  for (const chunk of chunks) {
+    for (let i = 0; i < chunk.length; i++, at += 2) {
+      const v = Math.max(-1, Math.min(1, chunk[i]));
+      view.setInt16(at, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+    }
+  }
+  return new Blob([buf], { type: "audio/wav" });
+}
+
+// Where takes are written. Pick a folder once (recordings/ in the repo) and
+// both files land there, overwriting in place — no Downloads, no "(1)"
+// suffix on a corrected sheet. Falls back to an ordinary download when the
+// browser has no File System Access API, or when nothing has been picked.
+let dirHandle = null;
+
+async function pickFolder() {
+  if (!window.showDirectoryPicker) return;
+  try {
+    dirHandle = await window.showDirectoryPicker({ mode: "readwrite", startIn: "documents" });
+    $("folder").textContent = `Folder: ${dirHandle.name}`;
+  } catch { /* the picker was dismissed */ }
+}
+
+async function save(blob, name) {
+  if (dirHandle) {
+    try {
+      const handle = await dirHandle.getFileHandle(name, { create: true });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return;
+    } catch (err) {
+      // Permission revoked, folder gone, disk full: fall through rather
+      // than lose a take that has already been performed.
+      console.warn("Could not write to the chosen folder, downloading instead:", err);
+      dirHandle = null;
+      $("folder").textContent = "Folder: Downloads";
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+/** scene-02-the-name-mangled_take3 — sortable, and says what it is. */
+function takeName() {
+  const slug = scene.name.replace(/^\d+\s*—\s*/, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return `scene-${String(scene.id).padStart(2, "0")}-${slug}_take${takeNo}`;
+}
+
+$("scene").innerHTML = SCENES.map((s) => `<option value="${s.id}">${s.name}</option>`).join("");
+$("scene").onchange = () => { scene = SCENES.find((s) => s.id === +$("scene").value); reset(); };
+$("start").onclick = (e) => {
+  e.currentTarget.blur();          // so a later Space isn't eaten by the button
+  phase === "idle" || phase === "done" ? begin() : advance();
+};
+// The whole stage is the button. In a kitchen, with flour on your hands
+// and the phone across the room, aiming at anything smaller is a way to
+// ruin a take.
+stage.onclick = () => { if (phase !== "idle" && phase !== "leadin") advance(); };
+$("again").onclick = reset;
+$("promptOnly").onchange = (e) => { promptOnly = e.target.checked; reset(); };
+$("folder").onclick = (e) => { e.currentTarget.blur(); pickFolder(); };
+if (!window.showDirectoryPicker) $("folder").hidden = true;
+// The sheet also goes out automatically when the take ends. This button is
+// for the second copy: somebody improvised, the line got fixed here, and
+// the corrected version has to reach the same folder.
+$("saveSheet").onclick = (e) => {
+  e.currentTarget.blur();
+  const name = lastTakeName || takeName();
+  save(new Blob([$("sheet").value], { type: "text/plain" }), `${name}.txt`);
+  const label = e.currentTarget;
+  label.textContent = `Saved ${name}.txt`;
+  setTimeout(() => { label.textContent = "Save sheet"; }, 2500);
+};
+
+document.addEventListener("keydown", (e) => {
+  const tag = e.target.tagName;
+  // A focused control handles its own Space; intercepting it here would
+  // run the same thing twice and skip a line.
+  if (tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON") return;
+  if (e.code !== "Space" && e.code !== "Enter") return;
+  e.preventDefault();
+  if (phase === "leadin") return;           // the lead-in is not skippable
+  if (phase === "idle" || phase === "done") begin(); else advance();
+});
+
+function reset() {
+  clearTimeout(timer);
+  stopRecording(); // a restart abandons the take; don't leave the mic live
+  phase = "idle"; idx = -1; sheet = [];
+  $("sheet").value = "";
+  $("setup").innerHTML = scene.setup;
+  drawScript();
+  stage.innerHTML = `<p class="hint">Press <kbd>Space</kbd>. It records the take itself and
+    saves the WAV and the timing sheet when you finish.</p>`;
+  $("clock").textContent = "00:00";
+}
+
+async function begin() {
+  phase = "leadin";   // claimed up front: getUserMedia can take a moment
+  sheet = [];
+  idx = -1;
+  t0 = 0;
+  if (!promptOnly) {
+    stage.innerHTML = `<p class="hint">Asking for the microphone…</p>`;
+    try {
+      await startRecording();
+    } catch (err) {
+      // Recording is the point, so say why rather than quietly prompting on.
+      const why = location.protocol === "file:"
+        ? "Browsers refuse the microphone on a file:// page. Run <kbd>npm run dev</kbd> and open <kbd>localhost:5173/teleprompter.html</kbd>."
+        : err.name === "NotAllowedError"
+          ? "Permission was denied. Allow the microphone for this page and try again."
+          : "Check that a microphone is connected and not in use by something else.";
+      stage.innerHTML = `<span class="badge room">No microphone</span>
+        <p class="warn">${escape(err.message)}</p>
+        <p class="hint">${why}<br>Or switch on <b>Prompt only</b> and record on the phone.</p>`;
+      phase = "idle";
+      return;
+    }
+  }
+  countdown(3);
+}
+
+// Three beats, then three seconds of room tone before the first word —
+// the replay harness wants that silence at the head of the file.
+function countdown(n) {
+  phase = "leadin";
+  if (n > 0) {
+    tick(520);
+    stage.innerHTML = `<div class="timer">${n}</div><p class="hint">Recording? Here we go.</p>`;
+    timer = setTimeout(() => countdown(n - 1), 1000);
+    return;
+  }
+  t0 = Date.now();
+  startClock();
+  roomTone(3);
+}
+
+function roomTone(left) {
+  if (left > 0) {
+    stage.innerHTML = `<span class="badge room">Room tone</span>
+      <div class="timer">${left}</div>
+      <p class="hint">Silence. Do not speak yet.</p>`;
+    timer = setTimeout(() => roomTone(left - 1), 1000);
+    return;
+  }
+  advance();
+}
+
+function advance() {
+  clearTimeout(timer);
+  if (phase === "speak") {            // they just finished saying the line
+    mark(scene.lines[idx], "end");
+    return runPause(scene.lines[idx].pause ?? 2);
+  }
+  next();
+}
+
+function next() {
+  idx += 1;
+  if (idx >= scene.lines.length) return finish();
+  const line = scene.lines[idx];
+  drawScript();
+  mark(line, "start");
+  if (line.who === null) return runHold(line);
+  showLine(line);
+}
+
+function showLine(line) {
+  phase = "speak";
+  tick(line.who === "B" ? 760 : 620);
+  const cls = line.who === "B" ? "b" : "a";
+  const who = line.who === "AB" ? "A + B together" : line.who;
+  stage.innerHTML = `
+    <span class="badge ${cls}">${who}</span>
+    <p class="line">${escape(line.text)}</p>
+    ${line.dir ? `<p class="direction">${escape(line.dir)}</p>` : ""}
+    <p class="hint">Press <kbd>Space</kbd> the moment you stop talking.</p>`;
+}
+
+// Nobody speaks: pure noise or ordinary chatter, timed to the second.
+function runHold(line) {
+  phase = "pause";
+  const total = line.hold;
+  countTo(total, `<span class="badge room">Nobody addresses Goose</span>
+    <p class="line room">${escape(line.text)}</p>`, () => { mark(line, "end"); next(); });
+}
+
+function runPause(seconds) {
+  phase = "pause";
+  if (seconds <= 0) return next();    // an overlap: the next line starts on top
+  countTo(seconds, `<span class="badge room">Silence</span>`, next);
+}
+
+function countTo(total, head, done) {
+  const startedAt = Date.now();
+  const step = () => {
+    const gone = (Date.now() - startedAt) / 1000;
+    const left = Math.max(0, total - gone);
+    if (left <= 0) { tick(880, 50); return done(); }
+    stage.innerHTML = `${head}
+      <div class="timer go">${left >= 10 ? Math.ceil(left) : left.toFixed(1)}</div>
+      <div class="bar"><i style="width:${(gone / total) * 100}%"></i></div>
+      <p class="hint">${total >= 20 ? "Keep the room as it is." : "Quiet — the gap is the test."}</p>`;
+    timer = setTimeout(step, left > 10 ? 250 : 80);
+  };
+  step();
+}
+
+function finish() {
+  phase = "done";
+  clearTimeout(timer);
+  drawScript();
+
+  const name = takeName();
+  lastTakeName = name;
+  const take = stopRecording();
+  if (!take) {
+    stage.innerHTML = `<span class="badge room">Take complete</span>
+      <p class="line room">Stop the recorder now.</p>
+      <p class="hint">Fix anything either of you said differently, press
+        <kbd>Save sheet</kbd>, then <kbd>Space</kbd> for another take.</p>`;
+    return;
+  }
+
+  // Both go out now, as a pair — the audio is not much use without the
+  // sheet saying what was meant to be in it, and a take that ends with an
+  // unsaved file is a take that gets lost. Correcting the sheet afterwards
+  // and pressing Save sheet writes a second copy; Downloads suffixes it
+  // "(1)" and the newer one is the one that counts.
+  save(take.blob, `${name}.wav`);
+  save(new Blob([$("sheet").value], { type: "text/plain" }), `${name}.txt`);
+  takeNo += 1;
+
+  const trouble = take.clipped
+    ? `<p class="warn">That take clipped. Move further from the mic and do it again.</p>`
+    : take.seconds < 5
+      ? `<p class="warn">Only ${take.seconds.toFixed(1)}s of audio — check the right microphone is selected.</p>`
+      : "";
+  stage.innerHTML = `<span class="badge room">Take complete</span>
+    <p class="line room">${name}.wav — ${take.seconds.toFixed(1)}s</p>
+    ${trouble}
+    <p class="hint">WAV and sheet written to
+      <b>${escape(dirHandle ? dirHandle.name : "Downloads")}</b>. Fixed a line?
+      Press <kbd>Save sheet</kbd> to rewrite the sheet.</p>`;
+}
+
+// The sheet is the .txt that travels with the recording: what was said and
+// when. Edit it in place if anyone improvised — the transcript we grade
+// against has to be what actually happened, not what was scripted.
+function mark(line, which) {
+  const at = mmss(Date.now() - t0);
+  if (which === "start") {
+    sheet.push({ at, who: line.who, text: line.text });
+  }
+  render();
+}
+
+function render() {
+  const head = [`# ${scene.name}`, `# recorded ${new Date().toISOString().slice(0, 16).replace("T", " ")}`,
+                "# correct any line you said differently", ""];
+  $("sheet").value = head.concat(
+    sheet.map((s) => `${s.at}  ${s.who ? `${s.who}:` : "--"} ${s.who ? s.text : `(${s.text})`}`),
+  ).join("\n");
+}
+
+function drawScript() {
+  $("script").innerHTML = scene.lines.map((l, i) => {
+    const cls = l.who === "B" ? "b" : l.who ? "a" : "";
+    const state = i < idx ? "done" : i === idx ? "at" : "";
+    const who = l.who === null ? "·" : l.who === "AB" ? "±" : l.who;
+    return `<li class="${cls} ${state}"><span class="w">${who}</span><span>${escape(l.text)}</span></li>`;
+  }).join("");
+}
+
+function startClock() {
+  const id = setInterval(() => {
+    if (!t0) return clearInterval(id);
+    $("clock").textContent = mmss(Date.now() - t0);
+  }, 500);
+}
+
+function escape(s) {
+  return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+}
+
+reset();
+listMics();
+navigator.mediaDevices?.addEventListener?.("devicechange", listMics);
+// Leaving mid-take would otherwise keep the microphone open.
+window.addEventListener("beforeunload", stopRecording);
+</script>
+</body>
+</html>

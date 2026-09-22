@@ -5,13 +5,17 @@
 // Every animated element carries `.anim`, which GooseMarks.css switches
 // off under prefers-reduced-motion.
 import "./GooseMarks.css";
-import gooseProfile from "../assets/goose-chef-profile.png";
+import gooseProfile from "../assets/check-goose-clipped.png";
 
-// The agent's profile picture: the chef goose's head, cropped from the
-// character art. The art faces left, so the image is flipped horizontally
-// (in the CSS) to look toward the words beside it. Round frame, with a
-// slight wiggle. Shown at 40px in the transcript, the same as the cook's
-// avatar on the other side of the chat, and at 24px in the rail header.
+// The agent's profile picture: zoomed past the circle already drawn on
+// the character art, not out to it — the source image is bigger than
+// that circle, so it's shown as a background image sized and positioned
+// (in the CSS) to fill the frame with the circle's inside, cropping its
+// drawn ring away rather than landing it just inside the frame edge. The
+// art already faces right, toward the words beside it, so it's shown
+// unflipped. Round frame, with a slight wiggle. Shown at 36px in the
+// transcript — a touch smaller than the cook's 40px avatar on the other
+// side of the chat, on purpose — and at 22px in the rail header.
 export function GooseProfile({ size = 30, delay = 0, className = "", ...rest }) {
   return (
     <span
@@ -19,7 +23,7 @@ export function GooseProfile({ size = 30, delay = 0, className = "", ...rest }) 
       style={{ width: size, height: size, animationDelay: `${delay}ms` }}
       {...rest}
     >
-      <img className="goose-profile-img" src={gooseProfile} alt="" />
+      <span className="goose-profile-img" style={{ backgroundImage: `url(${gooseProfile})` }} />
     </span>
   );
 }
