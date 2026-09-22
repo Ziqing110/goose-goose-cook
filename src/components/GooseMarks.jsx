@@ -97,6 +97,27 @@ const TRACKS = {
 
 const TRACK_ROTATION = { up: -18, down: 18, few: -12 };
 
+// A single print on its own, for use inline as a bullet — the bird has
+// walked past this line of copy. Rotated a quarter turn by default so it
+// points along the text rather than up out of it.
+export function GoosePrint({ depth = "deep", size = 13, rotate = -92, style, ...rest }) {
+  const d = DEPTHS[depth] || DEPTHS.deep;
+  const height = Math.round((size * d.h) / d.w);
+  return (
+    <svg
+      viewBox="0 0 26 28"
+      width={size}
+      height={height}
+      fill="none"
+      aria-hidden="true"
+      style={{ flex: "none", transform: `rotate(${rotate}deg)`, ...style }}
+      {...rest}
+    >
+      <path d={PRINT_PATH} fill={d.fill} stroke={d.stroke} strokeWidth="2.2" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function GooseTracks({ variant = "up" }) {
   const prints = TRACKS[variant] || TRACKS.up;
   const rotation = TRACK_ROTATION[variant] ?? TRACK_ROTATION.up;
