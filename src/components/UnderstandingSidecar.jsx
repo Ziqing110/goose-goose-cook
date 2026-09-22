@@ -89,7 +89,7 @@ export default function UnderstandingSidecar({ slots, locked = false, onConfirm,
   return (
     <aside className="us-sidecar" aria-label="What the agent understood">
       <header className="us-head">
-        <GooseProfile size={24} aria-hidden="true" />
+        <GooseProfile size={22} aria-hidden="true" />
         <span className="us-head-title">My notes</span>
         <span className="us-head-count" aria-label={`${confirmedCount} of ${slots.length} confirmed`}>
           {confirmedCount}/{slots.length}
