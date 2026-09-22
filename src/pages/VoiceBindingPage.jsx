@@ -13,6 +13,7 @@ import {
 } from "../utils/cooks.js";
 import Icon from "../components/Icon.jsx";
 import { GoosePrint } from "../components/GooseMarks.jsx";
+import gooseChoir from "../assets/goose-choir.png";
 import "./VoiceBindingPage.css";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 import { audioTap } from "../voice/audioTap.js";
@@ -626,21 +627,33 @@ export default function VoiceBindingPage() {
   return (
     <section className="page voice-binding-page">
       <header className="vb-title-row">
-        <span className="ds-run-eyebrow">Tonight&rsquo;s run</span>
-        <div className="vb-title-line">
-          <span className="ds-title-mark">
-            <h1>Who&rsquo;s in the kitchen?</h1>
-            <svg className="ds-underline ds-underline-title" viewBox="0 0 430 10" preserveAspectRatio="none" fill="none" aria-hidden="true">
-              <path d="M2 7c68-4 144 1 220-2 58-2.5 134 3 206 .5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
-            </svg>
+        <div className="vb-title-copy">
+          <span className="ds-run-eyebrow">Tonight&rsquo;s run</span>
+          <div className="vb-title-line">
+            <span className="ds-title-mark">
+              <h1>Who&rsquo;s in the kitchen?</h1>
+              <svg className="ds-underline ds-underline-title" viewBox="0 0 430 10" preserveAspectRatio="none" fill="none" aria-hidden="true">
+                <path d="M2 7c68-4 144 1 220-2 58-2.5 134 3 206 .5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+              </svg>
+            </span>
+            <BoundStamp bound={boundCount} total={cooks.length} nonce={stampNonce} />
+          </div>
+          <p className="vb-sub">Two cooks max · different names · voices stay on this device</p>
+          <span className="ds-aside">
+            <GoosePrint />
+            <span className="mono">A bird, a name, one line read out loud. That&rsquo;s how I know who&rsquo;s shouting &ldquo;done&rdquo;.</span>
           </span>
-          <BoundStamp bound={boundCount} total={cooks.length} nonce={stampNonce} />
         </div>
-        <p className="vb-sub">Two cooks max · different names · voices stay on this device</p>
-        <span className="ds-aside">
-          <GoosePrint />
-          <span className="mono">A bird, a name, one line read out loud. That&rsquo;s how I know who&rsquo;s shouting &ldquo;done&rdquo;.</span>
-        </span>
+        {/* The page's one piece of scenery: the choir stands up and
+            sways while a cook is reading, and sits back down when the
+            room goes quiet. */}
+        <div className="vb-choir">
+          <img
+            className={`vb-choir-art${recordingCookId ? " is-singing" : ""}`}
+            src={gooseChoir}
+            alt="Chef Goose leading a choir of goslings"
+          />
+        </div>
       </header>
 
       {locked ? (

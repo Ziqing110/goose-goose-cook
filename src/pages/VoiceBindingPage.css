@@ -24,13 +24,30 @@
   color: var(--ink-faint);
 }
 
-/* ---------------- title row ---------------- */
+/* ---------------- title row ----------------
+   Copy on the left, the choir on the right, both bottom-aligned so the
+   birds stand on the same line the aside sits on. */
 .vb-title-row {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 32px;
   padding: 26px 0 22px;
   animation: vb-rise 240ms ease-out both;
+}
+.vb-title-copy { flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+
+/* The choir sits a little below the row's baseline so the goslings'
+   feet land on it rather than floating above it. */
+.vb-choir { flex: 0 1 380px; min-width: 240px; margin-bottom: -8px; }
+.vb-choir-art { display: block; width: 90%; height: auto; transition: width 240ms ease-out; }
+/* Someone is singing: the choir stands to full width and sways from
+   its feet. */
+.vb-choir-art.is-singing {
+  width: 100%;
+  transform-origin: 50% 100%;
+  animation: vb-choir 900ms ease-in-out infinite;
 }
 .vb-title-line { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
 .vb-title-row h1 { margin: 0; font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.01em; }
@@ -608,6 +625,11 @@
   100% { transform: none; opacity: 1; }
 }
 @keyframes vb-wave { 0%, 100% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } }
+@keyframes vb-choir {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-3px) rotate(-0.6deg); }
+  75% { transform: translateY(-3px) rotate(0.6deg); }
+}
 @keyframes vb-on-air {
   0% { transform: rotate(9deg) scale(0.5); opacity: 0; }
   70% { transform: rotate(6deg) scale(1.06); opacity: 1; }
@@ -631,6 +653,8 @@
 }
 @media (max-width: 720px) {
   .vb-title-row { padding: 16px 0; }
+  /* Scenery is the first thing to go when the header runs out of room. */
+  .vb-choir { display: none; }
   .vb-panel { padding: 16px; }
   .vb-locked-rows { grid-template-columns: 1fr; }
   .cook-slot { min-height: 0; }
