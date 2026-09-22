@@ -732,10 +732,10 @@ export default function LiveCookPage() {
     setSaving(true);
     try {
       await finishSession(summary);
-      navigate(`/cook/${sessionId}`);
+      navigate(`/cook/${sessionId}`, { state: { fromLiveCook: true } });
     } catch (err) {
       setSaving(false);
-      setSaveError(err.message || "Couldn't save the card.");
+      setSaveError(err.message || "Couldn't save the page.");
     }
   };
 

@@ -1,251 +1,212 @@
-// The card you get after a cook, and can come back to from Home.
-//
-// Lives outside /session/* on purpose: every session guard bounces to
-// Home the moment the session is cleared, which happens the instant a
-// cook is saved. So this reads a session by id from the API and never
-// touches state.session.
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+// Frozen journal for one completed cook. Outside /session/* by design.
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { getSession, updateSession } from "../api/sessions.js";
 import { stylePhoto } from "../api/photo.js";
-import { formatDuration } from "../utils/graphLayout.js";
+import { chefAvatar } from "../utils/cooks.js";
 import { fileToDataUrl, applyLocalStyle, renderShareCard, downloadDataUrl } from "../utils/summaryCard.js";
+import BabyGoose from "../components/BabyGoose.jsx";
+import KpIcon from "../components/KpIcon.jsx";
 import "./CookSummaryPage.css";
 
-const RANK_MEDALS = ["1st", "2nd", "3rd"];
-
 function formatDate(iso) {
-  if (!iso) return "";
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
+}
+function formatClock(sec) {
+  const safe = Math.max(0, Math.round(Number(sec) || 0));
+  if (safe < 60) return `${safe}s`;
+  return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, "0")}`;
+}
+function formatTotal(sec) {
+  const safe = Math.max(0, Math.round(Number(sec) || 0));
+  return safe < 60 ? `${Math.max(1, safe)}s` : `${Math.round(safe / 60)} min`;
+}
+function formatPlan(totalSec, estimatedSec) {
+  if (estimatedSec == null) return null;
+  const planned = Math.max(1, Math.round(estimatedSec / 60));
+  const delta = Math.max(1, Math.round(Math.abs(totalSec - estimatedSec) / 60));
+  return `planned ${planned} min · ${delta} min ${totalSec <= estimatedSec ? "inside" : "over"}`;
+}
+
+function PlayerAvatar({ cook, sessionCook }) {
+  const avatar = chefAvatar(sessionCook?.avatar);
+  return <span className={`journal-avatar is-${cook.colorKey}`} style={{ "--avatar-bg": avatar.bg }}><img src={avatar.src} alt="" /></span>;
+}
+
+function PlayerColumn({ cook, sessionCook, versus, tied }) {
+  return (
+    <section className="journal-player">
+      <header className="journal-player-head">
+        <PlayerAvatar cook={cook} sessionCook={sessionCook} />
+        <div className="journal-signature">
+          <div className="journal-signature-line">
+            <h2>{cook.name}</h2>
+            {versus && <span className="journal-points mono">{cook.points} pts</span>}
+            {versus && cook.isWinner && !tied && <KpIcon glyph="trophy" size={16} className="journal-winner" />}
+          </div>
+          <span className="journal-step-count mono">
+            {cook.doneCount} {cook.doneCount === 1 ? "step" : "steps"}{cook.skippedCount > 0 ? ` · ${cook.skippedCount} skipped` : ""}
+          </span>
+        </div>
+      </header>
+      {cook.steps.length ? (
+        <ul className="journal-steps">
+          {cook.steps.map((step, index) => (
+            <li key={`${step.label}-${index}`} className={step.status === "skipped" ? "is-skipped" : ""}>
+              <span className="journal-step-label">{step.label}</span>
+              <span className="journal-step-meta mono">
+                {step.status === "skipped" ? "skipped" : `${formatClock(step.actualSec)}${step.deltaSec > 0 ? ` · ${formatClock(step.deltaSec)} over` : ""}`}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="journal-empty">Nothing finished.</p>}
+      {cook.quips?.length > 0 && <div className="journal-notes">{cook.quips.slice(0, 2).map((quip, index) => <p key={index}>{quip}</p>)}</div>}
+    </section>
+  );
 }
 
 export default function CookSummaryPage() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const fileInputRef = useRef(null);
   const [session, setSession] = useState(null);
   const [status, setStatus] = useState("loading");
   const [busy, setBusy] = useState(null);
+  const [pendingPhoto, setPendingPhoto] = useState(null);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let live = true;
-    getSession(sessionId)
-      .then((s) => {
-        if (!live) return;
-        setSession(s);
-        setStatus("loaded");
-      })
-      .catch(() => live && setStatus("missing"));
-    return () => {
-      live = false;
-    };
+    getSession(sessionId).then((result) => {
+      if (live) { setSession(result); setStatus("loaded"); }
+    }).catch(() => live && setStatus("missing"));
+    return () => { live = false; };
   }, [sessionId]);
 
   const summary = session?.summary || null;
   const cooks = useMemo(() => summary?.cooks || [], [summary]);
+  const sessionCooks = useMemo(() => new Map((session?.cooks || []).map((cook) => [cook.id, cook])), [session]);
 
   const saveSummary = async (next) => {
-    setSession((s) => ({ ...s, summary: next }));
-    try {
-      await updateSession(sessionId, { summary: next });
-    } catch {
-      setError("Saved locally, but couldn't reach the server.");
-    }
+    setSession((current) => ({ ...current, summary: next }));
+    await updateSession(sessionId, { summary: next });
   };
-
   const onPhoto = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
     setError(null);
-    setBusy("Reading photo…");
     try {
       const photo = await fileToDataUrl(file);
-      setBusy("Styling…");
-      let styledPhoto = photo;
-      let photoSource = "stub";
+      setPendingPhoto(photo);
+      setBusy("styling");
       try {
         const result = await stylePhoto(photo, `A styled hero shot of ${summary.dish}`);
-        photoSource = result.source;
-        // The stub hands the original straight back, so do the visible
-        // work locally rather than pretending nothing happened.
-        styledPhoto = result.source === "model" ? result.dataUrl : await applyLocalStyle(result.dataUrl);
+        const styledPhoto = result.source === "model" ? result.dataUrl : await applyLocalStyle(result.dataUrl);
+        await saveSummary({ ...summary, photo, styledPhoto, photoSource: result.source });
       } catch {
-        styledPhoto = await applyLocalStyle(photo);
-        setError("Styling service unavailable — used a local effect instead.");
+        await saveSummary({ ...summary, photo, styledPhoto: null, photoSource: null });
+        setError("Styling didn't work — kept your photo as is.");
       }
-      await saveSummary({ ...summary, photo, styledPhoto, photoSource });
-    } catch (err) {
-      setError(err.message);
+    } catch (photoError) {
+      setError(photoError.message || "Couldn't read that photo.");
     } finally {
       setBusy(null);
+      setPendingPhoto(null);
     }
   };
-
   const onDownload = async () => {
-    setBusy("Building card…");
+    setBusy("saving");
+    setError(null);
     try {
       downloadDataUrl(await renderShareCard(summary), `${(summary.dish || "cook").replace(/\W+/g, "-").toLowerCase()}.png`);
     } catch {
-      setError("Couldn't build the card image.");
-    } finally {
-      setBusy(null);
-    }
+      setError("Couldn't build the image — try again.");
+    } finally { setBusy(null); }
   };
-
   const onCopyLink = async () => {
+    setError(null);
     try {
       await navigator.clipboard.writeText(window.location.href);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setError("Couldn't copy — you can copy the address bar instead.");
-    }
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch { setError("Couldn't copy — use the address bar."); }
   };
 
-  if (status === "loading") return null; // avoids a flash-redirect on hard refresh
-
+  if (status === "loading") return null;
   if (status === "missing" || !summary) {
     return (
-      <section className="page summary-page">
-        <div className="band-header">
-          <div className="band-header-left">
-            <div>
-              <p className="band-eyebrow">Kitchen Path</p>
-              <h1>No card for this cook</h1>
-            </div>
-          </div>
-        </div>
-        <p className="hint">
-          {status === "missing"
-            ? "That cook doesn't exist any more."
-            : "This session was left before anyone finished cooking, so there's no card to show."}
-        </p>
-        <button className="btn btn-primary" onClick={() => navigate("/")}>
-          Back to Home
-        </button>
+      <section className="journal-missing">
+        <span className="journal-eyebrow">Cook journal</span>
+        <h1>No page for this cook</h1>
+        <p>{status === "missing" ? "That cook doesn't exist any more." : "This cook was left before anyone finished, so there's nothing to write down."}</p>
+        <button type="button" className="btn btn-primary" onClick={() => navigate("/")}>Back to Home</button>
       </section>
     );
   }
 
-  const hero = summary.styledPhoto || summary.photo;
+  const hero = pendingPhoto || summary.styledPhoto || summary.photo;
+  const versus = summary.mode === "competition";
+  const tied = versus && summary.winnerCookIds?.length > 1;
+  const plan = !versus ? formatPlan(summary.totalSec, summary.estimatedSec) : null;
 
   return (
-    <section className="page summary-page">
-      <div className="band-header">
-        <div className="band-header-left">
-          <div>
-            <p className="band-eyebrow">{formatDate(summary.createdAt)} &middot; {summary.mode}</p>
-            <h1>{summary.dish}</h1>
-          </div>
-        </div>
-        <div className="band-header-right">
-          {/* A quick cook rounds to "0 min", which reads as broken. */}
-          <span className="tag mono">
-            {summary.totalSec < 60 ? `${Math.max(1, Math.round(summary.totalSec))}s` : `${Math.round(summary.totalSec / 60)} min`}
-          </span>
-          {summary.estimatedSec != null && (
-            <span className="tag mono">
-              {summary.totalSec <= summary.estimatedSec ? "under" : "over"} plan by{" "}
-              {formatDuration(Math.abs(summary.totalSec - summary.estimatedSec))}
-            </span>
+    <section className="cook-journal-page">
+      <article className={`journal-sheet${location.state?.fromLiveCook ? " should-reveal" : ""}`}>
+        <div className="journal-hero">
+          {hero ? (
+            <>
+              <div className={`journal-photo-frame${busy === "styling" ? " is-styling" : ""}`}>
+                <img src={hero} alt={summary.dish} />
+                {busy === "styling" && <span className="journal-styling"><i aria-hidden="true" />Styling…</span>}
+              </div>
+              <div className="journal-photo-foot">
+                <span>{summary.photoSource === "model" ? "Styled" : summary.photoSource === "stub" ? "Styled here — no image model yet" : ""}</span>
+                <button type="button" className="btn btn-ghost" onClick={() => fileInputRef.current?.click()} disabled={busy === "styling"}>Change photo</button>
+              </div>
+            </>
+          ) : (
+            <div className="journal-no-photo">
+              <div className="journal-no-photo-geese" aria-hidden="true"><BabyGoose pose="g1-on-it" size={78} decorative /><BabyGoose pose="g4-free-hands" size={78} decorative /></div>
+              <p>Add the photo while it&apos;s still on the table.</p>
+              <button type="button" className="btn btn-primary" onClick={() => fileInputRef.current?.click()}>Add the photo</button>
+            </div>
           )}
+          <input ref={fileInputRef} type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} />
         </div>
-      </div>
 
-      <p className="summary-headline">{summary.headline}</p>
-
-      <div className="card summary-hero">
-        {hero ? (
-          <>
-            <img className="summary-photo" src={hero} alt={summary.dish} />
-            <div className="summary-hero-foot">
-              <span className="hint">
-                {summary.photoSource === "model" ? "Styled by the image model." : "Styled locally — no image model wired up yet."}
-              </span>
-              <label className="btn">
-                Replace photo
-                <input type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} />
-              </label>
-            </div>
-          </>
-        ) : (
-          <label className="summary-dropzone">
-            <span className="mini-title">Add a photo of the food</span>
-            <p className="hint">We&rsquo;ll style it and put it on the card.</p>
-            <span className="btn btn-primary btn-lg">Take or choose a photo</span>
-            <input type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} />
-          </label>
-        )}
-      </div>
-
-      {busy && <p className="hint">{busy}</p>}
-      {error && <p className="hint summary-error">{error}</p>}
-
-      <div className="scoreboard-grid">
-        {cooks.map((cook) => (
-          <div className={`card score-panel cook-border-${cook.colorKey} ${cook.isWinner ? "is-winner" : ""}`} key={cook.cookId}>
-            <div className="score-head">
-              <span className={`cook-avatar cook-avatar-sm cook-color-${cook.colorKey}`}>{cook.name[0]?.toUpperCase()}</span>
-              <span className="score-name">{cook.name}</span>
-              <span className="tag mono">{RANK_MEDALS[cook.rank - 1] || `${cook.rank}th`}</span>
-            </div>
-            <div className={`score-points mono ink-${cook.colorKey}`}>{cook.points}</div>
-            <div className="hint mono score-sub">
-              {cook.doneCount} done{cook.skippedCount ? ` · ${cook.skippedCount} skipped` : ""}
-            </div>
-            {cook.quips.map((q, i) => (
-              <p className="score-quip" key={i}>
-                {q}
-              </p>
-            ))}
+        <header className="journal-title-block">
+          <span className="journal-eyebrow">Cook journal · <span className="mono">{formatDate(summary.createdAt)}</span></span>
+          <h1>{summary.dish}</h1>
+          <div className="journal-meta">
+            <span className="mono">{formatTotal(summary.totalSec)}</span><span className="journal-dot">·</span>
+            <span className="journal-mode-chip"><KpIcon glyph={versus ? "trophy" : "fork-branch"} size={16} />{versus ? "Versus" : "Co-op"}</span>
+            {plan && <><span className="journal-dot">·</span><span className="mono journal-plan">{plan}</span></>}
           </div>
-        ))}
-      </div>
+          <p className="journal-headline">{summary.headline}</p>
+        </header>
 
-      <div className="card ledger">
-        <span className="mini-title">Who did what</span>
-        <div className="ledger-cols">
-          {cooks.map((cook) => (
-            <div className="ledger-col" key={cook.cookId}>
-              <div className={`ledger-col-head cook-color-${cook.colorKey}`}>{cook.name}</div>
-              {cook.steps.length === 0 ? (
-                <p className="hint">Nothing completed.</p>
-              ) : (
-                <ul className="ledger-list">
-                  {cook.steps.map((s, i) => (
-                    <li key={i} className={s.status === "skipped" ? "is-skipped" : ""}>
-                      <span className="ledger-label">{s.label}</span>
-                      <span className="hint mono">
-                        {s.status === "skipped"
-                          ? "skipped"
-                          : `${formatDuration(s.actualSec)}${s.deltaSec > 0 ? ` · +${formatDuration(s.deltaSec)}` : ""} · +${s.points}`}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+        <section className="journal-kitchen">
+          <span className="journal-section-label">In the kitchen</span>
+          <div className="journal-players">
+            {cooks.map((cook) => <PlayerColumn key={cook.cookId} cook={cook} sessionCook={sessionCooks.get(cook.cookId)} versus={versus} tied={tied} />)}
+          </div>
+        </section>
 
-      <div className="band-footer">
-        <div className="band-footer-left">
-          <button className="btn" onClick={onDownload} disabled={Boolean(busy)}>
-            Download card
-          </button>
-          <button className="btn" onClick={onCopyLink}>
-            {copied ? "Link copied" : "Copy link"}
-          </button>
-        </div>
-        <div className="band-footer-right">
-          <button className="btn btn-primary btn-lg" onClick={() => navigate("/")}>
-            Back to Home
-          </button>
-        </div>
-      </div>
+        {/* Same footer row as Home's list cards, so the sheet ends the
+            way it began: as one card lifted out of the run log. */}
+        <footer className="journal-actions">
+          <div className="journal-actions-left">
+            <button type="button" className="btn btn-ghost" onClick={onDownload} disabled={Boolean(busy)}>{busy === "saving" ? "Building…" : "Save the page"}</button>
+            <button type="button" className="btn btn-ghost" onClick={onCopyLink}>{copied ? "Link copied" : "Copy link"}</button>
+          </div>
+          <button type="button" className="btn btn-primary" onClick={() => navigate("/")}>Back to Home</button>
+        </footer>
+      </article>
+      {error && <p className="journal-error" role="status">{error}</p>}
     </section>
   );
 }

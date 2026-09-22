@@ -15,5 +15,5 @@ export const DESIGN_V4_ROUTES = ["/session/conversation", "/session/inventory", 
 
 export function useDesignV4() {
   const { pathname } = useLocation();
-  return DESIGN_V4_ROUTES.includes(pathname);
+  return DESIGN_V4_ROUTES.includes(pathname) || pathname.startsWith("/cook/");
 }
