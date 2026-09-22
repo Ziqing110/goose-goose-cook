@@ -137,6 +137,10 @@ function TendingChip({ node, className = "" }) {
   return <span className={`sch-tending-chip ${className}`}>{label}</span>;
 }
 
+// Same identity contract as Cooks / Live Cook: the bird the player
+// picked on the Cooks page carries their identity, ringed in their
+// player colour on the schedule. Initial-in-a-circle is the fallback for
+// runs that predate avatars.
 function PlayerAvatar({ cook, index, size = 32 }) {
   const chef = cook?.avatar ? chefAvatar(cook.avatar) : null;
   return (
@@ -597,7 +601,9 @@ export default function SchedulePage() {
         }
       : null;
 
-  const metaBits = [approved.title];
+  // Title moved to the h1 above; the meta below carries the remaining
+  // trip-band: servings, steps, kitchen.
+  const metaBits = [];
   if (approved.servings != null) metaBits.push(<><Mono>{approved.servings}</Mono> servings</>);
   metaBits.push(<><Mono>{nodes.length}</Mono> steps</>);
   if (kitchenProfile?.name) metaBits.push(kitchenProfile.name);
@@ -615,7 +621,30 @@ export default function SchedulePage() {
         />
       )}
       <header className="sch-title-row">
-        <h1>Schedule</h1>
+        <span className="sch-eyebrow sch-run-eyebrow">Tonight&rsquo;s run</span>
+        <span className="sch-title-mark">
+          <h1>{approved.title}</h1>
+          {/* Crooked hand-drawn underline — same voice as the Home page's
+              titles, so both hero surfaces read as goose-authored. */}
+          <svg
+            className="sch-underline sch-underline-title"
+            viewBox="0 0 430 10"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+            fill="none"
+          >
+            <path
+              d="M2 7c68-4 144 1 220-2 58-2.5 134 3 206 .5"
+              stroke="currentColor"
+              strokeWidth="2.6"
+              strokeLinecap="round"
+            />
+          </svg>
+          {/* APPROVED stamp — the recipe cleared conversation and the
+              recipe graph. Same stamp language as the Home page's
+              IN PROGRESS. */}
+          <span className="sch-stamp sch-stamp-approved" aria-hidden="true">APPROVED</span>
+        </span>
         <span className="sch-meta">
           {metaBits.map((bit, i) => (
             <span key={i}>
@@ -623,6 +652,18 @@ export default function SchedulePage() {
               {bit}
             </span>
           ))}
+        </span>
+        <span className="sch-goose-line">
+          {/* A single feather is the goose's speaking mark — same one the
+              Home page uses on the fastest run. */}
+          <svg viewBox="0 0 26 28" width="13" height="14" fill="none" aria-hidden="true" className="sch-goose-feather">
+            <path d="M13 3.2c1.6 0 2.2 1.6 2.4 3.4l.5 4.6c.1 1.2 1 1.6 2 1.1l3.6-1.8c1.6-.8 2.8.6 1.7 2L14.9 25c-1 1.3-2.6 1.3-3.5 0L2.9 12.6c-1-1.4.2-2.8 1.8-2l3.5 1.8c1 .5 1.9.1 2-1.1l.5-4.6C10.9 4.8 11.4 3.2 13 3.2Z" fill="#f6cfa6" stroke="#b08a63" strokeWidth="2.2" strokeLinejoin="round" />
+          </svg>
+          <Mono className="sch-goose-line-text">
+            {mode
+              ? "I ran this 37 ways. This one gets you fed first — and nobody stands around holding a spoon."
+              : "Recipe's settled. Now tell me — are you helping each other, or racing?"}
+          </Mono>
         </span>
       </header>
 
@@ -664,9 +705,12 @@ export default function SchedulePage() {
                     <span className="sch-tile-label">finish in</span>
                   </div>
                   {schedule.savedSec > 0 && (
-                    <div className="sch-tile sch-roll" style={{ animationDelay: "60ms" }}>
-                      <Mono className="sch-tile-value">{formatClock(schedule.savedSec)}</Mono>
+                    <div className="sch-tile sch-tile-highlight sch-roll" style={{ animationDelay: "60ms" }}>
+                      <Mono className="sch-tile-value sch-tile-value-hot">{formatClock(schedule.savedSec)}</Mono>
                       <span className="sch-tile-label">faster than solo</span>
+                      {/* HONK stamp — the goose's way of pointing out
+                          the win, same voice as the Home page. */}
+                      <span className="sch-stamp sch-stamp-honk" aria-hidden="true">HONK</span>
                     </div>
                   )}
                   <div className="sch-tile sch-roll" style={{ animationDelay: "120ms" }}>
@@ -826,10 +870,10 @@ function ModeCard({ glyph, title, body, selected, locked, onSelect }) {
       onClick={onSelect}
     >
       {selected && (
-        <span className="sch-mode-chip" aria-hidden="true">
-          <KpIcon glyph="checkmark-burst" size={16} />
-          <span className="sch-mode-chip-text">Selected</span>
-        </span>
+        // GOOSE PICKS stamp — same recipe as the Home page's HONK / IN
+        // PROGRESS: mono, tilted, orange. Signals authorship rather than
+        // a neutral "Selected" chip.
+        <span className="sch-mode-stamp" aria-hidden="true">GOOSE PICKS</span>
       )}
       <KpIcon glyph={glyph} size={24} className="sch-mode-glyph" />
       <span className="sch-mode-title">{title}</span>
@@ -881,7 +925,23 @@ function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepId
   return (
     <div className="sch-card">
       <div className="sch-card-head">
-        <span className="sch-card-title">Who does what, when</span>
+        <span className="sch-card-title sch-title-mark">
+          Who does what, when
+          <svg
+            className="sch-underline sch-underline-section"
+            viewBox="0 0 250 10"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+            fill="none"
+          >
+            <path
+              d="M2 7c40-4 84 1 128-2 34-2.5 78 3 118 .5"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+            />
+          </svg>
+        </span>
         <div className="sch-card-tools">
           <span className="sch-legend">
             <span className="sch-legend-item">
@@ -1282,7 +1342,23 @@ function OpeningHand({ opening, cooks, byId, dishOf }) {
   return (
     <div className="sch-card sch-card-versus">
       <div className="sch-card-head">
-        <span className="sch-card-title">Opening hand</span>
+        <span className="sch-card-title sch-title-mark">
+          The opening hand
+          <svg
+            className="sch-underline sch-underline-section"
+            viewBox="0 0 200 10"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+            fill="none"
+          >
+            <path
+              d="M2 7c34-4 70 1 108-2 28-2.5 64 3 88 .5"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+            />
+          </svg>
+        </span>
         {!contested && skewSec > 0 && <Mono className="sch-card-meta">{formatClock(skewSec)} apart at the start</Mono>}
       </div>
 

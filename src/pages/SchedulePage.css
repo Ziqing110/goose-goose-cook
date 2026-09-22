@@ -38,8 +38,11 @@
   color: var(--ink-soft);
 }
 
-/* PlayerAvatar — the chef picked on Cooks; legacy sessions without a
-   selection keep the player-colour initial as a safe fallback. */
+/* PlayerAvatar — the chef bird the player picked on Cooks (via chef.src,
+   chef.bg from utils/cooks.js), ringed in the player colour so the
+   schedule reads the same way as Live Cook. `.has-chef` swaps the flat
+   fill for the art; the plain `.is-a` / `.is-b` fill and the letter are
+   the fallback for runs that predate avatars. */
 .sch-avatar {
   flex: 0 0 auto;
   display: inline-flex;
@@ -48,22 +51,106 @@
   border-radius: 50%;
   color: #fff;
   font-weight: 700;
-}
-.sch-avatar.is-a { background: var(--cook-a); }
-.sch-avatar.is-b { background: var(--cook-b); }
-.sch-avatar.has-chef {
-  border: 1px solid var(--line);
+  background-size: 92%;
+  background-position: center 54%;
   background-repeat: no-repeat;
-  background-position: center 52%;
-  background-size: 96%;
+  box-sizing: border-box;
 }
+.sch-avatar.is-a { background-color: var(--cook-a); }
+.sch-avatar.is-b { background-color: var(--cook-b); }
+.sch-avatar.has-chef.is-a { border: 2px solid var(--cook-a); }
+.sch-avatar.has-chef.is-b { border: 2px solid var(--cook-b); }
 .sch-avatar-20 { width: 20px; height: 20px; font-size: 11px; }
 .sch-avatar-24 { width: 24px; height: 24px; font-size: 12px; }
 .sch-avatar-32 { width: 32px; height: 32px; font-size: 14px; }
+/* The picked art is decorative — the player colour still identifies the
+   cook, and the ring puts that colour back on the avatar. */
+.sch-avatar.has-chef { color: transparent; }
 
 /* ---------------- title ---------------- */
-.sch-title-row { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; animation: sch-rise 240ms ease-out both; }
+.sch-title-row { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; animation: sch-rise 240ms ease-out both; }
 .sch-title-row h1 { margin: 0; font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.01em; }
+.sch-run-eyebrow { font-family: var(--font-mono); font-size: 11.5px; line-height: 16px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); }
+
+/* ---------------- goose marks (schedule) ----------------
+   Same voice as the Home page: crooked orange underline, tilted orange
+   stamps, feather bullets. Painted through their own tokens so light
+   and dark themes each get a workable pass. */
+:root {
+  --sch-honk: #b8461f;
+  --sch-approved-ink: #5d7040;
+  --sch-approved-border: #7a8f5a;
+  --sch-feather-fill: #f6cfa6;
+  --sch-feather-ink: #b08a63;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --sch-approved-ink: #a4c07a;
+    --sch-approved-border: #667a45;
+    --sch-feather-fill: #3a2f22;
+    --sch-feather-ink: #a89778;
+  }
+}
+:root[data-theme="dark"] {
+  --sch-approved-ink: #a4c07a;
+  --sch-approved-border: #667a45;
+  --sch-feather-fill: #3a2f22;
+  --sch-feather-ink: #a89778;
+}
+
+.sch-title-mark { position: relative; display: inline-block; width: fit-content; align-self: flex-start; }
+.sch-title-mark > .sch-underline { color: var(--sch-honk); }
+.sch-underline {
+  position: absolute;
+  left: -2px;
+  display: block;
+  overflow: visible;
+  pointer-events: none;
+  width: calc(100% + 4px);
+}
+.sch-underline-title { bottom: -9px; height: 9px; }
+.sch-underline-section { bottom: -7px; height: 9px; }
+
+/* Tilted orange stamps — the shared shape lives on .sch-stamp, and
+   .sch-stamp-honk / .sch-stamp-approved swap the tint. */
+.sch-stamp {
+  position: absolute;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  transform: rotate(9deg);
+  pointer-events: none;
+}
+.sch-stamp-honk { background: var(--sch-honk); color: #fff; }
+.sch-stamp-approved {
+  top: 6px;
+  right: 0;
+  padding: 4px 11px;
+  border: 2px solid var(--sch-approved-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sch-approved-ink);
+  letter-spacing: 0.14em;
+  transform: rotate(-7deg);
+}
+/* Reserve room to the right of the recipe title so the APPROVED stamp
+   never lands on the last word. The stamp is ~104px wide with rotation. */
+.sch-title-mark { padding-right: 112px; }
+@media (max-width: 640px) {
+  .sch-title-mark { padding-right: 0; }
+  .sch-stamp-approved { position: relative; display: inline-block; top: 0; right: 0; margin-top: 8px; }
+}
+
+/* Goose speech line — one feather then a mono line, tucked under the
+   recipe title. */
+.sch-goose-line { display: inline-flex; align-items: center; gap: 9px; padding-top: 6px; }
+.sch-goose-feather { flex: none; transform: rotate(-92deg); }
+.sch-goose-line-text { font-size: 13px; color: var(--ink-soft); text-wrap: pretty; }
 
 /* ---------------- mode picker ---------------- */
 .sch-modes-wrap { display: flex; flex-direction: column; gap: 8px; animation: sch-rise 240ms 40ms ease-out both; }
@@ -91,6 +178,35 @@
 .sch-mode-glyph { color: var(--ink); }
 .sch-mode-title { font-size: 18px; line-height: 24px; font-weight: 700; }
 .sch-mode-body { font-size: 15px; line-height: 22px; color: var(--ink-soft); max-width: 440px; }
+/* GOOSE PICKS — the mode picker's version of the HONK stamp, punched
+   through the top-right corner of the selected card. */
+.sch-mode-stamp {
+  position: absolute;
+  right: -12px;
+  top: -12px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--sch-honk);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  transform: rotate(8deg);
+  pointer-events: none;
+  animation: sch-stamp-in 320ms cubic-bezier(0.2, 1.5, 0.4, 1) both;
+}
+@keyframes sch-stamp-in {
+  0% { opacity: 0; transform: rotate(-16deg) scale(0.55); }
+  70% { opacity: 1; transform: rotate(12deg) scale(1.08); }
+  100% { opacity: 1; transform: rotate(8deg) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sch-mode-stamp { animation: none; }
+}
+
 .sch-mode-chip {
   position: absolute;
   top: 16px;
@@ -127,10 +243,15 @@
   animation: sch-rise 240ms 80ms ease-out both;
 }
 .sch-tiles { display: flex; align-items: flex-start; gap: 40px; }
-.sch-tile { display: flex; flex-direction: column; gap: 2px; }
+.sch-tile { display: flex; flex-direction: column; gap: 2px; position: relative; }
 .sch-tile-value-row { display: flex; align-items: center; gap: 8px; }
 .sch-tile-value { font-size: 24px; line-height: 30px; font-weight: 500; }
 .sch-tile-label { font-size: 13px; color: var(--ink-soft); }
+/* The "faster than solo" tile — highlighted with a HONK stamp, so the
+   win reads as a win, not just a number. */
+.sch-tile-highlight { padding: 4px 2px 2px; }
+.sch-tile-value-hot { color: var(--sch-honk); }
+.sch-tile-highlight .sch-stamp-honk { top: -11px; right: -18px; }
 .sch-player-chips { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .sch-player-chip {
   display: flex;

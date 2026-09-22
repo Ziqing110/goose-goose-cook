@@ -78,11 +78,20 @@ body:has(.home-v4) { background: var(--kp-bg); }
 .hp-band {
   flex: 0 0 auto;
   display: block;
-  width: 100%;
-  max-width: 400px;
-  aspect-ratio: 2.2 / 1;
+  width: 60%;
+  max-width: 684px;
+  aspect-ratio: 2.492 / 1;
   object-fit: contain;
+  border-radius: 12px;
 }
+/* The trim art is drawn on paper — orange bills, chef hats, and dark
+   linework, all designed against a light ground. Give it that ground
+   in dark mode too so the goose reads properly instead of punching a
+   white hole in the header. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .hp-band { background: #ffffff; }
+}
+:root[data-theme="dark"] .hp-band { background: #ffffff; }
 
 /* ---------------- buttons ---------------- */
 
@@ -135,6 +144,21 @@ body:has(.home-v4) { background: var(--kp-bg); }
 .hp-chip .mono { font-size: 14px; }
 .hp-chip-difficulty { height: 32px; padding: 0 12px; gap: 3px; background: var(--kp-accent-tint); color: var(--kp-accent); }
 .hp-chip-equipment { background: var(--kp-bg); }
+/* Count chips: tighter on the number side so the little badge inside
+   sits flush, like a mono die tucked into the pill. */
+.hp-chip-count { padding: 0 5px 0 10px; gap: 6px; }
+.hp-chip-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: var(--kp-bg-tertiary);
+  color: var(--kp-text);
+  font-size: 13px;
+}
 .hp-chip-status { height: 32px; padding: 0 12px; }
 .hp-chip-inplay { height: 28px; padding: 0 10px; background: var(--kp-accent-tint); color: var(--kp-accent); }
 .hp-chip-done { background: var(--kp-bg); border: 1px solid var(--kp-status-done); color: var(--kp-status-done); }
@@ -164,6 +188,9 @@ body:has(.home-v4) { background: var(--kp-bg); }
 
 /* run card (state A) */
 .hp-run { display: flex; align-items: flex-start; justify-content: space-between; gap: 40px; }
+/* An imperfect tilt — the run card sits like a note pinned a hair
+   off-square. Enough to notice, not enough to fight the grid. */
+.hp-run-tilt { transform: rotate(-0.2deg); transform-origin: center; }
 /* The shared stage path (components/StagePath.css) sits in the card's
    content column, so it keeps the width the old .hp-stages had rather
    than running the full width of the card. */
@@ -283,6 +310,147 @@ body:has(.home-v4) { background: var(--kp-bg); }
 .hp-duration { font-size: 16px; font-weight: 500; flex: 0 0 auto; }
 .hp-duration.is-muted { color: var(--kp-text-secondary); }
 
+/* ---------------- goose marks ---------------- */
+/* The Conversation page's HONK pill, brought over to Home: a mono
+   orange stamp poking out of the primary CTA. Same voice, same colour,
+   same tilt. */
+:root {
+  --hp-honk: #b8461f;
+  --kp-accent-shadow: #a03d17;
+  --kp-feather-fill: #f7f2e6;
+  --kp-feather-vane: #fffdf7;
+  --kp-feather-ink: #8a7a58;
+  --kp-footprint-fill: #fdeada;
+  --kp-footprint-ink: #d2b79c;
+  --kp-footprint-fill-2: #f6cfa6;
+  --kp-footprint-ink-2: #b08a63;
+  --hp-best-tint: #fffdf7;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --kp-feather-fill: #3a3226;
+    --kp-feather-vane: #453a2a;
+    --kp-feather-ink: #a89778;
+    --kp-footprint-fill: #3a2f22;
+    --kp-footprint-ink: #6a5945;
+    --kp-footprint-fill-2: #4a3826;
+    --kp-footprint-ink-2: #8a6f4d;
+    --hp-best-tint: #24211a;
+  }
+}
+:root[data-theme="dark"] {
+  --kp-feather-fill: #3a3226;
+  --kp-feather-vane: #453a2a;
+  --kp-feather-ink: #a89778;
+  --kp-footprint-fill: #3a2f22;
+  --kp-footprint-ink: #6a5945;
+  --kp-footprint-fill-2: #4a3826;
+  --kp-footprint-ink-2: #8a6f4d;
+  --hp-best-tint: #24211a;
+}
+
+/* Crooked hand-drawn underline under key titles. The SVG stretches to
+   the text width, so the pen mark tracks the word without the parent
+   having to know the character count. */
+.hp-title-mark { position: relative; display: inline-block; width: fit-content; align-self: flex-start; }
+.hp-title-mark > .hp-underline { color: var(--hp-honk); }
+.hp-underline {
+  position: absolute;
+  left: -2px;
+  display: block;
+  overflow: visible;
+  pointer-events: none;
+  width: calc(100% + 4px);
+}
+.hp-underline-title { bottom: -6px; height: 9px; }
+.hp-underline-section { bottom: -6px; height: 7px; width: calc(100% + 4px); }
+
+/* IN PROGRESS stamp — same recipe as the Conversation page's HONK. */
+.hp-stamp-wrap { position: relative; display: flex; }
+.hp-stamp-wrap > .hp-btn { flex: 1; }
+.hp-stamp {
+  position: absolute;
+  right: -8px;
+  top: -11px;
+  transform: rotate(9deg);
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--hp-honk);
+  color: #ffffff;
+  font-family: var(--kp-mono);
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Feather beside the trophy — hand-drawn, tilted, no other decoration. */
+.hp-feather { flex: none; transform: rotate(24deg); margin-left: 2px; }
+.hp-row-run.is-best { background: var(--hp-best-tint); }
+
+/* Footprints for abandoned rows — two little steps walking out. Sit in
+   the space to the left of the duration so the row's layout is intact. */
+.hp-footprints {
+  position: relative;
+  flex: 0 0 auto;
+  width: 64px;
+  height: 40px;
+  pointer-events: none;
+  opacity: 0.7;
+}
+.hp-footprints .hp-footprint { position: absolute; }
+
+/* Start-the-run — 3a Weighted key: a physical key with a 4px bottom
+   edge that collapses when pressed. Paired with a keyboard hint. */
+.hp-start-row { display: inline-flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.hp-btn-start-key {
+  border-radius: 10px;
+  letter-spacing: -0.005em;
+  box-shadow: 0 4px 0 var(--kp-accent-shadow, #a03d17);
+  transition: transform 90ms ease, box-shadow 90ms ease, background 140ms ease;
+}
+.hp-btn-start-key:hover { transform: none; background: var(--kp-accent-hover); }
+.hp-btn-start-key:active {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 var(--kp-accent-shadow, #a03d17);
+}
+.hp-start-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--kp-mono);
+  font-size: 13px;
+  color: var(--kp-text-tertiary);
+}
+.hp-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 5px;
+  background: var(--kp-bg);
+  color: var(--kp-text-secondary);
+  box-shadow: 0 1px 0 var(--kp-divider);
+  font-family: var(--kp-mono);
+  font-size: 12px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .hp-kbd { background: var(--kp-bg-tertiary); box-shadow: 0 1px 0 #0000004d; }
+}
+:root[data-theme="dark"] .hp-kbd { background: var(--kp-bg-tertiary); box-shadow: 0 1px 0 #0000004d; }
+@media (prefers-reduced-motion: reduce) {
+  .hp-btn-start-key,
+  .hp-btn-start-key:hover,
+  .hp-btn-start-key:active {
+    transform: none;
+    box-shadow: 0 4px 0 var(--kp-accent-shadow, #a03d17);
+  }
+}
+
 /* ---------------- mobile ---------------- */
 
 @media (max-width: 720px) {
@@ -308,4 +476,8 @@ body:has(.home-v4) { background: var(--kp-bg); }
   .hp-stat-value-row .kp-icon { display: none; }
   .hp-row-run .hp-chip-status .hp-chip-text { display: none; }
   .hp-row-run .hp-chip-status { width: 32px; padding: 0; justify-content: center; }
+  /* Not enough room in the row on phones — the abandoned chip carries
+     the same signal on its own. */
+  .hp-footprints { display: none; }
+  .hp-underline { display: none; }
 }
