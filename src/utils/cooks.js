@@ -55,9 +55,9 @@ export const CHEF_AVATARS = [
   { id: "spoon", src: "/avatars/1115.png", name: "Spoon", bg: "#a9d4fb", ink: "#14456f", hue: "Blue" },
   { id: "whisk", src: "/avatars/1116.png", name: "Whisk", bg: "#ffb866", ink: "#7a3a00", hue: "Orange" },
   { id: "slurp", src: "/avatars/1131.png", name: "Slurp", bg: "#a8e6c4", ink: "#175232", hue: "Green" },
-  { id: "tomato", src: "/avatars/1117.png", name: "Tomato", bg: "#cfc4fb", ink: "#3b3183", hue: "Violet" },
+  { id: "tomato", src: "/avatars/1117.png", name: "Tomato", bg: "#cfc4fb", ink: "#3b3183", hue: "Purple" },
   { id: "booky", src: "/avatars/1123.png", name: "Booky", bg: "#ff9c8c", ink: "#8c1f14", hue: "Red" },
-  { id: "roller", src: "/avatars/1120.png", name: "Roller", bg: "#f6c9dd", ink: "#8a2f57", hue: "Rose" },
+  { id: "roller", src: "/avatars/1120.png", name: "Roller", bg: "#f6c9dd", ink: "#8a2f57", hue: "Pink" },
   { id: "flip", src: "/avatars/1133.png", name: "Flip", bg: "#ffe08a", ink: "#6e4d00", hue: "Yellow" },
   { id: "stir", src: "/avatars/1128.png", name: "Stir", bg: "#c9c3b4", ink: "#4d463a", hue: "Stone" },
 ];
@@ -66,4 +66,33 @@ export const UNCLAIMED_AVATAR = { id: null, src: "/avatars/unclaimed.png", name:
 
 export function chefAvatar(id) {
   return CHEF_AVATARS.find((a) => a.id === id) || UNCLAIMED_AVATAR;
+}
+
+// Index into CHEF_AVATARS, or -1 for a cook who hasn't claimed one. The
+// bird carousel on the cooks page steps through the list from here, so
+// an unclaimed cook (-1) steps into the list at either end.
+export function chefAvatarIndex(id) {
+  return CHEF_AVATARS.findIndex((a) => a.id === id);
+}
+
+// The next bird in `dir` from `id`, never landing on one already taken.
+// Wraps, and returns the same bird when nothing else is free.
+export function stepChefAvatar(id, dir, taken) {
+  const n = CHEF_AVATARS.length;
+  const from = chefAvatarIndex(id);
+  // From unclaimed, forwards starts at the head and backwards at the tail.
+  let i = from === -1 ? (dir > 0 ? -1 : 0) : from;
+  for (let tries = 0; tries < n; tries += 1) {
+    i = (i + dir + n) % n;
+    if (!taken.has(CHEF_AVATARS[i].id)) return CHEF_AVATARS[i].id;
+  }
+  return id;
+}
+
+// Seeded cooks come with a bird each so the line-up reads as two chefs
+// from the first paint rather than two blanks. Sessions that predate
+// avatars still carry `avatar: null`, which is why nothing downstream
+// may assume a cook has one.
+export function defaultChefAvatar(index) {
+  return CHEF_AVATARS[index % CHEF_AVATARS.length].id;
 }

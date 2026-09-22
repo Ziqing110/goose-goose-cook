@@ -105,6 +105,13 @@
      Only ever an outline or a line of text, never a fill or a button. */
   --critical: var(--kp-critical);
 
+  /* Chef Goose's marks: the crooked underline, the stamps, the
+     footprints. A deliberately un-tokened warm red — it is the
+     character's ink, not a palette colour, so it does not follow the
+     accent when that moves. Home and Schedule predate this and carry
+     their own copies (--hp-honk / --sch-honk). */
+  --ds-honk: #b8461f;
+
   --radius-card: 12px;
   --radius-control: 8px;
   --shadow-sm: none;
@@ -165,6 +172,43 @@ body:has(.app-shell.ds-v4) { background: var(--kp-bg); }
 /* Shared min-width so the hero action is the same size on every page
    (Generate recipe graph / Continue to scheduling) regardless of label. */
 .ds-v4 .btn-lg { min-height: 56px; min-width: 280px; padding: 0 28px; font-size: 18px; }
+
+/* The weighted key: a hero CTA with a 4px ink bottom edge that
+   collapses under the press, so the button has something behind it.
+   Pair it with .btn-lg. Home carries its own copy on its own button
+   system (.hp-btn-start-key); this is the one for every v4 page.
+
+   It has to out-rank `.ds-v4 .btn`, whose flat `box-shadow: none` and
+   `scale(0.97)` press it replaces — hence `.ds-v4 .btn.btn-key` rather
+   than a bare class. A page-local copy at plain `.sch-btn-key` lost
+   that fight silently and left the Schedule's CTA flat for weeks. */
+.ds-v4 .btn.btn-key {
+  position: relative;
+  border-radius: 10px;
+  letter-spacing: -0.005em;
+  box-shadow: 0 4px 0 var(--kp-accent-shadow, #a03d17);
+  transition: transform 90ms ease, box-shadow 90ms ease, background 140ms ease;
+}
+/* Held flat on hover: the press is the only movement this key makes. */
+.ds-v4 .btn.btn-key:hover:not(:disabled) {
+  transform: none;
+  background: var(--kp-accent-hover, #c64e26);
+}
+.ds-v4 .btn.btn-key:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 var(--kp-accent-shadow, #a03d17);
+}
+/* Nothing to press when there is nothing to start — the edge goes too,
+   so the key reads as flat against the page. */
+.ds-v4 .btn.btn-key:disabled { box-shadow: none; opacity: 0.55; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) {
+  .ds-v4 .btn.btn-key,
+  .ds-v4 .btn.btn-key:hover,
+  .ds-v4 .btn.btn-key:active { transform: none; box-shadow: 0 4px 0 var(--kp-accent-shadow, #a03d17); }
+}
+@media (max-width: 640px) {
+  .ds-v4 .btn.btn-key { min-width: 0; padding: 0 20px; font-size: 15px; }
+}
 .ds-v4 .btn-ghost,
 .ds-v4 .btn-ghost:hover { background: transparent; }
 .ds-v4 .btn-ghost { color: var(--ink-soft); }
@@ -178,9 +222,67 @@ body:has(.app-shell.ds-v4) { background: var(--kp-bg); }
 
 .app-shell.ds-v4 :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
+/* ---------------- page furniture ----------------
+   The three marks every v4 page's header and footer are built from.
+   Home and Schedule each grew their own copy first (.hp-* / .sch-*);
+   these are the shared ones, and a page that wants this look should
+   reach for them rather than start a fourth copy.
+
+   The footprint glyphs themselves are components, not CSS — see
+   GoosePrint in components/GooseMarks.jsx. */
+
+/* "TONIGHT'S RUN" — the mono line above a page's title. */
+.ds-v4 .ds-run-eyebrow {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 16px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* A crooked hand-drawn underline. The SVG stretches to the width of
+   whatever it is wrapped around (preserveAspectRatio="none"), so the
+   mark is only ever as long as the words. It sits below the text and
+   takes no space, which is why the wrapper is inline-block and sized to
+   fit: a wrapper that stretched would stretch the line past the last
+   word. */
+.ds-v4 .ds-title-mark { position: relative; display: inline-block; width: fit-content; }
+.ds-v4 .ds-title-mark > .ds-underline { color: var(--ds-honk); }
+.ds-v4 .ds-underline {
+  position: absolute;
+  left: -2px;
+  display: block;
+  width: calc(100% + 4px);
+  overflow: visible;
+  pointer-events: none;
+}
+.ds-v4 .ds-underline-title { bottom: -9px; height: 9px; }
+.ds-v4 .ds-underline-section { bottom: -6px; height: 7px; }
+
+/* A line of the goose's own commentary: one footprint, then mono copy.
+   The bird has walked past this line, which is why it is a print and
+   not a bullet. */
+.ds-v4 .ds-aside {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding-top: 6px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink-soft);
+}
+
+/* Two prints walking up to a hero CTA. Purely decorative, so it is the
+   first thing a narrow footer drops. */
+.ds-v4 .ds-tracks { position: relative; flex: none; width: 64px; height: 40px; opacity: 0.7; }
+
 /* ---------------- narrow ---------------- */
 @media (max-width: 720px) {
   .ds-v4 .topbar { padding: 16px 0 12px; }
+  .ds-v4 .ds-underline { display: none; }
+  .ds-v4 .ds-tracks { display: none; }
 }
 
 /* ---------------- reduced motion ----------------

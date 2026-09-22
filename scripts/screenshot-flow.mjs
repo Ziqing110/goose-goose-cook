@@ -126,16 +126,17 @@ for (let i = 0; i < count; i++) {
 }
 await shot("voice-binding-named");
 
-// Every cook picks a chef bird before they can record.
+// Every cook comes seeded with a bird, so this drives the chef drawer
+// rather than satisfying a gate: open it from the lane chip, take a
+// free bird, and let it fold itself away.
 for (let i = 0; i < count; i++) {
-  const pick = page.getByRole("button", { name: /Pick your chef/ }).first();
-  if (!(await pick.isVisible().catch(() => false))) break;
-  await pick.click();
-  await page.waitForTimeout(300);
-  await page.locator(".chef-tile:not([disabled])").first().click();
-  await page.waitForTimeout(150);
-  await click(/That.s me/);
-  await page.waitForTimeout(300);
+  const chip = page.locator(".cook-lane-chip").nth(i);
+  if (!(await chip.isVisible().catch(() => false))) break;
+  await chip.click();
+  await page.waitForTimeout(500);
+  if (i === 0) await shot("voice-binding-chef-drawer");
+  await page.locator(".cook-drawer .chef-tile:not([disabled])").nth(i + 2).click();
+  await page.waitForTimeout(700);
 }
 
 for (let i = 0; i < count; i++) {

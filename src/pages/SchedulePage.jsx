@@ -867,11 +867,11 @@ export default function SchedulePage() {
               </span>
             )}
             {run ? (
-              <button type="button" className="btn btn-primary btn-lg sch-btn-key" onClick={() => navigate("/session/live-cook")}>
+              <button type="button" className="btn btn-primary btn-lg btn-key" onClick={() => navigate("/session/live-cook")}>
                 {runEnded ? "See the result" : "Back to the cook"} &rarr;
               </button>
             ) : (
-              <button type="button" className="btn btn-primary btn-lg sch-btn-key" disabled={!canStart} onClick={goLive}>
+              <button type="button" className="btn btn-primary btn-lg btn-key" disabled={!canStart} onClick={goLive}>
                 Start cooking &rarr;
               </button>
             )}
