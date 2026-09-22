@@ -27,6 +27,7 @@ function randomDistinct(items, count) {
 
 function withUnattendedStep(graph) {
   const preferred = graph.nodes.find((node) => node.label === "Blanch tofu") ||
+    graph.nodes.find((node) => /\b(heat|preheat|simmer|bake|roast)\b/i.test(node.label)) ||
     graph.nodes.find((node) => node.required_equipment?.includes("pot"));
   if (!preferred) return graph;
   return {
@@ -46,7 +47,13 @@ function withUnattendedStep(graph) {
   };
 }
 
-export async function seedSession(base, { randomizeCooks = false, ensureUnattended = false } = {}) {
+export async function seedSession(base, {
+  randomizeCooks = false,
+  ensureUnattended = false,
+  dishes = [],
+  cookNames = null,
+  avatarIds = null,
+} = {}) {
   const api = async (method, path, body) => {
     const res = await fetch(`${base}/api${path}`, {
       method,
@@ -65,12 +72,50 @@ export async function seedSession(base, { randomizeCooks = false, ensureUnattend
   const sessionId = crypto.randomUUID();
   await api("POST", "/sessions", { id: sessionId, kitchenProfileId: kitchen.id });
 
-  // No dishIdea: that is what sends the page down the template fallback.
-  const answers = { servings: "2", diet: "none", cooks: "2", skill: "regular", targetTime: "90" };
-  const templates = await api("GET", "/recipe-templates");
-  let graphs = matchTemplates(templates, answers).map((t) => buildNamespacedGraph(t, answers, crypto.randomUUID()));
-  if (!graphs.some((g) => /mapo/i.test(g.title))) {
-    throw new Error(`the seeded templates should include Mapo Tofu, got: ${graphs.map((g) => g.title).join(", ") || "none"}`);
+  const requestedDishes = dishes.map((dish) => dish.trim()).filter(Boolean);
+  const answers = {
+    servings: "2",
+    diet: "none",
+    cooks: "2",
+    skill: "regular",
+    targetTime: "90",
+    ...(requestedDishes.length ? { dishIdea: requestedDishes } : {}),
+  };
+  let graphs;
+  if (requestedDishes.length) {
+    const generated = await api("POST", "/recipes/generate", {
+      dishes: requestedDishes,
+      servings: 2,
+      diet: "none",
+      skill: "regular",
+      targetTime: 90,
+      cooks: 2,
+      kitchen: {
+        burners: kitchen.burners,
+        hasWok: kitchen.hasWok,
+        hasOven: kitchen.hasOven,
+        pots: kitchen.pots,
+        cuttingBoards: kitchen.cuttingBoards,
+      },
+    });
+    if (generated.missingDishes?.length || generated.templates.length !== requestedDishes.length) {
+      throw new Error(`could not seed every requested dish: ${generated.missingDishes?.join(", ") || `${generated.templates.length}/${requestedDishes.length} returned`}`);
+    }
+    const customMaterials = Object.fromEntries((generated.materials || []).map((material) => [
+      material.id,
+      { label: material.label, category: material.category, amount: material.amount, unit: material.unit },
+    ]));
+    graphs = generated.templates.map((template) => ({
+      ...buildNamespacedGraph(template, answers, crypto.randomUUID()),
+      customMaterials,
+    }));
+  } else {
+    // No dishIdea: that is what sends the page down the template fallback.
+    const templates = await api("GET", "/recipe-templates");
+    graphs = matchTemplates(templates, answers).map((t) => buildNamespacedGraph(t, answers, crypto.randomUUID()));
+    if (!graphs.some((g) => /mapo/i.test(g.title))) {
+      throw new Error(`the seeded templates should include Mapo Tofu, got: ${graphs.map((g) => g.title).join(", ") || "none"}`);
+    }
   }
   if (ensureUnattended) {
     graphs = graphs.map((graph, index) => index === 0 ? withUnattendedStep(graph) : graph);
@@ -98,8 +143,8 @@ export async function seedSession(base, { randomizeCooks = false, ensureUnattend
     await api("PATCH", `/sessions/${sessionId}/shared-steps/${step.id}`, { approved: cloneGraph(step.working) });
   }
 
-  const names = randomizeCooks ? randomDistinct(TEST_COOK_NAMES, 2) : ["Mia", "Leo"];
-  const avatars = randomizeCooks ? randomDistinct(CHEF_AVATARS, 2).map((avatar) => avatar.id) : ["spoon", "whisk"];
+  const names = cookNames || (randomizeCooks ? randomDistinct(TEST_COOK_NAMES, 2) : ["Mia", "Leo"]);
+  const avatars = avatarIds || (randomizeCooks ? randomDistinct(CHEF_AVATARS, 2).map((avatar) => avatar.id) : ["spoon", "whisk"]);
   await api("PATCH", `/sessions/${sessionId}`, {
     conversation: { complete: true, transcript: [], answers, understanding: {}, questionIndex: 5 },
     cooks: [

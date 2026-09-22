@@ -4,8 +4,11 @@
 import { seedSession } from "./seed-session.mjs";
 
 const BASE = process.env.BASE || "http://localhost:5173";
-const { sessionId } = await seedSession(BASE);
-console.log(`Seeded session ${sessionId} (Mapo Tofu + Chicken Noodle Soup, cooks Mia and Leo, all bound).`);
+const dishes = (process.env.DISHES || "").split("|").map((dish) => dish.trim()).filter(Boolean);
+const ensureUnattended = process.env.UNATTENDED === "1";
+const { sessionId } = await seedSession(BASE, { dishes, ensureUnattended });
+const menu = dishes.length ? dishes.join(" + ") : "Mapo Tofu + Chicken Noodle Soup";
+console.log(`Seeded session ${sessionId} (${menu}, cooks Mia and Leo, all bound${ensureUnattended ? ", unattended task included" : ""}).`);
 console.log("");
 console.log("Open any of these:");
 for (const [name, path] of [
