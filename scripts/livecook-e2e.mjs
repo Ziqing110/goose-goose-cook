@@ -254,6 +254,24 @@ await check("versus: Toque's line opens the drawer with the whole run, Escape cl
   assert.equal(await page.locator(".lc-drawer").count(), 0, "drawer closed");
 });
 
+await check("versus: typing in Toque's drawer keeps focus in the input across live rerenders", async () => {
+  await page.locator(".lc-toque-line").click();
+  const input = page.locator(".lc-say-input");
+  await input.waitFor({ state: "visible", timeout: 3000 });
+  await input.click();
+  await page.keyboard.type("focus stays in this field");
+  assert.equal(await input.inputValue(), "focus stays in this field", "all typed characters reach the input");
+  assert.equal(await input.evaluate((el) => el === document.activeElement), true, "typing leaves the input focused");
+
+  // Live Cook's clock rerenders the page once a second. The drawer must
+  // retain input focus through those updates too, not only input changes.
+  await page.waitForTimeout(1200);
+  assert.equal(await input.evaluate((el) => el === document.activeElement), true, "clock updates do not refocus Close");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator(".lc-drawer").count(), 0, "Escape still closes the drawer");
+});
+
 await check("versus: Done and Take it sit on one line with both secondary slots present", async () => {
   // Mia is free now and gets an "Up for grabs" suggestion; claim for Leo
   // so one card is On it and the other is a suggestion.

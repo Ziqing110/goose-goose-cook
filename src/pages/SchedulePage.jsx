@@ -6,7 +6,7 @@
 // two players and the kitchen; this page only renders it. Mode is
 // session state (persisted through the debounced sync); the run is
 // written straight through saveRunNow.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
@@ -200,6 +200,7 @@ export default function SchedulePage() {
   // 1× by default: "Fit" squeezes a 40-minute plan into bare slivers.
   const [zoom, setZoom] = useState(ZOOM_1X);
   const [selectedStepId, setSelectedStepId] = useState(null);
+  const closeSelectedStep = useCallback(() => setSelectedStepId(null), []);
   const [confirmAbandon, setConfirmAbandon] = useState(false);
   const [editingKitchen, setEditingKitchen] = useState(false);
   const [kitchenError, setKitchenError] = useState(null);
@@ -779,7 +780,7 @@ export default function SchedulePage() {
               selectedStepId={selectedStepId}
               onSelect={(id) => setSelectedStepId((cur) => (cur === id ? null : id))}
               selected={selected}
-              onClose={() => setSelectedStepId(null)}
+              onClose={closeSelectedStep}
               headerTiles={
                 <div className="sch-card-tiles">
                   <div className="sch-tile sch-roll">

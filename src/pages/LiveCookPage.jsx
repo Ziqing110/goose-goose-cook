@@ -24,7 +24,7 @@
 //
 // Sub-components live in this file rather than their own (same pattern
 // as Schedule) since none of them is used elsewhere.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { mergeRecipesForDisplay, formatDuration } from "../utils/graphLayout.js";
@@ -410,6 +410,7 @@ export default function LiveCookPage() {
   // Versus: Toque is one line under the board; the whole run reads
   // back in a drawer. Opens itself when the agent needs an answer.
   const [logOpen, setLogOpen] = useState(false);
+  const closeLog = useCallback(() => setLogOpen(false), []);
   // "Pass to X": the receiving card's goose takes the handoff (G11)
   // for a beat before settling in at the pot.
   const [handoff, setHandoff] = useState(null); // cookId
@@ -1340,9 +1341,9 @@ export default function LiveCookPage() {
             </div>
           </div>
 
-          <ToqueDrawer open={logOpen || Boolean(pending || pendingConfirm)} onClose={() => setLogOpen(false)}>
+          <ToqueDrawer open={logOpen || Boolean(pending || pendingConfirm)} onClose={closeLog}>
             <AgentPanel
-              onClose={() => setLogOpen(false)}
+              onClose={closeLog}
               cooks={cooks}
               transcript={run.transcript}
               speaker={speaker}
