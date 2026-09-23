@@ -11,6 +11,7 @@ import { UNCLAIMED_AVATAR } from "../utils/cooks.js";
 import VoiceInput from "../components/VoiceInput.jsx";
 import UnderstandingSidecar from "../components/UnderstandingSidecar.jsx";
 import { GooseProfile, GoosePrint } from "../components/GooseMarks.jsx";
+import gooseThinking from "../assets/chef-goose-thinking-wide.png";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 import "./ConversationPage.css";
 
@@ -372,20 +373,27 @@ export default function ConversationPage() {
   return (
     <section className="page conversation-page">
       <header className="convo-title-row">
-        <span className="ds-run-eyebrow">Tonight&rsquo;s run</span>
-        <span className="ds-title-mark convo-title-mark">
-          <h1>What are we cooking tonight?</h1>
-          <svg className="ds-underline ds-underline-title" viewBox="0 0 430 10" preserveAspectRatio="none" fill="none" aria-hidden="true">
-            <path d="M2 7c68-4 144 1 220-2 58-2.5 134 3 206 .5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
-          </svg>
-        </span>
-        <p className="convo-sub">
-          {total} questions &middot; answer out loud or type &middot; correct me in the notes
-        </p>
-        <span className="ds-aside">
-          <GoosePrint />
-          <span className="mono">Feed me answers. I&rsquo;ll spit out a graph.</span>
-        </span>
+        <div className="convo-title-copy">
+          <span className="ds-run-eyebrow">Tonight&rsquo;s run</span>
+          <span className="ds-title-mark convo-title-mark">
+            <h1>What are we cooking tonight?</h1>
+            <svg className="ds-underline ds-underline-title" viewBox="0 0 430 10" preserveAspectRatio="none" fill="none" aria-hidden="true">
+              <path d="M2 7c68-4 144 1 220-2 58-2.5 134 3 206 .5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+            </svg>
+          </span>
+          <p className="convo-sub">
+            {total} questions &middot; answer out loud or type &middot; correct me in the notes
+          </p>
+          <span className="ds-aside">
+            <GoosePrint />
+            <span className="mono">Feed me answers. I&rsquo;ll spit out a graph.</span>
+          </span>
+        </div>
+        {/* The goose is still thinking the dish up, which is exactly
+            what this page is for. Scenery only — no state rides on it. */}
+        <div className="convo-hero">
+          <img className="convo-hero-art" src={gooseThinking} alt="Chef Goose picturing tonight’s ingredients" />
+        </div>
       </header>
 
       {/* Transcript column (progress, panel, answer row) beside the

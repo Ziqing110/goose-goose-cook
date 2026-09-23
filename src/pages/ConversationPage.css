@@ -40,10 +40,19 @@
    (.ds-run-eyebrow / .ds-title-mark / .ds-aside). */
 .convo-title-row {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 24px;
   padding: 24px 0 22px;
 }
+.convo-title-copy { flex: 1 1 360px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+
+/* Scenery. It hangs a little below the row's baseline so the goose
+   stands on the line the aside sits on, and it is right-aligned inside
+   a frame wider than itself so it keeps that edge as the row reflows. */
+.convo-hero { flex: 0 1 580px; min-width: 300px; margin-bottom: -8px; }
+.convo-hero-art { display: block; width: 75%; height: auto; margin-left: auto; }
 /* The underline hangs 9px below the baseline and takes no space, so the
    title reserves it rather than letting the sub-line sit on top. */
 .convo-title-mark { align-self: flex-start; margin-bottom: 6px; }
@@ -263,6 +272,8 @@
 
 @media (max-width: 720px) {
   .convo-title-row { padding: 16px 0; }
+  /* Scenery is the first thing to go when the header runs out of room. */
+  .convo-hero { display: none; }
   .convo-panel { padding: 16px; }
   .chat-row { max-width: 88%; }
   .convo-done-actions { width: 100%; justify-content: flex-end; }
