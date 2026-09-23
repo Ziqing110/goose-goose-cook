@@ -75,6 +75,12 @@
      they never cover (or steal clicks from) the voice bar. */
   --voice-bar-height: 88px;
 
+  /* The floating goose parks in the bottom-right corner (see
+     GooseVoiceAgent.css). Page furniture that also wants that corner —
+     a sticky footer's right-aligned controls — keeps this much clear of
+     it. The goose is 160px wide with a 16px margin; the rest is air. */
+  --goose-agent-inset: 192px;
+
   /* One type system across every route. v4 pages used to switch from
      Figtree/IBM Plex Mono to Inter/JetBrains Mono halfway through the
      session, so shared chrome visibly changed between pages. */

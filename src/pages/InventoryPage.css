@@ -18,8 +18,9 @@
    themselves. */
 .page.inventory-page { gap: 0; }
 
-/* 32px between the sticky footer and the fixed VoiceBar. */
-.app-shell.ds-v4:has(.inventory-page) { padding-bottom: calc(var(--voice-bar-height) + 32px); }
+/* The VoiceBar used to be a fixed band at the bottom; the goose floats
+   instead, so the page ends where its content ends. */
+.app-shell.ds-v4:has(.inventory-page) { padding-bottom: 32px; }
 
 @keyframes ds-pop { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: none; } }
 @keyframes inv-roll { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
@@ -381,7 +382,7 @@
   top: 16px;
   display: flex;
   flex-direction: column;
-  max-height: calc(100dvh - var(--voice-bar-height) - 120px);
+  max-height: calc(100dvh - 120px);
 }
 .inv-rail-head { flex: none; display: flex; align-items: center; gap: 10px; padding: 18px 20px 12px; }
 .inv-rail-title {
@@ -440,6 +441,9 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px 16px;
+  /* The zoom controls sit at the right end of the last row on the page,
+     which is where the floating goose parks. Keep them clear of it. */
+  padding-right: var(--goose-agent-inset);
 }
 .inv-board-count { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; font-size: 15px; line-height: 22px; font-weight: 600; }
 .inv-board-pan { font-size: 13px; line-height: 18px; font-weight: 400; color: var(--ink-soft); }
@@ -512,11 +516,13 @@
 .inv-phase-key.is-plate .inv-phase-swatch { background: var(--phase-plate); }
 
 /* ---------------- footer band ----------------
-   Sticky above the fixed VoiceBar so the primary action is always
-   reachable while scrolling a long ingredient list. */
+   Sticky to the bottom of the viewport so the primary action is always
+   reachable while scrolling a long ingredient list. It used to stick
+   above the fixed VoiceBar; with the bar gone that left it hovering
+   over 88px of nothing. */
 .inv-footer {
   position: sticky;
-  bottom: var(--voice-bar-height);
+  bottom: 0;
   z-index: 5;
   display: flex;
   align-items: center;
@@ -524,7 +530,9 @@
   flex-wrap: wrap;
   gap: 12px 16px;
   margin-top: 20px;
-  padding: 16px 0;
+  /* Right padding keeps the actions out from under the floating goose,
+     which parks in this same corner. */
+  padding: 16px var(--goose-agent-inset) 16px 0;
   background: var(--bg);
   border-top: 1px solid var(--line);
 }

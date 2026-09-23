@@ -63,6 +63,19 @@ function setSpeaking(next) {
 
 export const isSpeaking = () => speaking;
 
+// Whether the agent is allowed to play audio at all. Lives here rather
+// than in React state because speak() is called from plain modules; the
+// VoiceBar mirrors the app-state toggle onto it.
+let voiceEnabled = true;
+
+/** Turn the agent's spoken voice on or off. Silences anything playing. */
+export function setVoiceEnabled(next) {
+  voiceEnabled = Boolean(next);
+  if (!voiceEnabled) stop();
+}
+
+export const isVoiceEnabled = () => voiceEnabled;
+
 /** Subscribe to speaking changes. Returns an unsubscribe function. */
 export function onSpeakingChange(fn) {
   listeners.add(fn);
@@ -134,6 +147,10 @@ export function stop() {
 export async function speak(text) {
   const line = text?.trim();
   if (!line) return;
+  // The goose's voice egg. Off means the agent still decides what it
+  // would say — the caller's logic is untouched — it just doesn't say
+  // it out loud, so the subtitle bubble still carries the line.
+  if (!voiceEnabled) return;
   stop();
   const myToken = token;
   setSpeaking(true);

@@ -16,7 +16,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { useStreamingTranscript } from "../hooks/useStreamingTranscript.js";
-import { agentWasSpeakingAt, preload, speak, stop as stopSpeaking } from "../voice/agentVoice.js";
+import {
+  agentWasSpeakingAt,
+  onSpeakingChange,
+  preload,
+  setVoiceEnabled,
+  speak,
+  stop as stopSpeaking,
+} from "../voice/agentVoice.js";
+import GooseVoiceAgent from "./GooseVoiceAgent.jsx";
+import { devGooseState } from "../dev/preview.js";
 import {
   matchConfirmation,
   matchesConfirmationPhrase,
@@ -34,12 +43,7 @@ import {
   voiceCommandsAreExclusive,
 } from "../utils/voicePageCommands.js";
 import { sessionStageStates } from "../utils/sessionSteps.js";
-import "./VoiceBar.css";
 
-// Four bars, lit proportionally to the current peak. The old markup
-// animated all four on a CSS loop whether or not anyone was speaking;
-// these respond to the actual signal.
-const METER_BARS = 4;
 
 // Long enough to read, short enough that the bar goes back to being a
 // hint rather than a log of what you just did.
@@ -114,7 +118,10 @@ const STREAM_CONFIG = {
 
 export default function VoiceBar() {
   const { state, dispatch } = useAppState();
-  const { muted, hint } = state.voice;
+  const { muted, hint, agentVoice, subtitles } = state.voice;
+  // The goose's speaking pose follows the TTS module, not the reducer:
+  // only agentVoice knows when audio actually starts and stops.
+  const [speaking, setSpeaking] = useState(false);
   const [error, setError] = useState(null);
   const [idled, setIdled] = useState(false);
   const [feedback, setFeedback] = useState(null);
@@ -157,6 +164,12 @@ export default function VoiceBar() {
     preload();
     return stopSpeaking;
   }, []);
+
+  useEffect(() => onSpeakingChange(setSpeaking), []);
+
+  // speak() is called from plain modules, so the egg's setting has to be
+  // pushed onto agentVoice rather than read from React state there.
+  useEffect(() => setVoiceEnabled(agentVoice), [agentVoice]);
 
   const run = useCallback(
     (action, path) => {
@@ -389,7 +402,7 @@ export default function VoiceBar() {
     [say, run, askToConfirm, clearPending],
   );
 
-  const { status, partial, level, updateConfig } = useStreamingTranscript({
+  const { status, partial, updateConfig } = useStreamingTranscript({
     enabled: !muted,
     config: STREAM_CONFIG,
     onTurn,
@@ -443,67 +456,60 @@ export default function VoiceBar() {
   // the pill, the label and the body copy can never disagree.
   const view = describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname });
 
-  // A peak of ~0.5 is already loud speech, so scale before splitting
-  // across bars — otherwise normal talking barely lifts the first one.
-  const litBars = Math.round(Math.min(1, level * 2.2) * METER_BARS);
-
-  const isLiveCook = pathname === "/session/live-cook";
+  const goose = describeGoose({ view, speaking, muted, status, partial, pending, feedback, error });
+  // ?goose=<state> pins a pose for design review (dev only).
+  const pinned = devGooseState();
+  const shown = pinned ? { ...GOOSE_PREVIEW[pinned], state: pinned } : goose;
 
   return (
-    <div
-      className={`voice-bar${isLiveCook ? " is-live-cook" : ""}${muted ? " is-muted" : ""}`}
-      role="status"
-      aria-label="Voice agent status"
-    >
-      <div className="voice-bar-inner">
-        <span className="voice-avatar" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
-            <path
-              d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"
-              stroke="currentColor"
-              strokeWidth="1.6"
-            />
-            <path d="M6 11v1a6 6 0 0 0 12 0v-1M12 18v3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
-        </span>
-
-        <div className="voice-transcript">
-          <span className="voice-transcript-label mono">{view.label}</span>
-          <span className={`voice-transcript-text${view.isPartial ? " is-partial" : ""}`}>
-            {view.line}
-          </span>
-          {view.sub && <span className="voice-transcript-sub">{view.sub}</span>}
-        </div>
-
-        <div className="voice-meter" aria-hidden="true">
-          {Array.from({ length: METER_BARS }, (_, i) => (
-            <span key={i} className={`meter-bar${i < litBars ? " is-lit" : ""}`} />
-          ))}
-        </div>
-
-        <span className={`voice-status-pill ${view.pillClass}`}>{view.pill}</span>
-
-        <button
-          type="button"
-          className="voice-mute-btn"
-          onClick={toggleMuted}
-          // Closing waits for the server's Termination so the last
-          // transcript isn't discarded; clicking again mid-close would
-          // race that.
-          disabled={status === "closing"}
-          title={muted ? "Unmute" : "Mute"}
-        >
-          {/* Only shown when Live cook folds the muted bar into a round
-              button (see VoiceBar.css); the label stays for AT. */}
-          <svg className="voice-mute-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
-            <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" stroke="currentColor" strokeWidth="1.6" />
-            <path d="M6 11v1a6 6 0 0 0 12 0v-1M12 18v3M4 4l16 16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
-          <span className="voice-mute-label">{muted ? "Unmute" : "Mute"}</span>
-        </button>
-      </div>
-    </div>
+    <GooseVoiceAgent
+      state={shown.state}
+      tag={shown.tag}
+      line={shown.line}
+      partial={shown.partial}
+      listening={!muted && !error}
+      micDisabled={status === "closing"}
+      micLabel={muted ? "Start listening" : "Mute listening"}
+      voiceOn={agentVoice}
+      subtitlesOn={subtitles}
+      onToggleMic={toggleMuted}
+      onToggleVoice={() => dispatch({ type: "voice/setAgentVoice", payload: { on: !agentVoice } })}
+      onToggleSubtitles={() => dispatch({ type: "voice/setSubtitles", payload: { on: !subtitles } })}
+    />
   );
+}
+
+// Sample copy for ?goose=<state>, taken from the design's state sheet.
+const GOOSE_PREVIEW = {
+  idle: { tag: "Mic off", line: "Hover me and tap the mic to talk.", partial: false },
+  listening: { tag: "Listening", line: "Answer out loud. Servings is next.", partial: false },
+  thinking: { tag: "Thinking", line: "four of us, maybe five if Sam…", partial: true },
+  speaking: { tag: "Speaking", line: "Five it is. I’ll plan for leftovers.", partial: false },
+  warning: { tag: "Mic error", line: "I lost the microphone. Tap the mic to try again.", partial: false },
+};
+
+/**
+ * Which of the five poses the goose is in, and what it is saying.
+ *
+ * Order matters and follows the design's signal column: a broken mic
+ * outranks everything, then the agent's own voice, then what it is
+ * hearing, then the resting states. `view` has already collapsed the
+ * connection into copy, so this only decides the pose and reuses it.
+ */
+function describeGoose({ view, speaking, muted, status, partial, pending, feedback, error }) {
+  if (error) return { state: "warning", tag: "Mic error", line: error, partial: false };
+  // `feedback` is the line the agent just said, `pending` the question
+  // it just asked — either way, that is what is coming out of its beak.
+  if (speaking) return { state: "speaking", tag: "Speaking", line: pending || feedback || view.line, partial: false };
+  if (muted) return { state: "idle", tag: "Mic off", line: "Hover me and tap the mic to talk.", partial: false };
+  if (status === "connecting" || status === "closing") {
+    return { state: "thinking", tag: status === "closing" ? "Finishing" : "Connecting", line: view.line, partial: false };
+  }
+  // A pending question and a live partial are both "still resolving":
+  // the turn has not landed yet, so the words can still change.
+  if (pending) return { state: "thinking", tag: "Confirm", line: pending, partial: false };
+  if (partial) return { state: "thinking", tag: "Thinking", line: partial, partial: true };
+  return { state: "listening", tag: "Listening", line: view.line, partial: false };
 }
 
 /** Collapse mute + connection status + error into one view model. */
