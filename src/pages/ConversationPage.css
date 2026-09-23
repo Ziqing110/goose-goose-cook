@@ -40,10 +40,21 @@
    (.ds-run-eyebrow / .ds-title-mark / .ds-aside). */
 .convo-title-row {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 24px 0 22px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 32px;
+  padding: 26px 0 22px;
 }
+.convo-title-copy { flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 6px;  padding-bottom: 10px;}
+/* The scenery frame is .ds-scene (design-v4.css), widened here. This
+   page's art is a thought-cloud with the goose off to one side, so it
+   carries far more empty sky than the cooks page's choir does and reads
+   smaller at the same width. The frame grows rather than the art's
+   percentage, so the bird keeps the same margin of white to its right
+   that .ds-scene gives every page. */
+.conversation-page .ds-scene { flex: 0 1 auto; min-width: 0; padding-right: 40px; }
+.conversation-page .ds-scene-art { width: 400px; max-width: 100%; }
 /* The underline hangs 9px below the baseline and takes no space, so the
    title reserves it rather than letting the sub-line sit on top. */
 .convo-title-mark { align-self: flex-start; margin-bottom: 6px; }
@@ -190,14 +201,22 @@
 .chat-cook .chat-bubble { background: var(--accent-soft); }
 
 /* ---------------- the goose's bubbles ----------------
-   Mono, ink-outlined, with the corner nearest the speaker pulled in
-   tight, and each one tilted a fraction of a degree (the angle is
-   authored per message in ConversationPage.jsx). */
+   Hand-lettered, ink-outlined, with the corner nearest the speaker
+   pulled in tight, and each one tilted a fraction of a degree (the
+   angle is authored per message in ConversationPage.jsx).
+
+   The bird writes in its own hand; the cook's replies opposite stay in
+   the app's sans, so you can tell who is talking without reading the
+   name above the bubble. Schoolbell runs small for its point size, so
+   17px here sits where the old 15px mono did — same optical size, not
+   a bigger bubble. Line-height stays at the sans's 22px: the face has
+   short ascenders and a taller leading would make the lines drift. */
 .chat-bubble-wrap { position: relative; }
 .chat-agent .chat-bubble {
   border: 2.5px solid var(--goose-ink, #1a1a1a);
   border-radius: 14px 14px 14px 3px;
-  font-family: var(--font-mono);
+  font-family: var(--font-hand);
+  font-size: 17px;
 }
 /* The one that asks you to check a reading gets a pill poking out of
    the corner. #b8461f, not the lighter bill orange — white text on

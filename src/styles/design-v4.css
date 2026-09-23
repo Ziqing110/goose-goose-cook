@@ -119,6 +119,10 @@
   --font-display: var(--kp-font);
   --font-body: var(--kp-font);
   --font-mono: var(--kp-mono);
+  /* Chef Goose's own handwriting. Only the goose writes in it — the
+     page's titles and copy stay in the sans, so the bird's voice is
+     distinguishable from the app's. Ships a single weight (400). */
+  --font-hand: "Schoolbell", ui-rounded, cursive;
   /* body resolved its own font/color from the root tokens; restate
      them here so descendants inherit the v4 values. */
   background: var(--bg);
@@ -278,11 +282,22 @@ body:has(.app-shell.ds-v4) { background: var(--kp-bg); }
    first thing a narrow footer drops. */
 .ds-v4 .ds-tracks { position: relative; flex: none; width: 64px; height: 40px; opacity: 0.7; }
 
+/* Page scenery: the goose art that sits opposite a page's title copy in
+   a .ds-title-row. The frame is wider than the art it holds, and the art
+   sits at the frame's leading edge rather than flush to the page gutter,
+   so the bird keeps a margin of white to stand in as the row reflows.
+   It hangs 8px below the row's baseline so the goose stands ON the line
+   the aside sits on instead of floating above it. */
+.ds-v4 .ds-scene { flex: 0 1 380px; min-width: 240px; margin-bottom: -8px; }
+.ds-v4 .ds-scene-art { display: block; width: 80%; height: auto; }
+
 /* ---------------- narrow ---------------- */
 @media (max-width: 720px) {
   .ds-v4 .topbar { padding: 16px 0 12px; }
   .ds-v4 .ds-underline { display: none; }
   .ds-v4 .ds-tracks { display: none; }
+  /* Scenery is the first thing to go when a header runs out of room. */
+  .ds-v4 .ds-scene { display: none; }
 }
 
 /* ---------------- reduced motion ----------------
