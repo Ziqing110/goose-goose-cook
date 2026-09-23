@@ -391,8 +391,8 @@ export default function ConversationPage() {
         </div>
         {/* The goose is still thinking the dish up, which is exactly
             what this page is for. Scenery only — no state rides on it. */}
-        <div className="convo-hero">
-          <img className="convo-hero-art" src={gooseThinking} alt="Chef Goose picturing tonight’s ingredients" />
+        <div className="ds-scene">
+          <img className="ds-scene-art" src={gooseThinking} alt="Chef Goose picturing tonight’s ingredients" />
         </div>
       </header>
 

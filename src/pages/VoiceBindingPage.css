@@ -38,13 +38,11 @@
 }
 .vb-title-copy { flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 
-/* The choir sits a little below the row's baseline so the goslings'
-   feet land on it rather than floating above it. */
-.vb-choir { flex: 0 1 380px; min-width: 240px; margin-bottom: -8px; }
-.vb-choir-art { display: block; width: 90%; height: auto; transition: width 240ms ease-out; }
-/* Someone is singing: the choir stands to full width and sways from
-   its feet. */
-.vb-choir-art.is-singing {
+/* The frame and the resting size come from .ds-scene (design-v4.css).
+   Only the singing is this page's: the choir stands to full width and
+   sways from its feet while a cook is reading. */
+.voice-binding-page .ds-scene-art { transition: width 240ms ease-out; }
+.voice-binding-page .ds-scene-art.is-singing {
   width: 100%;
   transform-origin: 50% 100%;
   animation: vb-choir 900ms ease-in-out infinite;
@@ -653,8 +651,6 @@
 }
 @media (max-width: 720px) {
   .vb-title-row { padding: 16px 0; }
-  /* Scenery is the first thing to go when the header runs out of room. */
-  .vb-choir { display: none; }
   .vb-panel { padding: 16px; }
   .vb-locked-rows { grid-template-columns: 1fr; }
   .cook-slot { min-height: 0; }

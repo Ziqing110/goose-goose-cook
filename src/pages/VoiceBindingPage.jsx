@@ -647,9 +647,9 @@ export default function VoiceBindingPage() {
         {/* The page's one piece of scenery: the choir stands up and
             sways while a cook is reading, and sits back down when the
             room goes quiet. */}
-        <div className="vb-choir">
+        <div className="ds-scene">
           <img
-            className={`vb-choir-art${recordingCookId ? " is-singing" : ""}`}
+            className={`ds-scene-art${recordingCookId ? " is-singing" : ""}`}
             src={gooseChoir}
             alt="Chef Goose leading a choir of goslings"
           />
