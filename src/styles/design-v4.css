@@ -119,12 +119,9 @@
   --font-display: var(--kp-font);
   --font-body: var(--kp-font);
   --font-mono: var(--kp-mono);
-  /* The page titles are hand-lettered — the same voice as the goose's
-     crooked underline and tilted stamps, which were already drawn by
-     hand while the words above them were not. Schoolbell ships one
-     weight (400); asking for 700 gets a synthesised bold that thickens
-     the strokes unevenly, so the title rule below sets 400 explicitly
-     rather than inheriting the 700 that tokens.css puts on every h1. */
+  /* Chef Goose's own handwriting. Only the goose writes in it — the
+     page's titles and copy stay in the sans, so the bird's voice is
+     distinguishable from the app's. Ships a single weight (400). */
   --font-hand: "Schoolbell", ui-rounded, cursive;
   /* body resolved its own font/color from the root tokens; restate
      them here so descendants inherit the v4 values. */
@@ -238,21 +235,10 @@ body:has(.app-shell.ds-v4) { background: var(--kp-bg); }
    The footprint glyphs themselves are components, not CSS — see
    GoosePrint in components/GooseMarks.jsx. */
 
-/* The hand-lettered page title, and the line above it. Sizes come from
-   the design's own Schoolbell entry: the face runs small for its point
-   size, so 36px here sits where 30px did in Inter. */
-.ds-v4 .page h1 {
-  font-family: var(--font-hand);
-  font-size: 36px;
-  line-height: 1.1;
-  font-weight: 400;
-  letter-spacing: 0;
-}
-
-/* "TONIGHT'S RUN" — the line above a page's title. */
+/* "TONIGHT'S RUN" — the mono line above a page's title. */
 .ds-v4 .ds-run-eyebrow {
   display: block;
-  font-family: var(--font-hand);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   line-height: 16px;
   letter-spacing: 0.12em;
