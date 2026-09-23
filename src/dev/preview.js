@@ -11,6 +11,22 @@
 //
 // Read once per render from the URL and ignored outside `npm run dev`, so it
 // cannot reach a production build. Nothing is written or generated.
+/**
+ * ?goose=<state> pins the voice agent in one of its five poses, so the
+ * states that need a live socket (listening, thinking, speaking) or a
+ * broken one (warning) can be looked at without either.
+ *
+ *   /session/conversation?goose=speaking
+ *
+ * Dev-only, same as devPreview above.
+ */
+const GOOSE_STATES = ["idle", "listening", "thinking", "speaking", "warning"];
+export function devGooseState() {
+  if (!import.meta.env.DEV) return null;
+  const value = new URLSearchParams(window.location.search).get("goose");
+  return GOOSE_STATES.includes(value) ? value : null;
+}
+
 export function devPreview() {
   if (!import.meta.env.DEV) return null;
   const value = new URLSearchParams(window.location.search).get("preview");

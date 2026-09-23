@@ -84,7 +84,10 @@ const initialState = {
   // that happens because someone loaded the page. It also means the
   // conversation page starts in typing mode, which is the honest default
   // while voice is opt-in.
-  voice: { muted: true, hint: null },
+  // `agentVoice` is the goose speaking out loud; `subtitles` is its
+  // speech bubble. Both default on — they are the agent being an agent —
+  // while `muted` (the mic) defaults off, because that one costs money.
+  voice: { muted: true, hint: null, agentVoice: true, subtitles: true },
 };
 
 function reducer(state, action) {
@@ -212,6 +215,10 @@ function reducer(state, action) {
       return { ...state, voice: { ...state.voice, muted: action.payload.muted } };
     case "voice/setHint":
       return { ...state, voice: { ...state.voice, hint: action.payload.hint } };
+    case "voice/setAgentVoice":
+      return { ...state, voice: { ...state.voice, agentVoice: action.payload.on } };
+    case "voice/setSubtitles":
+      return { ...state, voice: { ...state.voice, subtitles: action.payload.on } };
 
     default:
       return state;
