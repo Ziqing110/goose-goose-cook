@@ -212,8 +212,7 @@
 .cook-avatar-face.is-out-right { animation: vb-out-right 260ms ease-in both; }
 
 /* Badges ride on the wrap, outside the window that clips the faces. */
-.cook-avatar-badge,
-.cook-avatar-caret {
+.cook-avatar-badge {
   position: absolute;
   bottom: -2px;
   width: 30px;
@@ -226,7 +225,6 @@
   pointer-events: none;
 }
 .cook-avatar-badge { left: -2px; background: var(--success); color: #ffffff; animation: vb-avatar-pop 420ms cubic-bezier(0.3, 1.25, 0.6, 1) both; }
-.cook-avatar-caret { right: -2px; background: var(--ink); color: var(--surface); }
 
 .cook-on-air {
   position: absolute;

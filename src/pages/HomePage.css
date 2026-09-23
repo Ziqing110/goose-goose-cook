@@ -88,11 +88,6 @@ body:has(.home-v4) { background: var(--kp-bg); }
    linework, all designed against a light ground. Give it that ground
    in dark mode too so the goose reads properly instead of punching a
    white hole in the header. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .hp-band { background: #ffffff; }
-}
-:root[data-theme="dark"] .hp-band { background: #ffffff; }
-
 /* ---------------- buttons ---------------- */
 
 .hp-btn {
@@ -326,29 +321,6 @@ body:has(.home-v4) { background: var(--kp-bg); }
   --kp-footprint-ink-2: #b08a63;
   --hp-best-tint: #fffdf7;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --kp-feather-fill: #3a3226;
-    --kp-feather-vane: #453a2a;
-    --kp-feather-ink: #a89778;
-    --kp-footprint-fill: #3a2f22;
-    --kp-footprint-ink: #6a5945;
-    --kp-footprint-fill-2: #4a3826;
-    --kp-footprint-ink-2: #8a6f4d;
-    --hp-best-tint: #24211a;
-  }
-}
-:root[data-theme="dark"] {
-  --kp-feather-fill: #3a3226;
-  --kp-feather-vane: #453a2a;
-  --kp-feather-ink: #a89778;
-  --kp-footprint-fill: #3a2f22;
-  --kp-footprint-ink: #6a5945;
-  --kp-footprint-fill-2: #4a3826;
-  --kp-footprint-ink-2: #8a6f4d;
-  --hp-best-tint: #24211a;
-}
-
 /* Crooked hand-drawn underline under key titles. The SVG stretches to
    the text width, so the pen mark tracks the word without the parent
    having to know the character count. */
@@ -438,10 +410,6 @@ body:has(.home-v4) { background: var(--kp-bg); }
   font-family: var(--kp-mono);
   font-size: 12px;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .hp-kbd { background: var(--kp-bg-tertiary); box-shadow: 0 1px 0 #0000004d; }
-}
-:root[data-theme="dark"] .hp-kbd { background: var(--kp-bg-tertiary); box-shadow: 0 1px 0 #0000004d; }
 @media (prefers-reduced-motion: reduce) {
   .hp-btn-start-key,
   .hp-btn-start-key:hover,

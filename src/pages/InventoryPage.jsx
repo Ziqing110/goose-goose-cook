@@ -794,19 +794,20 @@ export default function InventoryPage() {
       .filter(Boolean)
       .map((d) => d.charAt(0).toUpperCase() + d.slice(1));
     const servings = session.conversation?.answers?.servings;
-    const details = [
-      dishes.length ? dishes.join(" + ") : "Your dishes",
-      servings ? <><Mono>{servings}</Mono> servings</> : null,
-      kitchenProfile?.name || "Your kitchen",
-    ].filter(Boolean);
+    // The ticket reads as an order the chef is working from, so the
+    // session's answers become its line items rather than a caption.
+    const order = dishes.length ? dishes.map((name) => ({ qty: 1, name })) : [{ qty: 1, name: "Your dishes" }];
     return (
       <ChefWorkingScreen
         done={shownBeat === "done"}
-        title={<>Good food takes<br />a little thought.</>}
-        desc={<>Your chef is writing every step for tonight&rsquo;s dishes,<br className="inv-long" /> and checking them over before you see them.</>}
+        title={<>Good food takes a little thought.</>}
+        eyebrow="A menu worth waiting for"
+        doneEyebrow="Recipes are ready"
         live={generating ? "Writing your recipes" : "Setting your dishes"}
         doneLive="Recipes are written"
-        details={details}
+        ticket={servings ? `Ticket #${session.id?.slice(-4) || "0923"} · table for ${servings}` : `Ticket #${session.id?.slice(-4) || "0923"}`}
+        order={order}
+        orderNote={kitchenProfile?.name || "Your kitchen"}
         quote="You bring the appetite. I'll bring the plan."
       />
     );

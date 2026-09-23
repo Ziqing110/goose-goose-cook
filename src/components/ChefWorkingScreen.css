@@ -1,9 +1,17 @@
 /* ---------------------------------------------------------------
-   ChefWorkingScreen — the full-page "chef at work" beat, on the v4
-   tokens. The art sits on a sunken halo, then the display line and
-   description, the accent live line led by stepping footprints, a quiet
-   details chip, and a footer quote. Type stays on the system's
-   scale (h1 30/36, body 15/22, meta 13/18, nothing under 13).
+   ChefWorkingScreen — the full-page "chef at work" beat.
+
+   Layout is "4a Goose on the receipt" (Inventory Loading v2): one
+   centred column, headline over eyebrow, then the goose standing on a
+   printed order ticket. The ticket is drawn as paper — hard 2px rule,
+   offset hard shadow, dashed tear lines, all mono — against the flat
+   page around it, so the one object on screen reads as a thing the
+   chef printed rather than a panel the app drew.
+
+   Colours come from the generic tokens, which the ds-v4 routes this
+   screen runs on re-point at the --kp-* palette the design is drawn
+   in (accent #d4552a, ink #1a1a1a, done green #2e7d32). --kp-paper is
+   the one value with no generic name, so it falls back to --surface.
 
    The sprite sheet is four 543×724 frames side by side: read → sort →
    shuffle → thumbs up. While working, steps(3) walks the first three
@@ -16,24 +24,20 @@
 @keyframes chef-working-pop { 0% { opacity: 0; transform: scale(0.82); } 60% { transform: scale(1.06); } 100% { opacity: 1; transform: scale(1); } }
 @keyframes chef-working-shuffle { from { background-position-x: 0; } to { background-position-x: 100%; } }
 @keyframes chef-working-out { from { opacity: 1; } to { opacity: 0; } }
-/* One print lands after another, holds, then fades back — a walk on a
-   loop. Opacity only: each print's rotation lives on its own transform. */
-@keyframes chef-working-step { 0% { opacity: 0.2; } 12%, 55% { opacity: 1; } 78%, 100% { opacity: 0.2; } }
-@keyframes chef-working-check { from { stroke-dashoffset: 16; } to { stroke-dashoffset: 0; } }
+/* The three dots of the "..." mark breathe in turn, so the line being
+   worked is the only moving thing on the ticket. */
+@keyframes chef-working-dots { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
 
 .chef-working {
-  --chef-goose-w: clamp(150px, 26vw, 196px);
+  --chef-goose-w: 112px;
+  --chef-ticket-w: 480px;
+  --chef-paper: var(--kp-paper, var(--surface));
   align-items: center;
-  gap: 24px;
-  /* Fill the viewport below the topbar so the footer quote sits at the
-     bottom, but never past it: a loading beat shouldn't scroll. */
+  /* Fill the viewport below the topbar so the ticket centres in what's
+     left, but never past it: a loading beat shouldn't scroll. */
   min-height: calc(100dvh - var(--voice-bar-height) - 176px);
 }
 .chef-working.is-done { animation: chef-working-out 320ms 380ms ease-in both; }
-/* The stage takes the free height and centres in it, so the goose sits
-   in the middle of the page instead of hugging the topbar. Spacing is
-   grouped: tight inside a group (title + desc), wide between groups
-   (art / copy / status). */
 .chef-working-stage {
   flex: 1;
   display: flex;
@@ -45,31 +49,29 @@
   animation: chef-working-rise 240ms ease-out both;
 }
 
-/* art: a round halo centred behind the sprite, so it reads as a plate
-   the goose stands on rather than a stray blob */
-.chef-working-art {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: calc(var(--chef-goose-w) * 724 / 543);
-  height: calc(var(--chef-goose-w) * 724 / 543);
-  margin-bottom: 28px;
+/* headline group: title first, eyebrow under it as the caption */
+.chef-working-copy { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.chef-working-title { margin: 0; font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.01em; }
+.chef-working-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
 }
-.chef-working-halo {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  /* as wide as the sprite is tall, so the plate never spills past the
-     art box and crowds the title */
-  width: calc(var(--chef-goose-w) * 724 / 543);
-  height: calc(var(--chef-goose-w) * 724 / 543);
-  border-radius: 50%;
-  background: var(--surface-sunken);
-  transform: translate(-50%, -50%);
-}
+.chef-working-eyebrow-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.chef-working.is-done .chef-working-eyebrow-dot { background: var(--success); }
+
+/* The goose overlaps the ticket's top edge — it stands on the paper,
+   so it sits above it in the stack and eats its own bottom margin. */
 .chef-working-goose {
   position: relative;
-  z-index: 1;
+  z-index: 2;
+  margin-top: 4px;
+  margin-bottom: -19px;
   width: var(--chef-goose-w);
   height: calc(var(--chef-goose-w) * 724 / 543);
   background-repeat: no-repeat;
@@ -79,65 +81,90 @@
 }
 .chef-working.is-done .chef-working-goose { animation: chef-working-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; background-position-x: 100%; }
 
-.chef-working-copy { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 28px; }
-.chef-working-title { margin: 0; font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.01em; }
-.chef-working-desc { margin: 0; max-width: 420px; font-size: 15px; line-height: 22px; color: var(--ink-soft); }
-.chef-working-live { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 500; color: var(--accent); }
-/* Fixed width so the label doesn't shift when the prints become a check. */
-.chef-working-loader { display: flex; align-items: center; justify-content: center; gap: 5px; width: 44px; height: 18px; }
-.chef-working-loader svg:not(.chef-working-check) { opacity: 0.2; animation: chef-working-step 1560ms ease-out infinite; }
-.chef-working-check { width: 16px; height: 16px; fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 16; animation: chef-working-check 280ms ease-out both; }
-/* What's being cooked: context, not copy — a quiet chip under the status. */
-.chef-working-details {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 14px;
-  padding: 5px 14px;
-  border-radius: 999px;
-  background: var(--surface-sunken);
-  font-size: 13px;
-  line-height: 18px;
-  color: var(--ink-faint);
-}
-.chef-working-details > span { display: inline-flex; gap: 8px; }
-.chef-working-details i { font-style: normal; }
-
-/* Footer quote: flavour, so no rule above it and the quietest ink on
-   the page. */
-.chef-working-foot {
+/* the printed ticket */
+.chef-working-ticket {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  text-align: center;
+  gap: 12px;
+  width: var(--chef-ticket-w);
+  max-width: 100%;
+  padding: 30px 28px 20px;
+  background: var(--chef-paper);
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  box-shadow: 4px 5px 0 var(--ink);
+  font-family: var(--font-mono);
+  text-align: left;
 }
-.chef-working-quote { font-size: 14px; line-height: 20px; font-style: italic; color: var(--ink-soft); }
-.chef-working-attrib { font-size: 13px; line-height: 18px; color: var(--ink-faint); }
+.chef-working-ticket-head { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; }
+.chef-working-ticket-brand { font-size: 15px; font-weight: 600; letter-spacing: 0.16em; }
+.chef-working-ticket-meta { font-size: 13px; color: var(--ink-soft); }
 
-/* Short laptop viewports: a smaller goose so the quote still clears the
-   VoiceBar without a scroll. */
-@media (max-height: 800px) {
-  .chef-working { --chef-goose-w: 132px; gap: 16px; }
-  .chef-working-title { font-size: 24px; line-height: 30px; }
+/* Tear lines, not borders: the ticket is one piece of paper with
+   perforations, so every divider is the same dashed rule. */
+.chef-working-rule { border-top: 2px dashed var(--ink); }
+
+.chef-working-order { display: flex; flex-direction: column; gap: 2px; font-size: 16px; line-height: 24px; }
+.chef-working-order-line { display: flex; gap: 14px; }
+.chef-working-qty { color: var(--accent); font-weight: 600; }
+.chef-working-order-note { font-size: 14px; color: var(--ink-soft); }
+
+.chef-working-tasks { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 14px; line-height: 20px; }
+.chef-working-task { display: flex; align-items: baseline; gap: 8px; }
+.chef-working-task-line { flex: none; }
+/* The leader runs from the line out to the mark, so the eye tracks
+   across the gap the way it does on a printed bill. */
+.chef-working-leader { flex: 1; min-width: 12px; border-bottom: 2px dotted var(--line-strong); transform: translateY(-4px); }
+.chef-working-mark { flex: none; font-weight: 600; }
+.chef-working-task.is-done .chef-working-mark { color: var(--success); }
+.chef-working-task.is-now .chef-working-task-line { font-weight: 600; }
+.chef-working-task.is-now .chef-working-mark { color: var(--accent); animation: chef-working-dots 1200ms ease-in-out infinite; }
+.chef-working-task.is-next { color: var(--ink-faint); }
+.chef-working-task.is-next .chef-working-mark { color: var(--ink-faint); }
+
+/* Progress as printed blocks rather than a drawn bar — the ticket has
+   no other filled shape on it, and a rounded bar would read as app
+   chrome sitting on the paper. */
+.chef-working-bar-group { display: flex; flex-direction: column; gap: 4px; }
+.chef-working-blocks {
+  font-size: 20px;
+  line-height: 24px;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  color: var(--accent);
 }
-/* Shorter still (1280×720): the quote is flavour, so it goes first. */
-@media (max-height: 760px) {
+.chef-working-bar-row { display: flex; justify-content: space-between; font-size: 14px; }
+.chef-working-pct { font-weight: 600; color: var(--accent); }
+.chef-working-eta { color: var(--ink-soft); }
+.chef-working.is-done .chef-working-blocks,
+.chef-working.is-done .chef-working-pct { color: var(--success); }
+
+.chef-working-foot { display: flex; flex-direction: column; gap: 12px; }
+.chef-working-quote { text-align: center; font-size: 13px; color: var(--ink-soft); }
+
+/* Short laptop viewports: a smaller goose and a tighter ticket so the
+   whole thing still clears the VoiceBar without a scroll. */
+@media (max-height: 960px) {
+  .chef-working { --chef-goose-w: 92px; }
+  .chef-working-title { font-size: 26px; line-height: 32px; }
+  .chef-working-ticket { gap: 10px; padding: 24px 24px 16px; }
+}
+@media (max-height: 820px) {
   .chef-working { min-height: 0; }
+  /* The footer line is flavour, so it's the first thing to go. */
   .chef-working-foot { display: none; }
 }
-/* Narrow: the topbar wraps to three rows, so the goose gives back the
-   height it takes. */
 @media (max-width: 720px) {
-  .chef-working { --chef-goose-w: 132px; gap: 16px; min-height: calc(100dvh - var(--voice-bar-height) - 220px); }
+  .chef-working { --chef-goose-w: 92px; --chef-ticket-w: 100%; min-height: calc(100dvh - var(--voice-bar-height) - 220px); }
   .chef-working-title { font-size: 24px; line-height: 30px; }
+  .chef-working-ticket { padding: 24px 20px 16px; }
+  .chef-working-blocks { font-size: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chef-working-loader svg, .chef-working-goose { animation: none; }
-  .chef-working-loader svg:not(.chef-working-check) { opacity: 1; }
-  .chef-working-stage { animation: none; }
+  .chef-working-goose, .chef-working-stage { animation: none; }
+  .chef-working-task.is-now .chef-working-mark { animation: none; }
   .chef-working.is-done { animation-delay: 0ms !important; }
   .chef-working.is-done .chef-working-goose { animation: none; }
 }
