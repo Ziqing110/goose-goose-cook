@@ -490,8 +490,15 @@ export default function VoiceBar() {
           // transcript isn't discarded; clicking again mid-close would
           // race that.
           disabled={status === "closing"}
+          title={muted ? "Unmute" : "Mute"}
         >
-          {muted ? "Unmute" : "Mute"}
+          {/* Only shown when Live cook folds the muted bar into a round
+              button (see VoiceBar.css); the label stays for AT. */}
+          <svg className="voice-mute-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
+            <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" stroke="currentColor" strokeWidth="1.6" />
+            <path d="M6 11v1a6 6 0 0 0 12 0v-1M12 18v3M4 4l16 16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+          <span className="voice-mute-label">{muted ? "Unmute" : "Mute"}</span>
         </button>
       </div>
     </div>

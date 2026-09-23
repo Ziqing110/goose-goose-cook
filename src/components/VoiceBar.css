@@ -152,15 +152,18 @@
    A muted microphone has no transcript or level to monitor, so keeping
    the full fixed bar only hides the live work. Collapse it to the one
    available action at every viewport size; unmuting restores the full
-   voice surface. */
+   voice surface. It is a round mic-off button, not an "Unmute" pill:
+   at 1280 the page gutter is 70px and a 112px pill sat on Toque's line.
+   52px at right 12 stays in the gutter; the word stays for AT. */
 .voice-bar.is-live-cook.is-muted {
   left: auto;
-  right: 16px;
+  right: 12px;
   bottom: 12px;
   z-index: 51;
-  width: auto;
+  width: 52px;
   height: 52px;
   padding: 4px;
+  justify-content: center;
   border-radius: var(--radius-pill);
 }
 .voice-bar.is-live-cook.is-muted .voice-avatar,
@@ -170,9 +173,24 @@
   display: none;
 }
 .voice-bar.is-live-cook.is-muted .voice-mute-btn {
+  width: 44px;
   height: 44px;
-  padding-inline: 18px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
   background: color-mix(in srgb, var(--vb-fg) 8%, transparent);
+}
+.voice-mute-icon { display: none; }
+.voice-bar.is-live-cook.is-muted .voice-mute-icon { display: block; }
+.voice-bar.is-live-cook.is-muted .voice-mute-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 @media (max-width: 720px) {

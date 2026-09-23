@@ -53,6 +53,7 @@ export async function seedSession(base, {
   dishes = [],
   cookNames = null,
   avatarIds = null,
+  useFallbackRecipes = false,
 } = {}) {
   const api = async (method, path, body) => {
     const res = await fetch(`${base}/api${path}`, {
@@ -82,7 +83,7 @@ export async function seedSession(base, {
     ...(requestedDishes.length ? { dishIdea: requestedDishes } : {}),
   };
   let graphs;
-  if (requestedDishes.length) {
+  if (requestedDishes.length && !useFallbackRecipes) {
     const generated = await api("POST", "/recipes/generate", {
       dishes: requestedDishes,
       servings: 2,
@@ -112,9 +113,23 @@ export async function seedSession(base, {
   } else {
     // No dishIdea: that is what sends the page down the template fallback.
     const templates = await api("GET", "/recipe-templates");
-    graphs = matchTemplates(templates, answers).map((t) => buildNamespacedGraph(t, answers, crypto.randomUUID()));
+    const fallbackAnswers = { ...answers };
+    delete fallbackAnswers.dishIdea;
+    graphs = matchTemplates(templates, fallbackAnswers).map((t) => buildNamespacedGraph(t, answers, crypto.randomUUID()));
     if (!graphs.some((g) => /mapo/i.test(g.title))) {
       throw new Error(`the seeded templates should include Mapo Tofu, got: ${graphs.map((g) => g.title).join(", ") || "none"}`);
+    }
+    // Frontend-only fixtures can reuse the deterministic built-in task graphs
+    // under caller-supplied dish names. This keeps visual QA one URL away and
+    // avoids turning a dev shortcut into a live model/network dependency.
+    if (requestedDishes.length) {
+      if (graphs.length < requestedDishes.length) {
+        throw new Error(`not enough fallback recipes for ${requestedDishes.length} named dishes`);
+      }
+      graphs = graphs.slice(0, requestedDishes.length).map((graph, index) => ({
+        ...graph,
+        title: requestedDishes[index],
+      }));
     }
   }
   if (ensureUnattended) {

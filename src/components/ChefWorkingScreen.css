@@ -1,9 +1,9 @@
 /* ---------------------------------------------------------------
    ChefWorkingScreen — the full-page "chef at work" beat, on the v4
-   tokens. The art sits on a sunken halo with a tilted tag, then the
-   display line, a one-line description, the accent live line with a
-   three-bar loader, and a footer quote. Type stays on the system's
-   scale (h1 30/36, eyebrow 13 uppercase, meta 13/18, nothing under 13).
+   tokens. The art sits on a sunken halo, then the display line and
+   description, the accent live line with typing dots, a quiet
+   details chip, and a footer quote. Type stays on the system's
+   scale (h1 30/36, body 15/22, meta 13/18, nothing under 13).
 
    The sprite sheet is four 543×724 frames side by side: read → sort →
    shuffle → thumbs up. While working, steps(3) walks the first three
@@ -16,50 +16,56 @@
 @keyframes chef-working-pop { 0% { opacity: 0; transform: scale(0.82); } 60% { transform: scale(1.06); } 100% { opacity: 1; transform: scale(1); } }
 @keyframes chef-working-shuffle { from { background-position-x: 0; } to { background-position-x: 100%; } }
 @keyframes chef-working-out { from { opacity: 1; } to { opacity: 0; } }
-@keyframes chef-working-bar { 0%, 100% { transform: scaleY(0.45); opacity: 0.5; } 50% { transform: scaleY(1); opacity: 1; } }
+@keyframes chef-working-dot { 0%, 60%, 100% { transform: none; opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }
+/* One print lands after another, holds, then fades — a walk on a loop. */
+@keyframes chef-working-step { 0% { opacity: 0; transform: scale(0.7); } 10% { opacity: 1; transform: none; } 62% { opacity: 1; } 80%, 100% { opacity: 0; } }
+@keyframes chef-working-check { from { stroke-dashoffset: 16; } to { stroke-dashoffset: 0; } }
 
 .chef-working {
   --chef-goose-w: clamp(150px, 26vw, 196px);
-  justify-content: space-between;
   align-items: center;
   gap: 24px;
   /* Fill the viewport below the topbar so the footer quote sits at the
      bottom, but never past it: a loading beat shouldn't scroll. */
   min-height: calc(100dvh - var(--voice-bar-height) - 176px);
-  padding-top: 8px;
 }
 .chef-working.is-done { animation: chef-working-out 320ms 380ms ease-in both; }
-.chef-working-stage { display: flex; flex-direction: column; align-items: center; text-align: center; animation: chef-working-rise 240ms ease-out both; }
-
-.chef-working-eyebrow {
+/* The stage takes the free height and centres in it, so the goose sits
+   in the middle of the page instead of hugging the topbar. Spacing is
+   grouped: tight inside a group (title + desc), wide between groups
+   (art / copy / status). */
+.chef-working-stage {
+  flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--ink-soft);
+  justify-content: center;
+  padding-top: 16px;
+  text-align: center;
+  animation: chef-working-rise 240ms ease-out both;
 }
-.chef-working-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
-.chef-working-dot.is-accent { background: var(--accent); }
 
-/* art: halo behind, sprite in front, tag overhanging the bottom edge */
+/* art: a round halo centred behind the sprite, so it reads as a plate
+   the goose stands on rather than a stray blob */
 .chef-working-art {
   position: relative;
   display: grid;
   place-items: center;
-  width: calc(var(--chef-goose-w) + 90px);
-  height: calc(var(--chef-goose-w) * 724 / 543 + 20px);
-  margin: 8px 0 8px;
+  width: calc(var(--chef-goose-w) * 724 / 543);
+  height: calc(var(--chef-goose-w) * 724 / 543);
+  margin-bottom: 28px;
 }
 .chef-working-halo {
   position: absolute;
-  bottom: 14px;
-  width: calc(var(--chef-goose-w) + 44px);
-  height: calc(var(--chef-goose-w) + 44px);
+  top: 50%;
+  left: 50%;
+  /* as wide as the sprite is tall, so the plate never spills past the
+     art box and crowds the title */
+  width: calc(var(--chef-goose-w) * 724 / 543);
+  height: calc(var(--chef-goose-w) * 724 / 543);
   border-radius: 50%;
   background: var(--surface-sunken);
+  transform: translate(-50%, -50%);
 }
 .chef-working-goose {
   position: relative;
@@ -71,52 +77,65 @@
   background-position: 0 0;
   animation: chef-working-shuffle 1650ms steps(3) infinite;
 }
-.chef-working.is-done .chef-working-goose { animation: chef-working-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; background-position-x: 100%; }
-.chef-working-tag {
+/* The trail walks in from the lower left and ends at the plate's edge,
+   in the art box's empty corner outside the circle. */
+.chef-working-trail {
   position: absolute;
-  z-index: 2;
   bottom: 0;
-  left: 50%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  color: var(--success);
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  transform: translateX(-50%) rotate(-4deg);
+  right: calc(100% - 40px);
+  width: 124px;
+  height: 52px;
+  pointer-events: none;
 }
+.chef-working-trail > span {
+  position: absolute;
+  display: block;
+  line-height: 0;
+  opacity: 0;
+  animation: chef-working-step 2800ms ease-out infinite;
+}
+.chef-working-trail svg { display: block; }
+.chef-working.is-done .chef-working-trail > span { animation: none; opacity: 1; }
+.chef-working.is-done .chef-working-goose { animation: chef-working-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; background-position-x: 100%; }
 
-.chef-working-title { margin: 12px 0 10px; font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.01em; }
-.chef-working-desc { margin: 0 0 16px; max-width: 420px; font-size: 15px; line-height: 22px; color: var(--ink-soft); }
-.chef-working-live { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; color: var(--accent); }
-.chef-working-loader { display: flex; align-items: center; gap: 3px; height: 14px; }
-.chef-working-loader i { width: 3px; height: 10px; border-radius: 2px; background: var(--accent); animation: chef-working-bar 1100ms ease-in-out infinite; }
-.chef-working-loader i:nth-child(2) { animation-delay: 150ms; }
-.chef-working-loader i:nth-child(3) { animation-delay: 300ms; }
-.chef-working.is-done .chef-working-loader i { animation: none; transform: none; opacity: 1; }
-.chef-working-details { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 12px; font-size: 13px; line-height: 18px; color: var(--ink-soft); }
-.chef-working-details > span { display: inline-flex; gap: 10px; }
-.chef-working-details i { font-style: normal; color: var(--ink-faint); }
+.chef-working-copy { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 28px; }
+.chef-working-title { margin: 0; font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.01em; }
+.chef-working-desc { margin: 0; max-width: 420px; font-size: 15px; line-height: 22px; color: var(--ink-soft); }
+.chef-working-live { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 500; color: var(--accent); }
+/* Fixed width so the label doesn't shift when the dots become a check. */
+.chef-working-loader { display: flex; align-items: center; justify-content: center; gap: 4px; width: 22px; height: 16px; }
+.chef-working-loader i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: chef-working-dot 1200ms ease-in-out infinite; }
+.chef-working-loader i:nth-child(2) { animation-delay: 160ms; }
+.chef-working-loader i:nth-child(3) { animation-delay: 320ms; }
+.chef-working-check { width: 16px; height: 16px; fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 16; animation: chef-working-check 280ms ease-out both; }
+/* What's being cooked: context, not copy — a quiet chip under the status. */
+.chef-working-details {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink-faint);
+}
+.chef-working-details > span { display: inline-flex; gap: 8px; }
+.chef-working-details i { font-style: normal; }
 
+/* Footer quote: flavour, so no rule above it and the quietest ink on
+   the page. */
 .chef-working-foot {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 16px 0 0;
-  border-top: 1px solid var(--line);
+  gap: 4px;
   text-align: center;
 }
-.chef-working-quote { font-size: 15px; line-height: 22px; font-style: italic; color: var(--ink); }
+.chef-working-quote { font-size: 14px; line-height: 20px; font-style: italic; color: var(--ink-soft); }
+.chef-working-attrib { font-size: 13px; line-height: 18px; color: var(--ink-faint); }
 
 /* Short laptop viewports: a smaller goose so the quote still clears the
    VoiceBar without a scroll. */
@@ -126,18 +145,20 @@
 }
 /* Shorter still (1280×720): the quote is flavour, so it goes first. */
 @media (max-height: 760px) {
-  .chef-working { min-height: 0; justify-content: flex-start; }
+  .chef-working { min-height: 0; }
   .chef-working-foot { display: none; }
 }
 /* Narrow: the topbar wraps to three rows, so the goose gives back the
    height it takes. */
 @media (max-width: 720px) {
+  .chef-working-trail { transform: scale(0.8); transform-origin: right bottom; }
   .chef-working { --chef-goose-w: 132px; gap: 16px; min-height: calc(100dvh - var(--voice-bar-height) - 220px); }
   .chef-working-title { font-size: 24px; line-height: 30px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chef-working-loader i, .chef-working-goose { animation: none; }
+  .chef-working-loader i, .chef-working-check, .chef-working-goose { animation: none; }
+  .chef-working-trail > span { animation: none; opacity: 1; }
   .chef-working-stage { animation: none; }
   .chef-working.is-done { animation-delay: 0ms !important; }
   .chef-working.is-done .chef-working-goose { animation: none; }

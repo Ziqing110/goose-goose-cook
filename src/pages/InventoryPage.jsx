@@ -853,8 +853,6 @@ export default function InventoryPage() {
     return (
       <ChefWorkingScreen
         done={shownBeat === "done"}
-        eyebrow="A menu worth waiting for"
-        doneEyebrow="Recipes are ready"
         title={<>Good food takes<br />a little thought.</>}
         desc={<>Your chef is writing every step for tonight&rsquo;s dishes,<br className="inv-long" /> and checking them over before you see them.</>}
         live={generating ? "Writing your recipes" : "Setting your dishes"}

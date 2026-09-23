@@ -95,12 +95,11 @@
   --cook-b: var(--kp-cook-b);
   --cook-b-ink: var(--kp-cook-b-ink);
   --cook-b-bg: var(--kp-cook-b-bg);
-  /* Live cook's field, the scoreboard-as-background (tokens.css). */
+  /* The two player tints used as ground. Live cook's coloured field is
+     retired (v5: the page ground is white like every other page); the
+     Versus countdown still splits the screen with these two. */
   --field-cook-a: var(--kp-field-cook-a);
   --field-cook-b: var(--kp-field-cook-b);
-  --field-warm-0: var(--kp-field-warm-0);
-  --field-warm-50: var(--kp-field-warm-50);
-  --field-warm-100: var(--kp-field-warm-100);
   /* The one legitimate red on a planning page: the critical path.
      Only ever an outline or a line of text, never a fill or a button. */
   --critical: var(--kp-critical);
@@ -123,6 +122,16 @@
      page's titles and copy stay in the sans, so the bird's voice is
      distinguishable from the app's. Ships a single weight (400). */
   --font-hand: "Schoolbell", ui-rounded, cursive;
+  --font-play: var(--kp-display);
+
+  --paper: var(--kp-paper);
+  --paper-edge: var(--kp-paper-edge);
+  --paper-ledge: var(--kp-paper-ledge);
+  --paper-punch: var(--kp-paper-punch);
+  --paper-dash: var(--kp-paper-dash);
+  --paper-hover: var(--kp-paper-hover);
+  --paper-rule-a: var(--kp-paper-rule-a);
+  --paper-rule-b: var(--kp-paper-rule-b);
   /* body resolved its own font/color from the root tokens; restate
      them here so descendants inherit the v4 values. */
   background: var(--bg);

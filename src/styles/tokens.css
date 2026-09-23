@@ -444,6 +444,17 @@ button { font: inherit; cursor: pointer; }
   --kp-field-warm-0: #fbf7f1;
   --kp-field-warm-50: #faf2e9;
   --kp-field-warm-100: #f8eddf;
+  /* Paper-ticket stock (Schedule's Versus opening hand, Live cook's
+     station tickets and receipt): cream paper, a warm edge and ledge,
+     punch holes, and each player's softened rule under the ticket head. */
+  --kp-paper: #fffdf7;
+  --kp-paper-edge: #e6dcc6;
+  --kp-paper-ledge: #eee7d7;
+  --kp-paper-punch: #f2ead8;
+  --kp-paper-dash: #d8ccb1;
+  --kp-paper-hover: #f4eee1;
+  --kp-paper-rule-a: #9dc0d9;
+  --kp-paper-rule-b: #e3b7a4;
   /* the one legitimate red on a planning page — outlines and text only */
   --kp-critical: #c62828;
 
@@ -454,6 +465,9 @@ button { font: inherit; cursor: pointer; }
 
   --kp-font: "Inter", ui-sans-serif, system-ui, sans-serif;
   --kp-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  /* Live cook's play-surface numerals only — scores, the run clock,
+     the final score. Everything else stays Inter / Plex Mono. */
+  --kp-display: "Bricolage Grotesque", "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -490,6 +504,14 @@ button { font: inherit; cursor: pointer; }
     --kp-field-warm-0: #1a1917;
     --kp-field-warm-50: #1f1c18;
     --kp-field-warm-100: #251f18;
+    --kp-paper: #2a251c;
+    --kp-paper-edge: #3d3628;
+    --kp-paper-ledge: #1c1912;
+    --kp-paper-punch: #1e1a12;
+    --kp-paper-dash: #4a4530;
+    --kp-paper-hover: #332d22;
+    --kp-paper-rule-a: #4a6a86;
+    --kp-paper-rule-b: #6a4a3a;
   }
 }
 
@@ -526,4 +548,12 @@ button { font: inherit; cursor: pointer; }
   --kp-field-warm-0: #1a1917;
   --kp-field-warm-50: #1f1c18;
   --kp-field-warm-100: #251f18;
+  --kp-paper: #2a251c;
+  --kp-paper-edge: #3d3628;
+  --kp-paper-ledge: #1c1912;
+  --kp-paper-punch: #1e1a12;
+  --kp-paper-dash: #4a4530;
+  --kp-paper-hover: #332d22;
+  --kp-paper-rule-a: #4a6a86;
+  --kp-paper-rule-b: #6a4a3a;
 }

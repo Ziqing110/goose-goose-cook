@@ -99,7 +99,9 @@ const cards = page.locator(".lc-card");
 // Versus
 // ---------------------------------------------------------------------
 const goLive = async () => {
-  await click(/Go live/);
+  // The Schedule CTA has been both "Go live →" and "Start cooking →";
+  // accept either so a copy change doesn't fail the Live cook suite.
+  await click(/Go live|Start cooking/);
   // Versus runs a countdown before the cards exist.
   await cards.first().waitFor({ state: "visible", timeout: 15000 });
   await page.waitForTimeout(600);
@@ -159,7 +161,10 @@ await check("versus: one column — strip, cards 50/50 with a score each, the bo
   assert.equal(await page.locator(".lc-race").count(), 0, "no race widget");
   assert.equal(await cards.locator(".lc-card-points").count(), 2, "a score on each card");
   assert.ok(await page.locator(".lc-lead-line").isVisible(), "the strip carries the lead line");
-  assert.equal(await page.locator(".lc-field.is-versus .lc-seam").count(), 1, "the versus field has its seam");
+  // v5 retired the coloured field: the ground is white like every
+  // other page, and the strip's lead chip is the one ambient signal.
+  assert.equal(await page.locator(".lc-field, .lc-seam").count(), 0, "no coloured field");
+  assert.ok(await page.locator(".lc-strip .lc-lead").isVisible(), "the lead chip carries the score signal");
 });
 
 await check("versus: no drift chip (there is no plan to drift from)", async () => {
@@ -193,9 +198,9 @@ await check("versus: a claim moves the tile to Taken, and the busy player's butt
   await page.waitForTimeout(600);
   const taken = page.locator(".lc-tile.is-taken", { hasText: label });
   assert.equal(await taken.count(), 1, "tile is now Taken");
-  // Versus says "on it" with the rail and the Done, not a status line.
+  // Versus says "on it" with the tinted ticket head and the Done, not a status line.
   assert.equal(await cards.nth(0).locator(".lc-card-status").count(), 0, "no status line while simply on it");
-  assert.ok(await cards.nth(0).locator(".lc-rail").isVisible(), "the rail is up");
+  assert.match((await cards.nth(0).getAttribute("class")) || "", /\bis-active\b/, "the head band is up");
   assert.ok(await cards.nth(0).getByRole("button", { name: "Done", exact: true }).isVisible(), "Done is the primary");
   const miaButtons = page.locator(".lc-tile.is-claimable .lc-claim.is-a");
   const n = await miaButtons.count();
@@ -271,8 +276,9 @@ await check("versus: a pot 'cooking on its own' grows the card instead of squeez
   const a0 = await box(cards.nth(0));
   const b0 = await box(cards.nth(1));
   assert.ok(Math.abs(a0.height - b0.height) <= 1, `cards equal during Start: ${a0.height} vs ${b0.height}`);
-  // Once the Start moment is over the step leaves focus and joins the list.
-  await page.locator(".lc-card .lc-cooking").waitFor({ state: "visible", timeout: 15000 });
+  // Once the Start moment is over the step leaves focus and joins the
+  // list. Whichever pot was free here, its Start is at most 45 s.
+  await page.locator(".lc-card .lc-cooking").waitFor({ state: "visible", timeout: 60000 });
   const a = await box(cards.nth(0));
   const b = await box(cards.nth(1));
   sameY(a, b, "cards start level");
@@ -284,17 +290,17 @@ await check("versus: a pot 'cooking on its own' grows the card instead of squeez
   sameY(await box(xl.nth(0)), await box(xl.nth(1)), "action blocks");
 });
 
-// Mobile: single column, fixed order, primaries stay 64 and full width.
+// Mobile: single column, fixed order, primaries stay 56 and full width.
 await page.setViewportSize({ width: 390, height: 844 });
 await page.waitForTimeout(500);
-await check("mobile 390: cards stack in player order, primaries 64px full-width, no horizontal scroll", async () => {
+await check("mobile 390: cards stack in player order, primaries 56px full-width, no horizontal scroll", async () => {
   const a = await box(cards.nth(0));
   const b = await box(cards.nth(1));
   assert.ok(b.y >= a.y + a.height - 1, "stacked");
   assert.equal(await cards.nth(0).locator(".lc-card-name").innerText(), "Mia");
   const xl = page.locator(".lc-card .lc-card-actions .lc-btn-xl").first();
   const xb = await box(xl);
-  assert.ok(xb.height >= 64, `primary ${xb.height}px`);
+  assert.ok(xb.height >= 56, `primary ${xb.height}px`);
   // Full width up to the goose's slot (88px on mobile).
   assert.ok(xb.width >= a.width - 40 - 88, "full width inside the card");
   const scrollW = await page.evaluate(() => document.documentElement.scrollWidth);
@@ -309,7 +315,9 @@ await check("mobile 390: cards stack in player order, primaries 64px full-width,
 // ---------------------------------------------------------------------
 await page.setViewportSize({ width: 1280, height: 800 });
 await page.goto(`${BASE}/session/schedule`, { waitUntil: "networkidle" });
-await page.waitForTimeout(800);
+// Schedule shows its chef screen until the session syncs; on a cold dev
+// server that can outlast click()'s 10 s, which made this step flaky.
+await page.locator(".sch-footer").waitFor({ state: "visible", timeout: 30000 });
 await click(/Abandon this cook/);
 await click(/^Abandon$/);
 await page.waitForTimeout(600);
@@ -317,6 +325,15 @@ await pickMode("Co-op");
 await goLive();
 
 await check("co-op: at 1280×800 both primaries are on screen above the VoiceBar", primariesAboveBar);
+
+await check("co-op: at 1280×800 the muted mic button sits in the gutter, clear of the page's content", async () => {
+  const bar = page.locator(".voice-bar.is-muted");
+  assert.equal(await bar.count(), 1, "the voice bar starts muted");
+  const mic = await box(bar);
+  const shell = await box(page.locator(".lc-toque-line"));
+  assert.ok(mic.x >= shell.x + shell.width, `mic left ${mic.x} vs content right ${shell.x + shell.width}`);
+  assert.ok(await page.getByRole("button", { name: "Unmute" }).isVisible(), "still named Unmute for AT");
+});
 
 await check("co-op: 768 wide — the strip's note shrinks instead of widening the page", async () => {
   await page.setViewportSize({ width: 768, height: 900 });
@@ -349,7 +366,8 @@ await check("co-op: the same one-column arena as Versus — cards 50/50, Toque o
   sameY(a, b, "cards");
   assert.ok(Math.abs(a.width - b.width) <= 1, "equal card widths");
   assert.ok(toque.y >= a.y + a.height - 1, "Toque's line is under the cards");
-  assert.ok(Math.abs(toque.width - (b.x + b.width - a.x)) <= 2, "Toque's line spans the cards");
+  // The tickets tilt ±0.4°, so their boxes overhang the row by a few px.
+  assert.ok(Math.abs(toque.width - (b.x + b.width - a.x)) <= 6, "Toque's line spans the cards");
   assert.equal(await page.locator(".lc-agent").count(), 0, "no agent panel on the page until the drawer opens");
   await page.locator(".lc-toque-line").click();
   await page.locator(".lc-agent .lc-say-input").waitFor({ state: "visible", timeout: 3000 });
@@ -358,12 +376,12 @@ await check("co-op: the same one-column arena as Versus — cards 50/50, Toque o
   assert.equal(await page.locator(".lc-agent").count(), 0, "Escape closes the drawer");
 });
 
-await check("co-op: both cards start with a 64px primary on the same line", async () => {
+await check("co-op: both cards start with a 56px primary on the same line", async () => {
   assert.equal(await primaries.count(), 2);
   const a = await box(primaries.nth(0));
   const b = await box(primaries.nth(1));
   sameY(a, b, "primaries");
-  assert.ok(a.height >= 64 && b.height >= 64, `primary heights ${a.height}/${b.height}`);
+  assert.ok(a.height >= 56 && b.height >= 56, `primary heights ${a.height}/${b.height}`);
 });
 
 // One player starts, the other doesn't: Done + Skip/Undo on one side,
@@ -379,7 +397,7 @@ await check("co-op: Done on one card and Start on the other sit on the same line
   sameY(await box(secondaries.nth(0)), await box(secondaries.nth(1)), "secondary rows");
 });
 
-await check("co-op: Undo is the far-right ghost and only the acting player can use it", async () => {
+await check("co-op: Undo sits in the ghost row after Skip and only the acting player can use it", async () => {
   const mia = cards.nth(0);
   const leo = cards.nth(1);
   const undoMia = mia.getByRole("button", { name: "Undo" });
@@ -387,10 +405,8 @@ await check("co-op: Undo is the far-right ghost and only the acting player can u
   assert.equal(await undoMia.isEnabled(), true, "Mia just started something");
   const u = await box(undoMia);
   const s = await box(skipMia);
-  const card = await box(mia);
   assert.ok(u.x > s.x, "Undo is right of Skip");
-  // The action block stops 118px short of the edge — that margin is the goose's.
-  assert.ok(u.x + u.width > card.x + card.width - 40 - 118, "Undo hugs the action block's right edge");
+  assert.ok(Math.abs(u.y - s.y) <= 1, "Undo is on Skip's row");
   const undoLeo = leo.getByRole("button", { name: "Undo" });
   assert.equal(await undoLeo.count(), 0, "Leo has nothing to undo, so no Undo is shown");
 });

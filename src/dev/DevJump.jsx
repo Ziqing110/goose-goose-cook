@@ -16,7 +16,7 @@
 // mounted under `npm run dev`; App.jsx does not register the route in a
 // production build.
 import { useEffect, useRef, useState } from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { seedSession } from "../../scripts/seed-session.mjs";
 import * as sessionsApi from "../api/sessions.js";
 import * as kitchensApi from "../api/kitchens.js";
@@ -57,6 +57,7 @@ function guardFailure(session, spec) {
 
 export default function DevJump() {
   const { target } = useParams();
+  const { search } = useLocation();
   const navigate = useNavigate();
   const { refetchSessions } = useAppState();
   const [status, setStatus] = useState("Seeding a session…");
@@ -67,7 +68,18 @@ export default function DevJump() {
     if (!spec || started.current) return; // StrictMode mounts twice; seed once
     started.current = true;
     (async () => {
-      const { sessionId } = await seedSession("", { randomizeCooks: true, ensureUnattended: true });
+      const params = new URLSearchParams(search);
+      const dishes = params.getAll("dish");
+      const cookNames = params.getAll("cook");
+      const avatarIds = params.getAll("avatar");
+      const hasFixedCooks = cookNames.length === 2 && avatarIds.length === 2;
+      const { sessionId } = await seedSession("", {
+        randomizeCooks: !hasFixedCooks,
+        ensureUnattended: true,
+        dishes,
+        useFallbackRecipes: dishes.length > 0,
+        ...(hasFixedCooks ? { cookNames, avatarIds } : {}),
+      });
       if (spec.mode) {
         setStatus("Starting the run…");
         const [session, kitchens] = await Promise.all([sessionsApi.getSession(sessionId), kitchensApi.listKitchens()]);
@@ -85,7 +97,7 @@ export default function DevJump() {
       await refetchSessions();
       navigate(spec.path, { replace: true });
     })().catch((err) => setStatus(`dev jump failed: ${err.message} (is the API up? npm run dev:full)`));
-  }, [spec, navigate, refetchSessions]);
+  }, [spec, search, navigate, refetchSessions]);
 
   if (!spec) return <Navigate to="/" replace />;
   return <p style={{ padding: "var(--space-6, 24px)", fontFamily: "monospace" }}>{status}</p>;

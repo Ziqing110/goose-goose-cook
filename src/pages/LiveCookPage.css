@@ -1,53 +1,43 @@
 /* ---------------------------------------------------------------
-   Live cook — design system v4, game layer ("Live Cook v4 — game
-   layer"). Tokens, buttons, topbar and the shared VoiceBar come from
-   styles/design-v4.css (route-scoped via AppShell) and keep their
-   site-wide look. Layout: title row → dark strip (clock + lead line)
-   → Versus: cards ×2 (one half each, the score on each card) → the
-   board of what's up for grabs → Toque as one line (tap for the
-   drawer). Co-op: cards ×2 | Toque in a side column. Then the footer.
+   Live cook — "the hand, played" (design: Kitchen Path Live Cook v7).
+   Tokens, buttons, topbar and the shared VoiceBar come from
+   styles/design-v4.css (route-scoped via AppShell).
 
-   What the game layer adds, and nothing else:
-   · the field — the viewport is the ground (Versus: the two player
-     tints split down the middle along a breathing seam; Co-op: one
-     warm ground that steps deeper with progress);
-   · game pieces — the cards and the strip are white/dark with a 2px
-     ink border, a 4px hard extrusion and one chamfered bottom-right
-     corner. The board is deliberately quiet — 1px rules on paper — so
-     the two cards are the first thing the eye lands on;
-   · a silhouette per card state (rail, chamfer colour, fill, tilt) so
-     the state reads from 3 m before any text does;
-   · the geese — one per card, reacting; Toque on his line and in the
-     drawer; one on the move beside the strip's lead line.
-   Text still sits on white; the colour goes around the panels. At most
-   three things loop at once: the run clock, the seam breathe, and one
-   of the offer pulse / the due pulse.
+   The Schedule's Versus opening hand, scaled up into live stations:
+   cream paper tickets with punch holes and a player-coloured rule, a
+   hair of tilt, a 2px paper ledge. The page ground stays white and the
+   strip is a light panel like every other panel in the flow — the game
+   comes from the tickets, the player colours and the big numerals, not
+   from a dark bar or a coloured field.
+
+   Type, kept in the product's voice: Inter for everything read,
+   IBM Plex Mono for small numbers only (never a sentence), and one
+   display face — Bricolage Grotesque, --font-play — for the play
+   surface's big numerals: scores, the run clock, the final score, the
+   results names and the Waiting countdown. Stamps are the goose's
+   outlined mono pills, the same mark as Schedule's APPROVED.
+
+   Layout: title row → strip → two station tickets, one half each, four
+   shared zones (head · the order · actions · on its own) → Versus: the
+   board of what's up for grabs → Toque as one line → footer.
 ----------------------------------------------------------------*/
 
-.live-cook-page { gap: 20px; }
-/* No entry animation on the section itself: a filling opacity or
-   transform animation makes it a stacking context (and a containing
-   block), which would lift the fixed field above the shell's chrome.
-   The rows below each rise on their own instead. */
+/* The page itself must not animate as one block (a transform on it
+   would create a containing block for the fixed shell chrome); the
+   rows below each rise on their own instead. */
 .ds-v4 .live-cook-page { animation: none; }
-/* The shell paints its own ground; step out of the way of the field. */
-.app-shell.ds-v4:has(.live-cook-page:not(.is-finished)) { background: transparent; }
 
 @keyframes lc-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes lc-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes lc-spring { 0% { opacity: 0; transform: scale(0.9); } 60% { transform: scale(1.03); } 100% { opacity: 1; transform: scale(1); } }
 @keyframes lc-roll { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @keyframes lc-pop { 0% { opacity: 0; transform: scale(0.82); } 60% { transform: scale(1.06); } 100% { opacity: 1; transform: scale(1); } }
-@keyframes lc-burst { 0% { transform: scale(0.6) rotate(-20deg); opacity: 0; } 60% { transform: scale(1.15) rotate(4deg); } 100% { transform: scale(1) rotate(0); opacity: 1; } }
+@keyframes lc-thunk { 0% { transform: scale(1.15); } 100% { transform: scale(1); } }
 @keyframes lc-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 /* The system's attention motion — one spring on entering "needs you". */
 @keyframes lc-attend { 0% { transform: scale(0.97); } 60% { transform: scale(1.015); } 100% { transform: scale(1); } }
 .lc-attend { animation: lc-attend 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
 .lc-roll { animation: lc-roll 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
-
-/* Game-layer motion (design §06). */
-@keyframes lc-seam-breathe { 0%, 100% { transform: skewX(-7deg) translateX(-4px); } 50% { transform: skewX(-7deg) translateX(4px); } }
-@keyframes lc-seam-breathe-v { 0%, 100% { transform: skewY(-5deg) translateY(-4px); } 50% { transform: skewY(-5deg) translateY(4px); } }
 @keyframes lc-offer { 0%, 84%, 100% { transform: scale(1); } 90% { transform: scale(1.035); } }
 @keyframes lc-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-3px); } 45% { transform: translateX(3px); } 70% { transform: translateX(-2px); } }
 @keyframes lc-flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
@@ -55,90 +45,21 @@
 @keyframes lc-goose-honk { 0%, 100% { transform: rotate(0deg) translateY(0); } 30% { transform: rotate(-5deg) translateY(-3px); } 65% { transform: rotate(3deg) translateY(0); } }
 @keyframes lc-fly { 0% { opacity: 0; transform: translate(0, 0) scale(0.9); } 16% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1.1); } }
 @keyframes lc-drawer-in { from { transform: translateX(100%); } to { transform: none; } }
-
-/* ---------------- the field ----------------
-   Fixed under everything, so the shell's chrome floats on it too. */
-.lc-field {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  overflow: hidden;
-  pointer-events: none;
-  background: var(--field-cook-b);
-  transition: background 400ms ease-out;
-}
-/* Versus: player 1's tint from the left, along a seam skewed 7° and
-   fading over 90px, centred on the page — one half each, whatever the
-   score. The breathe is the page's one ambient loop. */
-.lc-seam {
-  position: absolute;
-  top: -60px;
-  bottom: -60px;
-  left: -90px;
-  width: calc(50% + 45px);
-  background: var(--field-cook-a);
-  transform: skewX(-7deg);
-  transform-origin: center;
-  animation: lc-seam-breathe 6000ms ease-in-out infinite;
-  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 90px), rgba(0, 0, 0, 0) 100%);
-  mask-image: linear-gradient(90deg, #000 calc(100% - 90px), rgba(0, 0, 0, 0) 100%);
-}
-.lc-field.is-paused .lc-seam { animation-play-state: paused; }
-/* Co-op: one warm ground in three static steps — no scores, no seam,
-   no ambient. Behind plan adds the warning tint at the edges only. */
-.lc-field.is-coop { background: var(--field-warm-0); }
-.lc-field.is-coop.is-warm-50 { background: var(--field-warm-50); }
-.lc-field.is-coop.is-warm-100 { background: var(--field-warm-100); }
-.lc-field.is-coop.is-behind::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 140px var(--warning-soft); }
-
-/* ---------------- game pieces ----------------
-   White panel, 2px ink border, 4px extrusion in the border colour and
-   one 14px chamfer at the bottom-right. Drawn with two pseudo-elements
-   (fill + edge, then the extrusion shifted 4px) so the chamfer cuts
-   the extrusion too and nothing needs a wrapper. Content sits above
-   both; anything a piece wants *under* its text (the goose) goes at
-   z-index -1 inside the piece's own stacking context. */
-.lc-piece {
-  --piece-bg: var(--surface);
-  --piece-edge: var(--ink);
-  --piece-depth: 4px;
-  --piece-chamfer: 14px;
-  position: relative;
-  isolation: isolate;
-  border-radius: var(--radius-card);
-}
-.lc-piece::before, .lc-piece::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--piece-chamfer)), calc(100% - var(--piece-chamfer)) 100%, 0 100%);
-  pointer-events: none;
-}
-.lc-piece::before { z-index: -2; background: var(--piece-bg); box-shadow: inset 0 0 0 2px var(--piece-edge); }
-.lc-piece::after { z-index: -3; background: var(--piece-edge); transform: translate(var(--piece-depth), var(--piece-depth)); }
-.lc-piece.is-dark { --piece-bg: var(--kp-voice-bg); color: #fff; }
-
-/* Piece buttons — the 64px primaries and the claim buttons: ink-coloured
-   2px border and hard shadow, pressed = 2px in, 2px less depth. The
-   shared .btn keeps its flat look everywhere else on the page. */
-.ds-v4 .lc-btn-piece {
-  --btn-edge: var(--ink);
-  border: 2px solid var(--btn-edge);
-  box-shadow: 4px 4px 0 var(--btn-edge);
-  transition: transform 120ms ease-out, box-shadow 120ms ease-out, background 120ms ease-out;
-}
-.ds-v4 .lc-btn-piece:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--btn-edge); }
-.ds-v4 .lc-btn-piece:disabled { border-color: var(--line); box-shadow: none; }
-.ds-v4 .btn-primary.lc-btn-piece { --btn-edge: color-mix(in srgb, var(--accent) 80%, #000); }
-.ds-v4 .lc-btn-done { --btn-edge: color-mix(in srgb, var(--success) 80%, #000); }
-.lc-offer-pulse { animation: lc-offer 4000ms ease-in-out infinite; }
+/* A stamp lands: a touch big, a touch small, then down. */
+@keyframes lc-stamp-in { 0% { opacity: 0; transform: scale(1.35); } 70% { opacity: 1; transform: scale(0.96); } 100% { opacity: 1; transform: scale(1); } }
 
 /* ---------------- shared bits ---------------- */
 .lc-meta { font-size: 13px; line-height: 18px; color: var(--ink-soft); }
-.lc-meta.is-tertiary { color: var(--ink-faint); }
+.lc-meta .mono { color: var(--ink); }
+/* Section labels: UP FOR GRABS · NOT YET · SERVICE DONE. */
+.lc-eyebrow-label { margin: 0; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
 
-/* PlayerAvatar — the system's colored circle with the name's first letter. */
+/* Each player's colours, set once on whatever belongs to them. */
+.live-cook-page .is-a { --pc: var(--cook-a); --pc-ink: var(--cook-a-ink); --pc-bg: var(--cook-a-bg); --rule: var(--paper-rule-a); }
+.live-cook-page .is-b { --pc: var(--cook-b); --pc-ink: var(--cook-b-ink); --pc-bg: var(--cook-b-bg); --rule: var(--paper-rule-b); }
+
+/* PlayerAvatar — the chef bird the player picked, ringed in their
+   colour; the coloured circle with an initial is the fallback. */
 .lc-avatar {
   flex: 0 0 auto;
   display: inline-flex;
@@ -153,8 +74,10 @@
 .lc-avatar.is-b { background: var(--cook-b); }
 .lc-avatar-20 { width: 20px; height: 20px; font-size: 11px; }
 .lc-avatar-24 { width: 24px; height: 24px; font-size: 12px; }
+.lc-avatar-28 { width: 28px; height: 28px; font-size: 13px; }
 .lc-avatar-32 { width: 32px; height: 32px; font-size: 14px; }
 .lc-avatar-40 { width: 40px; height: 40px; font-size: 17px; }
+.lc-avatar-44 { width: 44px; height: 44px; font-size: 18px; }
 .lc-avatar.has-chef { background-size: cover; background-position: center; box-shadow: 0 0 0 2px var(--cook-a); }
 .lc-avatar.has-chef.is-b { box-shadow: 0 0 0 2px var(--cook-b); }
 .lc-avatar-20.has-chef { box-shadow: 0 0 0 1.5px var(--cook-a); }
@@ -172,145 +95,226 @@
   color: var(--ai);
 }
 .lc-agent-avatar-20 { width: 20px; height: 20px; }
+.lc-offer-pulse { animation: lc-offer 4000ms ease-in-out infinite; }
 
-/* The goose at a card's bottom-right, under the text. Its wrapper
-   carries the loop (bob or honk); the sprite cycles on its own. It is
-   anchored to the card, not the action block, so it stands in the same
-   corner whether or not a pot list follows the buttons — the action
-   block and the pot list both leave that right-hand lane free. */
+/* The goose's stamp: an outlined mono pill, tilted — Schedule's
+   APPROVED badge, in the ink of whoever it is about. */
+.lc-stamp {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 11px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  rotate: -4deg;
+  animation: lc-stamp-in 260ms cubic-bezier(0.2, 1.5, 0.4, 1) both;
+}
+.lc-stamp.is-a, .lc-stamp.is-b { color: var(--pc-ink); }
+.lc-stamp.is-due { color: var(--warning-soft-ink); }
+
+/* What a step is worth: a dashed tag, neutral on the board until
+   someone owns it, then in their colour. */
+.lc-pts-tag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 7px;
+  border: 2px dashed var(--line-strong);
+  border-radius: 4px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-play);
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  rotate: -3deg;
+}
+.lc-pts-tag.is-a, .lc-pts-tag.is-b { border-color: var(--pc); color: var(--pc-ink); }
+
+/* The goose in the action block's reserved right margin, under the
+   text. Its wrapper carries the loop (bob or honk); the sprite cycles
+   on its own. */
 .lc-goose {
   position: absolute;
-  /* Tucked into the corner: the art has its own clear margin inside
-     the square, so 4px in still keeps the bird off the outline and
-     clear of the chamfer. Further right = more room for the row of
-     secondaries and the pot list beside it. */
-  right: 4px;
-  bottom: 8px;
-  z-index: -1;
+  right: 10px;
+  bottom: 4px;
+  z-index: 0;
   line-height: 0;
   pointer-events: none;
 }
 .lc-goose.is-bob { animation: lc-goose-bob 3600ms ease-in-out infinite; }
 .lc-goose.is-honk { animation: lc-goose-honk 900ms ease-in-out infinite; }
 
-/* Accent-text ghost buttons (Pause · The plan · Skip · Undo · Cancel). */
+/* Accent-text ghosts (Pause · View plan · Call it early · Cancel). */
 .ds-v4 .lc-btn-accent { color: var(--accent); }
 .ds-v4 .lc-btn-accent:hover { color: var(--ds-accent-hover); }
 .ds-v4 .lc-btn-accent:disabled { background: transparent; color: var(--ink-faint); }
 
-/* The 64px primaries: Done / Start / Take it. */
-.ds-v4 .lc-btn-xl { width: 100%; min-height: 64px; padding: 0 24px; font-size: 18px; font-weight: 500; }
-.ds-v4 .lc-btn-done { background: var(--success); color: #fff; }
-.ds-v4 .lc-btn-done:hover { background: color-mix(in srgb, var(--success) 88%, #000); }
-.ds-v4 .lc-btn-done:disabled { background: var(--ds-chip); color: var(--ink-faint); }
+/* Done / Start / Take it — the station's one loud button: 56 tall, a
+   2px ledge of its own colour like the paper under it, pressed down
+   into it on tap. Done is green; anything that starts or claims work
+   is the accent. */
+.ds-v4 .lc-btn-xl {
+  width: 100%;
+  height: 56px;
+  min-height: 56px;
+  padding: 0 24px;
+  border: none;
+  border-radius: var(--radius-control);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 500;
+  box-shadow: 0 2px 0 var(--ledge);
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out, background 120ms ease-out;
+}
+.ds-v4 .lc-btn-xl:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 0 0 var(--ledge); }
+.ds-v4 .lc-btn-done { background: var(--success); --ledge: color-mix(in srgb, var(--success) 72%, #000); }
+.ds-v4 .lc-btn-done:hover:not(:disabled) { background: color-mix(in srgb, var(--success) 88%, #000); }
+.ds-v4 .lc-btn-go { background: var(--accent); --ledge: color-mix(in srgb, var(--accent) 72%, #000); }
+.ds-v4 .lc-btn-go:hover:not(:disabled) { background: var(--ds-accent-hover); }
+.ds-v4 .lc-btn-xl:disabled { background: var(--ds-chip); color: var(--ink-faint); box-shadow: none; }
 
 /* ---------------- title row ---------------- */
 .lc-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
   padding-top: 4px;
   animation: lc-rise 240ms ease-out both;
 }
-.lc-title { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto; }
-.lc-title-glyph { flex: none; }
-.lc-title h1 {
-  margin: 0;
-  min-width: 0;
-  font-size: 18px;
-  line-height: 24px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* The eyebrow, the underlined title and the run's facts — the same
+   three marks Conversation, Cooks and Schedule are built from. */
+.lc-title { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.lc-title h1 { margin: 0; font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.01em; }
+.lc-subtitle { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; min-width: 0; font-size: 13px; line-height: 18px; color: var(--ink-soft); }
+.lc-title .ds-aside { padding-top: 4px; }
 .lc-mode-chip {
   flex: none;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
+  height: 24px;
   padding: 0 10px;
   border-radius: 999px;
-  border: 2px solid var(--ink);
-  background: var(--surface);
+  background: var(--ds-chip);
+  color: var(--ink);
   font-size: 13px;
   font-weight: 500;
 }
-.lc-hud { display: flex; align-items: center; gap: 6px; flex: none; }
+.lc-hud { display: flex; align-items: center; gap: 6px; flex: none; padding-top: 22px; }
 .ds-v4 .lc-hud .btn { min-height: 36px; padding: 0 14px; }
+.ds-v4 .lc-btn-plan { color: var(--ink-soft); }
 
-/* ---------------- the strip ----------------
-   Dark, 84px: the run clock at 40, the count, the drift chip, and in
-   Versus one plain sentence — "Mia leads by 20" — with the goose on
-   the move beside it. The scores themselves live on the cards; the
-   pills only come back up here on mobile, where the cards stack. */
+/* ---------------- the strip — the scoreboard ----------------
+   A bg-secondary panel like Schedule's, flat, radius 12. Three
+   columns: a side, the clock in the middle, a side. The clock sits in
+   the same cell at the same size in both modes. */
 .lc-strip {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  height: 84px;
-  padding: 0 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px 28px;
+  padding: 14px 24px 12px;
+  border-radius: var(--radius-card);
+  background: var(--surface-sunken);
   animation: lc-rise 240ms 40ms ease-out both;
 }
-.lc-strip-spacer { flex: 1 1 auto; }
-.lc-clock { display: inline-flex; align-items: center; gap: 10px; flex: none; color: #fff; }
-.lc-clock-value { font-size: 40px; line-height: 44px; font-weight: 500; letter-spacing: -0.02em; }
-.is-paused .lc-clock-value { color: color-mix(in srgb, #fff 55%, transparent); }
-.lc-count { flex: none; font-size: 18px; font-weight: 500; color: color-mix(in srgb, #fff 62%, transparent); }
-.lc-count-pill { flex: none; display: inline-flex; align-items: center; gap: 8px; height: 52px; padding: 0 16px; border-radius: 10px; background: var(--surface); color: var(--ink); }
-.lc-count-big { font-size: 32px; line-height: 36px; font-weight: 700; }
-.lc-count-of { font-size: 18px; color: var(--ink-soft); }
-.lc-drift {
-  flex: none;
-  height: 30px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: var(--warning-soft);
-  color: var(--warning-soft-ink);
-  font-size: 14px;
-  font-weight: 500;
-}
-.lc-strip-note { flex: 0 1 auto; min-width: 0; display: inline-flex; align-items: center; gap: 10px; font-size: 15px; text-align: right; color: color-mix(in srgb, #fff 62%, transparent); }
-.lc-lead { flex: none; display: inline-flex; align-items: center; gap: 10px; padding-right: 4px; }
-.lc-lead-goose { flex: none; }
-.lc-lead-line { font-size: 15px; font-weight: 500; color: #fff; }
-.lc-strip-scores { display: none; align-items: center; gap: 10px; }
-.lc-score-pill {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  height: 52px;
-  padding: 0 16px;
-  border-radius: 10px;
-  background: var(--surface);
+.lc-strip-center { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+.lc-clock-value {
+  font-family: var(--font-play);
+  font-size: 32px;
+  line-height: 36px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
   color: var(--ink);
 }
-.lc-score-dot { width: 10px; height: 10px; border-radius: 50%; }
-.lc-score-pill.is-a .lc-score-dot { background: var(--cook-a); }
-.lc-score-pill.is-b .lc-score-dot { background: var(--cook-b); }
-.lc-score-name { font-size: 15px; font-weight: 500; }
-.lc-score-num { font-size: 32px; line-height: 36px; font-weight: 700; min-width: 2ch; text-align: right; }
+.is-paused .lc-clock-value { color: var(--ink-faint); }
+.lc-strip-side { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 36px; }
+.lc-strip-caption { font-size: 13px; line-height: 18px; color: var(--ink-soft); white-space: nowrap; }
+.lc-strip-caption .mono { color: var(--ink); }
+
+/* Versus: A's avatar · name · score, the clock, B's score · name ·
+   avatar — mirrored, so the numbers face each other across the clock. */
+.lc-strip.is-versus .lc-strip-side.is-a { grid-column: 1; grid-row: 1; justify-self: end; }
+.lc-strip.is-versus .lc-strip-side.is-b { grid-column: 3; grid-row: 1; justify-self: start; flex-direction: row-reverse; }
+.lc-strip-name { font-size: 18px; line-height: 24px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-score-pill {
+  flex: none;
+  min-width: 2ch;
+  font-family: var(--font-play);
+  font-size: 32px;
+  line-height: 36px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--pc-ink);
+  text-align: center;
+}
+.lc-score-num { display: inline-block; }
 /* While the points are in the air the new total holds back, then pops
    as they land (600 ms in). */
 .lc-score-num.is-landing { animation: lc-pop 320ms 600ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
-.lc-score-pill.is-a .lc-score-num { color: var(--cook-a-ink); }
-.lc-score-pill.is-b .lc-score-num { color: var(--cook-b-ink); }
+/* The tug of war: each side's share of the points, easing across when
+   they land, with a goose print standing on the seam. */
+.lc-tug { display: flex; align-items: center; width: 320px; max-width: 100%; height: 14px; }
+.lc-tug-a, .lc-tug-b { flex-basis: 0; height: 6px; border-radius: 999px; transition: flex-grow 600ms cubic-bezier(0.34, 1.2, 0.64, 1); }
+.lc-tug-a { background: var(--cook-a); }
+.lc-tug-b { background: var(--cook-b); }
+.lc-tug-print { margin: 0 3px; }
+.lc-lead { display: inline-flex; align-items: center; min-height: 18px; }
+.lc-lead-line { font-size: 13px; line-height: 18px; color: var(--ink-soft); }
 
-/* The points in flight — mono 24 in the player's colour, fixed at the
-   card, translated to the pill by the vars ScoreFly measures. */
+/* Co-op: the pips on the left, the clock, the status on the right. */
+.lc-strip.is-coop .lc-strip-side.is-pips { grid-column: 1; grid-row: 1; flex-direction: column; align-items: flex-start; gap: 8px; justify-self: start; }
+.lc-strip.is-coop .lc-strip-side.is-status { grid-column: 3; grid-row: 1; justify-self: end; }
+.lc-pips { display: flex; flex-wrap: wrap; gap: 4px; max-width: 420px; }
+.lc-pip { width: 14px; height: 14px; border-radius: 3px; background: var(--line); transition: background 240ms ease-out; }
+.lc-pip.is-done { background: var(--pc); }
+.lc-pip.is-live { background: transparent; box-shadow: inset 0 0 0 2px var(--pc); }
+.lc-pip.is-skipped { background: var(--line-strong); opacity: 0.55; }
+.lc-count-big { color: var(--ink); }
+.lc-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.lc-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
+.lc-status-chip.lc-drift { padding-left: 4px; background: var(--warning-soft); color: var(--warning-soft-ink); }
+.lc-status-chip.lc-drift .mono { color: inherit; }
+.lc-lead-goose { flex: none; }
+
+/* The points in flight — in the player's colour, fixed at the card,
+   translated to the score by the vars ScoreFly measures. */
 .lc-fly {
   position: fixed;
   left: var(--fx);
   top: var(--fy);
   z-index: 60;
-  font-size: 24px;
-  font-weight: 700;
+  font-family: var(--font-play);
+  font-size: 20px;
+  font-weight: 800;
   pointer-events: none;
   animation: lc-fly 600ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
@@ -332,315 +336,298 @@
 }
 .lc-paused .kp-icon { flex: none; }
 
-.ds-v4 .lc-btn-plan { color: var(--ink-soft); }
-
-/* ---------------- the arena ----------------
-   One column in both modes: cards ×2, (Versus) the board, Toque's line.
-   Toque's full panel lives in the drawer. */
-.lc-arena {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-  align-items: stretch;
-}
+/* ---------------- the arena ---------------- */
+.lc-arena { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: stretch; }
 .lc-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .lc-cards { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
-/* On a desk the two cards are one fixed height, so the row never grows
-   when a card changes state — never one high and one low. The card's
-   body scrolls inside if it must; the action block and the "cooking on
-   its own" list stay put. */
+/* On a desk both tickets share one set of row tracks (subgrid), so zone
+   N on the left is always level with zone N on the right:
+     1 head · 2 the order (takes the spare height) · 3 actions · 4 on its own
+   Row 4 exists only when either card has a pot going — and then both
+   cards carry it, the empty one saying so. */
 @media (min-width: 1101px) {
-  /* The cards are the play surface, so the primaries must sit above
-     the shell's fixed VoiceBar without scrolling. Everything above the
-     cards is fixed-height chrome: topbar and progress (183px), the
-     header, the strip and its gaps (104px). The row takes what is left
-     of the viewport up to its design height; on an 800px-tall counter
-     screen that is ~410px. A "cooking on its own" list is the one thing
-     allowed to grow a card past that. */
-  .lc-cards { min-height: clamp(380px, calc(100vh - var(--lc-chrome-above, 287px) - var(--voice-bar-height) - 16px), 500px); }
-
-  /* Both cards share one set of row tracks (subgrid) — but only the
-     card's own parts, not the lines inside the body. Sharing body
-     tracks made "like line up with like", and also made one card's
-     text hop whenever the other card's changed (a wrapped line over
-     there opened a gap here). Now the body is a plain column on each
-     side; what must line up across the cards — the action block — is
-     the track that still is shared. The tracks, top to bottom:
-       1 brow ("Free hands?")     4 action block
-       2 head                     5 pots cooking on their own
-       3 body — takes the spare height
-     Empty tracks are 0px. */
-  .lc-cards { grid-template-rows: auto auto minmax(0, 1fr) auto auto; row-gap: 0; }
-  .lc-cards > .lc-card { display: grid; grid-template-rows: subgrid; grid-row: span 5; row-gap: 0; height: auto; }
-  /* A card with no pots ends at its action block rather than carrying
-     an empty row to match — the one allowed height difference. */
-  .lc-cards > .lc-card:not(:has(.lc-cooking)) { grid-row: span 4; }
-  .lc-card > .lc-card-brow { grid-row: 1; }
-  .lc-card > .lc-card-head { grid-row: 2; }
-  .lc-card > .lc-card-body { grid-row: 3; min-height: 0; }
-  .lc-card > .lc-card-actions { grid-row: 4; margin-top: 0; }
-  .lc-card > .lc-cooking { grid-row: 5; }
-  /* With the height fixed, the room is spent on purpose: a dealt
-     card's dashed inset reaches down to the action block, so both
-     cards' insets end on the same line whatever their titles. */
-  .is-coop .lc-offer.is-dealt { flex: 1 1 auto; }
+  .lc-cards {
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    row-gap: 0;
+    min-height: clamp(360px, calc(100vh - var(--lc-chrome-above, 287px) - var(--voice-bar-height) - 16px), 480px);
+  }
+  .lc-cards > .lc-card { display: grid; grid-template-rows: subgrid; grid-row: span 4; row-gap: 0; }
+  .lc-cards:not(:has(.lc-cooking, .lc-cooking-empty)) { grid-template-rows: auto minmax(0, 1fr) auto; }
+  .lc-cards:not(:has(.lc-cooking, .lc-cooking-empty)) > .lc-card { grid-row: span 3; }
+  .lc-card > .lc-card-head { grid-row: 1; }
+  .lc-card > .lc-card-body { grid-row: 2; }
+  .lc-card > .lc-card-actions { grid-row: 3; }
+  .lc-card > .lc-cooking, .lc-card > .lc-cooking-empty { grid-row: 4; }
 }
-.live-cook-page { --lc-chrome-above: 287px; }
+/* Everything above the cards, measured: topbar + stage line (183) and
+   the header (162), plus the strip and its gap. If either grows this has
+   to grow with it, or the primaries slide under the fixed VoiceBar. */
+.live-cook-page { --lc-chrome-above: 437px; }
 
-/* ---------------- PlayerFocusCard ----------------
-   A game piece with a silhouette per state. The same skeleton every
-   time — avatar circle, title, the goose bottom-right, one number, one
-   primary — so the eye lands in the same place; only the frame (rail,
-   chamfer colour, fill, tilt) changes. */
+/* ---------------- the station ticket ----------------
+   Schedule's opening-hand bundle card, scaled up: cream paper, a warm
+   edge, a 2px ledge, punch holes down the left, a hair of tilt (left
+   card one way, right card the other). */
 .lc-card {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
-  min-height: 380px;
+  background: var(--paper);
+  border: 1px solid var(--paper-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 2px 0 var(--paper-ledge);
+  overflow: hidden;
   animation: lc-rise 240ms 60ms ease-out both;
 }
-/* On it: rail + chamfered top in the player colour, extrusion in the
-   player's ink. */
-.lc-card.is-state-active.is-a { --piece-edge: var(--cook-a-ink); }
-.lc-card.is-state-active.is-b { --piece-edge: var(--cook-b-ink); }
-.lc-rail { position: absolute; inset: 0; z-index: 0; border-radius: inherit; overflow: hidden; pointer-events: none; }
-.lc-rail::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 8px; background: var(--rail); }
-.lc-rail::after { content: ""; position: absolute; left: 8px; right: 0; top: 0; height: 6px; background: var(--rail); }
-.lc-card.is-a { --rail: var(--cook-a); }
-.lc-card.is-b { --rail: var(--cook-b); }
-/* Waiting: the cool card — secondary fill, grey ink, the countdown is
-   the only dark thing. */
-.lc-card.is-state-waiting { --piece-bg: var(--surface-sunken); --piece-edge: var(--line-strong); }
-.lc-card.is-state-waiting .lc-card-name, .lc-card.is-state-waiting .lc-waiting-copy { color: var(--ink-soft); }
-/* Done for the night: green chamfered top edge. */
-.lc-card.is-state-finished { --piece-edge: color-mix(in srgb, var(--success) 80%, #000); }
-.lc-card.is-state-finished::before { box-shadow: inset 0 0 0 2px var(--piece-edge), inset 0 6px 0 var(--success); }
-/* Due: rail and chamfer in the warning ink, one 300ms shake — the only
-   shake in the system — and the goose honks until it's handled. */
-.lc-card.is-state-due { --piece-edge: var(--warning-soft-ink); --rail: var(--warning-soft-ink); animation: lc-shake 300ms ease-out both; }
-/* Free hands: Up next's silhouette plus the amber eyebrow band. */
-.lc-card-brow {
-  position: relative;
-  margin: 2px 2px 0;
-  padding: 8px 14px;
-  border-radius: 10px 10px 0 0;
-  background: var(--warning-soft);
-  color: var(--warning-soft-ink);
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+.lc-card.is-a { rotate: -0.4deg; }
+.lc-card.is-b { rotate: 0.4deg; }
+.lc-card::before {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  left: 9px;
+  top: 14px;
+  bottom: 14px;
+  width: 8px;
+  background-image: radial-gradient(circle, var(--paper-punch) 3px, var(--paper-edge) 3.4px, transparent 4px);
+  background-repeat: repeat-y;
+  background-size: 8px 22px;
+  pointer-events: none;
 }
+/* Due: one 300ms shake — the only shake in the system — and the goose
+   honks until it's handled. */
+.lc-card.is-state-due { animation: lc-shake 300ms ease-out both; }
 
+/* A — the head. A 3px rule in the player's softened colour; while their
+   hands are on something the band fills with their tint and the rule
+   goes to full colour. An offer's rule is dashed — not yours yet. */
 .lc-card-head {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px 16px 10px 20px;
+  min-height: 64px;
+  padding: 8px 16px 8px 30px;
+  border-bottom: 3px solid var(--rule);
+  transition: background 240ms ease-out, border-color 240ms ease-out;
 }
-.lc-card-name { flex: 1; min-width: 0; font-size: 20px; line-height: 24px; font-weight: 700; }
-/* Versus: the name with its state on the line under it, and the score
-   at 44 on the right — where "+20" lands and the counter rolls. */
-.lc-card-head.is-scored { padding-right: 16px; }
-.lc-card-id { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.lc-card-id .lc-card-name { flex: none; line-height: 26px; }
-.lc-card-status {
+.lc-card.is-active .lc-card-head { background: var(--pc-bg); border-bottom-color: var(--pc); }
+.lc-card.is-offer .lc-card-head { border-bottom-style: dashed; }
+.lc-card-id { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.lc-card-name { font-size: 18px; line-height: 24px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-card-ticket { font-size: 13px; line-height: 18px; color: var(--ink-soft); }
+/* The score roundel — where "+20" lands: a double-ringed stamp in the
+   player's colour, the number in the play face. */
+.lc-card-score {
+  flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 14px;
-  line-height: 18px;
-  font-weight: 500;
-  color: var(--ink-soft);
-  white-space: nowrap;
+  gap: 4px;
+  height: 46px;
+  padding: 0 14px 0 16px;
+  border: 2px solid var(--pc);
+  border-radius: 999px;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 2px var(--paper), inset 0 0 0 3px var(--pc);
+  rotate: -3deg;
 }
-.lc-card-status.is-active.is-a { color: var(--cook-a-ink); }
-.lc-card-status.is-active.is-b { color: var(--cook-b-ink); }
-.lc-card-status.is-active.is-a .lc-eyebrow-dot { background: var(--cook-a); }
-.lc-card-status.is-active.is-b .lc-eyebrow-dot { background: var(--cook-b); }
-.lc-card-status.is-active .lc-eyebrow-dot { animation: lc-dot 1.6s ease-in-out infinite; }
-.lc-card-status.is-finished { color: var(--success); }
-.lc-card-status.is-due { color: var(--warning-soft-ink); }
-.lc-card-status.is-paused { color: var(--ink-faint); }
-.lc-card-score { flex: none; display: inline-flex; align-items: baseline; gap: 6px; }
-.lc-card-points { font-size: 44px; line-height: 44px; font-weight: 700; letter-spacing: -0.02em; min-width: 2ch; text-align: right; }
-.lc-card.is-a .lc-card-points { color: var(--cook-a-ink); }
-.lc-card.is-b .lc-card-points { color: var(--cook-b-ink); }
+.lc-card-score:has(.is-landing) { animation: lc-thunk 180ms 600ms ease-out both; }
+.lc-card-points {
+  display: inline-block;
+  min-width: 2ch;
+  text-align: right;
+  font-family: var(--font-play);
+  font-size: 32px;
+  line-height: 32px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--pc-ink);
+}
 .lc-card-points.is-landing { animation: lc-pop 320ms 600ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
-.lc-card-pts { font-size: 14px; color: var(--ink-soft); }
-.lc-eyebrow {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: var(--ds-chip);
-  color: var(--ink-soft);
-  font-size: 15px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-.lc-eyebrow-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-.lc-eyebrow.is-active .lc-eyebrow-dot { animation: lc-dot 1.6s ease-in-out infinite; }
-.lc-eyebrow.is-active.is-a { background: var(--cook-a-bg); color: var(--cook-a-ink); }
-.lc-eyebrow.is-active.is-b { background: var(--cook-b-bg); color: var(--cook-b-ink); }
-.lc-eyebrow.is-offer { background: var(--warning-soft); color: var(--warning-soft-ink); }
-.lc-eyebrow.is-finished { background: transparent; border: 2px solid var(--success); color: var(--success); }
-.lc-eyebrow.is-paused { color: var(--ink-faint); }
-.lc-eyebrow.is-due { background: var(--warning-soft); color: var(--warning-soft-ink); }
-.lc-eyebrow.is-due .lc-eyebrow-dot { animation: lc-dot 1.6s ease-in-out infinite; }
+.lc-card-pts { margin-top: 8px; font-size: 13px; line-height: 13px; font-weight: 500; color: var(--pc-ink); }
 
-.lc-card-body { position: relative; display: flex; flex-direction: column; gap: 12px; flex: 1; padding: 0 20px 8px; }
-.lc-step-title { margin: 0; font-size: 20px; line-height: 26px; font-weight: 700; letter-spacing: -0.01em; text-wrap: pretty; }
-.lc-step-desc { margin: 0; font-size: 15px; line-height: 22px; color: var(--ink-soft); }
-/* The instruction: full ink, a step up from meta — it is what the cook
-   reads; everything under it is bookkeeping. */
-.lc-step-desc.is-instruction { font-size: 15px; line-height: 22px; color: var(--ink); text-wrap: pretty; }
-.lc-step-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-/* Phase chip: system Chip in the player's color, the one thing that
-   has to read from across the kitchen (with the eyebrow saying it too). */
-.lc-phase-chip {
-  display: inline-flex;
-  align-items: center;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  font-size: 15px;
-  font-weight: 500;
-  white-space: nowrap;
+/* B — the order. The eyebrow (dish · tools), the title, the
+   instruction, and the clock pinned to the bottom of the zone. Text
+   clamps; it never grows the card. */
+.lc-card-body { position: relative; display: flex; flex-direction: column; min-height: 0; padding: 14px 20px 12px 30px; overflow: hidden; }
+.lc-card-body > .lc-pts-tag { position: absolute; top: 13px; right: 18px; }
+.lc-order-brow { display: flex; align-items: center; gap: 8px; min-height: 26px; padding-right: 64px; overflow: hidden; }
+.lc-order-dish { min-width: 0; flex: 0 1 auto; font-size: 13px; line-height: 18px; font-weight: 500; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-step-title {
+  margin: 8px 0 0;
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-wrap: pretty;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  animation: lc-rise 240ms ease-out both;
 }
-.lc-phase-chip.is-a { background: var(--cook-a-bg); color: var(--cook-a-ink); }
-.lc-phase-chip.is-b { background: var(--cook-b-bg); color: var(--cook-b-ink); }
-
-/* The moment banner sits where a primary would — same 64px, same
-   width — so across the two cards a "Done" and a "Get it going — 0:07"
-   are on one line. Amber, not a button: it is a clock to act by. */
-.lc-moment { grid-row: 1; display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 0 20px; border-radius: var(--radius-control, 12px); background: var(--warning-soft); }
-.lc-moment-instruction { flex: 1 1 auto; min-width: 0; font-size: 18px; line-height: 24px; font-weight: 500; color: var(--warning-soft-ink); }
-.lc-moment-countdown { flex: none; font-size: 28px; line-height: 32px; font-weight: 700; letter-spacing: -0.01em; color: var(--warning-soft-ink); }
-
-/* Tending chip — the Schedule's vocabulary, as a neutral chip. */
-.lc-tending-chip {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: var(--ds-chip);
-  color: var(--ink-soft);
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
+.lc-step-title.is-quiet { color: var(--ink-soft); }
+/* The instruction: full ink — it is what the cook reads. */
+.lc-step-desc {
+  margin: 6px 0 0;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--ink);
+  text-wrap: pretty;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-/* The heat ring: a 3px conic ring around the timer block that fills to
-   est in the player's colour, then turns amber. A value, not motion. */
-/* Elapsed against est as one rail — the pot rows' drawing (.lc-axis)
-   with no moments on it. The fill is the player's colour to est, then
-   the whole rail goes amber and the right end reads "0:20 over". */
-.lc-step-rail { display: flex; align-items: center; gap: 10px; min-width: 0; --rail: var(--ink); --rail-bg: var(--line); }
+.lc-card-body > .lc-meta { margin-top: 6px; }
+.lc-order-spacer { flex: 1 1 auto; min-height: 10px; }
+/* The rail: elapsed · a 10px bar filling toward est · est — readable
+   from across the kitchen. Amber past est. */
+.lc-step-rail { display: flex; align-items: center; gap: 12px; min-height: 28px; --rail: var(--ink); --rail-bg: var(--line); }
 .lc-step-rail.is-a { --rail: var(--cook-a); --rail-bg: var(--cook-a-bg); }
 .lc-step-rail.is-b { --rail: var(--cook-b); --rail-bg: var(--cook-b-bg); }
 .lc-step-rail.is-over { --rail: var(--warning-graphic); --rail-bg: var(--warning-soft); }
-.lc-step-rail-track { position: relative; flex: 1 1 auto; min-width: 0; height: 6px; border-radius: 999px; background: var(--rail-bg); overflow: hidden; }
+.lc-step-rail-track { position: relative; flex: 1 1 auto; min-width: 0; height: 10px; border-radius: 999px; background: var(--rail-bg); overflow: hidden; }
 .lc-step-rail-fill { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: var(--rail); transition: width 1s linear; }
-.lc-timer-value { flex: none; font-size: 20px; line-height: 24px; font-weight: 500; letter-spacing: -0.01em; min-width: 4ch; }
-.lc-timer-est { flex: none; font-size: 13px; color: var(--ink-soft); }
+.lc-timer-value { flex: none; min-width: 4ch; font-size: 18px; line-height: 24px; font-weight: 500; color: var(--ink); }
+.lc-timer-value.is-idle { color: var(--ink-soft); }
+.lc-timer-est { flex: none; font-size: 18px; line-height: 24px; color: var(--ink-soft); }
 .lc-step-rail.is-over .lc-timer-value, .lc-step-rail.is-over .lc-timer-est { color: var(--warning-soft-ink); }
-.lc-step-rail .lc-chip.is-points { margin-left: 6px; }
-/* Waiting: the countdown in the rail's slot, no rail — one number. */
-.lc-step-rail.is-countdown { gap: 6px; }
+.lc-step-rail.is-offer { gap: 8px; }
+.lc-offer-stamp { margin-left: auto; }
 
-.lc-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.lc-chip {
+.lc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.lc-chip, .lc-tending-chip {
+  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 32px;
-  padding: 0 12px;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--paper-edge);
   border-radius: 999px;
-  background: var(--ds-chip);
+  background: var(--surface);
+  color: var(--ink);
   font-size: 13px;
   font-weight: 500;
+  white-space: nowrap;
 }
-.lc-chip.is-points { background: var(--accent-soft); color: var(--accent); font-size: 15px; }
-.lc-chip.is-est { font-size: 16px; color: var(--ink-soft); background: transparent; padding: 0; }
-.lc-chip.is-points.is-big { height: 36px; padding: 0 14px; font-size: 24px; font-weight: 700; }
+.lc-tending-chip { border-color: var(--line-strong); color: var(--ink-soft); }
+.lc-chip.is-due { border-color: transparent; background: var(--warning-soft); color: var(--warning-soft-ink); }
+.lc-chip.is-phase { border-color: transparent; background: var(--pc-bg); color: var(--pc-ink); }
 
-/* The dealt card (Up next / Free hands): a dashed inset. The offer (Up
-   for grabs): a card within the card at −2°, the points big. */
-.lc-offer { display: flex; flex-direction: column; gap: 10px; }
-.lc-offer.is-dealt { padding: 12px; border: 2px dashed var(--line-strong); border-radius: 10px; }
-.lc-offer.is-tilted {
-  /* Room for the tilt: the raised corner needs ~10px above. */
-  margin: 10px 8px 4px;
-  padding: 16px;
-  border: 2px solid var(--ink);
-  border-radius: 12px;
-  background: var(--surface);
-  transform: rotate(-2deg);
-  box-shadow: 6px 7px 0 color-mix(in srgb, var(--ink) 16%, transparent);
-}
-.lc-offer .lc-step-title { font-size: 20px; line-height: 26px; }
-/* One fact line — how long · what it needs — with the points on the
-   right, where the score they'd add to also sits. */
-.lc-offer-meta { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.lc-offer-facts { flex: 1 1 auto; min-width: 0; font-size: 15px; line-height: 20px; color: var(--ink-soft); }
-
-.lc-step-title.is-quiet { color: var(--ink-soft); font-weight: 600; }
+/* Waiting: the countdown takes the title's place, in the play face. */
+.lc-wait { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; animation: lc-rise 240ms ease-out both; }
+.lc-wait-num { font-family: var(--font-play); font-size: 40px; line-height: 44px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
+.lc-wait-unit { font-size: 16px; line-height: 24px; color: var(--ink-soft); }
 .lc-waiting-copy .lc-avatar { vertical-align: -4px; margin-left: 6px; }
-.lc-card.is-state-finished .lc-waiting-copy { margin: 0; font-size: 17px; line-height: 24px; color: var(--ink-soft); }
-.lc-done-chip {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--success) 12%, var(--surface));
-  color: color-mix(in srgb, var(--success) 80%, #000);
-  font-size: 15px;
-  font-weight: 500;
-}
+.lc-card-body .goose-tracks { right: 12px; bottom: 6px; opacity: 0.8; }
 
-/* The action block is two fixed slots — 64px primary, 44px secondary
-   row — on every variant, whether or not a variant fills them. That is
-   what keeps Done / Start / Take it on one line across both cards and
-   the Skip · Undo row from pushing a primary up on one side only. The
-   right margin is the goose's. */
-.lc-card-actions {
-  display: grid;
-  grid-template-rows: 64px 44px;
-  gap: 8px;
-  padding: 8px 20px 18px;
-  margin-right: 124px;
-  margin-top: auto;
-}
-/* Explicit rows: a waiting card has no primary, and its (empty)
-   secondary row must not float up into the primary's slot. */
-.lc-card-actions > .lc-btn-xl { grid-row: 1; }
-.lc-card-secondary { grid-row: 2; display: flex; align-items: center; gap: 4px; min-height: 44px; }
-.lc-btn-undo { margin-left: auto; }
-/* The secondaries are quiet: small, soft ink, no accent — the primary
-   (or the banner) is the only loud thing in the block. Undo sits far
-   right on its own. */
-.ds-v4 .lc-card-secondary .btn { padding-inline: 10px; white-space: nowrap; font-size: 14px; color: var(--ink-soft); }
-.ds-v4 .lc-card-secondary .btn:hover { color: var(--ink); }
+/* Done for the night: the resting goose and the night's tally. */
+.lc-rest { display: flex; align-items: center; gap: 16px; margin-top: 10px; animation: lc-rise 240ms ease-out both; }
+.lc-rest-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.lc-rest-copy .lc-step-title { margin: 0; }
+.lc-rest-tally { font-size: 16px; line-height: 24px; }
+.lc-rest-tally .mono { font-size: 18px; font-weight: 500; }
+.lc-rest-pts { color: var(--pc-ink); }
+
+/* C — the action block: a 56px primary slot and a 36px row of quiet
+   ghosts on every state, whether or not it fills them. The right margin
+   is the goose's. */
+.lc-card-actions { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 4px 124px 14px 30px; }
+.lc-card-actions > :not(.lc-goose) { position: relative; z-index: 1; }
+.lc-primary-slot { display: flex; height: 56px; }
+.lc-primary-slot > * { flex: 1 1 auto; }
+.lc-card-secondary { display: flex; align-items: center; gap: 2px; height: 36px; margin-left: -10px; }
+.ds-v4 .lc-card-secondary .btn { min-height: 36px; padding: 0 10px; background: transparent; color: var(--ink-soft); font-size: 14px; white-space: nowrap; }
+.ds-v4 .lc-card-secondary .btn:hover:not(:disabled) { background: var(--paper-hover); color: var(--ink); }
 .ds-v4 .lc-card-secondary .btn:disabled { color: var(--ink-faint); }
-.ds-v4 .lc-card-secondary .btn:first-child { margin-left: -10px; }
+/* The moment banner holds the primary's slot: amber, a clock to act by. */
+.lc-moment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding: 0 16px 0 14px;
+  border-radius: var(--radius-control);
+  background: var(--warning-soft);
+  color: var(--warning-soft-ink);
+  box-shadow: 0 2px 0 var(--paper-edge);
+  animation: lc-rise 240ms ease-out both;
+}
+.lc-moment .kp-icon { flex: none; }
+.lc-moment-instruction { flex: 1 1 auto; min-width: 0; font-size: 16px; line-height: 20px; font-weight: 500; }
+.lc-moment-countdown { flex: none; font-size: 20px; line-height: 24px; font-weight: 500; }
 
-/* Paused: the whole card dims — the eyebrow, title and timer read as
-   frozen, and the disabled buttons say the rest. */
+/* D — on its own: one row per pot, the same inset in both cards. */
+.lc-cooking, .lc-cooking-empty { margin: 0 20px 14px 30px; }
+.lc-cooking { display: flex; flex-direction: column; gap: 6px; }
+.lc-cooking-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 8px 0 12px;
+  border: 1px solid var(--paper-edge);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: 13px;
+  animation: lc-fade 200ms ease-out both;
+}
+.lc-cooking-row .kp-icon { flex: none; }
+.lc-own-eyebrow { flex: none; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+.lc-cooking-row-label { flex: 1 1 auto; min-width: 0; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-cooking-row-next { flex: none; display: inline-flex; align-items: baseline; gap: 6px; }
+.lc-cooking-row-next-label { font-size: 12px; color: var(--ink-soft); }
+.lc-cooking-row-next-value { font-size: 14px; font-weight: 500; }
+.ds-v4 .lc-cooking-row-done { flex: none; min-height: 28px; height: 28px; padding: 0 12px; border: none; border-radius: 6px; background: var(--success); color: #fff; font-size: 13px; }
+/* Due: warning tint, one pop on entry. No red — a passed check is just
+   gone, a late finish counts up. */
+.lc-cooking-row.is-due { border-color: transparent; background: var(--warning-soft); color: var(--warning-soft-ink); animation: lc-attend 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.lc-cooking-row.is-due .lc-own-eyebrow, .lc-cooking-row.is-due .lc-cooking-row-next-label { color: var(--warning-soft-ink); }
+.lc-cooking-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px dashed var(--paper-dash);
+  border-radius: var(--radius-control);
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+/* The live time axis — the Schedule's rail-and-moments drawing. */
+.lc-axis { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lc-axis-end { flex: none; font-size: 12px; color: var(--ink-soft); }
+.lc-axis-track { position: relative; flex: 1 1 auto; min-width: 0; height: 16px; }
+.lc-axis-rail, .lc-axis-fill { position: absolute; left: 0; top: 5px; height: 6px; border-radius: 999px; }
+.lc-axis-rail { right: 0; }
+.lc-axis-moment { position: absolute; top: 0; height: 16px; box-sizing: border-box; border: 1px solid; border-radius: 4px; transform: translateX(-5px); }
+.lc-axis-now { position: absolute; top: 0; width: 2px; height: 16px; margin-left: -1px; background: var(--ink); }
+.lc-axis.is-compact { flex: 0 0 72px; }
+.lc-axis.is-compact .lc-axis-track { height: 12px; }
+.lc-axis.is-compact .lc-axis-rail, .lc-axis.is-compact .lc-axis-fill { top: 4px; height: 4px; }
+.lc-axis.is-compact .lc-axis-moment { height: 12px; }
+.lc-axis.is-compact .lc-axis-now { height: 12px; }
+.lc-axis.is-a .lc-axis-rail { background: var(--cook-a-bg); }
+.lc-axis.is-a .lc-axis-fill { background: var(--cook-a); }
+.lc-axis.is-a .lc-axis-moment { border-color: var(--cook-a); background: var(--cook-a); }
+.lc-axis.is-a .lc-axis-moment.is-past { background: var(--cook-a-bg); }
+.lc-axis.is-b .lc-axis-rail { background: var(--cook-b-bg); }
+.lc-axis.is-b .lc-axis-fill { background: var(--cook-b); }
+.lc-axis.is-b .lc-axis-moment { border-color: var(--cook-b); background: var(--cook-b); }
+.lc-axis.is-b .lc-axis-moment.is-past { background: var(--cook-b-bg); }
+
+/* Paused: the whole ticket dims — the title and clock read as frozen,
+   and the disabled buttons say the rest. */
 .lc-card.is-paused .lc-step-title, .lc-card.is-paused .lc-card-name { color: var(--ink-soft); }
 .lc-card.is-paused .lc-timer-value, .lc-card.is-paused .lc-timer-est, .lc-card.is-paused .lc-step-desc { color: var(--ink-faint); }
 .lc-card.is-paused .lc-step-rail { --rail: var(--ink-faint); --rail-bg: var(--line); }
-.lc-card.is-paused .lc-step-rail .lc-chip, .lc-card.is-paused .lc-card-secondary { opacity: 0.5; }
-.lc-card.is-paused .lc-avatar, .lc-card.is-paused .lc-goose { opacity: 0.6; }
-.lc-card.is-paused .lc-phase-chip, .lc-card.is-paused .lc-moment, .lc-card.is-paused .lc-cooking { opacity: 0.6; }
-.lc-card.is-paused .lc-cooking-row, .lc-card.is-paused .lc-btn-done, .lc-card.is-paused .lc-goose { animation: none; }
+.lc-card.is-paused .lc-card-secondary { opacity: 0.5; }
+.lc-card.is-paused .lc-avatar, .lc-card.is-paused .lc-goose, .lc-card.is-paused .lc-moment, .lc-card.is-paused .lc-cooking { opacity: 0.6; }
+.lc-card.is-paused .lc-cooking-row, .lc-card.is-paused .lc-goose { animation: none; }
 
 /* ---------------- Toque (the agent) ---------------- */
 /* The panel fills the drawer's height: a titled head with a close
@@ -745,41 +732,42 @@
 .lc-say-input:focus { outline: 2px solid var(--ink); outline-offset: 1px; }
 
 /* ---------------- the board (Versus) ----------------
-   Quiet on purpose: 1px rules on paper, no ink border, no extrusion —
-   the two player cards are the first thing the eye lands on. Tiles are
-   white on it. A claim presses the tile into the claimant's tint with
-   "Leo took it" on it, then it settles to a rail in their colour with
-   the next moment beside their name. What's not ready yet is one line
-   under the grid. */
+   Schedule's card-on-panel relationship: a bg-secondary panel, small
+   paper tickets on it. Every tile has the same rows, the tool row
+   always reserved and the claim halves pinned to the bottom, so a row
+   of tiles shares its edges. */
 .lc-pool {
-  --board-bg: color-mix(in srgb, var(--surface) 55%, var(--surface-sunken));
-  --board-line: color-mix(in srgb, var(--line) 85%, var(--ink-faint));
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 18px 16px;
-  border: 1px solid var(--board-line);
+  gap: 12px;
+  padding: 14px 18px 16px;
   border-radius: var(--radius-card);
-  background: var(--board-bg);
+  background: var(--surface-sunken);
   animation: lc-rise 240ms 120ms ease-out both;
 }
 .lc-pool-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
-.lc-pool-head h2 { margin: 0; }
-.lc-pool-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.lc-pool-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .lc-tile {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--board-line);
+  gap: 6px;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--paper-edge);
   border-radius: 10px;
-  background: var(--surface);
+  background: var(--paper);
+  box-shadow: 0 2px 0 var(--paper-ledge);
   animation: lc-rise 240ms ease-out both;
 }
+.lc-tile-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.lc-tile-label { min-width: 0; font-size: 16px; line-height: 22px; font-weight: 700; text-wrap: pretty; }
+.lc-tile-meta { font-size: 13px; line-height: 18px; color: var(--ink-soft); }
+.lc-tile-meta .mono { color: var(--ink); }
+.lc-tile-chips { min-height: 24px; }
 /* The refusal, on the thing that was tapped: warning tint, one line,
    the system's attention spring, gone after CLAIM_NOTE_MS. */
 .lc-claim-note {
-  margin: 0;
+  margin: 6px 0 0;
   padding: 6px 10px;
   border-radius: 8px;
   background: var(--warning-soft);
@@ -788,87 +776,83 @@
   line-height: 18px;
   animation: lc-attend 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
-.lc-tile-chips { gap: 6px; }
-.lc-tile-chips .lc-chip { height: 24px; padding: 0 8px; font-size: 12px; }
-/* Tiles in one grid row stretch to the tallest; the claim buttons pin
-   to the bottom so a one-line label and a two-line label still put
-   their buttons on the same baseline. */
-.lc-tile-claims { margin-top: auto; padding-top: 4px; }
-.lc-tile-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.lc-tile-label { font-size: 16px; font-weight: 500; line-height: 22px; }
-.lc-tile-meta-strong { color: var(--ink); }
-.lc-tile-holder .mono.is-due { color: var(--warning-soft-ink); font-weight: 500; }
-.lc-tile-meta { font-size: 13px; color: var(--ink-soft); }
-.lc-tile-claims { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-/* One button per player, in their tint with their ink; the press is
-   1px, not the pieces' 2. Grey when that player's hands are full. */
+/* Two halves of one bar, one per player: the accent while they can
+   take it, chip grey (with why) when they can't. */
+.lc-tile-claims { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; margin-top: auto; padding-top: 6px; }
 .ds-v4 .lc-claim {
   min-height: 44px;
-  padding: 0 8px;
-  border: 1px solid var(--claim-line);
-  border-radius: 8px;
-  background: var(--claim-bg);
-  color: var(--claim-ink);
-  font-weight: 500;
-  box-shadow: none;
-  transition: transform 120ms ease-out, background 120ms ease-out;
-}
-.ds-v4 .lc-claim.is-a { --claim-bg: var(--cook-a-bg); --claim-line: color-mix(in srgb, var(--cook-a) 45%, var(--cook-a-bg)); --claim-ink: var(--cook-a-ink); }
-.ds-v4 .lc-claim.is-b { --claim-bg: var(--cook-b-bg); --claim-line: color-mix(in srgb, var(--cook-b) 45%, var(--cook-b-bg)); --claim-ink: var(--cook-b-ink); }
-.ds-v4 .lc-claim.is-a:hover:not(:disabled) { background: color-mix(in srgb, var(--cook-a) 14%, var(--cook-a-bg)); }
-.ds-v4 .lc-claim.is-b:hover:not(:disabled) { background: color-mix(in srgb, var(--cook-b) 14%, var(--cook-b-bg)); }
-.ds-v4 .lc-claim:active:not(:disabled) { transform: translateY(1px); }
-.ds-v4 .lc-claim:disabled { background: var(--surface-sunken); color: var(--ink-faint); border-color: var(--line); cursor: not-allowed; }
-/* Taken: a 6px rail in the player's mid-tint, the holder and the next
-   moment on one line. Freshly claimed: the whole tile in their tint
-   with "Leo took it" — the other player sees the steal. */
-.lc-tile.is-taken { gap: 6px; border-left-width: 6px; animation: lc-spring 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
-.lc-tile.is-taken.is-a { border-left-color: color-mix(in srgb, var(--cook-a) 35%, var(--surface)); }
-.lc-tile.is-taken.is-b { border-left-color: color-mix(in srgb, var(--cook-b) 35%, var(--surface)); }
-.lc-tile.is-taken.is-fresh { gap: 8px; border-left-width: 1px; }
-.lc-tile.is-taken.is-fresh.is-a { background: var(--cook-a-bg); border-color: color-mix(in srgb, var(--cook-a) 40%, var(--cook-a-bg)); }
-.lc-tile.is-taken.is-fresh.is-b { background: var(--cook-b-bg); border-color: color-mix(in srgb, var(--cook-b) 40%, var(--cook-b-bg)); }
-.lc-tile-took {
-  flex: none;
   display: inline-flex;
   align-items: center;
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 0;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--accent) 72%, #000);
+}
+.ds-v4 .lc-claim:first-child { border-radius: var(--radius-control) 0 0 var(--radius-control); }
+.ds-v4 .lc-claim:last-child { border-radius: 0 var(--radius-control) var(--radius-control) 0; }
+.ds-v4 .lc-claim:hover:not(:disabled) { background: var(--ds-accent-hover); }
+.ds-v4 .lc-claim:active:not(:disabled) { transform: translateY(2px); box-shadow: none; }
+.ds-v4 .lc-claim:disabled { background: var(--ds-chip); color: var(--ink-faint); box-shadow: none; cursor: not-allowed; }
+.ds-v4 .lc-claim:disabled .lc-avatar { opacity: 0.55; }
+.lc-claim-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-claim-why { font-weight: 400; }
+/* Taken: the goose stamps who took it across the tile for a beat, then
+   it settles to the holder and their next moment. */
+.lc-tile.is-taken { border-top: 3px solid var(--pc); animation: lc-spring 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.lc-tile.is-taken.is-fresh > :not(.lc-tile-took) { opacity: 0.5; }
+.lc-tile-took { position: absolute; right: 16px; bottom: 16px; rotate: -6deg; }
+.lc-tile-holder { display: inline-flex; align-items: center; gap: 8px; margin-top: auto; font-size: 13px; font-weight: 500; }
+.lc-tile-holder .mono { color: var(--ink-soft); }
+.lc-tile-holder .mono.is-due { color: var(--warning-soft-ink); font-weight: 500; }
+/* NOT YET: Schedule's locked chips — a pause mark and the name. */
+.lc-pool-notyet { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.lc-pool-notyet .lc-eyebrow-label { margin-right: 4px; }
+.lc-notyet-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 12px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
   background: var(--surface);
+  box-shadow: 0 2px 0 var(--line);
+  color: var(--ink-soft);
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
 }
-.lc-tile.is-a .lc-tile-took { color: var(--cook-a-ink); }
-.lc-tile.is-b .lc-tile-took { color: var(--cook-b-ink); }
-.lc-tile-holder { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; }
-.lc-tile-holder .mono { color: var(--ink-soft); }
-.lc-pool-notyet { padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; line-height: 20px; color: var(--ink-faint); }
-.lc-pool-notyet-label { color: var(--ink-soft); }
+.lc-notyet-chip::before { content: ""; width: 3px; height: 10px; border-left: 2px solid var(--line-strong); border-right: 2px solid var(--line-strong); }
 
-/* ---------------- Toque's line (Versus) ----------------
-   One line, the newest utterance only, as a piece-flavoured button:
-   ink border, 4px hard shadow, pressed = 2px in. Tap for the drawer. */
+/* ---------------- Toque's line ----------------
+   One line, the newest utterance only. Tap for the drawer. */
+/* A bg-secondary row, not a piece: it is one line of the conversation
+   and a way into the drawer, not a panel competing with the cards. */
 .lc-toque-line {
   display: flex;
   align-items: center;
   gap: 12px;
   height: 56px;
   padding: 0 14px;
-  border: 2px solid var(--ink);
+  border: none;
   border-radius: var(--radius-card);
-  background: var(--surface);
+  background: var(--surface-sunken);
   color: var(--ink);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  box-shadow: 4px 4px 0 var(--ink);
-  transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+  transition: transform 120ms ease-out, background 120ms ease-out;
   animation: lc-rise 240ms 140ms ease-out both;
 }
-.lc-toque-line:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
-.lc-toque-line .lc-agent-tag { flex: none; }
+.lc-toque-line:hover { background: var(--ds-chip-hover); }
+.lc-toque-line:active { transform: scale(0.99); }
+.lc-toque-line .goose-print { flex: none; }
 .lc-toque-line-text {
   flex: 1 1 auto;
   min-width: 0;
@@ -876,10 +860,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 15px;
+  line-height: 22px;
   animation: lc-rise 240ms ease-out both;
 }
 .lc-toque-line-text.is-agent { color: var(--ai); }
-.lc-toque-line-count { flex: none; display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 500; color: var(--accent); }
+.lc-toque-line-count { flex: none; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--accent); }
 .lc-toque-line-chevron {
   width: 26px;
   height: 26px;
@@ -906,35 +891,26 @@
   display: flex;
   flex-direction: column;
   background: var(--surface);
-  border-left: 2px solid var(--ink);
+  /* The modal shadow separates it; no border. */
+  box-shadow: var(--shadow-modal);
   animation: lc-drawer-in 240ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 /* ---------------- footer band ----------------
-   In flow, not sticky: the primaries live on the cards, and a sticky
-   band here would sit on top of them on an 800px counter screen.
-   "Call it early" is the one action that can wait for a scroll. Once
-   everything's done the footer is the primary, so it pins again. */
+   In flow, not sticky: the primaries live on the cards. Once everything
+   is done the footer holds "Dinner's up" on a light panel. */
 .lc-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
   padding: 12px 0;
-  border-top: 2px solid var(--ink);
+  border-top: 1px solid var(--line);
 }
-/* Everything done: the band becomes a dark piece like the strip — the
-   run's two cabinet edges now hold "Dinner's up" between them. Keep it
-   in flow after Toque: pinning this footer made it cover Toque's line
-   when the bottom of the board was scrolled into view. */
-.lc-footer.is-final {
-  padding: 14px 20px;
-  border-top: none;
-  color: #fff;
-}
-.lc-footer.is-final .lc-footer-meta { font-size: 15px; color: color-mix(in srgb, #fff 62%, transparent); }
+.lc-footer.is-final { padding: 12px 12px 12px 20px; border-top: none; border-radius: var(--radius-card); background: var(--surface-sunken); }
 .ds-v4 .lc-footer.is-final .btn-primary { min-height: 56px; padding: 0 28px; font-size: 18px; }
 .lc-footer-meta { font-size: 14px; color: var(--ink-soft); }
+.lc-footer-meta .mono { color: var(--ink); }
 .ds-v4 .lc-btn-early { padding-inline: 12px; margin-left: -12px; }
 
 /* ---------------- modals ---------------- */
@@ -966,110 +942,137 @@
 .lc-modal .lc-btn-danger { padding: 0 20px; background: var(--accent); color: #fff; }
 .lc-modal .lc-btn-danger:hover { background: var(--ds-accent-hover); filter: none; }
 
-.paused-banner { border-style: dashed; }
-.paused-banner .mini-title { color: var(--crit); }
 
-
-/* --- "Cooking on its own" -------------------------------------------
-   Pinned under the action block: every pot this cook has going, its
-   next moment counting down. Quiet while running; the system's "needs
-   you" treatment when a check or the finish is due. */
-.lc-cooking {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  /* Right margin is the goose's lane (same as the action block's). */
-  margin: 0 144px 16px 24px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-}
-.lc-cooking-head { display: flex; align-items: center; gap: 8px; }
-.lc-cooking-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-height: 56px;
-  padding: 8px 10px;
-  border-radius: var(--radius-control);
-  border-left: 3px solid transparent;
-  background: var(--surface);
-  animation: lc-fade 200ms ease-out both;
-}
-.lc-cooking-row-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.lc-cooking-row-label { flex: 1 1 auto; min-width: 0; font-size: 16px; line-height: 22px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lc-cooking-row-next { display: flex; align-items: baseline; justify-content: flex-end; gap: 8px; }
-.lc-cooking-row-next-label { font-size: 12px; line-height: 16px; color: var(--ink-soft); }
-.lc-cooking-row-next-value { font-size: 20px; line-height: 24px; font-weight: 500; }
-.ds-v4 .lc-cooking-row-done { width: 100%; min-height: 44px; }
-
-/* Due: warning tint, the player's color as the left rail, one pop on
-   entry. No red — a passed check is just gone, a late finish counts up. */
-.lc-cooking-row.is-due { background: var(--warning-soft); animation: lc-attend 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
-.lc-cooking-row.is-due.is-a { border-left-color: var(--cook-a); }
-.lc-cooking-row.is-due.is-b { border-left-color: var(--cook-b); }
-.lc-cooking-row.is-due .lc-cooking-row-next-label { font-size: 13px; font-weight: 500; color: var(--warning-soft-ink); }
-.lc-cooking-row.is-due .lc-cooking-row-next-value { color: var(--warning-soft-ink); }
-
-/* The live time axis — the Schedule's rail-and-moments drawing scaled
-   to the row: 6px rail, 10×16 moment blocks in the player's color
-   (past ones in the tint), elapsed fill and a 2px now marker. */
-.lc-axis { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.lc-axis-end { flex: none; font-size: 12px; color: var(--ink-soft); }
-.lc-axis-track { position: relative; flex: 1 1 auto; min-width: 0; height: 16px; }
-.lc-axis-rail, .lc-axis-fill { position: absolute; left: 0; top: 5px; height: 6px; border-radius: 999px; }
-.lc-axis-rail { right: 0; }
-.lc-axis-moment {
-  position: absolute;
-  top: 0;
-  height: 16px;
-  box-sizing: border-box;
-  border: 1px solid;
-  border-radius: 4px;
-  /* Centered on its time; clamped so the first and last stay inside. */
-  transform: translateX(-5px);
-}
-.lc-axis-now { position: absolute; top: 0; width: 2px; height: 16px; margin-left: -1px; background: var(--ink); }
-.lc-axis.is-a .lc-axis-rail { background: var(--cook-a-bg); }
-.lc-axis.is-a .lc-axis-fill { background: var(--cook-a); }
-.lc-axis.is-a .lc-axis-moment { border-color: var(--cook-a); background: var(--cook-a); }
-.lc-axis.is-a .lc-axis-moment.is-past { background: var(--cook-a-bg); }
-.lc-axis.is-b .lc-axis-rail { background: var(--cook-b-bg); }
-.lc-axis.is-b .lc-axis-fill { background: var(--cook-b); }
-.lc-axis.is-b .lc-axis-moment { border-color: var(--cook-b); background: var(--cook-b); }
-.lc-axis.is-b .lc-axis-moment.is-past { background: var(--cook-b-bg); }
-
-/* ---------------- Service done (finished) ---------------- */
+/* ---------------- Service done ----------------
+   A results screen: the illustration, then the two result tickets
+   either side of the final score (Versus) or the night against the plan
+   (Co-op); the receipt on the right, as tall as that column. */
 .lc-service {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 48px;
-  padding: 8px 0;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 32px;
+  padding: 4px 0 8px;
   animation: lc-rise 240ms ease-out both;
 }
-.lc-service-main { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
-.lc-service-clock { font-size: 48px; line-height: 52px; font-weight: 500; letter-spacing: -0.02em; }
-.lc-service-scores { display: grid; grid-template-columns: 1fr; gap: 16px; width: 100%; max-width: 420px; margin-top: 16px; }
-/* Celebration: a tile per player with their goose behind the name —
-   the winner's up with wings out, the other's tucked in for the night. */
-.lc-score-tile {
+.lc-service-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.lc-service-top { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.lc-service-clock { font-size: 14px; font-weight: 500; }
+.lc-service-art { display: block; align-self: center; width: min(100%, 500px); height: auto; aspect-ratio: 2 / 1; margin: -4px 0 -6px; }
+
+/* Versus: ticket · final score · ticket. Both tickets are the same width
+   and top edge; the winner is marked by the banner and the tinted head. */
+.lc-results {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: 18px;
+  padding-top: 24px;
+}
+.lc-result {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 16px 14px 30px;
+  border: 1px solid var(--paper-edge);
+  border-radius: var(--radius-card);
+  background: var(--paper);
+  box-shadow: 0 2px 0 var(--paper-ledge);
+}
+.lc-result.is-a { rotate: -0.4deg; }
+.lc-result.is-b { rotate: 0.4deg; }
+.lc-result::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 14px;
+  bottom: 14px;
+  width: 8px;
+  background-image: radial-gradient(circle, var(--paper-punch) 3px, var(--paper-edge) 3.4px, transparent 4px);
+  background-repeat: repeat-y;
+  background-size: 8px 22px;
+  pointer-events: none;
+}
+.lc-result-head {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 120px;
-  padding: 14px 120px 14px 16px;
+  margin: 0 -16px 0 -30px;
+  padding: 18px 16px 12px 30px;
+  border-bottom: 3px solid var(--rule);
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
 }
-.lc-score-tile.is-winner.is-a { --piece-edge: var(--cook-a-ink); }
-.lc-score-tile.is-winner.is-b { --piece-edge: var(--cook-b-ink); }
-.lc-score-goose { position: absolute; right: 12px; bottom: 8px; z-index: -1; }
-.lc-leader-trophy { color: var(--accent); }
-.lc-score-body { flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.lc-score-name { font-size: 16px; font-weight: 500; }
-.lc-score-points { font-size: 28px; line-height: 32px; font-weight: 500; }
-.lc-service-winner { margin: 8px 0 0; font-size: 18px; font-weight: 500; }
-.lc-service-cta { margin-top: 16px; }
+.lc-result.is-winner .lc-result-head { background: var(--pc-bg); border-bottom-color: var(--pc); }
+.lc-result-id { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.lc-result-name {
+  max-width: 100%;
+  font-family: var(--font-play);
+  font-size: 40px;
+  line-height: 44px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--pc-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lc-result-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.lc-result-stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lc-result-num { font-family: var(--font-play); font-size: 32px; line-height: 36px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.lc-result-num.is-points { color: var(--pc-ink); }
+.lc-result-fact { display: flex; flex-direction: column; gap: 2px; padding-top: 10px; border-top: 1px solid var(--paper-edge); }
+.lc-result-fact-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.lc-result-fact-value { min-width: 0; font-size: 15px; line-height: 22px; font-weight: 500; }
+/* WINNER / DEAD HEAT — a ribbon with notched ends, in the goose's mono. */
+.lc-banner {
+  position: absolute;
+  z-index: 3;
+  left: -10px;
+  right: -10px;
+  top: -24px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--pc);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 50%, 100% 100%, 0 100%, 12px 50%);
+  animation: lc-stamp-in 320ms 200ms cubic-bezier(0.2, 1.5, 0.4, 1) both;
+}
+.lc-banner.is-tie { top: 0; left: -8px; right: -8px; background: var(--ink); color: var(--surface); }
+.lc-results.is-tie { padding-top: 44px; }
+.lc-final { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+.lc-final-score { display: flex; align-items: baseline; gap: 6px; font-family: var(--font-play); font-size: 56px; line-height: 60px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.lc-final-score .is-a { color: var(--cook-a-ink); }
+.lc-final-score .is-b { color: var(--cook-b-ink); }
+.lc-final-colon { color: var(--ink-faint); }
+
+/* Co-op: "Dinner's up", the night against the plan, one shared bar. */
+.lc-coop-result { display: flex; flex-direction: column; gap: 14px; }
+.lc-coop-title { margin: 0; font-family: var(--font-play); font-size: 40px; line-height: 44px; font-weight: 800; letter-spacing: -0.02em; }
+.lc-coop-delta { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-top: -6px; }
+.lc-coop-delta-num { font-family: var(--font-play); font-size: 56px; line-height: 60px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--success); }
+.lc-coop-delta-num.is-over { color: var(--warning-soft-ink); }
+.lc-coop-times { display: flex; flex-direction: column; font-size: 13px; line-height: 18px; color: var(--ink-soft); }
+.lc-coop-times .mono { color: var(--ink); }
+.lc-share { display: flex; flex-direction: column; gap: 8px; }
+.lc-share-legend { display: flex; justify-content: space-between; gap: 16px; }
+.lc-share-who { display: inline-flex; align-items: center; gap: 6px; }
+.lc-share-who.is-b { flex-direction: row-reverse; }
+.lc-share-name { font-size: 16px; font-weight: 700; }
+.lc-share-n { font-size: 16px; font-weight: 500; color: var(--pc-ink); }
+.lc-share-bar { display: flex; gap: 2px; height: 10px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.lc-share-bar > span { flex-basis: 0; background: var(--pc); }
+.lc-service-actions { display: flex; align-items: center; gap: 12px; margin-top: auto; padding-top: 4px; }
 .lc-service-error {
   width: 100%;
-  margin: 8px 0 0;
+  margin: 0;
   padding: 14px 18px;
   border-radius: 12px;
   background: var(--crit-soft);
@@ -1077,21 +1080,51 @@
   font-size: 15px;
   line-height: 22px;
 }
-.lc-service-main { padding: 4px 0; }
-/* The step list matches the celebration's height and scrolls inside.
-   The cell is the grid item; the panel is absolute within it, so its
-   rows don't size the row — the column on the left does. */
-.lc-service-steps-cell { position: relative; min-height: 320px; }
-.lc-service-steps { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 0; }
-.lc-service-steps-head { flex: none; display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 16px 18px 12px; border-bottom: 1px solid var(--line); }
-.lc-service-steps-title { margin: 0; font-size: 18px; line-height: 24px; font-weight: 700; }
-.lc-step-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; list-style: none; margin: 0; padding: 0 18px 8px; }
-.lc-step-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
-.lc-step-row:last-child { border-bottom: none; }
-.lc-step-row-label { font-size: 16px; font-weight: 500; }
-.lc-step-row-meta { font-size: 13px; color: var(--ink-soft); text-align: right; }
-.lc-step-row.is-over .lc-step-row-meta { color: var(--warning-soft-ink); }
-.lc-step-row.is-skipped .lc-step-row-label, .lc-step-row.is-skipped .lc-step-row-meta { color: var(--ink-faint); }
+
+/* The receipt: cream paper with a torn edge, one line per step with a
+   dotted leader, the finisher's avatar, the time and the points. It
+   matches the results column's height and scrolls inside. */
+.lc-service-steps-cell { position: relative; min-height: 420px; }
+.lc-receipt {
+  position: absolute;
+  inset: 0 0 10px;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px 14px;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  background: var(--paper);
+  /* A hairline that follows the torn edge too — a border can't. */
+  filter: drop-shadow(1px 0 0 var(--paper-edge)) drop-shadow(-1px 0 0 var(--paper-edge)) drop-shadow(0 1px 0 var(--paper-edge)) drop-shadow(0 -1px 0 var(--paper-edge));
+}
+.lc-receipt::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -10px;
+  height: 10px;
+  background:
+    linear-gradient(-45deg, transparent 7px, var(--paper) 0) 0 0 / 14px 10px repeat-x,
+    linear-gradient(45deg, transparent 7px, var(--paper) 0) 0 0 / 14px 10px repeat-x;
+}
+.lc-receipt-head { flex: none; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px dashed var(--paper-dash); }
+.lc-receipt-heading { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lc-receipt-title { margin: 0; font-size: 20px; line-height: 26px; font-weight: 700; }
+.lc-step-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; list-style: none; margin: 0; padding: 8px 0; }
+.lc-step-row { display: flex; align-items: center; gap: 10px; min-height: 32px; font-size: 14px; line-height: 20px; }
+.lc-step-row-label { flex: 0 1 auto; min-width: 0; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-leader { flex: 1 1 12px; min-width: 12px; align-self: center; height: 0; margin-top: 8px; border-bottom: 2px dotted var(--paper-dash); }
+.lc-step-row-time { flex: none; font-size: 13px; }
+.lc-step-row-pts { flex: none; width: 3.5ch; text-align: right; font-size: 13px; color: var(--pc-ink, var(--ink-soft)); }
+.lc-step-row.is-skipped .lc-step-row-label { color: var(--ink-soft); text-decoration: line-through; }
+.lc-step-row.is-skipped .lc-step-row-time { color: var(--ink-soft); }
+.lc-receipt-dot { flex: none; width: 20px; height: 20px; border: 1.5px dashed var(--paper-dash); border-radius: 50%; }
+.lc-receipt-foot { flex: none; display: flex; flex-direction: column; gap: 6px; padding-top: 12px; border-top: 1px dashed var(--paper-dash); }
+.lc-receipt-total { display: flex; align-items: center; gap: 10px; font-size: 16px; line-height: 22px; font-weight: 700; }
+.lc-receipt-total-label { flex: 1 1 auto; min-width: 0; }
+.lc-receipt-total-value { font-size: 16px; font-weight: 500; color: var(--pc-ink, var(--ink)); }
+.lc-receipt-total-value.is-under { color: var(--success); }
+.lc-receipt-sign { align-self: center; display: inline-flex; align-items: center; gap: 8px; padding-top: 6px; font-size: 13px; color: var(--ink-soft); }
 
 /* ---------------- no run ---------------- */
 .lc-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; padding: 24px 0; }
@@ -1099,78 +1132,43 @@
 
 /* ---------------- mobile 390 ----------------
    Single column, 16px gutters (the shell's), fixed player order. The
-   seam runs top-to-bottom, the strip is 56px, avatar circles 36px, the
-   goose 92px. No shake — the rail flashes amber instead. */
+   tickets stack untilted, the goose shrinks to 80. */
 @media (max-width: 720px) {
   .live-cook-page { gap: 12px; }
-  .lc-seam {
-    top: -90px;
-    left: -60px;
-    right: -60px;
-    bottom: auto;
-    width: auto;
-    height: calc(50% + 45px);
-    transform: skewY(-5deg);
-    animation-name: lc-seam-breathe-v;
-    -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 90px), rgba(0, 0, 0, 0) 100%);
-    mask-image: linear-gradient(180deg, #000 calc(100% - 90px), rgba(0, 0, 0, 0) 100%);
-  }
-  /* The title gets its own line; Pause · The plan sit right, under it. */
   .lc-header { flex-wrap: wrap; gap: 4px 12px; }
   .lc-title { flex: 1 1 100%; }
   .lc-title h1 { font-size: 17px; }
-  .lc-hud { margin-left: auto; gap: 2px; }
+  .lc-hud { margin-left: auto; gap: 2px; padding-top: 0; }
   .ds-v4 .lc-hud .btn { padding-inline: 10px; }
 
-  .lc-strip { height: 56px; gap: 10px; padding: 0 12px; --piece-chamfer: 12px; }
-  .lc-clock .kp-icon { display: none; }
-  .lc-clock-value { font-size: 26px; line-height: 30px; }
-  .lc-count { font-size: 13px; }
-  .lc-count-pill { height: 34px; padding: 0 10px; gap: 6px; }
-  .lc-count-big { font-size: 20px; line-height: 24px; }
-  .lc-count-of { font-size: 13px; }
-  /* The cards stack, so the scores come back up to the strip and the
-     lead line steps aside. */
-  .lc-strip-note, .lc-lead { display: none; }
-  .lc-strip-scores { display: inline-flex; gap: 8px; }
-  .lc-score-pill { height: 34px; padding: 0 10px; gap: 6px; border-radius: 8px; }
-  .lc-score-dot { width: 8px; height: 8px; }
-  .lc-score-num { font-size: 20px; line-height: 24px; }
-  .lc-drift { height: 26px; padding: 0 8px; font-size: 12px; }
+  .lc-strip { gap: 6px 12px; padding: 12px 14px; }
+  .lc-strip .lc-avatar { display: none; }
+  .lc-strip-name { font-size: 15px; }
+  .lc-score-pill, .lc-clock-value { font-size: 26px; line-height: 30px; }
+  .lc-tug { width: 100%; }
+  .lc-strip.is-coop { grid-template-columns: minmax(0, 1fr) auto; }
+  .lc-strip.is-coop .lc-strip-side.is-pips { grid-column: 1 / -1; grid-row: 2; }
+  .lc-strip.is-coop .lc-strip-center { grid-column: 1; align-items: flex-start; }
+  .lc-strip.is-coop .lc-strip-side.is-status { grid-column: 2; }
+  .lc-pip { width: 12px; height: 12px; }
 
-  .lc-arena { gap: 12px; }
-  .lc-main { gap: 12px; }
+  .lc-arena, .lc-main { gap: 12px; }
   .lc-cards { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .lc-card { min-height: 0; --piece-chamfer: 12px; }
-  .lc-card-head { padding: 14px 14px 6px 18px; }
-  .lc-card-head .lc-avatar-40 { width: 36px; height: 36px; font-size: 15px; }
-  .lc-card-name { font-size: 18px; line-height: 24px; }
-  /* Versus head on mobile: the state goes back to a chip on the right
-     (the score is up in the strip). */
-  .lc-card-head.is-scored { padding-right: 14px; }
-  .lc-card-id { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
-  .lc-card-id .lc-card-name { flex: 1 1 auto; min-width: 0; }
-  .lc-card-status { height: 28px; padding: 0 10px; border-radius: 999px; background: var(--ds-chip); font-size: 13px; }
-  .lc-card-status.is-active.is-a { background: var(--cook-a-bg); }
-  .lc-card-status.is-active.is-b { background: var(--cook-b-bg); }
-  .lc-card-status.is-due { background: var(--warning-soft); }
-  .lc-card-score { display: none; }
-  .lc-card-body { padding: 0 18px 4px; }
-  .lc-card-actions { padding: 8px 18px 16px; margin-right: 88px; grid-template-rows: 64px auto; }
-  /* Three ghosts (Not now · Pass to X · Undo) don't fit beside the
-     goose at 390 — wrap, and let Undo drop to its own line rather than
-     run under the bird. */
-  .lc-card-secondary { flex-wrap: wrap; row-gap: 0; }
-  .ds-v4 .lc-card-secondary .btn { padding-inline: 8px; }
-  /* No far-right ghost here: the right edge is the goose's. */
-  .lc-card-secondary .lc-btn-undo { margin-left: 0; }
-  .lc-goose { right: 4px; bottom: 6px; }
-  .lc-cooking { margin: 0 106px 16px 16px; }
+  .lc-card.is-a, .lc-card.is-b { rotate: none; }
+  .lc-card-head { padding: 8px 14px 8px 28px; }
+  .lc-card-score { height: 40px; padding: 0 12px; }
+  .lc-card-points { font-size: 26px; line-height: 26px; }
+  .lc-card-body { padding: 12px 16px 10px 28px; }
   .lc-step-title { font-size: 20px; line-height: 26px; }
   .lc-step-desc { font-size: 15px; line-height: 22px; }
-  .lc-goose .kp-baby-goose { width: 92px !important; height: 92px !important; }
+  .lc-card-actions { padding: 4px 92px 14px 28px; }
+  /* Three ghosts (Not now · Pass to X · Undo) don't fit beside the
+     goose at 390 — wrap rather than run under the bird. */
+  .lc-card-secondary { flex-wrap: wrap; height: auto; min-height: 36px; }
+  .lc-goose .kp-baby-goose { width: 80px !important; height: 80px !important; }
+  .lc-cooking, .lc-cooking-empty { margin: 0 14px 14px 28px; }
+  .lc-own-eyebrow { display: none; }
   .lc-card.is-state-due { animation: none; }
-  .lc-card.is-state-due .lc-rail { animation: lc-flash 300ms ease-out 2 both; }
 
   .lc-pool { padding: 12px 14px 14px; }
   .lc-pool-grid { grid-template-columns: 1fr; gap: 10px; }
@@ -1179,26 +1177,25 @@
 
   .lc-footer { gap: 12px; padding: 12px 0; }
   .lc-footer .btn-lg { flex: 1 1 auto; min-width: 0; }
-  .lc-service { grid-template-columns: 1fr; gap: 28px; }
-  /* One column: nothing beside it to match, so the panel is back in
-     flow with a cap of its own. */
+
+  .lc-service { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .lc-results { grid-template-columns: minmax(0, 1fr); padding-top: 28px; }
+  .lc-results.is-tie { padding-top: 44px; }
+  .lc-final { order: -1; }
+  .lc-result.is-a, .lc-result.is-b { rotate: none; }
+  .lc-result.is-winner { margin-top: 24px; }
   .lc-service-steps-cell { min-height: 0; }
-  .lc-service-steps { position: static; max-height: 60vh; }
-  .lc-service-scores { grid-template-columns: 1fr; }
+  .lc-receipt { position: static; max-height: 70vh; margin-bottom: 10px; }
   .lc-service-cta { width: 100%; min-width: 0; }
 }
 
 /* ---------------- reduced motion ----------------
-   Everything becomes a 200ms fade (design-v4.css caps every loop at
-   one run); the seam holds still, the geese stand still (the sprite
-   component stops itself), the offer doesn't pulse, due flashes
-   instead of shaking, and the bars jump to position. */
+   Everything becomes a 200ms fade; the geese stand still, the offer
+   doesn't pulse, due doesn't shake, and the bars jump to position. */
 @media (prefers-reduced-motion: reduce) {
-  .lc-header, .lc-strip, .lc-card, .lc-agent, .lc-pool, .lc-tile, .lc-service, .lc-roll, .lc-done-burst, .lc-line, .lc-fly, .lc-toque-line, .lc-toque-line-text, .lc-drawer-panel, .lc-card-points { animation-name: lc-fade; }
-  .lc-seam, .lc-goose, .lc-offer-pulse { animation: none; }
+  .lc-header, .lc-strip, .lc-card, .lc-agent, .lc-pool, .lc-tile, .lc-service, .lc-roll, .lc-line, .lc-fly, .lc-toque-line, .lc-toque-line-text, .lc-drawer-panel, .lc-card-points, .lc-stamp, .lc-banner, .lc-step-title, .lc-wait, .lc-rest, .lc-moment { animation-name: lc-fade; }
+  .lc-goose, .lc-offer-pulse, .lc-card-score { animation: none; }
   .lc-card.is-state-due { animation: none; }
-  .lc-eyebrow.is-active .lc-eyebrow-dot, .lc-eyebrow.is-due .lc-eyebrow-dot { animation: none; }
-  /* Due rows tint without popping; phase changes are plain fades. */
+  .lc-tug-a, .lc-tug-b, .lc-step-rail-fill { transition: none; }
   .lc-cooking-row, .lc-cooking-row.is-due, .lc-attend { animation-name: lc-fade; }
-  .lc-seam { transition: none; }
 }

@@ -607,7 +607,6 @@ export default function SchedulePage() {
     const who = cooks.map((c) => c.name).filter(Boolean);
     return (
       <ChefWorkingScreen
-        eyebrow="Lining up the kitchen"
         title={<>Who does what,<br />and when.</>}
         desc={<>Your chef is sorting the steps between you,<br /> so the timing works out.</>}
         live="Building your plan"
