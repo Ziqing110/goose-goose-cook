@@ -602,10 +602,20 @@ export default function SchedulePage() {
     const who = cooks.map((c) => c.name).filter(Boolean);
     return (
       <ChefWorkingScreen
-        title={<>Who does what,<br />and when.</>}
-        desc={<>Your chef is sorting the steps between you,<br /> so the timing works out.</>}
+        title={<>Who does what, and when.</>}
+        eyebrow="Sorting out the timing"
         live="Building your plan"
-        details={[who.length ? who.join(" + ") : "Your cooks", kitchenProfile?.name || "Your kitchen"]}
+        doneLive="Your plan is ready"
+        ticket={`Prep list · ${who.length || 1} ${who.length === 1 ? "cook" : "cooks"}`}
+        order={(who.length ? who : ["Your cooks"]).map((name) => ({ name }))}
+        orderNote={kitchenProfile?.name || "Your kitchen"}
+        tasks={[
+          { at: 0, line: "Reading both recipes." },
+          { at: 0.22, line: "Finding what can overlap." },
+          { at: 0.5, line: "Splitting the steps between you." },
+          { at: 0.78, line: "Checking the timing holds." },
+        ]}
+        workSeconds={8}
       />
     );
   }
