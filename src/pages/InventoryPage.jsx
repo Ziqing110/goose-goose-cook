@@ -39,6 +39,7 @@ const WORKING_DONE_MS = 700;
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 import { normalizeUtterance, CONFIRM_YES_PATTERN, CONFIRM_NO_PATTERN } from "../utils/navCommands.js";
 import { matchStepName } from "../utils/stepNameMatch.js";
+import { INVENTORY_VOICE, ingredientVoicePhrases, parseAddTaskSpeech } from "../utils/pageVoiceGrammar.js";
 
 // The system's two dish marks. Matched by title keyword; a dish with
 // no mark simply shows none (the title carries the meaning).
@@ -65,28 +66,6 @@ const withArticle = (label) => `${/^[aeiou]/i.test(label) ? "an" : "a"} ${label}
 
 const pad2 = (n) => String(n).padStart(2, "0");
 
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-// Every way someone says an ingredient just ran out, or just turned up —
-// mirroring the checkboxes' own words ("out" / "on hand") plus how people
-// actually talk in a kitchen. Off is checked before on in the command
-// list below, same reasoning as the kitchen form's wok/oven toggle: a
-// phrase that could read either way should read as off.
-const OUT_PHRASES = (name) => [
-  new RegExp(`\\bno (?:more )?${name}\\b`),
-  new RegExp(`\\bout of ${name}\\b`),
-  new RegExp(`\\b${name} is out\\b`),
-  new RegExp(`\\b(?:don't|dont) have (?:any )?${name}\\b`),
-  new RegExp(`\\bmark ${name} out\\b`),
-];
-const ON_HAND_PHRASES = (name) => [
-  new RegExp(`\\bgot (?:the |some )?${name}\\b`),
-  new RegExp(`\\bhave (?:the |some )?${name}\\b`),
-  new RegExp(`\\bfound (?:the |some )?${name}\\b`),
-  new RegExp(`\\b${name} is (?:back|on hand)\\b`),
-  new RegExp(`\\bmark ${name} on hand\\b`),
-];
-
 /**
  * One "out" and one "on hand" command per ingredient, matched against its
  * full name. Unlike the kitchen picker's bare distinctive word, these
@@ -96,44 +75,14 @@ const ON_HAND_PHRASES = (name) => [
  */
 function ingredientVoiceCommands(items, { markOut, markOnHand }) {
   return items.flatMap((item) => {
-    const name = escapeRe(normalizeUtterance(item.label));
+    const name = normalizeUtterance(item.label);
     if (!name) return [];
+    const phrases = ingredientVoicePhrases(name);
     return [
-      { phrases: OUT_PHRASES(name), label: `${item.label} — marked out.`, run: () => markOut(item.id) },
-      { phrases: ON_HAND_PHRASES(name), label: `${item.label} — back on hand.`, run: () => markOnHand(item.id) },
+      { phrases: phrases.out, label: `${item.label} — marked out.`, run: () => markOut(item.id) },
+      { phrases: phrases.onHand, label: `${item.label} — back on hand.`, run: () => markOnHand(item.id) },
     ];
   });
-}
-
-/**
- * Pulls the task's own name and any position clause out of what follows
- * "add a task" / "add a step" — "between X and Y" checked first since
- * "before" alone would otherwise swallow it (`between mix the batter and
- * pour it` contains no "before", so order only matters for a phrase
- * that could plausibly satisfy both, which doesn't happen here, but
- * "between" is the more specific claim and goes first on principle).
- *
- * The name itself is only recognised behind a connector word
- * (to/called/named/for). Without one, "add a task toast the sesame
- * seeds before plating" has no reliable way to tell the task's name
- * apart from the position clause, so it's left for the form rather
- * than guessed at.
- */
-function parseAddTaskSpeech(rest) {
-  const empty = { name: "", before: null, between: null };
-  if (!rest) return empty;
-  const named = "(?:(?:to|called|named|for) (.+?) )?";
-
-  const between = new RegExp(`^${named}between (.+) and (.+)$`).exec(rest);
-  if (between) return { name: (between[1] || "").trim(), before: null, between: [between[2].trim(), between[3].trim()] };
-
-  const before = new RegExp(`^${named}before (.+)$`).exec(rest);
-  if (before) return { name: (before[1] || "").trim(), before: before[2].trim(), between: null };
-
-  const namedOnly = /^(?:to|called|named|for) (.+)$/.exec(rest);
-  if (namedOnly) return { name: namedOnly[1].trim(), before: null, between: null };
-
-  return empty;
 }
 
 /** "01–03" for a run of consecutive step numbers, otherwise "01, 04". */
@@ -447,7 +396,7 @@ export default function InventoryPage() {
     if (recipes.length === 0) return undefined;
     return registerVoiceCommands([
       {
-        phrases: [/\bapprove\b/],
+        phrases: INVENTORY_VOICE.approve,
         confirm: "Approve the board and move to scheduling? Say yes or no.",
         label: "Approved.",
         run: () => {
@@ -552,7 +501,7 @@ export default function InventoryPage() {
     return registerVoiceCommands([
       ...ingredientVoiceCommands(inv.ingredients, { markOut, markOnHand }),
       {
-        phrases: [/\beverything(?:'s| is)? on hand\b/, /\bmark everything on hand\b/, /\ball on hand\b/],
+        phrases: INVENTORY_VOICE.everythingOnHand,
         label: "Everything's on hand.",
         run: () => hasOut && markAllOnHand(),
       },
@@ -564,7 +513,7 @@ export default function InventoryPage() {
         // parseAddTaskSpeech, rather than only recognising the name — a
         // position clause ("before X", "between X and Y") lives out here
         // too.
-        phrases: [/\badd (?:a |another )?task\b(.*)$/, /\badd (?:a |another )?step\b(.*)$/],
+        phrases: INVENTORY_VOICE.addTask,
         run: (m) => {
           if (approved) return "The plan's approved — revise it to add a task.";
           const { name, before, between } = parseAddTaskSpeech((m?.[1] || "").trim());
@@ -627,17 +576,17 @@ export default function InventoryPage() {
     if (!hasDishes || !catalog) return undefined;
     const commands = [
       {
-        phrases: [/\bshow (?:me )?(?:the )?ingredients\b/, /\bingredients tab\b/, /\bgo to (?:the )?ingredients\b/],
+        phrases: INVENTORY_VOICE.showIngredients,
         label: "Showing ingredients.",
         run: () => showTab("ingredients"),
       },
       {
-        phrases: [/\bshow (?:me )?(?:the )?(?:recipe graph|board)\b/, /\brecipe graph\b/, /\bgo to (?:the )?(?:recipe graph|board)\b/],
+        phrases: INVENTORY_VOICE.showGraph,
         label: "Showing the recipe graph.",
         run: () => showTab("graph"),
       },
       {
-        phrases: [/\bzoom in\b/, /\bzoom (?:in )?closer\b/],
+        phrases: INVENTORY_VOICE.zoomIn,
         run: () => {
           showTab("graph");
           if (zoomPct >= 100) return "Already as close as it goes.";
@@ -646,7 +595,7 @@ export default function InventoryPage() {
         },
       },
       {
-        phrases: [/\bzoom out\b/],
+        phrases: INVENTORY_VOICE.zoomOut,
         run: () => {
           showTab("graph");
           if (zoomPct <= 0) return "Already fitted.";
@@ -655,7 +604,7 @@ export default function InventoryPage() {
         },
       },
       {
-        phrases: [/\bfit (?:the )?(?:board|graph)\b/, /\breset zoom\b/, /\bzoom to fit\b/],
+        phrases: INVENTORY_VOICE.fit,
         label: "Fitted.",
         run: () => {
           showTab("graph");
@@ -663,21 +612,21 @@ export default function InventoryPage() {
         },
       },
       {
-        phrases: [/\bscroll (?:to the )?right\b/, /\bpan (?:to the )?right\b/],
+        phrases: INVENTORY_VOICE.panRight,
         run: () => {
           showTab("graph");
           boardRef.current?.scrollBy(320, 0);
         },
       },
       {
-        phrases: [/\bscroll (?:to the )?left\b/, /\bpan (?:to the )?left\b/],
+        phrases: INVENTORY_VOICE.panLeft,
         run: () => {
           showTab("graph");
           boardRef.current?.scrollBy(-320, 0);
         },
       },
       {
-        phrases: [/\bscroll (?:up|down)\b/, /\bpan (?:up|down)\b/],
+        phrases: INVENTORY_VOICE.panVertical,
         run: (m) => {
           showTab("graph");
           const down = /down/.test(m[0]);
@@ -685,7 +634,7 @@ export default function InventoryPage() {
         },
       },
       {
-        phrases: [/\bscroll to (?:the )?step (.+)$/, /\bfind (?:the )?step (.+)$/, /\bshow me (?:the )?step (.+)$/],
+        phrases: INVENTORY_VOICE.findStep,
         run: (m) => {
           showTab("graph");
           const said = (m?.[1] || "").trim();
@@ -706,7 +655,7 @@ export default function InventoryPage() {
 
     if (!approved) {
       commands.push({
-        phrases: [/\bopen (?:the )?step (.+)$/, /\bedit (?:the )?step (.+)$/, /\bselect (?:the )?step (.+)$/],
+        phrases: INVENTORY_VOICE.editStep,
         run: (m) => {
           showTab("graph");
           const said = (m?.[1] || "").trim();
@@ -727,7 +676,7 @@ export default function InventoryPage() {
 
     if (dishIsUndoable) {
       commands.push({
-        phrases: [/\bremove (?:the )?blocked steps?\b/, /\bdrop (?:the )?blocked steps?\b/],
+        phrases: INVENTORY_VOICE.removeBlocked,
         confirm: `Remove ${blockedIds.length} step${blockedIds.length === 1 ? "" : "s"} you can't do without those materials? Say yes or no.`,
         label: "Removed.",
         run: () => {
@@ -741,13 +690,13 @@ export default function InventoryPage() {
     if (showEquipment) {
       if (kitchenProfile) {
         commands.push({
-          phrases: [/\bedit (?:the )?kitchen profile\b/, /\bedit (?:the |my )?kitchen\b/],
+          phrases: INVENTORY_VOICE.editKitchen,
           label: "Opening the kitchen profile.",
           run: () => setEditingKitchen(true),
         });
       }
       commands.push({
-        phrases: [/\bcook it anyway\b/],
+        phrases: INVENTORY_VOICE.cookAnyway,
         label: "Okay — cooking with what you've got.",
         run: () => setDismissedEquipment(lackingKey),
       });
@@ -755,7 +704,7 @@ export default function InventoryPage() {
 
     if (approved) {
       commands.push({
-        phrases: [/\brevise\b/, /\bunapprove\b/, /\bgo back to editing\b/],
+        phrases: INVENTORY_VOICE.revise,
         label: "Back to editing.",
         run: () => revise(),
       });

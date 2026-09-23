@@ -20,6 +20,7 @@ import { audioTap } from "../voice/audioTap.js";
 import { speechActivity } from "../utils/speechActivity.js";
 import { enrollVoice, clearVoice, speakerHealth } from "../api/speaker.js";
 import { ORDINAL, ordinalIndex, resolveCookRef, cleanSpokenName } from "../utils/cookVoice.js";
+import { VOICE_BINDING_VOICE, RECORDING_VOICE, AVATAR_PICKER_VOICE } from "../utils/pageVoiceGrammar.js";
 
 // Binding is real: the line is read into the app's one microphone and the
 // audio goes to the local speaker service, which keeps a voiceprint for
@@ -422,11 +423,11 @@ export default function VoiceBindingPage() {
       // page has anything to say.
       return registerVoiceCommands([
         {
-          phrases: [/\btake me back\b/, /\bback to the cook\b/, /\bgo back to the cook\b/],
+          phrases: VOICE_BINDING_VOICE.lockedBack,
           run: () => v().navigate("/session/live-cook"),
         },
         {
-          phrases: [/\bcontinue to scheduling\b/, /\bgo to scheduling\b/],
+          phrases: VOICE_BINDING_VOICE.continueSchedule,
           run: () => v().navigate("/session/schedule"),
         },
       ]);
@@ -442,21 +443,21 @@ export default function VoiceBindingPage() {
 
     return registerVoiceCommands([
       {
-        phrases: [/\bcontinue to scheduling\b/, /\bgo to scheduling\b/],
+        phrases: VOICE_BINDING_VOICE.continueSchedule,
         run: () => {
           if (!v().ready) return "Not yet — every cook needs a chef, a name and a voice.";
           v().navigate("/session/schedule");
         },
       },
       {
-        phrases: [new RegExp(`\\b(?:call|name) (?:the )?(?:cook )?(${ORDINAL})(?: cook)? (?:is |as )?(.+)$`)],
+        phrases: VOICE_BINDING_VOICE.nameByOrdinal(ORDINAL),
         run: ({ 1: slot, 2: spoken }) => {
           const cook = v().cooks[ordinalIndex(slot)];
           return cook ? setName(cook, spoken) : "There’s no second cook yet — say “add a second cook”.";
         },
       },
       {
-        phrases: [new RegExp(`\\bcook (${ORDINAL}) (?:is|=) (.+)$`)],
+        phrases: VOICE_BINDING_VOICE.nameCook(ORDINAL),
         run: ({ 1: slot, 2: spoken }) => {
           const cook = v().cooks[ordinalIndex(slot)];
           return cook ? setName(cook, spoken) : "There’s no second cook yet — say “add a second cook”.";
@@ -466,7 +467,7 @@ export default function VoiceBindingPage() {
         // "I'm Mia" starts with a subject word, which the bar would
         // otherwise take for conversation.
         allowSubject: true,
-        phrases: [/\b(?:i'm|i am|my name is|this is) ([a-z' -]+)$/],
+        phrases: VOICE_BINDING_VOICE.nameSelf,
         run: ({ 1: spoken }) => {
           const cook = v().cooks.find((c) => !c.name.trim());
           if (!cook) return "Both cooks have names — say “call the first cook…” to change one.";
@@ -474,7 +475,7 @@ export default function VoiceBindingPage() {
         },
       },
       {
-        phrases: [/\b(?:pick|choose|select|change|open)(?: (?:my|the|a|your))? (?:chef|bird|avatar)(?: (?:for|of))?(?: (.+))?$/],
+        phrases: VOICE_BINDING_VOICE.chooseAvatar,
         run: ({ 1: who }) => {
           const cook = who ? ref(who) : v().cooks.find((c) => !c.avatar) ?? v().cooks[0];
           if (!cook) return which;
@@ -484,7 +485,7 @@ export default function VoiceBindingPage() {
       {
         // The dice, without opening the drawer first — the card's own
         // avatar shuffles in place.
-        phrases: [/\b(?:surprise me|surprise)\b/, /\broll (?:the )?dice\b/, /\brandom(?: chef| bird)?\b/],
+        phrases: VOICE_BINDING_VOICE.randomAvatar,
         run: ({ 1: who }) => {
           const cook = who ? ref(who) : v().cooks.find((c) => !c.avatar) ?? v().cooks[0];
           if (!cook) return which;
@@ -493,7 +494,7 @@ export default function VoiceBindingPage() {
         },
       },
       {
-        phrases: [/\bstart (?:reading|recording)(?: (?:for|of))?(?: (.+))?$/, /\brecord again(?: (?:for|of))?(?: (.+))?$/],
+        phrases: VOICE_BINDING_VOICE.record,
         run: ({ 1: who }) => {
           const isReady = (c) => c.name.trim() && c.avatar;
           const cook = who ? ref(who) : v().cooks.find((c) => isReady(c) && !c.bound) ?? v().cooks.find(isReady);
@@ -504,7 +505,7 @@ export default function VoiceBindingPage() {
         },
       },
       {
-        phrases: [/\badd (?:a |another |the )?(?:second |2nd )?cook\b/],
+        phrases: VOICE_BINDING_VOICE.addCook,
         run: () => {
           if (!v().canAdd) return "Two cooks is the most one kitchen takes.";
           v().addCook();
@@ -514,7 +515,7 @@ export default function VoiceBindingPage() {
       {
         // Losing a name and a recorded voice is not undone by saying it
         // again, so it asks first.
-        phrases: [/\b(?:remove|delete) (?:the )?(?:cook )?(.+)$/],
+        phrases: VOICE_BINDING_VOICE.removeCook,
         confirm: "Remove that cook and their voice?",
         run: ({ 1: who }) => {
           const cook = ref(who);
@@ -535,12 +536,12 @@ export default function VoiceBindingPage() {
     return registerVoiceCommands(
       [
         {
-          phrases: [/\bstop(?: and save| recording| reading)?\b/, /\bsave(?: it)?\b/, /\bdone reading\b/, /\bthat'?s it\b/],
+          phrases: RECORDING_VOICE.save,
           label: "Saved.",
           run: () => voiceRef.current.completeRecording(recordingCookId),
         },
         {
-          phrases: [/\bcancel\b/, /\bnever ?mind\b/, /\bdiscard\b/],
+          phrases: RECORDING_VOICE.cancel,
           label: "Cancelled — nothing saved.",
           run: () => voiceRef.current.stopRecording(),
         },
@@ -563,14 +564,14 @@ export default function VoiceBindingPage() {
     return registerVoiceCommands(
       [
         {
-          phrases: [/\bthat'?s me\b/, /\bconfirm\b/, /\bthis one\b/, /\blooks good\b/, /\bsave\b/, /\bdone\b/, /\bclose\b/],
+          phrases: AVATAR_PICKER_VOICE.confirm,
           run: () => {
             v().closeDrawer();
             return null;
           },
         },
         {
-          phrases: [/\brandom\b/, /\bsurprise(?: me)?\b/, /\broll (?:the )?dice\b/],
+          phrases: AVATAR_PICKER_VOICE.random,
           run: () => {
             const cook = cookNow();
             if (!cook) return null;
@@ -579,14 +580,14 @@ export default function VoiceBindingPage() {
           },
         },
         {
-          phrases: [/\bcancel\b/, /\bnever ?mind\b/, /\bgo back\b/],
+          phrases: AVATAR_PICKER_VOICE.cancel,
           run: () => {
             v().closeDrawer();
             return null;
           },
         },
         {
-          phrases: [new RegExp(`\\b(${words.join("|")})\\b`)],
+          phrases: AVATAR_PICKER_VOICE.avatarName(words),
           run: ({ 1: word }) => {
             const cook = cookNow();
             if (!cook) return null;

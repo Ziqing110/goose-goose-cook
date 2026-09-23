@@ -152,6 +152,11 @@ export function matchConfirmation(text) {
   return null;
 }
 
+/** A destructive voice action requires its full passphrase, never yes/no. */
+export function matchesConfirmationPhrase(text, phrase) {
+  return Boolean(phrase) && normalize(text) === normalize(phrase);
+}
+
 // Two kinds of pattern per action:
 //   explicit — unmistakably an instruction. Allowed at any length,
 //              because the phrasing itself is the evidence.

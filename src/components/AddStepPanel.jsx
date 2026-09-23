@@ -13,11 +13,9 @@ import { DIFFICULTY_SEGMENTS } from "./NodeEditorPanel.jsx";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 import { spokenNumber, NUMBER_TOKEN } from "../utils/understanding.js";
 import { matchStepName } from "../utils/stepNameMatch.js";
+import { ADD_STEP_VOICE } from "../utils/pageVoiceGrammar.js";
 import "./AddStepPanel.css";
 
-const N = `(${NUMBER_TOKEN})`;
-const TOGGLE_ON = (thing, a) => [new RegExp(`\\b(?:add|with) (?:${a} |the )?${thing}\\b`), new RegExp(`\\b${thing} on\\b`)];
-const TOGGLE_OFF = (thing, a) => [new RegExp(`\\b(?:remove|drop|without) (?:${a} |the )?${thing}\\b`), new RegExp(`\\b${thing} off\\b`)];
 const EQUIPMENT_ARTICLE = { cutting_board: "a", stove_burner: "a", wok: "a", pot: "a", oven: "an" };
 
 export default function AddStepPanel({
@@ -91,7 +89,7 @@ export default function AddStepPanel({
 
     const commands = [
       {
-        phrases: [/\b(?:call it|name it|for) (.+)$/],
+        phrases: ADD_STEP_VOICE.name,
         run: (m) => {
           const name = m[1].trim();
           if (!name) return null;
@@ -100,7 +98,7 @@ export default function AddStepPanel({
         },
       },
       {
-        phrases: [new RegExp(`\\bset (?:the )?(?:duration|time) to ${N} minutes?\\b`), new RegExp(`\\bmake it ${N} minutes?\\b`), new RegExp(`\\b${N} minutes?\\b`)],
+        phrases: ADD_STEP_VOICE.duration(NUMBER_TOKEN),
         run: (m) => {
           const n = spokenNumber(m[1]);
           if (n === null) return null;
@@ -109,14 +107,14 @@ export default function AddStepPanel({
         },
       },
       {
-        phrases: [/\b(?:set )?difficulty (?:to )?(low|medium|high)\b/, /\bmake it (low|medium|high)(?: difficulty)?\b/],
+        phrases: ADD_STEP_VOICE.difficulty,
         run: (m) => {
           setDifficulty(m[1]);
           return `${m[1]} difficulty.`;
         },
       },
       {
-        phrases: [/\b(?:set )?phase (?:to )?(prep|cook|plate)\b/, /\bmark it (?:as )?(prep|cook|plate)\b/],
+        phrases: ADD_STEP_VOICE.phase,
         run: (m) => {
           setPhase(m[1]);
           return `Phase: ${m[1]}.`;
@@ -126,12 +124,12 @@ export default function AddStepPanel({
         const word = equipmentLabel(eq).toLowerCase();
         const a = EQUIPMENT_ARTICLE[eq];
         return [
-          { phrases: TOGGLE_OFF(word, a), label: `${equipmentLabel(eq)} — not needed.`, run: () => setEquipment((cur) => cur.filter((x) => x !== eq)) },
-          { phrases: TOGGLE_ON(word, a), label: `${equipmentLabel(eq)} needed.`, run: () => setEquipment((cur) => (cur.includes(eq) ? cur : [...cur, eq])) },
+          { phrases: ADD_STEP_VOICE.equipment(word, a).off, label: `${equipmentLabel(eq)} — not needed.`, run: () => setEquipment((cur) => cur.filter((x) => x !== eq)) },
+          { phrases: ADD_STEP_VOICE.equipment(word, a).on, label: `${equipmentLabel(eq)} needed.`, run: () => setEquipment((cur) => (cur.includes(eq) ? cur : [...cur, eq])) },
         ];
       }),
       {
-        phrases: [/\bruns? after (.+)$/, /\bwait(?:s|ing)? on (.+)$/],
+        phrases: ADD_STEP_VOICE.after,
         run: (m) => {
           const match = matchStepName(m[1], stepIds, labelOf);
           if (match.confidence !== "exact") return "I couldn't tell which step you meant.";
@@ -140,7 +138,7 @@ export default function AddStepPanel({
         },
       },
       {
-        phrases: [/\bruns? before (.+)$/],
+        phrases: ADD_STEP_VOICE.before,
         run: (m) => {
           const match = matchStepName(m[1], stepIds, labelOf);
           if (match.confidence !== "exact") return "I couldn't tell which step you meant.";
@@ -149,7 +147,7 @@ export default function AddStepPanel({
         },
       },
       {
-        phrases: [/\badd (?:it |this |the task )?to the board\b/, /\badd (?:the )?task\b/, /\bcreate (?:the )?step\b/, /\bthat's? it\b/],
+        phrases: ADD_STEP_VOICE.submit,
         run: () => {
           const s = stateRef.current;
           const name = s.label.trim();
@@ -167,7 +165,7 @@ export default function AddStepPanel({
         },
       },
       {
-        phrases: [/\bcancel\b/, /\bclose (?:this|the) form\b/, /\bnever ?mind\b/],
+        phrases: ADD_STEP_VOICE.cancel,
         run: () => {
           actionsRef.current.onClose();
           return null;

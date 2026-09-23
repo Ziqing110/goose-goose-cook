@@ -4,6 +4,7 @@ import KitchenProfileForm, { emptyKitchenProfileDraft } from "./KitchenProfileFo
 import { useAppState } from "../state/AppStateContext.jsx";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 import { spokenNumber, NUMBER_TOKEN } from "../utils/understanding.js";
+import { KITCHEN_PROFILE_VOICE } from "../utils/pageVoiceGrammar.js";
 import "./KitchenProfileFormModal.css";
 
 // The bounds the steppers enforce, restated here because voice has no
@@ -16,18 +17,10 @@ const LIMITS = {
   pots: { min: 0, max: 6, label: "pots", one: "pot" },
 };
 
-const N = `(${NUMBER_TOKEN})`;
-
 // Imperative phrasings only, deliberately. The "is this conversation?"
 // guard stands a command down the moment it finds a subject, so "we have
 // a wok" would be heard as two people chatting and ignored — which is
 // correct behaviour in a kitchen, and the reason to say "add a wok".
-const FIELD_PHRASES = (word) => [
-  new RegExp(`\\bset ${word} to ${N}\\b`),
-  new RegExp(`\\b${N} ${word}\\b`),
-  new RegExp(`\\bmake (?:it|that) ${N} ${word}\\b`),
-];
-
 // Every way someone actually flips a switch out loud. The first pass here
 // listed two phrasings per toggle and missed the shortest one there is —
 // "oven on" — which is exactly what a person says when their hands are
@@ -36,34 +29,6 @@ const FIELD_PHRASES = (word) => [
 // The singular forms, for stepping one at a time. Plural stays out of
 // these on purpose: "\bpot\b" will not match "pots", which is what keeps
 // "one more pot" and "three pots" from fighting over the same words.
-const NUDGE_UP = (one) => [new RegExp(`\\b(?:add|one more|another) (?:a |an )?${one}\\b`)];
-const NUDGE_DOWN = (one) => [
-  new RegExp(`\\b(?:remove|drop|one less|one fewer) (?:a |an |the )?${one}\\b`),
-];
-
-// `a` is the article, so "an oven" and "a wok" both read naturally.
-const TOGGLE_ON = (thing, a) => [
-  new RegExp(`\\b${thing} on\\b`),
-  new RegExp(`\\byes ${thing}\\b`),
-  new RegExp(`\\bturn (?:the )?${thing} on\\b`),
-  new RegExp(`\\bturn on (?:the )?${thing}\\b`),
-  new RegExp(`\\b(?:add|enable) (?:${a} |the )?${thing}\\b`),
-  new RegExp(`\\bwith (?:${a} |the )?${thing}\\b`),
-];
-
-// Checked BEFORE the "on" list, so a phrase that contains both readings
-// resolves to off. "without an oven" is safe either way — "with" needs a
-// following space, which "without" does not have — but relying on that
-// coincidence for every future phrasing would be asking for trouble.
-const TOGGLE_OFF = (thing, a) => [
-  new RegExp(`\\b${thing} off\\b`),
-  new RegExp(`\\bno ${thing}\\b`),
-  new RegExp(`\\bturn (?:the )?${thing} off\\b`),
-  new RegExp(`\\bturn off (?:the )?${thing}\\b`),
-  new RegExp(`\\b(?:remove|drop|disable) (?:${a} |the )?${thing}\\b`),
-  new RegExp(`\\bwithout (?:${a} |the )?${thing}\\b`),
-];
-
 // Add/edit a kitchen profile. `profile` is null for "add", or an
 // existing profile object for "edit" — which adds a Delete action when
 // `onDelete` is given (Home passes it; a mid-session edit doesn't, since
@@ -128,7 +93,7 @@ export default function KitchenProfileFormModal({ profile, notice, error, onSave
         // Free text, so it has to be last-resort specific: an explicit
         // naming verb and everything after it. Without the verb this
         // would swallow every other command in the list.
-        phrases: [/\b(?:call it|name it|call this kitchen|the name is) (.+)$/],
+        phrases: KITCHEN_PROFILE_VOICE.name,
         run: (m) => {
           const name = m[1].trim();
           if (!name) return null;
@@ -138,22 +103,22 @@ export default function KitchenProfileFormModal({ profile, notice, error, onSave
         },
       },
       ...Object.keys(LIMITS).map((field) => ({
-        phrases: FIELD_PHRASES(LIMITS[field].label),
+        phrases: KITCHEN_PROFILE_VOICE.count(LIMITS[field].label, NUMBER_TOKEN),
         run: (m) => setField(field, m[1]),
       })),
       // Stepping one at a time, for every count — not just burners, which
       // was the only one the first pass covered.
       ...Object.keys(LIMITS).flatMap((field) => [
-        { phrases: NUDGE_DOWN(LIMITS[field].one), run: () => nudge(field, -1) },
-        { phrases: NUDGE_UP(LIMITS[field].one), run: () => nudge(field, 1) },
+        { phrases: KITCHEN_PROFILE_VOICE.decrease(LIMITS[field].one), run: () => nudge(field, -1) },
+        { phrases: KITCHEN_PROFILE_VOICE.increase(LIMITS[field].one), run: () => nudge(field, 1) },
       ]),
       // Off before on, so anything that reads both ways reads as off.
-      { phrases: TOGGLE_OFF("wok", "a"), run: () => toggle("hasWok", false, "Wok") },
-      { phrases: TOGGLE_ON("wok", "a"), run: () => toggle("hasWok", true, "Wok") },
-      { phrases: TOGGLE_OFF("oven", "an"), run: () => toggle("hasOven", false, "Oven") },
-      { phrases: TOGGLE_ON("oven", "an"), run: () => toggle("hasOven", true, "Oven") },
+      { phrases: KITCHEN_PROFILE_VOICE.toggleOff("wok", "a"), run: () => toggle("hasWok", false, "Wok") },
+      { phrases: KITCHEN_PROFILE_VOICE.toggleOn("wok", "a"), run: () => toggle("hasWok", true, "Wok") },
+      { phrases: KITCHEN_PROFILE_VOICE.toggleOff("oven", "an"), run: () => toggle("hasOven", false, "Oven") },
+      { phrases: KITCHEN_PROFILE_VOICE.toggleOn("oven", "an"), run: () => toggle("hasOven", true, "Oven") },
       {
-        phrases: [/\bsave (?:the |this )?kitchen\b/, /\bsave it\b/, /\bthat's? it\b/],
+        phrases: KITCHEN_PROFILE_VOICE.save,
         run: () => {
           const d = draftRef.current;
           if (!d.name.trim()) {
@@ -165,7 +130,7 @@ export default function KitchenProfileFormModal({ profile, notice, error, onSave
         },
       },
       {
-        phrases: [/\bcancel\b/, /\bclose (?:this|the form)\b/, /\bnever ?mind\b/, /\bdiscard this\b/],
+        phrases: KITCHEN_PROFILE_VOICE.cancel,
         run: () => {
           actions.current.onClose();
           return null;

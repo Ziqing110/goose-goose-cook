@@ -16,6 +16,7 @@
     "lint": "eslint . --ext .js,.jsx --max-warnings 0",
     "test": "node --test src/utils/*.test.js server/**/*.test.js",
     "test:e2e": "node scripts/livecook-e2e.mjs",
+    "test:voice-e2e": "node scripts/voice-commands-e2e.mjs",
     "speaker:eval": "node scripts/speaker-eval.mjs",
     "seed": "node scripts/seed.mjs"
   },

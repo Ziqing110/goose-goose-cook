@@ -25,6 +25,7 @@ import {
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 import { CONFIRM_YES_PATTERN, CONFIRM_NO_PATTERN } from "../utils/navCommands.js";
 import { matchStepName } from "../utils/stepNameMatch.js";
+import { SCHEDULE_VOICE } from "../utils/pageVoiceGrammar.js";
 import { tendingOf, TENDING } from "../utils/tending.js";
 import { formatClock } from "../utils/inventory.js";
 import { chefAvatar } from "../utils/cooks.js";
@@ -36,9 +37,6 @@ import { devPreview } from "../dev/preview.js";
 import { devQuickstart } from "../dev/quickstart.js";
 import VersusCountdown from "../components/VersusCountdown.jsx";
 import "./SchedulePage.css";
-
-// Abandoning destroys the run, so voice makes you read the sentence back.
-const ABANDON_PHRASE = "I want to abandon this cook";
 
 // Player colors come from the index in cooks[] — player 1 is "a",
 // player 2 is "b" — never stored, never chosen (design-v4.css tokens).
@@ -467,35 +465,35 @@ export default function SchedulePage() {
     const needsCoop = (what) => `${what} only applies to the co-op timeline — pick co-op first.`;
 
     const commands = [
-      { phrases: [/\bco ?-?op(?:eration)?\b/, /\bcooperat(?:ive|ion)\b/], run: pickMode("cooperation", "Co-op") },
-      { phrases: [/\bversus\b/, /\bcompetition\b/, /\bcompetitive\b/, /\bvs\b/], run: pickMode("competition", "Versus") },
+      { phrases: SCHEDULE_VOICE.cooperation, run: pickMode("cooperation", "Co-op") },
+      { phrases: SCHEDULE_VOICE.competition, run: pickMode("competition", "Versus") },
     ];
 
     if (run) {
       commands.push({
-        phrases: [/\bgo live\b/, /\bback to the cook\b/, /\b(?:see|show) (?:the )?result\b/],
+        phrases: SCHEDULE_VOICE.backToCook,
         label: runEnded ? "Opening the result." : "Back to the cook.",
         run: () => navigate("/session/live-cook"),
       });
       if (!runEnded) {
         commands.push({
           // Destroys the run, so a yes/no is not enough — same as Home.
-          phrases: [/\b(?:abandon|abort|discard) (?:the |this )?(?:cook|run|session)\b/],
-          confirmPhrase: ABANDON_PHRASE,
+          phrases: SCHEDULE_VOICE.abandon,
+          confirmPhrase: SCHEDULE_VOICE.abandonConfirmation,
           label: "Cook abandoned.",
           run: abandonRun,
         });
       }
     } else if (canStart) {
       commands.push({
-        phrases: [/\bgo live\b/, /\bstart (?:the )?(?:cook|cooking)\b/],
+        phrases: SCHEDULE_VOICE.live,
         confirm: "Go live? Say yes or no.",
         label: "Going live.",
         run: goLive,
       });
     } else {
       commands.push({
-        phrases: [/\bgo live\b/, /\bstart (?:the )?(?:cook|cooking)\b/],
+        phrases: SCHEDULE_VOICE.live,
         run: () =>
           hasLoop
             ? "Can't go live yet — some steps depend on each other in a loop. Say “back to the recipe graph” to fix it."
@@ -504,14 +502,14 @@ export default function SchedulePage() {
     }
 
     commands.push({
-      phrases: [/\b(?:back to|go to|open|show) (?:the )?recipe (?:graph|board)\b/, /\bfix (?:the )?loop\b/],
+      phrases: SCHEDULE_VOICE.recipeGraph,
       label: "Opening the recipe graph.",
       run: () => navigate("/session/inventory"),
     });
 
     if (kitchenProfile) {
       commands.push({
-        phrases: [/\bedit (?:the )?kitchen(?: profile)?\b/],
+        phrases: SCHEDULE_VOICE.editKitchen,
         label: "Opening the kitchen form.",
         run: () => setEditingKitchen(true),
       });
@@ -530,17 +528,17 @@ export default function SchedulePage() {
     };
     commands.push(
       {
-        phrases: [/\bzoom (?:to )?fit\b/, /\bfit (?:the )?(?:timeline|plan|schedule|screen)\b/, /^fit$/, /\breset zoom\b/],
+        phrases: SCHEDULE_VOICE.fit,
         run: () => {
           if (!isCoop) return needsCoop("Zoom");
           setZoom(ZOOM_FIT);
           return "Fit to screen.";
         },
       },
-      { phrases: [/\bzoom in\b/, /\bzoom closer\b/], run: zoomBy(1) },
-      { phrases: [/\bzoom out\b/], run: zoomBy(-1) },
+      { phrases: SCHEDULE_VOICE.zoomIn, run: zoomBy(1) },
+      { phrases: SCHEDULE_VOICE.zoomOut, run: zoomBy(-1) },
       {
-        phrases: [/\b(?:close|hide|dismiss) (?:the )?(?:details|panel|sheet|step)\b/],
+        phrases: SCHEDULE_VOICE.closeDetails,
         run: () => {
           if (!selectedStepId) return "Nothing is open.";
           setSelectedStepId(null);
@@ -548,7 +546,7 @@ export default function SchedulePage() {
         },
       },
       {
-        phrases: [/\b(?:select|open|show details (?:for|on|of)|details (?:for|on|of)) (?:the )?(?:step |task )?(.+)$/],
+        phrases: SCHEDULE_VOICE.showDetails,
         run: (m) => {
           if (!isCoop) return needsCoop("Step details");
           const ids = schedule.steps.map((s) => s.id);
@@ -569,11 +567,7 @@ export default function SchedulePage() {
         // "When do I get free" has a subject in it, which the conversation
         // filter would otherwise throw away.
         allowSubject: true,
-        phrases: [
-          /\bwhen (?:am i|are we|do i|do we|can i|can we|is \S+) (?:get |be )?(?:a )?(?:free|break)\b/,
-          /\bfree time\b/,
-          /\bwho(?:'s| is) free\b/,
-        ],
+        phrases: SCHEDULE_VOICE.freeTime,
         run: () => {
           if (!isCoop) return needsCoop("Free time");
           const lines = cooks

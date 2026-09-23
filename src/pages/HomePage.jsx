@@ -25,6 +25,7 @@ import {
 import StagePath from "../components/StagePath.jsx";
 import "./HomePage.css";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { HOME_VOICE } from "../utils/pageVoiceGrammar.js";
 // The same normalizer VoiceBar runs over the utterance before matching —
 // kitchen names have to be folded exactly the same way or they will
 // never line up.
@@ -186,13 +187,7 @@ function LoadoutChips({ profile, delayBase = 0 }) {
 
 /* ---------------- page ---------------- */
 
-// What you have to say out loud to abandon a run by voice. Deliberately
-// a whole sentence and deliberately specific: it names the thing being
-// destroyed, so it cannot fall out of agreeing with something else. One
-// constant, used by both the command and the on-screen copy, so the two
-// can never drift apart and leave you reading a phrase that won't match.
-const ABORT_PHRASE = "I want to abort this cooking session";
-
+// The exact abort passphrase lives with this page's tested voice grammar.
 export default function HomePage() {
   const {
     state,
@@ -301,7 +296,7 @@ export default function HomePage() {
     // a command in every hero state. Same rule as everywhere else: what
     // you can press, you can say.
     const addKitchen = {
-      phrases: [/\badd (?:a |another )?kitchen\b/, /\bnew kitchen\b/],
+      phrases: HOME_VOICE.addKitchen,
       label: "Opening the kitchen form.",
       run: () => openAddProfileModal(false),
     };
@@ -309,7 +304,7 @@ export default function HomePage() {
     if (heroState === "resumable") {
       return registerVoiceCommands([
         {
-          phrases: [/\bresume\b/, /\bcarry on with the run\b/],
+          phrases: HOME_VOICE.resume,
           label: "Resuming.",
           run: () => navigate("/session"),
         },
@@ -319,8 +314,8 @@ export default function HomePage() {
           // that — a stray "yeah" from the other side of the kitchen
           // would be sufficient, which is exactly the accident worth
           // ruling out. Reading the sentence back IS the authorisation.
-          phrases: [/\b(?:abandon|abort|discard|cancel) (?:the |this )?(?:cooking )?(?:run|session|cook)\b/],
-          confirmPhrase: ABORT_PHRASE,
+          phrases: HOME_VOICE.abandon,
+          confirmPhrase: HOME_VOICE.abandonConfirmation,
           label: "Run abandoned.",
           run: discardSession,
         },
@@ -334,7 +329,7 @@ export default function HomePage() {
       return registerVoiceCommands([
         ...kitchenPickCommands(profiles, handleStartSession),
         {
-          phrases: [/\bcancel\b/, /\bnever ?mind\b/, /\bgo back\b/],
+          phrases: HOME_VOICE.cancelPicker,
           label: "Cancelled.",
           run: () => setPickerOpen(false),
         },
@@ -360,7 +355,7 @@ export default function HomePage() {
           // several profiles this opens a picker, and a voice command
           // that opens a dialog you then have to click is no better
           // than clicking the button.
-          phrases: [/\bstart (?:the )?(?:run|cooking|session)\b/],
+          phrases: HOME_VOICE.start,
           label: profiles.length > 1 ? "Which kitchen?" : "Starting.",
           run: handleStartClick,
         },

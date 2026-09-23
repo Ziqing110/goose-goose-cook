@@ -18,6 +18,7 @@ speaker-sidecar/voiceprints.json
 
 # Working documents, kept locally and not committed.
 VOICE_PLAN.md
+VOICE_CONTROL.md
 UNATTENDED_TASK_FRONTEND.md
 
 # Local AI design prompts; keep them out of the product repository.

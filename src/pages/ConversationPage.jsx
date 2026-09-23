@@ -13,6 +13,7 @@ import UnderstandingSidecar from "../components/UnderstandingSidecar.jsx";
 import { GooseProfile, GoosePrint } from "../components/GooseMarks.jsx";
 import gooseThinking from "../assets/chef-goose-thinking-wide.png";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { CONVERSATION_VOICE } from "../utils/pageVoiceGrammar.js";
 import "./ConversationPage.css";
 
 // Each agent bubble is tilted a fraction of a degree, authored per
@@ -364,7 +365,7 @@ export default function ConversationPage() {
     if (!isComplete) return undefined;
     return registerVoiceCommands([
       {
-        phrases: [/\bcheck (?:the )?inventory\b/, /\bcontinue to (?:the )?inventory\b/, /\bgo to (?:the )?inventory\b/],
+        phrases: CONVERSATION_VOICE.continueInventory,
         run: () => navigate("/session/inventory"),
       },
     ]);

@@ -19,6 +19,7 @@ import { useStreamingTranscript } from "../hooks/useStreamingTranscript.js";
 import { agentWasSpeakingAt, preload, speak, stop as stopSpeaking } from "../voice/agentVoice.js";
 import {
   matchConfirmation,
+  matchesConfirmationPhrase,
   matchNavCommand,
   navCommandList,
   isLikelyConversation,
@@ -290,7 +291,7 @@ export default function VoiceBar() {
         // to stop being sufficient.
         if (phrase) {
           clearPending();
-          if (normalizeUtterance(text) === phrase) return perform();
+          if (matchesConfirmationPhrase(text, phrase)) return perform();
           return say("That didn't match, so nothing changed.");
         }
         const answer = matchConfirmation(text);

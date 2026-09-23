@@ -12,6 +12,7 @@ import Modal from "./Modal.jsx";
 import { ChoiceChip } from "./BoardPanel.jsx";
 import { cyclicDependencyIds } from "../utils/graphLayout.js";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { DELETE_STEP_VOICE } from "../utils/pageVoiceGrammar.js";
 import "./BoardPanel.css";
 import "./DeleteStepDialog.css";
 
@@ -63,29 +64,29 @@ export default function DeleteStepDialog({ node, dependents, allNodes, onCancel,
   useEffect(() => {
     const commands = [
       {
-        phrases: [/\bmove them to what (?:it|this step) was waiting on\b/, /\binherit\b/, /\bmove (?:it|them) (?:to|onto) (?:its|the) (?:old )?dependencies\b/],
+        phrases: DELETE_STEP_VOICE.inherit,
         label: "Moving dependents to what this step was waiting on.",
         run: () => setMode("inherit"),
       },
       {
-        phrases: [/\bchoose for each\b/, /\blet me choose\b/, /\bpick (?:it|them) myself\b/],
+        phrases: DELETE_STEP_VOICE.choose,
         label: "Choose for each — pick them in the panel.",
         run: () => setMode("choose"),
       },
       {
-        phrases: [/\bjust drop (?:the )?link\b/, /\bdrop (?:the )?links?\b/],
+        phrases: DELETE_STEP_VOICE.drop,
         label: "Dropping the link.",
         run: () => setMode("drop"),
       },
       {
-        phrases: [/\bremove (?:the )?step\b/, /\bdelete (?:the )?step\b/, /\bconfirm\b/],
+        phrases: DELETE_STEP_VOICE.confirm,
         run: () => {
           confirmRef.current();
           return null; // the dialog is closing; the page will speak next
         },
       },
       {
-        phrases: [/\bkeep it\b/, /\bcancel\b/, /\bnever ?mind\b/],
+        phrases: DELETE_STEP_VOICE.cancel,
         run: () => {
           actionsRef.current.onCancel();
           return null;

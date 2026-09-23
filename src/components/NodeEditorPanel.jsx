@@ -5,6 +5,7 @@ import BoardPanel, { ChoiceChip, PanelField, Segmented } from "./BoardPanel.jsx"
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 import { spokenNumber, NUMBER_TOKEN } from "../utils/understanding.js";
 import { matchStepName } from "../utils/stepNameMatch.js";
+import { EDIT_STEP_VOICE } from "../utils/pageVoiceGrammar.js";
 import "./NodeEditorPanel.css";
 
 export const DIFFICULTY_SEGMENTS = DIFFICULTY_OPTIONS.map((d) => ({
@@ -14,9 +15,6 @@ export const DIFFICULTY_SEGMENTS = DIFFICULTY_OPTIONS.map((d) => ({
 
 const ADD_NEW = "__new__";
 
-const N = `(${NUMBER_TOKEN})`;
-const TOGGLE_ON = (thing, a) => [new RegExp(`\\b(?:add|with) (?:${a} |the )?${thing}\\b`), new RegExp(`\\b${thing} on\\b`)];
-const TOGGLE_OFF = (thing, a) => [new RegExp(`\\b(?:remove|drop|without) (?:${a} |the )?${thing}\\b`), new RegExp(`\\b${thing} off\\b`)];
 const EQUIPMENT_ARTICLE = { cutting_board: "a", stove_burner: "a", wok: "a", pot: "a", oven: "an" };
 
 // Edits are staged locally and only committed to the graph when Save
@@ -90,7 +88,7 @@ export default function NodeEditorPanel({
 
     const commands = [
       {
-        phrases: [/\b(?:call it|rename it|name it) (.+)$/],
+        phrases: EDIT_STEP_VOICE.name,
         run: (m) => {
           const name = m[1].trim();
           if (!name) return null;
@@ -99,7 +97,7 @@ export default function NodeEditorPanel({
         },
       },
       {
-        phrases: [new RegExp(`\\bset (?:the )?(?:duration|time) to ${N} minutes?\\b`), new RegExp(`\\bmake it ${N} minutes?\\b`), new RegExp(`\\b${N} minutes?\\b`)],
+        phrases: EDIT_STEP_VOICE.duration(NUMBER_TOKEN),
         run: (m) => {
           const mins = spokenNumber(m[1]);
           if (mins === null) return null;
@@ -108,14 +106,14 @@ export default function NodeEditorPanel({
         },
       },
       {
-        phrases: [/\b(?:set )?difficulty (?:to )?(low|medium|high)\b/, /\bmake it (low|medium|high)(?: difficulty)?\b/],
+        phrases: EDIT_STEP_VOICE.difficulty,
         run: (m) => {
           patch((n) => (n.difficulty = m[1]));
           return `${m[1]} difficulty.`;
         },
       },
       {
-        phrases: [/\b(?:set )?phase (?:to )?(prep|cook|plate)\b/, /\bmark it (?:as )?(prep|cook|plate)\b/],
+        phrases: EDIT_STEP_VOICE.phase,
         run: (m) => {
           patch((n) => (n.phase = m[1]));
           return `Phase: ${m[1]}.`;
@@ -126,19 +124,19 @@ export default function NodeEditorPanel({
         const a = EQUIPMENT_ARTICLE[eq];
         return [
           {
-            phrases: TOGGLE_OFF(word, a),
+            phrases: EDIT_STEP_VOICE.equipment(word, a).off,
             label: `${equipmentLabel(eq)} — not needed.`,
             run: () => patch((n) => (n.required_equipment = n.required_equipment.filter((x) => x !== eq))),
           },
           {
-            phrases: TOGGLE_ON(word, a),
+            phrases: EDIT_STEP_VOICE.equipment(word, a).on,
             label: `${equipmentLabel(eq)} needed.`,
             run: () => patch((n) => (n.required_equipment = n.required_equipment.includes(eq) ? n.required_equipment : [...n.required_equipment, eq])),
           },
         ];
       }),
       {
-        phrases: [/\bstop waiting on (.+)$/, /\bremove (.+) from runs after\b/, /\bdon'?t wait on (.+)$/],
+        phrases: EDIT_STEP_VOICE.stopWaiting,
         run: (m) => {
           const match = matchStepName(m[1], otherIds, labelOf);
           if (match.confidence !== "exact") return "I couldn't tell which step you meant.";
@@ -147,7 +145,7 @@ export default function NodeEditorPanel({
         },
       },
       {
-        phrases: [/\bruns? after (.+)$/, /\bwait(?:s|ing)? on (.+)$/],
+        phrases: EDIT_STEP_VOICE.after,
         run: (m) => {
           const match = matchStepName(m[1], otherIds, labelOf);
           if (match.confidence !== "exact") return "I couldn't tell which step you meant.";
@@ -157,7 +155,7 @@ export default function NodeEditorPanel({
         },
       },
       {
-        phrases: [/\bdelete (?:this )?step\b/, /\bdelete it\b/, /\bremove (?:this )?step\b/],
+        phrases: EDIT_STEP_VOICE.delete,
         confirm: "Delete this step? Say yes or no.",
         run: () => {
           actionsRef.current.onDelete(node.id);
@@ -165,14 +163,14 @@ export default function NodeEditorPanel({
         },
       },
       {
-        phrases: [/\bsave (?:the )?step\b/, /\bsave it\b/, /\bthat's? it\b/],
+        phrases: EDIT_STEP_VOICE.save,
         run: () => {
           actionsRef.current.onSave(node.id, draftRef.current);
           return null; // the panel is closing; the page will speak next
         },
       },
       {
-        phrases: [/\bcancel\b/, /\bclose (?:this|the) (?:step|editor)\b/, /\bnever ?mind\b/],
+        phrases: EDIT_STEP_VOICE.cancel,
         run: () => {
           actionsRef.current.onClose();
           return null;
