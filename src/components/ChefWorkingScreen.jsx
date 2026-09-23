@@ -2,16 +2,6 @@ import chefGooseSheet from "../assets/chef-goose-schedule-loading-v1.png";
 import { GoosePrint } from "./GooseMarks.jsx";
 import "./ChefWorkingScreen.css";
 
-// The trail the goose walked in on, oldest first: pale and small far
-// off, deepest by the plate (the same size-tracks-depth rule as the
-// other tracks). Alternating rows are the left and right feet.
-const TRAIL = [
-  { depth: "pale", size: 12, left: 0, bottom: 4 },
-  { depth: "pale", size: 13, left: 24, bottom: 22 },
-  { depth: "mid", size: 15, left: 50, bottom: 10 },
-  { depth: "mid", size: 16, left: 76, bottom: 30 },
-  { depth: "deep", size: 18, left: 104, bottom: 16 },
-];
 
 // Full-page beat while the chef is doing real work off screen — today
 // that is the recipe generation on Inventory, which runs the better
@@ -38,13 +28,6 @@ export default function ChefWorkingScreen({
       <div className="chef-working-stage">
         <div className="chef-working-art">
           <span className="chef-working-halo" aria-hidden="true" />
-          <span className="chef-working-trail" aria-hidden="true">
-            {TRAIL.map((p, i) => (
-              <span key={i} style={{ left: p.left, bottom: p.bottom, animationDelay: `${i * 280}ms` }}>
-                <GoosePrint depth={p.depth} size={p.size} rotate={68} />
-              </span>
-            ))}
-          </span>
           <div className="chef-working-goose" style={{ backgroundImage: `url(${chefGooseSheet})` }} role="img" aria-label="Chef goose arranging recipe cards" />
         </div>
 
@@ -54,19 +37,19 @@ export default function ChefWorkingScreen({
         </div>
 
         <span className="chef-working-live" role="status">
-          {/* Typing dots while the chef works — not bars, which read as
-              the VoiceBar's mic meter — and a check once it's done. */}
+          {/* The goose's own prints stepping left to right while the chef
+              works — not bars, which read as the VoiceBar's mic meter —
+              and a check once it's done. Toes point right, the way it
+              walks; the middle print is the other foot, a touch higher. */}
           <span className="chef-working-loader" aria-hidden="true">
             {done ? (
               <svg viewBox="0 0 16 16" className="chef-working-check">
                 <path d="M3 8.5l3.2 3L13 4.5" />
               </svg>
             ) : (
-              <>
-                <i />
-                <i />
-                <i />
-              </>
+              [0, 1, 2].map((i) => (
+                <GoosePrint key={i} size={11} rotate={90} style={{ marginTop: i === 1 ? -4 : 2, animationDelay: `${i * 260}ms` }} />
+              ))
             )}
           </span>
           {done ? doneLive : live}

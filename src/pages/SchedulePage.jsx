@@ -635,18 +635,24 @@ export default function SchedulePage() {
   metaBits.push(<><Mono>{nodes.length}</Mono> steps</>);
   if (kitchenProfile?.name) metaBits.push(kitchenProfile.name);
 
+  // Versus: the goose counts the match in on Live cook's own layout,
+  // standing in for this page until the run starts.
+  if (countingDown) {
+    return (
+      <VersusCountdown
+        cooks={cooks}
+        title={approved.title}
+        nodes={nodes}
+        opening={opening}
+        dishOf={dishOf}
+        onComplete={() => startCook()}
+        onCancel={() => setCountingDown(false)}
+      />
+    );
+  }
+
   return (
     <section className="page schedule-page">
-      {countingDown && (
-        <VersusCountdown
-          cooks={cooks}
-          title={approved.title}
-          nodes={nodes}
-          opening={opening}
-          onComplete={() => startCook()}
-          onCancel={() => setCountingDown(false)}
-        />
-      )}
       <header className="sch-title-row">
         <span className="sch-eyebrow sch-run-eyebrow">Tonight&rsquo;s run</span>
         <span className="sch-title-line">

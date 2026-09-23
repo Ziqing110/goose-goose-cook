@@ -502,7 +502,7 @@ await check("co-op: Call it early is a Modal, and confirming lands on Service do
   await page.getByRole("dialog").getByRole("button", { name: /^Call it$/ }).click();
   await page.waitForTimeout(800);
   assert.ok(await page.locator(".lc-service").isVisible(), "Service done panel");
-  assert.ok(await page.getByRole("button", { name: /See the cook card/ }).isVisible());
+  assert.ok(await page.getByRole("button", { name: /Take the cook card/ }).isVisible());
   assert.equal(await page.locator(".lc-card").count(), 0, "cards are replaced");
   assert.ok((await page.locator(".lc-step-row").count()) > 0, "step list rendered");
   // One step done, the rest skipped: nothing to cheer, so no winner tiles.

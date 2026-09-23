@@ -1,7 +1,7 @@
 /* ---------------------------------------------------------------
    ChefWorkingScreen — the full-page "chef at work" beat, on the v4
    tokens. The art sits on a sunken halo, then the display line and
-   description, the accent live line with typing dots, a quiet
+   description, the accent live line led by stepping footprints, a quiet
    details chip, and a footer quote. Type stays on the system's
    scale (h1 30/36, body 15/22, meta 13/18, nothing under 13).
 
@@ -16,9 +16,9 @@
 @keyframes chef-working-pop { 0% { opacity: 0; transform: scale(0.82); } 60% { transform: scale(1.06); } 100% { opacity: 1; transform: scale(1); } }
 @keyframes chef-working-shuffle { from { background-position-x: 0; } to { background-position-x: 100%; } }
 @keyframes chef-working-out { from { opacity: 1; } to { opacity: 0; } }
-@keyframes chef-working-dot { 0%, 60%, 100% { transform: none; opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }
-/* One print lands after another, holds, then fades — a walk on a loop. */
-@keyframes chef-working-step { 0% { opacity: 0; transform: scale(0.7); } 10% { opacity: 1; transform: none; } 62% { opacity: 1; } 80%, 100% { opacity: 0; } }
+/* One print lands after another, holds, then fades back — a walk on a
+   loop. Opacity only: each print's rotation lives on its own transform. */
+@keyframes chef-working-step { 0% { opacity: 0.2; } 12%, 55% { opacity: 1; } 78%, 100% { opacity: 0.2; } }
 @keyframes chef-working-check { from { stroke-dashoffset: 16; } to { stroke-dashoffset: 0; } }
 
 .chef-working {
@@ -77,36 +77,15 @@
   background-position: 0 0;
   animation: chef-working-shuffle 1650ms steps(3) infinite;
 }
-/* The trail walks in from the lower left and ends at the plate's edge,
-   in the art box's empty corner outside the circle. */
-.chef-working-trail {
-  position: absolute;
-  bottom: 0;
-  right: calc(100% - 40px);
-  width: 124px;
-  height: 52px;
-  pointer-events: none;
-}
-.chef-working-trail > span {
-  position: absolute;
-  display: block;
-  line-height: 0;
-  opacity: 0;
-  animation: chef-working-step 2800ms ease-out infinite;
-}
-.chef-working-trail svg { display: block; }
-.chef-working.is-done .chef-working-trail > span { animation: none; opacity: 1; }
 .chef-working.is-done .chef-working-goose { animation: chef-working-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; background-position-x: 100%; }
 
 .chef-working-copy { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 28px; }
 .chef-working-title { margin: 0; font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.01em; }
 .chef-working-desc { margin: 0; max-width: 420px; font-size: 15px; line-height: 22px; color: var(--ink-soft); }
 .chef-working-live { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 500; color: var(--accent); }
-/* Fixed width so the label doesn't shift when the dots become a check. */
-.chef-working-loader { display: flex; align-items: center; justify-content: center; gap: 4px; width: 22px; height: 16px; }
-.chef-working-loader i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: chef-working-dot 1200ms ease-in-out infinite; }
-.chef-working-loader i:nth-child(2) { animation-delay: 160ms; }
-.chef-working-loader i:nth-child(3) { animation-delay: 320ms; }
+/* Fixed width so the label doesn't shift when the prints become a check. */
+.chef-working-loader { display: flex; align-items: center; justify-content: center; gap: 5px; width: 44px; height: 18px; }
+.chef-working-loader svg:not(.chef-working-check) { opacity: 0.2; animation: chef-working-step 1560ms ease-out infinite; }
 .chef-working-check { width: 16px; height: 16px; fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 16; animation: chef-working-check 280ms ease-out both; }
 /* What's being cooked: context, not copy — a quiet chip under the status. */
 .chef-working-details {
@@ -151,14 +130,13 @@
 /* Narrow: the topbar wraps to three rows, so the goose gives back the
    height it takes. */
 @media (max-width: 720px) {
-  .chef-working-trail { transform: scale(0.8); transform-origin: right bottom; }
   .chef-working { --chef-goose-w: 132px; gap: 16px; min-height: calc(100dvh - var(--voice-bar-height) - 220px); }
   .chef-working-title { font-size: 24px; line-height: 30px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chef-working-loader i, .chef-working-check, .chef-working-goose { animation: none; }
-  .chef-working-trail > span { animation: none; opacity: 1; }
+  .chef-working-loader svg, .chef-working-goose { animation: none; }
+  .chef-working-loader svg:not(.chef-working-check) { opacity: 1; }
   .chef-working-stage { animation: none; }
   .chef-working.is-done { animation-delay: 0ms !important; }
   .chef-working.is-done .chef-working-goose { animation: none; }

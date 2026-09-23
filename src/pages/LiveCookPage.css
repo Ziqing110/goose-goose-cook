@@ -828,6 +828,19 @@
   font-weight: 500;
   white-space: nowrap;
 }
+/* Schedule's timid wobble: tiny twitches spaced far apart, staggered per
+   chip — nervous rather than restless. */
+.lc-notyet-chip {
+  animation: lc-timid 3.2s ease-in-out infinite;
+  animation-delay: calc(var(--lc-locked-index, 0) * 0.17s);
+  transform: rotate(var(--lc-locked-tilt, 0deg));
+}
+@keyframes lc-timid {
+  0%, 84%, 100% { transform: translateX(0) rotate(var(--lc-locked-tilt, 0deg)); }
+  88% { transform: translateX(-1.3px) rotate(var(--lc-locked-tilt, 0deg)); }
+  92% { transform: translateX(1.3px) rotate(var(--lc-locked-tilt, 0deg)); }
+  96% { transform: translateX(-0.7px) rotate(var(--lc-locked-tilt, 0deg)); }
+}
 .lc-notyet-chip::before { content: ""; width: 3px; height: 10px; border-left: 2px solid var(--line-strong); border-right: 2px solid var(--line-strong); }
 
 /* ---------------- Toque's line ----------------
@@ -1069,7 +1082,6 @@
 .lc-share-n { font-size: 16px; font-weight: 500; color: var(--pc-ink); }
 .lc-share-bar { display: flex; gap: 2px; height: 10px; border-radius: 999px; background: var(--line); overflow: hidden; }
 .lc-share-bar > span { flex-basis: 0; background: var(--pc); }
-.lc-service-actions { display: flex; align-items: center; gap: 12px; margin-top: auto; padding-top: 4px; }
 .lc-service-error {
   width: 100%;
   margin: 0;
@@ -1084,19 +1096,69 @@
 /* The receipt: cream paper with a torn edge, one line per step with a
    dotted leader, the finisher's avatar, the time and the points. It
    matches the results column's height and scrolls inside. */
-.lc-service-steps-cell { position: relative; min-height: 420px; }
-.lc-receipt {
+.lc-service-steps-cell { position: relative; min-height: 460px; }
+/* The roll: the receipt with its stub still attached. A hairline that
+   follows the torn edge and the stub's notches too — a border can't. */
+.lc-receipt-roll {
   position: absolute;
   inset: 0 0 10px;
+  display: flex;
+  flex-direction: column;
+  filter: drop-shadow(1px 0 0 var(--paper-edge)) drop-shadow(-1px 0 0 var(--paper-edge)) drop-shadow(0 1px 0 var(--paper-edge)) drop-shadow(0 -1px 0 var(--paper-edge));
+}
+.lc-receipt {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 18px 20px 14px;
   border-radius: var(--radius-card) var(--radius-card) 0 0;
   background: var(--paper);
-  /* A hairline that follows the torn edge too — a border can't. */
-  filter: drop-shadow(1px 0 0 var(--paper-edge)) drop-shadow(-1px 0 0 var(--paper-edge)) drop-shadow(0 1px 0 var(--paper-edge)) drop-shadow(0 -1px 0 var(--paper-edge));
 }
-.lc-receipt::after {
+/* The tear-off stub: a perforated strip of the same paper, a notch
+   punched in at each end of the perforation, holding the way on. It
+   tips away as the card is being saved. */
+.lc-receipt-stub {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 30px 20px 14px;
+  background: var(--paper);
+  -webkit-mask:
+    radial-gradient(circle 8px at 0 10px, transparent 7.5px, #000 8px) left / 51% 100% no-repeat,
+    radial-gradient(circle 8px at 100% 10px, transparent 7.5px, #000 8px) right / 51% 100% no-repeat;
+  mask:
+    radial-gradient(circle 8px at 0 10px, transparent 7.5px, #000 8px) left / 51% 100% no-repeat,
+    radial-gradient(circle 8px at 100% 10px, transparent 7.5px, #000 8px) right / 51% 100% no-repeat;
+  transform-origin: 20% 0;
+  transition: transform 240ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+.lc-receipt-stub.is-tearing { transform: translateY(6px) rotate(-1.5deg); }
+.lc-perforation {
+  position: absolute;
+  top: 9px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  justify-content: center;
+  border-top: 2px dashed var(--paper-dash);
+}
+.lc-perforation > span {
+  margin-top: -9px;
+  padding: 0 8px;
+  background: var(--paper);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.lc-receipt-stub .lc-service-error { padding: 10px 12px; font-size: 13px; line-height: 18px; }
+.lc-receipt-roll::after {
   content: "";
   position: absolute;
   left: 0;
@@ -1185,8 +1247,8 @@
   .lc-result.is-a, .lc-result.is-b { rotate: none; }
   .lc-result.is-winner { margin-top: 24px; }
   .lc-service-steps-cell { min-height: 0; }
-  .lc-receipt { position: static; max-height: 70vh; margin-bottom: 10px; }
-  .lc-service-cta { width: 100%; min-width: 0; }
+  .lc-receipt-roll { position: static; margin-bottom: 10px; }
+  .lc-receipt { max-height: 70vh; }
 }
 
 /* ---------------- reduced motion ----------------
@@ -1194,8 +1256,8 @@
    doesn't pulse, due doesn't shake, and the bars jump to position. */
 @media (prefers-reduced-motion: reduce) {
   .lc-header, .lc-strip, .lc-card, .lc-agent, .lc-pool, .lc-tile, .lc-service, .lc-roll, .lc-line, .lc-fly, .lc-toque-line, .lc-toque-line-text, .lc-drawer-panel, .lc-card-points, .lc-stamp, .lc-banner, .lc-step-title, .lc-wait, .lc-rest, .lc-moment { animation-name: lc-fade; }
-  .lc-goose, .lc-offer-pulse, .lc-card-score { animation: none; }
+  .lc-goose, .lc-offer-pulse, .lc-card-score, .lc-notyet-chip { animation: none; }
   .lc-card.is-state-due { animation: none; }
-  .lc-tug-a, .lc-tug-b, .lc-step-rail-fill { transition: none; }
+  .lc-tug-a, .lc-tug-b, .lc-step-rail-fill, .lc-receipt-stub { transition: none; }
   .lc-cooking-row, .lc-cooking-row.is-due, .lc-attend { animation-name: lc-fade; }
 }

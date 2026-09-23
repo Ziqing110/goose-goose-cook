@@ -246,7 +246,7 @@ function leadLine(board, cooks) {
 // (z-index below the content, above the panel fill). The card's action
 // block leaves room for it. `motion` is the wrapper's loop — bob,
 // honk, or none — layered on the sprite's own frame cycle.
-function CardGoose({ pose, size = 128, paused, motion = "bob" }) {
+export function CardGoose({ pose, size = 128, paused, motion = "bob" }) {
   return (
     <span className={`lc-goose is-${motion}`} aria-hidden="true">
       <BabyGoose pose={pose} size={size} paused={paused} decorative />
@@ -292,7 +292,7 @@ function ScoreFly({ fly, fromEl, toEls, onDone }) {
 // The chef bird the player picked on the Cooks page, ringed in their
 // player color; the initial is the fallback for a cook who predates
 // avatars. Same identity system either way — the color is the key.
-function PlayerAvatar({ cook, index, size = 32 }) {
+export function PlayerAvatar({ cook, index, size = 32 }) {
   const chef = cook?.avatar ? chefAvatar(cook.avatar) : null;
   return (
     <span
@@ -1460,7 +1460,7 @@ function cardFocus(cookId, run, byId, now) {
 
 // The goose's rubber stamp — the same outlined, tilted pill as Schedule's
 // APPROVED badge, in the ink of whoever it is about.
-function Stamp({ children, tone = "ink", className = "" }) {
+export function Stamp({ children, tone = "ink", className = "" }) {
   return <span className={`lc-stamp is-${tone} ${className}`}>{children}</span>;
 }
 
@@ -1995,10 +1995,19 @@ function TaskPoolBoard({ ready, blocked, run, byId, cooks, now, paused, dishOf, 
       {blocked.length > 0 && (
         <div className="lc-pool-notyet">
           <span className="lc-eyebrow-label">Not yet</span>
-          {blocked.map((id) => {
+          {blocked.map((id, i) => {
             const waiting = (byId[id].depends_on || []).filter((d) => byId[d] && !["done", "skipped"].includes(run.steps[d]?.status));
+            // Same tilt as the step's chip on Schedule (hashed from its id),
+            // on its own beat, so the row reads as steps waiting their turn.
+            const hash = String(id).split("").reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 5381);
+            const tiltDeg = ((hash % 26) - 13) / 10;
             return (
-              <span key={id} className="lc-notyet-chip" title={`needs ${waiting.map((d) => byId[d]?.label).join(", ")}`}>
+              <span
+                key={id}
+                className="lc-notyet-chip"
+                title={`needs ${waiting.map((d) => byId[d]?.label).join(", ")}`}
+                style={{ "--lc-locked-index": i, "--lc-locked-tilt": `${tiltDeg}deg` }}
+              >
                 {byId[id].label}
               </span>
             );
@@ -2320,22 +2329,15 @@ function ServiceDone({ outcome, cooks, isVersus, title, byId, dishOf, onExit, sa
           </div>
         )}
 
-        <div className="lc-service-actions">
-          <button type="button" className="btn btn-primary btn-lg btn-key lc-service-cta" onClick={onExit} disabled={saving}>
-            {saving ? "Saving…" : saveError ? "Try again" : "See the cook card →"}
-          </button>
-        </div>
-        {saveError && (
-          <p className="lc-service-error" role="alert">
-            {saveError} Nothing is lost — try again.
-          </p>
-        )}
       </div>
 
       {/* The receipt is as tall as the column beside it and scrolls
-          inside — the cell is the grid item, the paper is taken out of
-          flow, so twenty rows never stretch the page past the results. */}
+          inside — the cell is the grid item, the roll is taken out of
+          flow, so twenty rows never stretch the page past the results.
+          The way on is the receipt's own tear-off stub: the receipt is
+          what becomes the cook card, so taking it is the handoff. */}
       <div className="lc-service-steps-cell">
+        <div className="lc-receipt-roll">
         <div className="lc-receipt">
           <header className="lc-receipt-head">
             <span className="lc-receipt-heading">
@@ -2390,6 +2392,20 @@ function ServiceDone({ outcome, cooks, isVersus, title, byId, dishOf, onExit, sa
               <GoosePrint depth="mid" size={12} rotate={20} />
             </span>
           </footer>
+        </div>
+        <div className={`lc-receipt-stub ${saving ? "is-tearing" : ""}`}>
+          <span className="lc-perforation" aria-hidden="true">
+            <span>Tear here</span>
+          </span>
+          <button type="button" className="btn lc-btn-xl lc-btn-go lc-service-cta" onClick={onExit} disabled={saving}>
+            {saving ? "Saving…" : saveError ? "Try again" : "Take the cook card →"}
+          </button>
+          {saveError && (
+            <p className="lc-service-error" role="alert">
+              {saveError} Nothing is lost — try again.
+            </p>
+          )}
+        </div>
         </div>
       </div>
     </div>

@@ -267,7 +267,7 @@ await page.waitForTimeout(1200);
 await shot("live-summary");
 
 // --- summary card ---
-await click(/See the cook card/);
+await click(/Take the cook card/);
 await page.waitForTimeout(1500);
 await shot("summary-empty");
 
