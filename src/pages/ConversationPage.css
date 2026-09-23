@@ -52,7 +52,7 @@
    stands on the line the aside sits on, and it is right-aligned inside
    a frame wider than itself so it keeps that edge as the row reflows. */
 .convo-hero { flex: 0 1 580px; min-width: 300px; margin-bottom: -8px; }
-.convo-hero-art { display: block; width: 75%; height: auto; margin-left: auto; }
+.convo-hero-art { display: block; width: 60%; height: auto; margin-left: auto; }
 /* The underline hangs 9px below the baseline and takes no space, so the
    title reserves it rather than letting the sub-line sit on top. */
 .convo-title-mark { align-self: flex-start; margin-bottom: 6px; }
