@@ -14,6 +14,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { chromium } from "playwright";
+import { createRun } from "../src/utils/liveCook.js";
+import { computeOpeningAssignment } from "../src/utils/scheduleLayout.js";
 
 const BASE = process.env.VOICE_E2E_BASE || "http://127.0.0.1:5173";
 const SAMPLE_RATE = 48_000;
@@ -24,7 +26,7 @@ function writeFakeAudio(pathname) {
   // A short, non-silent 16-bit PCM tone is enough to prove that captured
   // microphone samples make it through the app's AudioWorklet and socket.
   // The mocked socket supplies the corresponding transcript below.
-  const samples = SAMPLE_RATE * 3;
+  const samples = SAMPLE_RATE * 180;
   const dataBytes = samples * 2;
   const wav = Buffer.alloc(44 + dataBytes);
   wav.write("RIFF", 0);
@@ -97,9 +99,12 @@ const kitchen = {
   hasOven: true,
 };
 const clone = (value) => JSON.parse(JSON.stringify(value));
+const originalSession = clone(session);
 const understandingInputs = [];
+const voiceFailures = [];
+let diagnosticPage = null;
 
-async function mockApi(page) {
+async function mockApi(page, { sessionState = session, kitchenProfiles = [kitchen], hasActiveSession = true } = {}) {
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -108,12 +113,46 @@ async function mockApi(page) {
       return route.fulfill({ json: { token: "voice-e2e-token" } });
     }
     if (url.pathname === "/api/kitchens" && request.method() === "GET") {
-      return route.fulfill({ json: [kitchen] });
+      return route.fulfill({ json: clone(kitchenProfiles) });
+    }
+    if (url.pathname === "/api/kitchens" && request.method() === "POST") {
+      const created = { id: "voice-e2e-kitchen-" + kitchenProfiles.length, ...request.postDataJSON() };
+      kitchenProfiles.push(created);
+      return route.fulfill({ json: created });
+    }
+    if (url.pathname.startsWith("/api/kitchens/") && request.method() === "PUT") {
+      const profileId = url.pathname.split("/").at(-1);
+      const profile = kitchenProfiles.find((item) => item.id === profileId) || kitchen;
+      Object.assign(profile, request.postDataJSON());
+      return route.fulfill({ json: profile });
+    }
+    if (url.pathname === "/api/materials" && request.method() === "GET") {
+      return route.fulfill({ json: [
+        { id: "ginger", label: "Ginger", category: "vegetable", amount: 1, unit: "piece" },
+        { id: "water", label: "Water", category: "pantry", amount: 2, unit: "cups" },
+      ] });
+    }
+    if (url.pathname === "/api/recipe-templates" && request.method() === "GET") {
+      return route.fulfill({ json: [] });
     }
     if (url.pathname === "/api/sessions" && request.method() === "GET") {
       return route.fulfill({
-        json: url.searchParams.get("status") === "active" ? [clone(session)] : [],
+        json: url.searchParams.get("status") === "active" && hasActiveSession ? [clone(sessionState)] : [],
       });
+    }
+    if (url.pathname === "/api/sessions" && request.method() === "POST") {
+      const payload = request.postDataJSON();
+      Object.assign(sessionState, {
+        ...clone(originalSession),
+        id: payload.id,
+        kitchenProfileId: payload.kitchenProfileId,
+        status: "active",
+        recipes: [],
+        sharedSteps: [],
+        run: null,
+      });
+      hasActiveSession = true;
+      return route.fulfill({ json: clone(sessionState) });
     }
     if (url.pathname === "/api/understanding/read" && request.method() === "POST") {
       const body = request.postDataJSON();
@@ -130,12 +169,12 @@ async function mockApi(page) {
         },
       });
     }
-    if (url.pathname === "/api/sessions/" + session.id && request.method() === "PATCH") {
-      Object.assign(session, request.postDataJSON());
-      return route.fulfill({ json: clone(session) });
+    if (url.pathname === "/api/sessions/" + sessionState.id && request.method() === "PATCH") {
+      Object.assign(sessionState, request.postDataJSON());
+      return route.fulfill({ json: clone(sessionState) });
     }
     if (url.pathname.startsWith("/api/sessions/")) {
-      return route.fulfill({ json: clone(session) });
+      return route.fulfill({ json: clone(sessionState) });
     }
     return route.fulfill({
       status: 404,
@@ -215,18 +254,25 @@ async function mockStreamingSocket(page) {
     async say(text, inspectPartial) {
       assert.ok(socket, "the streaming socket opened after unmuting");
       await waitForFrame(audioFrames + 1);
+      assert.ok(audioFrames > 0, "microphone PCM audio reached the socket");
       assert.ok(nonSilentFrames > 0, "non-silent microphone audio reached the socket");
       socket.send(JSON.stringify({ type: "Turn", transcript: text, end_of_turn: false }));
-      await page.waitForFunction(
-        (expected) => document.querySelector(".voice-transcript-text")?.textContent === expected,
-        text,
-        { timeout: 5_000 },
-      );
+      if (inspectPartial) {
+        await page.waitForFunction(
+          (expected) => document.querySelector(".voice-transcript-text")?.textContent === expected,
+          text,
+          { timeout: 5_000 },
+        );
+      }
       await inspectPartial?.();
       socket.send(JSON.stringify({
         type: "Turn",
         transcript: text,
         end_of_turn: true,
+        // The synthetic transcript represents a person speaking before
+        // the UI's asynchronous TTS reply begins. E2E coverage asserts
+        // command effects, not acoustic echo suppression.
+        startedAt: Date.now() - 10_000,
         words: text.split(/\s+/).map((word, i) => ({
           text: word,
           confidence: 0.99,
@@ -234,6 +280,9 @@ async function mockStreamingSocket(page) {
           end: (i + 1) * 250,
         })),
       }));
+      // Let the page's registered handler and React effects settle before
+      // the next synthetic turn, as they would between spoken commands.
+      await page.waitForTimeout(200);
     },
   };
 }
@@ -245,6 +294,17 @@ async function unmute(page, stream) {
   await stream.waitForAudio();
 }
 
+async function openVoicePage(browserContext, route, options = {}) {
+  const page = await browserContext.newPage();
+  page.setDefaultTimeout(3_000);
+  await mockApi(page, options);
+  const stream = await mockStreamingSocket(page);
+  page.on("dialog", (dialog) => dialog.accept());
+  await page.goto(BASE + route, { waitUntil: "networkidle" });
+  await unmute(page, stream);
+  return { page, stream };
+}
+
 async function waitForAttribute(locator, name, expected, timeoutMs = 5_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -252,6 +312,63 @@ async function waitForAttribute(locator, name, expected, timeoutMs = 5_000) {
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   assert.equal(await locator.getAttribute(name), expected, name + " did not become " + expected);
+}
+
+async function waitForInputValue(locator, expected, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await locator.inputValue() === expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.equal(await locator.inputValue(), expected, "input value did not become " + expected);
+}
+
+async function waitForChecked(locator, expected, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await locator.isChecked() === expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.equal(await locator.isChecked(), expected, "checkbox checked state did not become " + expected);
+}
+
+async function waitForObjectValue(object, key, expected, timeoutMs = 3_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (object[key] === expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.equal(object[key], expected, key + " did not become " + expected);
+}
+
+async function waitForPageCondition(page, fn, timeoutMs = 1_500) {
+  await page.waitForFunction(fn, undefined, { timeout: timeoutMs });
+}
+
+async function settleVoiceCommands(page) {
+  // React registers the newly mounted dialog's exclusive command layer in
+  // an effect after it paints. Let that effect run before sending the next
+  // synthetic turn; the hint itself may still be showing command feedback.
+  await page.waitForTimeout(250);
+}
+
+async function checkVoiceBehavior(name, fn) {
+  try {
+    await fn();
+    console.log("✔", name);
+  } catch (err) {
+    voiceFailures.push(name);
+    const heard = diagnosticPage
+      ? await diagnosticPage.evaluate(() => ({
+          label: document.querySelector(".voice-transcript-label")?.textContent || "",
+          text: document.querySelector(".voice-transcript-text")?.textContent || "",
+        })).catch(() => null)
+      : null;
+    console.log(
+      "✖", name, "\n   ", err.message.split("\n")[0],
+      heard?.text ? `\n    voice feedback: ${heard.label} ${heard.text}` : "",
+    );
+  }
 }
 
 await writeFakeAudio(WAV_PATH);
@@ -268,13 +385,14 @@ try {
       "--use-file-for-fake-audio-capture=" + WAV_PATH,
     ],
   });
-  context = await browser.newContext({ permissions: ["microphone"] });
+  context = await browser.newContext({ permissions: ["microphone"], reducedMotion: "reduce" });
   const schedulePage = await context.newPage();
   await mockApi(schedulePage);
   const scheduleStream = await mockStreamingSocket(schedulePage);
   await schedulePage.goto(BASE + "/session/schedule", { waitUntil: "networkidle" });
   await schedulePage.getByRole("slider", { name: "Timeline zoom" }).waitFor({ state: "visible" });
   await unmute(schedulePage, scheduleStream);
+  diagnosticPage = schedulePage;
 
   const zoom = schedulePage.getByRole("slider", { name: "Timeline zoom" });
   assert.equal(await zoom.getAttribute("aria-valuetext"), "1×");
@@ -288,10 +406,459 @@ try {
   await scheduleStream.say("zoom out");
   await waitForAttribute(zoom, "aria-valuetext", "1×");
 
+  await checkVoiceBehavior("Schedule: voice changes between Versus and Co-op modes", async () => {
+    const versus = schedulePage.getByRole("radio", { name: "Versus" });
+    const coop = schedulePage.getByRole("radio", { name: "Co-op" });
+    await scheduleStream.say("versus");
+    await waitForAttribute(versus, "aria-checked", "true");
+    await scheduleStream.say("cooperation");
+    await waitForAttribute(coop, "aria-checked", "true");
+  });
+  await checkVoiceBehavior("Schedule: saying a step name opens its timing details", async () => {
+    await scheduleStream.say("select the step Dice onion");
+    await schedulePage.locator('.sch-detail[aria-label="Dice onion"]').waitFor({ state: "visible" });
+  });
+  await checkVoiceBehavior("Schedule: ‘close details’ closes the selected step", async () => {
+    await scheduleStream.say("close details");
+    await schedulePage.locator('.sch-detail[aria-label="Dice onion"]').waitFor({ state: "hidden" });
+  });
+  await checkVoiceBehavior("Schedule: asking who is free returns the co-op free-time answer", async () => {
+    await scheduleStream.say("when am I free");
+    await waitForPageCondition(schedulePage, () => /Free stretches|Nobody gets free time/.test(document.querySelector(".voice-transcript-text")?.textContent || ""));
+  });
+  await checkVoiceBehavior("Schedule: fit voice command selects the fitted timeline", async () => {
+    await scheduleStream.say("fit the timeline");
+    await waitForAttribute(schedulePage.getByRole("button", { name: "Fit", exact: true }), "aria-pressed", "true");
+  });
+  await checkVoiceBehavior("Schedule: edit-kitchen voice opens the profile and applies spoken changes", async () => {
+    await scheduleStream.say("edit the kitchen");
+    const profile = schedulePage.getByRole("dialog", { name: "Edit kitchen" });
+    await profile.waitFor({ state: "visible" });
+    await scheduleStream.say("four burners");
+    await waitForInputValue(profile.locator("#kp-burners"), "4");
+    await scheduleStream.say("oven off");
+    await waitForChecked(profile.locator("#kp-hasOven"), false);
+    await scheduleStream.say("oven on");
+    await waitForChecked(profile.locator("#kp-hasOven"), true);
+    await scheduleStream.say("cancel");
+    await profile.waitFor({ state: "hidden" });
+  });
+
   await scheduleStream.say("go to inventory");
   await schedulePage.waitForURL("**/session/inventory", { timeout: 5_000 });
   await schedulePage.locator(".inventory-page").waitFor({ state: "visible" });
   await schedulePage.close();
+
+  // The Inventory voice checks use a separate unapproved graph with real
+  // material references, so the assertions can observe availability and
+  // graph changes rather than only hearing a matcher acknowledgement.
+  const inventoryGraph = {
+    title: "Voice test dinner",
+    servings: 2,
+    nodes: [
+      {
+        id: "dice_ginger",
+        label: "Dice ginger",
+        difficulty: "low",
+        estimated_duration_sec: 120,
+        depends_on: [],
+        required_equipment: ["cutting_board"],
+        required_materials: ["ginger"],
+        phase: "prep",
+      },
+      {
+        id: "boil_water",
+        label: "Boil water",
+        difficulty: "medium",
+        estimated_duration_sec: 300,
+        depends_on: ["dice_ginger"],
+        required_equipment: ["stove_burner", "wok"],
+        required_materials: ["water"],
+        phase: "cook",
+      },
+      {
+        id: "serve_noodles",
+        label: "Serve noodles",
+        difficulty: "low",
+        estimated_duration_sec: 60,
+        depends_on: ["boil_water"],
+        required_equipment: [],
+        required_materials: [],
+        phase: "plate",
+      },
+      {
+        id: "toast_sesame",
+        label: "Toast sesame",
+        difficulty: "low",
+        estimated_duration_sec: 120,
+        depends_on: [],
+        required_equipment: [],
+        required_materials: [],
+        phase: "prep",
+      },
+    ],
+  };
+  kitchen.hasWok = false;
+  Object.assign(session, {
+    recipes: [{
+      id: "voice-e2e-recipe",
+      draft: clone(inventoryGraph),
+      working: clone(inventoryGraph),
+      approved: null,
+    }],
+    sharedSteps: [],
+    outMaterialIds: [],
+    nodePositions: {
+      dice_ginger: { x: 0, y: 0 },
+      boil_water: { x: 1_500, y: 0 },
+      serve_noodles: { x: 1_500, y: 1_200 },
+      toast_sesame: { x: 0, y: 1_200 },
+    },
+  });
+
+  const inventoryPage = await context.newPage();
+  inventoryPage.setDefaultTimeout(2_000);
+  await mockApi(inventoryPage);
+  const inventoryStream = await mockStreamingSocket(inventoryPage);
+  inventoryPage.on("dialog", (dialog) => dialog.accept());
+  await inventoryPage.goto(BASE + "/session/inventory", { waitUntil: "networkidle" });
+  await inventoryPage.getByRole("tab", { name: /Ingredients/ }).waitFor({ state: "visible" });
+  await unmute(inventoryPage, inventoryStream);
+  diagnosticPage = inventoryPage;
+  await settleVoiceCommands(inventoryPage);
+
+  const ginger = inventoryPage.locator(".inv-row", { hasText: "Ginger" }).getByRole("checkbox");
+  const water = inventoryPage.locator(".inv-row", { hasText: "Water" }).getByRole("checkbox");
+  await checkVoiceBehavior("Inventory: ‘no ginger’ marks ginger out and blocks the step that needs it", async () => {
+    await inventoryStream.say("no ginger");
+    await waitForAttribute(ginger, "aria-checked", "false", 1_500);
+    await inventoryPage.getByRole("button", { name: /Dice ginger, blocked/ }).waitFor({ state: "visible" });
+  });
+  await checkVoiceBehavior("Inventory: ‘got ginger’ restores an out ingredient", async () => {
+    // Put it out by the visible control first so this checks the voice action.
+    if (await ginger.getAttribute("aria-checked") === "true") await ginger.click({ force: true });
+    await waitForAttribute(ginger, "aria-checked", "false");
+    await inventoryStream.say("got ginger");
+    await waitForAttribute(ginger, "aria-checked", "true", 1_500);
+  });
+  await checkVoiceBehavior("Inventory: ‘no water’ marks water out and updates the dependent graph", async () => {
+    await inventoryStream.say("no water");
+    await waitForAttribute(water, "aria-checked", "false", 1_500);
+    await inventoryPage.getByRole("button", { name: /Boil water, blocked/ }).waitFor({ state: "visible" });
+  });
+  await checkVoiceBehavior("Inventory: ‘everything’s on hand’ clears all out ingredients", async () => {
+    if (await ginger.getAttribute("aria-checked") === "true") await ginger.click({ force: true });
+    if (await water.getAttribute("aria-checked") === "true") await water.click({ force: true });
+    await waitForAttribute(ginger, "aria-checked", "false");
+    await waitForAttribute(water, "aria-checked", "false");
+    await inventoryStream.say("everything's on hand");
+    await waitForAttribute(ginger, "aria-checked", "true", 1_500);
+    await waitForAttribute(water, "aria-checked", "true", 1_500);
+  });
+  for (const checkbox of [ginger, water]) {
+    if (await checkbox.getAttribute("aria-checked") === "false") await checkbox.click({ force: true });
+  }
+
+  await checkVoiceBehavior("Inventory: equipment notice opens the kitchen editor and ‘cook it anyway’ dismisses it", async () => {
+    await inventoryStream.say("edit the kitchen profile");
+    const profile = inventoryPage.getByRole("dialog", { name: "Edit kitchen" });
+    await profile.waitFor({ state: "visible" });
+    await inventoryStream.say("four burners");
+    await waitForInputValue(profile.locator("#kp-burners"), "4");
+    await inventoryStream.say("wok on");
+    await waitForChecked(profile.locator("#kp-hasWok"), true);
+    await inventoryStream.say("cancel");
+    await profile.waitFor({ state: "hidden" });
+    await inventoryStream.say("cook it anyway");
+    await inventoryPage.getByRole("note").waitFor({ state: "hidden" });
+  });
+
+  await checkVoiceBehavior("Inventory: ingredient and recipe graph commands switch the selected tab", async () => {
+    await inventoryStream.say("show the recipe graph");
+    await waitForAttribute(inventoryPage.getByRole("tab", { name: /Recipe graph/ }), "aria-selected", "true");
+    await inventoryStream.say("show ingredients");
+    await waitForAttribute(inventoryPage.getByRole("tab", { name: /Ingredients/ }), "aria-selected", "true");
+  });
+  const boardZoom = inventoryPage.getByRole("slider", { name: "Zoom" });
+  await checkVoiceBehavior("Inventory: ‘zoom in’ increases the board zoom", async () => {
+    await inventoryStream.say("show the recipe graph");
+    await boardZoom.waitFor({ state: "visible" });
+    await boardZoom.focus();
+    await boardZoom.press("Home");
+    await waitForInputValue(boardZoom, "0");
+    await inventoryPage.waitForTimeout(200);
+    await inventoryStream.say("zoom in");
+    await waitForInputValue(boardZoom, "5");
+  });
+  await checkVoiceBehavior("Inventory: ‘zoom out’ decreases the board zoom", async () => {
+    await boardZoom.focus();
+    await boardZoom.press("End");
+    await waitForInputValue(boardZoom, "100");
+    await inventoryPage.waitForTimeout(200);
+    await inventoryStream.say("zoom out");
+    await waitForInputValue(boardZoom, "95");
+  });
+  await checkVoiceBehavior("Inventory: ‘zoom closer’ increases the board zoom", async () => {
+    await boardZoom.focus();
+    await boardZoom.press("Home");
+    await waitForInputValue(boardZoom, "0");
+    await inventoryPage.waitForTimeout(200);
+    await inventoryStream.say("zoom closer");
+    await waitForInputValue(boardZoom, "5");
+  });
+  await checkVoiceBehavior("Inventory: ‘fit the board’ resets the board zoom", async () => {
+    await boardZoom.focus();
+    await boardZoom.press("End");
+    await waitForInputValue(boardZoom, "100");
+    await inventoryPage.waitForTimeout(200);
+    await inventoryStream.say("fit the board");
+    await waitForInputValue(boardZoom, "0");
+  });
+  const boardScroll = inventoryPage.locator(".board-scroll");
+  await boardZoom.focus();
+  await boardZoom.press("End");
+  await waitForInputValue(boardZoom, "100");
+  await inventoryPage.waitForTimeout(200);
+  const overflow = await boardScroll.evaluate((el) => ({
+    x: el.scrollWidth - el.clientWidth,
+    y: el.scrollHeight - el.clientHeight,
+  }));
+  assert.ok(overflow.x > 0 && overflow.y > 0, "the fixture board can scroll in both axes");
+  await checkVoiceBehavior("Inventory: ‘pan right’ moves the recipe board horizontally", async () => {
+    await boardScroll.evaluate((el) => { el.scrollLeft = 0; });
+    await inventoryStream.say("pan right");
+    await waitForPageCondition(inventoryPage, () => document.querySelector(".board-scroll")?.scrollLeft > 0);
+  });
+  await checkVoiceBehavior("Inventory: ‘pan left’ moves the recipe board back", async () => {
+    await boardScroll.evaluate((el) => { el.scrollLeft = el.scrollWidth; });
+    const before = await boardScroll.evaluate((el) => el.scrollLeft);
+    await inventoryStream.say("pan left");
+    await inventoryPage.waitForFunction((value) => document.querySelector(".board-scroll")?.scrollLeft < value, before, { timeout: 1_500 });
+  });
+  await checkVoiceBehavior("Inventory: ‘scroll down’ moves the recipe board vertically", async () => {
+    await boardScroll.evaluate((el) => { el.scrollTop = 0; });
+    await inventoryStream.say("scroll down");
+    await waitForPageCondition(inventoryPage, () => document.querySelector(".board-scroll")?.scrollTop > 0);
+  });
+  await checkVoiceBehavior("Inventory: ‘scroll up’ moves the recipe board back", async () => {
+    await boardScroll.evaluate((el) => { el.scrollTop = el.scrollHeight; });
+    const before = await boardScroll.evaluate((el) => el.scrollTop);
+    await inventoryStream.say("scroll up");
+    await inventoryPage.waitForFunction((value) => document.querySelector(".board-scroll")?.scrollTop < value, before, { timeout: 1_500 });
+  });
+  await checkVoiceBehavior("Inventory: find and edit by step name open and locate the intended step", async () => {
+    await inventoryStream.say("find the step Boil water");
+    await inventoryPage.getByRole("button", { name: /Boil water/ }).waitFor({ state: "visible" });
+    await inventoryStream.say("edit the step Toast sesame");
+    await inventoryPage.getByRole("dialog", { name: "Edit step" }).waitFor({ state: "visible" });
+  });
+  // The Add task command itself is tested separately from the dialog
+  // fields. If it fails, click the same visible button so the remaining
+  // dialog scenarios still report their own results.
+  await checkVoiceBehavior("Inventory: ‘add a task’ opens the task form", async () => {
+    await inventoryPage.getByRole("dialog", { name: "Edit step" }).getByRole("button", { name: "Close panel" }).evaluate((el) => el.click());
+    await inventoryStream.say("add a task");
+    await inventoryPage.getByRole("dialog", { name: "Add a task" }).waitFor({ state: "visible", timeout: 1_500 });
+  });
+  if (await inventoryPage.getByRole("dialog", { name: "Add a task" }).count() === 0) {
+    const graphTab = inventoryPage.getByRole("tab", { name: /Recipe graph/ });
+    if (await graphTab.getAttribute("aria-selected") !== "true") await graphTab.evaluate((el) => el.click());
+    await inventoryPage.getByRole("button", { name: "Add a task" }).evaluate((el) => el.click());
+    await inventoryPage.getByRole("dialog", { name: "Add a task" }).waitFor({ state: "visible" });
+  }
+  await settleVoiceCommands(inventoryPage);
+  const addTaskForm = inventoryPage.getByRole("dialog", { name: "Add a task" });
+  const addTaskName = addTaskForm.locator('input[placeholder="e.g. Toast the sesame seeds"]');
+  const addTaskAfter = addTaskForm.locator(".panel-field").filter({ hasText: "Runs after" });
+  const addTaskBefore = addTaskForm.locator(".panel-field").filter({ hasText: "Runs before" });
+  await checkVoiceBehavior("Add Task dialog: ‘call it’ fills the task name", async () => {
+    await inventoryStream.say("call it Toast sesame seeds");
+    await waitForInputValue(addTaskName, "Toast sesame seeds");
+  });
+  await checkVoiceBehavior("Add Task dialog: duration speech changes minutes", async () => {
+    await inventoryStream.say("set duration to three minutes");
+    await waitForInputValue(addTaskForm.locator('input[type="number"]'), "3");
+  });
+  await checkVoiceBehavior("Add Task dialog: difficulty speech selects High", async () => {
+    await inventoryStream.say("set difficulty to high");
+    await waitForAttribute(addTaskForm.getByRole("radio", { name: "High" }), "aria-checked", "true");
+  });
+  await checkVoiceBehavior("Add Task dialog: phase speech selects Cook", async () => {
+    await inventoryStream.say("set phase to cook");
+    await waitForAttribute(addTaskForm.getByRole("radio", { name: "Cook" }), "aria-checked", "true");
+  });
+  await checkVoiceBehavior("Add Task dialog: equipment speech adds a wok", async () => {
+    await inventoryStream.say("add a wok");
+    await waitForAttribute(addTaskForm.getByRole("button", { name: "Wok" }), "aria-pressed", "true");
+  });
+  await checkVoiceBehavior("Add Task dialog: ‘runs after’ selects the prerequisite step", async () => {
+    await inventoryStream.say("runs after Dice ginger");
+    await waitForAttribute(addTaskAfter.getByRole("button", { name: /Dice ginger/ }), "aria-pressed", "true");
+  });
+  await checkVoiceBehavior("Add Task dialog: ‘runs before’ selects the following step", async () => {
+    await inventoryStream.say("runs before Boil water");
+    await waitForAttribute(addTaskBefore.getByRole("button", { name: /Boil water/ }), "aria-pressed", "true");
+  });
+  if (await addTaskForm.count()) {
+    if (!(await addTaskName.inputValue())) await addTaskName.fill("Toast sesame seeds");
+  }
+  await checkVoiceBehavior("Add Task dialog: submit adds a visible step with the spoken name", async () => {
+    const previousCount = await inventoryPage.locator(".board-card").count();
+    await inventoryStream.say("add it to the board");
+    await inventoryPage.waitForFunction((count) => document.querySelectorAll(".board-card").length > count, previousCount, { timeout: 1_500 });
+    await inventoryPage.locator(".board-card-label", { hasText: "Toast sesame seeds" }).waitFor({ state: "visible" });
+    await inventoryPage.getByRole("dialog", { name: "Edit step" }).waitFor({ state: "visible", timeout: 1_500 });
+  });
+  if (await inventoryPage.getByRole("dialog", { name: "Add a task" }).count()) {
+    await inventoryPage.getByRole("dialog", { name: "Add a task" }).getByRole("button", { name: "Add to the board" }).evaluate((el) => el.click());
+  }
+  if (!(await inventoryPage.getByRole("dialog", { name: "Edit step" }).count())) {
+    const taskName = inventoryPage.locator('input[placeholder="e.g. Toast the sesame seeds"]');
+    if (await taskName.count()) await taskName.fill("Toast sesame seeds");
+    const submit = inventoryPage.getByRole("button", { name: "Add to the board" });
+    if (await submit.count()) await submit.evaluate((el) => el.click());
+  }
+  const stepEditor = inventoryPage.getByRole("dialog", { name: "Edit step" });
+  if (await stepEditor.count()) await stepEditor.getByRole("button", { name: "Close panel" }).evaluate((el) => el.click());
+
+  await checkVoiceBehavior("Edit Step dialog: rename speech updates the draft label", async () => {
+    await inventoryStream.say("open the step Toast sesame");
+    const editor = inventoryPage.getByRole("dialog", { name: "Edit step" });
+    await editor.waitFor({ state: "visible" });
+    await settleVoiceCommands(inventoryPage);
+    await inventoryStream.say("rename it Toast seeds");
+    await waitForInputValue(editor.locator("input.panel-input").first(), "Toast seeds");
+  });
+  const editStepForm = inventoryPage.getByRole("dialog", { name: "Edit step" });
+  const editStepAfter = editStepForm.locator(".panel-field").filter({ hasText: "Runs after" });
+  await checkVoiceBehavior("Edit Step dialog: duration speech updates minutes", async () => {
+    const editor = editStepForm;
+    await inventoryStream.say("make it four minutes");
+    await waitForInputValue(editor.locator('input[type="number"]'), "4");
+  });
+  await checkVoiceBehavior("Edit Step dialog: difficulty speech selects Medium", async () => {
+    const editor = editStepForm;
+    await inventoryStream.say("make it medium difficulty");
+    await waitForAttribute(editor.getByRole("radio", { name: "Med" }), "aria-checked", "true");
+  });
+  await checkVoiceBehavior("Edit Step dialog: phase speech selects Plate", async () => {
+    const editor = editStepForm;
+    await inventoryStream.say("mark it as plate");
+    await waitForAttribute(editor.getByRole("radio", { name: "Plate" }), "aria-checked", "true");
+  });
+  await checkVoiceBehavior("Edit Step dialog: equipment speech adds a cutting board", async () => {
+    const editor = editStepForm;
+    await inventoryStream.say("add a cutting board");
+    await waitForAttribute(editor.getByRole("button", { name: /Cutting board/ }), "aria-pressed", "true");
+  });
+  await checkVoiceBehavior("Edit Step dialog: ‘runs after’ adds the selected dependency", async () => {
+    await inventoryStream.say("runs after Dice ginger");
+    await waitForAttribute(editStepAfter.getByRole("button", { name: /Dice ginger/ }), "aria-pressed", "true");
+  });
+  await checkVoiceBehavior("Edit Step dialog: ‘stop waiting on’ removes the dependency", async () => {
+    await inventoryStream.say("stop waiting on Dice ginger");
+    await waitForAttribute(editStepAfter.getByRole("button", { name: /Dice ginger/ }), "aria-pressed", "false");
+  });
+  const editedLabel = editStepForm.locator("input.panel-input").first();
+  if (await editedLabel.count() && await editedLabel.inputValue() !== "Toast seeds") await editedLabel.fill("Toast seeds");
+  await checkVoiceBehavior("Edit Step dialog: save commits the edited name and closes the editor", async () => {
+    await inventoryStream.say("save the step");
+    await inventoryPage.getByRole("dialog", { name: "Edit step" }).waitFor({ state: "hidden", timeout: 1_500 });
+    await inventoryPage.locator(".board-card-label", { hasText: "Toast seeds" }).waitFor({ state: "visible", timeout: 1_500 });
+  });
+  if (await inventoryPage.getByRole("dialog", { name: "Edit step" }).count()) {
+    await inventoryPage.getByRole("dialog", { name: "Edit step" }).getByRole("button", { name: "Save" }).evaluate((el) => el.click());
+  }
+  await checkVoiceBehavior("Edit Step dialog: ‘cancel’ closes the editor", async () => {
+    const card = inventoryPage.locator(".board-card-label", { hasText: "Toast seeds" }).first();
+    if (!(await inventoryPage.getByRole("dialog", { name: "Edit step" }).count())) {
+      await card.evaluate((el) => el.closest("button")?.click());
+    }
+    const editor = inventoryPage.getByRole("dialog", { name: "Edit step" });
+    await editor.waitFor({ state: "visible" });
+    await settleVoiceCommands(inventoryPage);
+    await inventoryStream.say("cancel");
+    await editor.waitFor({ state: "hidden" });
+  });
+  if (await inventoryPage.getByRole("dialog", { name: "Edit step" }).count()) {
+    await inventoryPage.getByRole("dialog", { name: "Edit step" }).getByRole("button", { name: "Close panel" }).evaluate((el) => el.click());
+  }
+  await checkVoiceBehavior("Add Task dialog: ‘cancel’ closes the form", async () => {
+    const addButton = inventoryPage.getByRole("button", { name: "Add a task" });
+    await addButton.evaluate((el) => el.click());
+    const form = inventoryPage.getByRole("dialog", { name: "Add a task" });
+    await form.waitFor({ state: "visible" });
+    await settleVoiceCommands(inventoryPage);
+    await inventoryStream.say("cancel");
+    await form.waitFor({ state: "hidden" });
+  });
+  if (await inventoryPage.getByRole("dialog", { name: "Add a task" }).count()) {
+    await inventoryPage.getByRole("dialog", { name: "Add a task" }).getByRole("button", { name: "Cancel" }).evaluate((el) => el.click());
+  }
+  if (!(await inventoryPage.getByRole("dialog", { name: "Edit step" }).count())) {
+    const target = inventoryPage.getByRole("button", { name: /Boil water/ }).first();
+    if (await target.count()) await target.evaluate((el) => el.click());
+  }
+  await checkVoiceBehavior("Delete Step dialog: choose/drop-link commands change dependency handling and remove the step", async () => {
+    await inventoryStream.say("edit the step Boil water");
+    const editor = inventoryPage.getByRole("dialog", { name: "Edit step" });
+    await editor.waitFor({ state: "visible" });
+    await inventoryStream.say("delete this step");
+    await inventoryPage.getByText(/Delete this step\?/).waitFor({ state: "visible", timeout: 1_500 });
+    await inventoryStream.say("yes");
+    const deleteDialog = inventoryPage.getByRole("dialog", { name: "Remove step" });
+    await deleteDialog.waitFor({ state: "visible" });
+    await settleVoiceCommands(inventoryPage);
+    await inventoryStream.say("inherit");
+    await waitForPageCondition(inventoryPage, () => document.querySelector(".delete-step-mode.is-on strong")?.textContent.includes("Move them to what this step was waiting on"));
+    await inventoryStream.say("choose for each");
+    await waitForPageCondition(inventoryPage, () => document.querySelector(".delete-step-mode.is-on")?.textContent.includes("Choose for each"));
+    await inventoryStream.say("just drop the link");
+    await waitForPageCondition(inventoryPage, () => document.querySelector(".delete-step-mode.is-on")?.textContent.includes("Just drop the link"));
+    await inventoryStream.say("remove the step");
+    await inventoryPage.getByRole("button", { name: /Boil water/ }).waitFor({ state: "hidden" });
+  });
+
+  await settleVoiceCommands(inventoryPage);
+  await checkVoiceBehavior("Inventory: approve asks for confirmation and locks the board", async () => {
+    await inventoryStream.say("approve");
+    await inventoryPage.getByText(/Approve the board and move to scheduling/).waitFor({ state: "visible", timeout: 1_500 });
+    await inventoryStream.say("yes");
+    await inventoryPage.getByText(/Approved/).waitFor({ state: "visible" });
+  });
+  // Revise is meaningful only after approval. A mouse approval keeps that
+  // assertion independent from the voice-approval scenario above.
+  const ingredientTab = inventoryPage.getByRole("tab", { name: /Ingredients/ });
+  if (await ingredientTab.getAttribute("aria-selected") !== "true") await ingredientTab.click({ force: true });
+  if (await ginger.count() && await ginger.getAttribute("aria-checked") === "false") await ginger.click({ force: true });
+  const recipeTab = inventoryPage.getByRole("tab", { name: /Recipe graph/ });
+  if (await recipeTab.getAttribute("aria-selected") !== "true") await recipeTab.click({ force: true });
+  const approveButton = inventoryPage.getByRole("button", { name: /Approve and schedule/ });
+  if (await approveButton.count()) {
+    await approveButton.evaluate((el) => el.click());
+    await inventoryPage.waitForTimeout(250);
+  }
+  await checkVoiceBehavior("Inventory: revise returns an approved board to editing", async () => {
+    await inventoryStream.say("revise");
+    await inventoryPage.getByRole("button", { name: "Add a task" }).waitFor({ state: "visible" });
+  });
+  if (!(await inventoryPage.getByRole("button", { name: "Add a task" }).count())) {
+    const reviseButton = inventoryPage.getByRole("button", { name: /Revise/ });
+    if (await reviseButton.count()) await reviseButton.click({ force: true });
+  }
+  await checkVoiceBehavior("Inventory: removing blocked steps confirms, then removes the unavailable dependency chain", async () => {
+    if (await ingredientTab.getAttribute("aria-selected") !== "true") await ingredientTab.click({ force: true });
+    if (await ginger.count() && await ginger.getAttribute("aria-checked") === "true") await ginger.evaluate((el) => el.click());
+    await waitForAttribute(ginger, "aria-checked", "false");
+    if (await recipeTab.getAttribute("aria-selected") !== "true") await recipeTab.click({ force: true });
+    await inventoryStream.say("remove the blocked steps");
+    await waitForPageCondition(inventoryPage, () => document.querySelector(".voice-transcript-label")?.textContent === "CONFIRM");
+    await inventoryStream.say("yes");
+    await inventoryPage.getByRole("button", { name: /Dice ginger/ }).waitFor({ state: "hidden", timeout: 1_500 });
+  });
+
+  await inventoryPage.close();
+  kitchen.hasWok = true;
 
   // Rehydrate a fresh in-progress conversation so the second browser page
   // exercises dictation instead of the completed-conversation screen.
@@ -312,6 +879,7 @@ try {
   await mockApi(conversationPage);
   const conversationStream = await mockStreamingSocket(conversationPage);
   await conversationPage.goto(BASE + "/session/conversation", { waitUntil: "networkidle" });
+  diagnosticPage = conversationPage;
   const answer = conversationPage.locator(".answer-input");
   await answer.waitFor({ state: "visible" });
   await unmute(conversationPage, conversationStream);
@@ -331,11 +899,366 @@ try {
   assert.deepEqual(understandingInputs, [spokenAnswer]);
   assert.match(await conversationPage.getByRole("log").innerText(), /ramen/);
 
+  await checkVoiceBehavior("Conversation: a named destination navigates instead of entering the answer", async () => {
+    await conversationStream.say("go to home");
+    await conversationPage.waitForURL("**/", { timeout: 3_000 });
+  });
+  await conversationPage.close();
+
+  const completedConversation = await openVoicePage(context, "/session/conversation", {
+    sessionState: clone(originalSession),
+  });
+  await checkVoiceBehavior("Conversation: ‘continue to inventory’ advances after the final answer", async () => {
+    await completedConversation.stream.say("continue to inventory");
+    await completedConversation.page.waitForURL("**/session/inventory", { timeout: 3_000 });
+  });
+  await completedConversation.page.close();
+
+  // Home and Kitchen Profile use a separate copy of the session fixture so
+  // these scenarios can change profiles and routes without affecting the
+  // Inventory, Schedule, or conversation assertions above.
+  const homeFixture = clone(originalSession);
+  homeFixture.conversation.complete = false;
+  homeFixture.recipes = [];
+  homeFixture.sharedSteps = [];
+  const homeProfiles = [clone(kitchen)];
+  const home = await openVoicePage(context, "/", {
+    sessionState: homeFixture,
+    kitchenProfiles: homeProfiles,
+  });
+  const homePage = home.page;
+  const homeStream = home.stream;
+  diagnosticPage = homePage;
+  await checkVoiceBehavior("Home: ‘add a kitchen’ opens the Add Kitchen dialog", async () => {
+    await homeStream.say("add a kitchen");
+    await homePage.getByRole("dialog", { name: "Add a kitchen" }).waitFor({ state: "visible" });
+  });
+  if (!(await homePage.getByRole("dialog", { name: "Add a kitchen" }).count())) {
+    await homePage.getByRole("button", { name: "Add kitchen", exact: true }).click({ force: true });
+  }
+  const addKitchenDialog = homePage.getByRole("dialog", { name: "Add a kitchen" });
+  await settleVoiceCommands(homePage);
+  await checkVoiceBehavior("Kitchen Profile: spoken name updates the kitchen draft", async () => {
+    await homeStream.say("call it Test Annex");
+    await waitForInputValue(addKitchenDialog.locator("#kp-name"), "Test Annex");
+  });
+  const kitchenNameDraft = addKitchenDialog.locator("#kp-name");
+  if (await kitchenNameDraft.inputValue() !== "Test Annex") await kitchenNameDraft.fill("Test Annex");
+  await checkVoiceBehavior("Kitchen Profile: spoken burner count updates the numeric field", async () => {
+    await homeStream.say("four burners");
+    await waitForInputValue(addKitchenDialog.locator("#kp-burners"), "4");
+  });
+  await checkVoiceBehavior("Kitchen Profile: equipment speech turns the oven on", async () => {
+    await homeStream.say("add an oven");
+    await waitForChecked(addKitchenDialog.locator("#kp-hasOven"), true);
+  });
+  await checkVoiceBehavior("Kitchen Profile: save creates the configured kitchen", async () => {
+    await homeStream.say("save the kitchen");
+    await addKitchenDialog.waitFor({ state: "hidden" });
+    const created = homeProfiles.find((profile) => profile.name === "Test Annex");
+    assert.ok(created, "the new kitchen was persisted through the mocked API");
+    assert.equal(created.burners, 4);
+    assert.equal(created.hasOven, true);
+  });
+  await checkVoiceBehavior("Kitchen Profile: ‘cancel’ closes a second unsaved kitchen form", async () => {
+    await homeStream.say("add another kitchen");
+    const form = homePage.getByRole("dialog", { name: "Add a kitchen" });
+    await form.waitFor({ state: "visible" });
+    await settleVoiceCommands(homePage);
+    await homeStream.say("cancel");
+    await form.waitFor({ state: "hidden" });
+  });
+  if (await homePage.getByRole("dialog", { name: "Add a kitchen" }).count()) {
+    await homePage.getByRole("dialog", { name: "Add a kitchen" }).getByRole("button", { name: "Cancel" }).evaluate((el) => el.click());
+  }
+  await checkVoiceBehavior("Home: ‘help’ shows usable voice guidance", async () => {
+    await homeStream.say("help");
+    await waitForPageCondition(homePage, () => /Try:/.test(document.querySelector(".voice-transcript-text")?.textContent || ""));
+  });
+  await checkVoiceBehavior("Home: abandon requires its exact passphrase; ‘yes’ leaves the run active", async () => {
+    await homeStream.say("abandon the run");
+    await waitForPageCondition(homePage, () => document.querySelector(".voice-transcript-label")?.textContent === "CONFIRM");
+    assert.match(await homePage.locator(".voice-transcript-text").innerText(), /I want to abort this cooking session/);
+    await homeStream.say("yes");
+    await homePage.getByRole("button", { name: "Resume the run" }).waitFor({ state: "visible" });
+    assert.equal(homeFixture.status, "active");
+  });
+  await checkVoiceBehavior("Home: ‘resume the run’ returns to the current session stage", async () => {
+    await homeStream.say("resume the run");
+    await homePage.waitForURL("**/session/conversation", { timeout: 3_000 });
+  });
+  await checkVoiceBehavior("Home: the exact abandon passphrase abandons the run", async () => {
+    await homeStream.say("go to home");
+    await homePage.waitForURL("**/", { timeout: 3_000 });
+    await homeStream.say("abandon the run");
+    await waitForPageCondition(homePage, () => document.querySelector(".voice-transcript-label")?.textContent === "CONFIRM");
+    await homeStream.say("I want to abort this cooking session");
+    await waitForObjectValue(homeFixture, "status", "abandoned");
+    await homePage.getByRole("button", { name: "Start the run" }).waitFor({ state: "visible" });
+  });
+  await homePage.close();
+
+  // With no active session, two kitchens make the spoken Start command ask
+  // which kitchen. A word shared by both names is deliberately ambiguous;
+  // a distinctive word must pick the corresponding kitchen.
+  const pickerFixture = clone(originalSession);
+  const pickerProfiles = [
+    { ...clone(kitchen), id: "harbour-flat", name: "Harbour Flat" },
+    { ...clone(kitchen), id: "harbour-loft", name: "Harbour Loft" },
+  ];
+  const picker = await openVoicePage(context, "/", {
+    sessionState: pickerFixture,
+    kitchenProfiles: pickerProfiles,
+    hasActiveSession: false,
+  });
+  diagnosticPage = picker.page;
+  await checkVoiceBehavior("Home: ‘start the run’ opens the kitchen picker when profiles are ambiguous", async () => {
+    await picker.stream.say("start the run");
+    await picker.page.locator(".hp-hero-state").getByRole("button", { name: "Harbour Flat", exact: true }).waitFor({ state: "visible" });
+  });
+  if (!(await picker.page.getByText("Which kitchen?", { exact: true }).count())) {
+    await picker.page.getByRole("button", { name: "Start the run" }).click({ force: true });
+  }
+  await checkVoiceBehavior("Kitchen picker: a shared name word selects neither kitchen", async () => {
+    await picker.stream.say("Harbour");
+    assert.equal(new URL(picker.page.url()).pathname, "/");
+    assert.equal(pickerFixture.kitchenProfileId, originalSession.kitchenProfileId);
+  });
+  await checkVoiceBehavior("Kitchen picker: a distinctive kitchen word starts the run there", async () => {
+    await picker.stream.say("Flat");
+    await picker.page.waitForURL("**/session/conversation", { timeout: 3_000 });
+    assert.equal(pickerFixture.kitchenProfileId, "harbour-flat");
+  });
+  await picker.page.close();
+
+  // A kitchen deleted during a session routes to this recovery page. The
+  // spoken unique word must set the chosen profile before continuing.
+  const repairFixture = clone(originalSession);
+  repairFixture.kitchenProfileId = null;
+  repairFixture.conversation.complete = false;
+  repairFixture.recipes = [];
+  const repairProfiles = [
+    { ...clone(kitchen), id: "repair-flat", name: "Harbour Flat" },
+    { ...clone(kitchen), id: "repair-loft", name: "Harbour Loft" },
+  ];
+  const repair = await openVoicePage(context, "/session/kitchen-setup", {
+    sessionState: repairFixture,
+    kitchenProfiles: repairProfiles,
+  });
+  diagnosticPage = repair.page;
+  await checkVoiceBehavior("Kitchen Setup: a shared kitchen word is rejected as ambiguous", async () => {
+    await repair.stream.say("Harbour");
+    assert.equal(new URL(repair.page.url()).pathname, "/session/kitchen-setup");
+    assert.equal(repairFixture.kitchenProfileId, null);
+  });
+  await checkVoiceBehavior("Kitchen Setup: a distinctive kitchen word selects that profile", async () => {
+    await repair.stream.say("Loft");
+    await repair.page.waitForURL("**/session/conversation", { timeout: 3_000 });
+    await waitForObjectValue(repairFixture, "kitchenProfileId", "repair-loft");
+    assert.equal(repairFixture.kitchenProfileId, "repair-loft");
+  });
+  await repair.page.close();
+
+  // Voice Binding exercises page actions and its higher-priority picker and
+  // recording layers. Rename, add, avatar selection, confirmation, and
+  // recording cancellation each assert the rendered result.
+  const bindingFixture = clone(originalSession);
+  bindingFixture.cooks = [{ id: "binding-mia", name: "Mia", bound: true, avatar: "spoon" }];
+  const binding = await openVoicePage(context, "/session/voice-binding", { sessionState: bindingFixture });
+  const bindingPage = binding.page;
+  const bindingStream = binding.stream;
+  diagnosticPage = bindingPage;
+  await checkVoiceBehavior("Voice Binding: ‘add a cook’ creates the second slot", async () => {
+    await bindingStream.say("add another cook");
+    await bindingPage.locator(".cook-slot").nth(1).waitFor({ state: "visible" });
+  });
+  if (await bindingPage.locator(".cook-slot").count() < 2) {
+    await bindingPage.getByRole("button", { name: /Add another cook|Add a cook/ }).click({ force: true });
+  }
+  await checkVoiceBehavior("Voice Binding: ordinal voice command names the second cook", async () => {
+    await bindingStream.say("call the second cook Leo");
+    await waitForInputValue(bindingPage.locator(".cook-name-input").nth(1), "Leo");
+  });
+  await checkVoiceBehavior("Voice Binding: spoken avatar selection commits the selected chef", async () => {
+    await bindingStream.say("choose avatar for Leo");
+    const drawer = bindingPage.locator(".cook-drawer");
+    await drawer.waitFor({ state: "visible" });
+    await bindingStream.say("Tomato");
+    await waitForPageCondition(bindingPage, () => document.querySelector(".cook-drawer .chef-tile.is-selected .chef-tile-name")?.textContent === "Tomato");
+    await bindingStream.say("that's me");
+    await drawer.waitFor({ state: "hidden" });
+    await bindingPage.locator(".cook-lane-chip").filter({ hasText: "Chef Tomato" }).waitFor({ state: "visible" });
+  });
+  await checkVoiceBehavior("Voice Binding: avatar-picker ‘cancel’ keeps the current chef", async () => {
+    await bindingStream.say("choose avatar for Mia");
+    const drawer = bindingPage.locator(".cook-drawer");
+    await drawer.waitFor({ state: "visible" });
+    await bindingStream.say("cancel");
+    await drawer.waitFor({ state: "hidden" });
+    await bindingPage.locator(".cook-lane-chip").filter({ hasText: "Chef Spoon" }).waitFor({ state: "visible" });
+  });
+  await checkVoiceBehavior("Voice Binding: removing a cook asks first and ‘yes’ removes that cook", async () => {
+    await bindingStream.say("remove the cook Leo");
+    await waitForPageCondition(bindingPage, () => document.querySelector(".voice-transcript-label")?.textContent === "CONFIRM");
+    await bindingStream.say("yes");
+    await waitForPageCondition(bindingPage, () => document.querySelectorAll(".cook-slot").length === 1);
+    assert.equal(await bindingPage.locator(".cook-name-input").first().inputValue(), "Mia");
+  });
+  await checkVoiceBehavior("Voice Binding: recording can be started and cancelled by voice", async () => {
+    await bindingStream.say("start recording for Mia");
+    await bindingPage.locator(".cook-slot.is-recording").waitFor({ state: "visible" });
+    await bindingStream.say("cancel");
+    await bindingPage.locator(".cook-slot.is-recording").waitFor({ state: "hidden" });
+  });
+  await bindingPage.close();
+
+  const readyBinding = await openVoicePage(context, "/session/voice-binding", {
+    sessionState: clone(originalSession),
+  });
+  await checkVoiceBehavior("Voice Binding: ready cooks can continue to Schedule by voice", async () => {
+    await readyBinding.stream.say("continue to scheduling");
+    await readyBinding.page.waitForURL("**/session/schedule", { timeout: 3_000 });
+  });
+  await readyBinding.page.close();
+
+  // Start an actual run through Schedule's confirmation prompt, then drive
+  // Live Cook's addressed microphone fallback with named intent phrases.
+  // The agent endpoint deliberately returns an error so the documented
+  // keyword path, rather than an LLM-generated action, is under test.
+  const liveFixture = clone(originalSession);
+  liveFixture.mode = "cooperation";
+  liveFixture.run = null;
+  const live = await openVoicePage(context, "/session/schedule", { sessionState: liveFixture });
+  diagnosticPage = live.page;
+  await checkVoiceBehavior("Schedule: ‘go live’ asks for confirmation and ‘yes’ opens Live Cook", async () => {
+    await live.stream.say("go live");
+    await waitForPageCondition(live.page, () => document.querySelector(".voice-transcript-label")?.textContent === "CONFIRM");
+    await live.stream.say("yes");
+    await live.page.waitForURL("**/session/live-cook", { timeout: 5_000 });
+    await live.page.locator(".live-cook-page").waitFor({ state: "visible" });
+  });
+  if (new URL(live.page.url()).pathname !== "/session/live-cook") {
+    await live.page.goto(BASE + "/session/live-cook", { waitUntil: "networkidle" });
+  }
+  await checkVoiceBehavior("Live Cook: addressed ‘pause’ stops the run and ‘resume’ restarts it", async () => {
+    await live.stream.say("Goose pause");
+    await live.page.locator(".live-cook-page.is-paused").waitFor({ state: "visible" });
+    await live.stream.say("Goose resume");
+    await live.page.locator(".live-cook-page:not(.is-paused)").waitFor({ state: "visible" });
+  });
+  await checkVoiceBehavior("Live Cook: Mandarin pause and resume phrases control the same run state", async () => {
+    await live.stream.say("暂停");
+    await live.page.locator(".live-cook-page.is-paused").waitFor({ state: "visible" });
+    await live.stream.say("接着");
+    await live.page.locator(".live-cook-page:not(.is-paused)").waitFor({ state: "visible" });
+  });
+  await checkVoiceBehavior("Live Cook: spoken start, done, undo, and skip update the step state", async () => {
+    const mia = live.page.locator(".lc-card.is-a");
+    const stepName = await mia.locator(".lc-step-title").innerText();
+    await live.stream.say("Goose start " + stepName);
+    await mia.getByRole("button", { name: "Done", exact: true }).waitFor({ state: "visible" });
+    await live.stream.say("Goose done");
+    await live.page.locator(".lc-pip.is-done").waitFor({ state: "visible" });
+    await live.stream.say("Goose undo");
+    await live.page.locator(".lc-pip.is-done").waitFor({ state: "hidden" });
+    await mia.getByRole("button", { name: "Done", exact: true }).waitFor({ state: "visible" });
+    await live.stream.say("Goose skip");
+    await live.page.locator(".lc-pip.is-skipped").waitFor({ state: "visible" });
+  });
+  await checkVoiceBehavior("Live Cook: status and help voice commands appear in Toque's run log", async () => {
+    await live.stream.say("Goose status");
+    await live.stream.say("Goose score");
+    await live.stream.say("Goose help");
+    await live.page.getByRole("button", { name: /Open Toque/ }).click({ force: true });
+    const log = live.page.getByRole("log");
+    await log.waitFor({ state: "visible" });
+    const text = await log.innerText();
+    assert.match(text, /Goose status/);
+    assert.match(text, /Goose score/);
+    assert.match(text, /No score in co-op/);
+    assert.match(text, /Say “done”|Say "done"/);
+  });
+  await checkVoiceBehavior("Live Cook: finishing the last step ends the run", async () => {
+    await live.stream.say("Goose finish the cook");
+    await live.page.locator(".live-cook-page.is-finished").waitFor({ state: "visible" });
+  });
+  await live.page.close();
+
+  // A competitive run starts with opening suggestions and an unclaimed pool.
+  // This fixture is created with the same run and opening-assignment helpers
+  // as Schedule so claim/drop/skip/undo assert real card and pool changes.
+  const contestNodes = [
+    { id: "contest_chop", label: "Chop scallions", difficulty: "low", estimated_duration_sec: 90, depends_on: [], required_equipment: [], required_materials: [], phase: "prep" },
+    { id: "contest_sauce", label: "Mix the sauce", difficulty: "medium", estimated_duration_sec: 150, depends_on: [], required_equipment: [], required_materials: [], phase: "prep" },
+    { id: "contest_greens", label: "Wash the greens", difficulty: "low", estimated_duration_sec: 60, depends_on: [], required_equipment: [], required_materials: [], phase: "prep" },
+    { id: "contest_bowls", label: "Warm the bowls", difficulty: "low", estimated_duration_sec: 75, depends_on: [], required_equipment: [], required_materials: [], phase: "prep" },
+  ];
+  const contestGraph = { ...clone(graph), title: "Voice test contest", nodes: contestNodes };
+  const contestFixture = clone(originalSession);
+  contestFixture.mode = "competition";
+  contestFixture.recipes = [{
+    id: "voice-e2e-contest-recipe",
+    draft: clone(contestGraph),
+    working: clone(contestGraph),
+    approved: clone(contestGraph),
+  }];
+  const opening = computeOpeningAssignment(contestNodes, contestFixture.cooks, kitchen);
+  contestFixture.run = createRun({ nodes: contestNodes, mode: "competition", schedule: null, opening });
+  const contest = await openVoicePage(context, "/session/live-cook", { sessionState: contestFixture });
+  await contest.page.locator(".live-cook-page.is-versus").waitFor({ state: "visible" });
+  await checkVoiceBehavior("Live Cook: ‘claim’ takes a ready pool task", async () => {
+    const tile = contest.page.locator(".lc-tile.is-claimable").first();
+    await tile.waitFor({ state: "visible" });
+    const stepName = await tile.locator(".lc-tile-label").innerText();
+    await contest.stream.say("Goose claim " + stepName);
+    await contest.page.locator(".lc-card.is-a.is-active").waitFor({ state: "visible" });
+    await contest.page.locator(".lc-card.is-a .lc-step-title").filter({ hasText: stepName }).waitFor({ state: "visible" });
+  });
+  await checkVoiceBehavior("Live Cook: ‘drop’ returns a claimed step to the pool", async () => {
+    const mia = contest.page.locator(".lc-card.is-a");
+    const stepName = await mia.locator(".lc-step-title").innerText();
+    await contest.stream.say("Goose drop");
+    await mia.getByRole("button", { name: /Start|Take/ }).waitFor({ state: "visible" });
+    await contest.page.locator(".lc-tile.is-claimable").filter({ hasText: stepName }).waitFor({ state: "visible" });
+  });
+  await checkVoiceBehavior("Live Cook: ‘skip’ removes a pool step and ‘undo’ restores it", async () => {
+    const tile = contest.page.locator(".lc-tile.is-claimable").first();
+    const stepName = await tile.locator(".lc-tile-label").innerText();
+    await contest.stream.say("Goose skip " + stepName);
+    await contest.page.locator(".lc-tile.is-claimable").filter({ hasText: stepName }).waitFor({ state: "hidden" });
+    await contest.stream.say("Goose undo");
+    await contest.page.locator(".lc-tile.is-claimable").filter({ hasText: stepName }).waitFor({ state: "visible" });
+  });
+  await contest.page.close();
+
+  const abandonFixture = clone(contestFixture);
+  abandonFixture.run = createRun({ nodes: contestNodes, mode: "competition", schedule: null, opening });
+  const returnToCook = await openVoicePage(context, "/session/schedule", { sessionState: abandonFixture });
+  await checkVoiceBehavior("Schedule: ‘back to the cook’ returns to the active run", async () => {
+    await returnToCook.stream.say("back to the cook");
+    await returnToCook.page.waitForURL("**/session/live-cook", { timeout: 3_000 });
+  });
+  await returnToCook.page.close();
+  const abandonSchedule = await openVoicePage(context, "/session/schedule", { sessionState: abandonFixture });
+  diagnosticPage = abandonSchedule.page;
+  await checkVoiceBehavior("Schedule: abandoning a cook requires the exact passphrase", async () => {
+    await abandonSchedule.stream.say("abandon the cook");
+    await waitForPageCondition(abandonSchedule.page, () => document.querySelector(".voice-transcript-label")?.textContent === "CONFIRM");
+    assert.match(await abandonSchedule.page.locator(".voice-transcript-text").innerText(), /I want to abandon this cook/);
+    await abandonSchedule.stream.say("yes");
+    assert.ok(abandonFixture.run, "a yes/no answer alone leaves the cook active");
+    await abandonSchedule.stream.say("abandon the cook");
+    await waitForPageCondition(abandonSchedule.page, () => document.querySelector(".voice-transcript-label")?.textContent === "CONFIRM");
+    await abandonSchedule.stream.say("I want to abandon this cook");
+    await waitForObjectValue(abandonFixture, "run", null);
+  });
+  await abandonSchedule.page.close();
+
   console.log(
-    "PASS voice e2e: unmute captured " + scheduleStream.audioFrames +
-      " PCM frames, zoom in/out changed the timeline, spoken navigation opened Inventory, " +
-      "and conversation dictation submitted and advanced.",
+    "Voice e2e scenarios completed; captured " + scheduleStream.audioFrames +
+      " microphone PCM frames on the Schedule page.",
   );
+  assert.deepEqual(voiceFailures, [], "Voice behavior E2E failures: " + voiceFailures.join(", "));
 } finally {
   await context?.close();
   await browser?.close();
