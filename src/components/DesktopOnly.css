@@ -1,66 +1,180 @@
-/* The one screen that IS laid out for a phone, since it is the only one
-   a phone will ever see. Tokens only — no hardcoded colours, so it
-   follows light and dark like everything else. */
-.kp-desktop-only {
+/* "Mobile Blocked.dc.html" from the design project, as a real screen.
+   The device frame, status bar and home indicator in that file are the
+   canvas's phone mock — not part of the page — so they are not here.
+
+   Light-only, on purpose: this uses the kp-* set, the same design-system
+   palette Home v4 is built on (see tokens.css), and the design is a
+   paper-white screen. No dark variant is defined for kp-*. */
+.kp-gate {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--font-body);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   overflow-y: auto;
-}
-
-.kp-desktop-only__card {
-  max-width: 34rem;
-  padding: 32px 28px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
-  background: var(--surface);
-  box-shadow: var(--shadow-md);
+  background: var(--kp-paper);
+  color: var(--kp-text);
+  font-family: var(--kp-font, "Inter", system-ui, sans-serif);
   text-align: center;
+  /* Design padding (16 / 32 / 36) plus the notch and home indicator,
+     which the canvas mock drew but a real phone actually has. */
+  padding:
+    calc(env(safe-area-inset-top, 0px) + 16px)
+    calc(env(safe-area-inset-right, 0px) + 32px)
+    calc(env(safe-area-inset-bottom, 0px) + 36px)
+    calc(env(safe-area-inset-left, 0px) + 32px);
 }
 
-.kp-desktop-only__goose {
-  width: 96px;
-  height: 96px;
-  margin-bottom: 8px;
+.kp-gate__wordmark {
+  flex: none;
+  font-family: "Schoolbell", cursive;
+  font-size: 22px;
+  line-height: 28px;
+  color: var(--kp-text);
 }
 
-.kp-desktop-only h1 {
-  margin: 0 0 12px;
-  font-family: var(--font-display);
-  font-size: 1.5rem;
-  line-height: 1.25;
+.kp-gate__goose {
+  flex: none;
+  /* The design crops this out of a wider sheet with background-position.
+     Our copy of the art (519x581) is already trimmed to the jar, so the
+     same offsets would zoom into the toque. Same intent, simpler means:
+     show the whole thing at the design art block height of 246. */
+  height: 246px;
+  width: auto;
+  margin-top: 40px;
+  /* The source PNG has a white background, not transparency, which
+     shows as a pale box on the cream paper. Multiply drops the white
+     and leaves the linework. */
+  mix-blend-mode: multiply;
 }
 
-.kp-desktop-only p {
-  margin: 0 0 12px;
-  color: var(--ink-soft);
-  line-height: 1.55;
+.kp-gate__title {
+  flex: none;
+  margin: 36px 0 0;
+  font-size: 28px;
+  line-height: 34px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
 }
 
-.kp-desktop-only__aside {
-  font-size: 0.9rem;
-  color: var(--ink-faint);
+.kp-gate__lede {
+  flex: none;
+  margin: 14px 0 0;
+  max-width: 290px;
+  font-size: 16px;
+  line-height: 25px;
+  color: var(--kp-text-secondary);
+  text-wrap: pretty;
 }
 
-.kp-desktop-only__anyway {
-  margin-top: 8px;
-  padding: 10px 18px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--ink-soft);
+/* Pinned to the bottom of the screen, as in the design. `auto` rather
+   than a fixed offset so a short phone closes the gap instead of
+   pushing the button off-screen. */
+.kp-gate__actions {
+  margin-top: auto;
+  padding-top: 36px;
+  width: 100%;
+  max-width: 326px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.kp-gate__copy {
+  min-height: 56px;
+  padding: 0 24px;
+  border: none;
+  border-radius: 999px;
+  background: var(--kp-text);
+  color: var(--kp-bg);
   font: inherit;
-  font-size: 0.9rem;
+  font-size: 16px;
+  font-weight: 600;
   cursor: pointer;
 }
 
-.kp-desktop-only__anyway:hover {
-  background: var(--surface-sunken);
-  color: var(--ink);
+.kp-gate__copy:active {
+  transform: translateY(1px);
+}
+
+.kp-gate__readout {
+  font-family: var(--kp-mono, "IBM Plex Mono", monospace);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--kp-text-tertiary);
+}
+
+/* Landscape on a phone is short: let the whole thing scroll rather than
+   crushing the art, and drop the art's lead so the title stays visible. */
+@media (max-height: 600px) {
+  .kp-gate__goose {
+    margin-top: 16px;
+  }
+
+  .kp-gate__title {
+    margin-top: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kp-gate__copy:active {
+    transform: none;
+  }
+}
+
+/* ---- ?preview=mobile (dev only) ----------------------------------
+   Renders the screen above inside a phone-sized frame so it can be
+   reviewed on a desktop. Never reached in a production build; see
+   dev/preview.js. */
+.kp-gate-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  overflow: auto;
+  background: var(--kp-bg-tertiary);
+  font-family: var(--kp-font, "Inter", system-ui, sans-serif);
+}
+
+.kp-gate-preview__device {
+  flex: none;
+  width: 414px;
+  height: 868px;
+  padding: 12px;
+  border-radius: 56px;
+  background: var(--kp-text);
+  box-shadow: 0 24px 60px rgb(26 26 26 / 18%);
+}
+
+/* The frame is the viewport now, so the screen stops being fixed to the
+   window and becomes a 390x844 box inside the bezel. */
+.kp-gate--framed {
+  position: relative;
+  inset: auto;
+  z-index: 0;
+  width: 390px;
+  height: 844px;
+  border-radius: 44px;
+  overflow: hidden;
+}
+
+.kp-gate-preview__note {
+  margin: 0;
+  color: var(--kp-text-secondary);
+  font-size: 13px;
+}
+
+.kp-gate-preview__note code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--kp-bg);
+  font-family: var(--kp-mono, "IBM Plex Mono", monospace);
+  font-size: 12px;
 }

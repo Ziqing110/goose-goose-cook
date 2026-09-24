@@ -32,3 +32,17 @@ export function devPreview() {
   const value = new URLSearchParams(window.location.search).get("preview");
   return value === "loading" || value === "done" ? value : null;
 }
+
+/**
+ * ?preview=mobile shows the phone-blocked screen inside a phone-sized
+ * frame on a desktop, so it can be looked at and tweaked without a
+ * device or a resized window.
+ *
+ *   /?preview=mobile
+ *
+ * Dev-only, same as the two above.
+ */
+export function devMobilePreview() {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(window.location.search).get("preview") === "mobile";
+}

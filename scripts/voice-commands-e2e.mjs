@@ -199,6 +199,13 @@ async function mockApi(page, { sessionState = session, kitchenProfiles = [kitche
   });
   // Kokoro's large model is unrelated to input capture or command behavior.
   await page.route(/cdn\.jsdelivr\.net|huggingface\.co/, (route) => route.abort());
+  // index.html pulls a six-family stylesheet from Google Fonts, and every
+  // navigation here waits for networkidle. Stubbing it keeps this test
+  // hermetic -- it passes on a machine with no outbound internet, and does
+  // not spend a network round trip per page load. Fonts do not affect any
+  // behaviour under test; only layout, which is not asserted.
+  await page.route(/fonts\.googleapis\.com|fonts\.gstatic\.com/, (route) =>
+    route.fulfill({ status: 200, contentType: "text/css", body: "" }));
 }
 
 async function mockStreamingSocket(page) {
