@@ -1,0 +1,66 @@
+/* The one screen that IS laid out for a phone, since it is the only one
+   a phone will ever see. Tokens only — no hardcoded colours, so it
+   follows light and dark like everything else. */
+.kp-desktop-only {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  overflow-y: auto;
+}
+
+.kp-desktop-only__card {
+  max-width: 34rem;
+  padding: 32px 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  text-align: center;
+}
+
+.kp-desktop-only__goose {
+  width: 96px;
+  height: 96px;
+  margin-bottom: 8px;
+}
+
+.kp-desktop-only h1 {
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  line-height: 1.25;
+}
+
+.kp-desktop-only p {
+  margin: 0 0 12px;
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
+
+.kp-desktop-only__aside {
+  font-size: 0.9rem;
+  color: var(--ink-faint);
+}
+
+.kp-desktop-only__anyway {
+  margin-top: 8px;
+  padding: 10px 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.kp-desktop-only__anyway:hover {
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
