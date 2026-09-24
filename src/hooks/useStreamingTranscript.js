@@ -56,6 +56,12 @@ const EMPTY_TURN_MS = 9_000;
 export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, onIdle } = {}) {
   const [status, setStatus] = useState("idle"); // idle|connecting|live|closing|error
   const [partial, setPartial] = useState("");
+  // Speech was detected but has not resolved into words yet. The API
+  // sends SpeechStarted before a turn's first transcript, and it only
+  // fires once the model has an actual transcript, so it means "someone
+  // is talking", not "the room is loud". It exists so the UI can say
+  // "heard you" in ~300ms instead of waiting for text.
+  const [hearing, setHearing] = useState(false);
   const [level, setLevel] = useState(0);
 
   const wsRef = useRef(null);
@@ -96,6 +102,7 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
     ctxRef.current = null;
     setLevel(0);
     setPartial("");
+    setHearing(false);
   }, []);
 
   /** Push keyterms / turn settings without reconnecting. */
@@ -249,10 +256,15 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
             }
             break;
 
+          case "SpeechStarted":
+            setHearing(true);
+            break;
+
           case "Turn": {
             const heard = (msg.transcript || "").trim();
             if (msg.end_of_turn) {
               setPartial("");
+              setHearing(false);
               turnStartedRef.current = Date.now();
               wordsThisTurnRef.current = false;
               // Only words count as someone being here. Noise used to
@@ -335,7 +347,7 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
     };
   }, [enabled, teardownAudio]);
 
-  return { status, partial, level, updateConfig };
+  return { status, partial, level, hearing, updateConfig };
 }
 
 /**
@@ -351,6 +363,23 @@ function buildParams(token, sampleRate, cfg) {
   p.set("speech_model", cfg.speechModel || "universal-3-5-pro");
   p.set("format_turns", String(cfg.formatTurns ?? true));
   if (cfg.mode) p.set("mode", cfg.mode);
+
+  // How the turn updates while someone is still talking. Both are
+  // universal-3-5-pro only, and both matter here because speaker_labels
+  // quietly changes their defaults: with diarization on, the server
+  // disables continuous partials, so a turn emits ONE early partial and
+  // then nothing at all until it ends. On a five-second sentence that
+  // reads as the app having stopped listening.
+  //
+  // interruption_delay is the wait before that first partial, and the
+  // server adds 300ms of its own on top (0 -> ~300ms, the balanced
+  // preset's 500 -> ~800ms).
+  if (cfg.continuousPartials != null) {
+    p.set("continuous_partials", String(cfg.continuousPartials));
+  }
+  if (cfg.interruptionDelay != null) {
+    p.set("interruption_delay", String(cfg.interruptionDelay));
+  }
 
   if (cfg.voiceFocus) {
     // universal-3-5-pro only, and it no-ops SILENTLY on anything else

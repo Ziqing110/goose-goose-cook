@@ -99,6 +99,15 @@ const STREAM_CONFIG = {
   // command longer than one word.
   vadThreshold: 0.45,
   turnDetection: COMMAND_TURN,
+  // Both of these are about the wait before you see your own words, not
+  // about accuracy. speakerLabels below turns continuous partials OFF
+  // server-side, which left a turn showing its first fragment and then
+  // nothing until it ended — long enough that people repeated themselves
+  // because the goose looked deaf. Ask for them back explicitly, and ask
+  // for the first partial as early as the API allows (0 plus the
+  // server's own 300ms floor) instead of the preset's 500.
+  continuousPartials: true,
+  interruptionDelay: 0,
   // Who said it, decided server-side, with no voice enrolled anywhere.
   // Two things came out of turning this on, measured by replaying the
   // kitchen takes with and without it:
@@ -412,7 +421,7 @@ export default function VoiceBar() {
     [say, run, askToConfirm, clearPending],
   );
 
-  const { status, partial, updateConfig } = useStreamingTranscript({
+  const { status, partial, hearing, updateConfig } = useStreamingTranscript({
     enabled: !muted,
     config: STREAM_CONFIG,
     onTurn,
@@ -466,7 +475,7 @@ export default function VoiceBar() {
   // the pill, the label and the body copy can never disagree.
   const view = describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname });
 
-  const goose = describeGoose({ view, speaking, muted, status, partial, pending, feedback, error });
+  const goose = describeGoose({ view, speaking, muted, status, partial, hearing, pending, feedback, error });
   // ?goose=<state> pins a pose for design review (dev only).
   const pinned = devGooseState();
   const shown = pinned ? { ...GOOSE_PREVIEW[pinned], state: pinned } : goose;
@@ -506,7 +515,7 @@ const GOOSE_PREVIEW = {
  * hearing, then the resting states. `view` has already collapsed the
  * connection into copy, so this only decides the pose and reuses it.
  */
-function describeGoose({ view, speaking, muted, status, partial, pending, feedback, error }) {
+function describeGoose({ view, speaking, muted, status, partial, hearing, pending, feedback, error }) {
   if (error) return { state: "warning", tag: "Mic error", line: error, partial: false };
   // An open question outranks the fact that the goose is reading it out:
   // the answer is what the screen is waiting for, and the design files
@@ -524,6 +533,11 @@ function describeGoose({ view, speaking, muted, status, partial, pending, feedba
   // A live partial is "still resolving": the turn has not landed yet, so
   // the words can still change.
   if (partial) return { state: "thinking", tag: "Thinking", line: partial, partial: true };
+  // Words take a moment; the acknowledgement should not. SpeechStarted
+  // arrives before the first partial, so the pose changes as soon as the
+  // model agrees someone is speaking — which is the whole difference
+  // between a slow goose and a deaf one.
+  if (hearing) return { state: "thinking", tag: "Hearing", line: "…", partial: true };
   return { state: "listening", tag: "Listening", line: view.line, partial: false };
 }
 
