@@ -193,7 +193,8 @@ export default function GooseVoiceAgent({
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // The bubble flips to whichever side has room.
+  // The bubble flips to whichever side has room, and the goose turns to
+  // face it — the art looks left, so on the left half it's mirrored.
   const onRight = pos.x + BOX.w / 2 > window.innerWidth / 2;
   // Subtitles off means off, in every state. Idle and warning used to
   // override it — one says how to start talking, the other says the mic
@@ -240,7 +241,7 @@ export default function GooseVoiceAgent({
       )}
 
       <div
-        className="goose-figure"
+        className={`goose-figure${onRight ? "" : " is-flipped"}`}
         onPointerDown={onPointerDown}
         onFocus={enter}
         tabIndex={0}

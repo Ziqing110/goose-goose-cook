@@ -50,6 +50,7 @@ import { decideSpeaker, hasHandover } from "../utils/speakerMatch.js";
 import { isNameOnlyTurn } from "../utils/addressing.js";
 import { buildSummary } from "../utils/summaryCard.js";
 import { clock, playerKey, resultPlayers } from "../utils/serviceResults.js";
+import { chefAvatar, CHEF_AVATARS } from "../utils/cooks.js";
 import { CoopResult, PlayerAvatar, Stamp, StepReceipt, VersusResults } from "../components/ServiceResults.jsx";
 import KpIcon from "../components/KpIcon.jsx";
 import { GoosePrint, GooseTracks } from "../components/GooseMarks.jsx";
@@ -1897,11 +1898,19 @@ function TaskPoolBoard({ ready, blocked, run, byId, cooks, now, paused, dishOf, 
                   // the equipment it needs is on something else.
                   const block = claimBlock(id, cook.id);
                   const why = block ? (block.startsWith("No ") ? block.replace(/^No (.*) free$/, "no $1").toLowerCase() : "busy") : null;
+                  // The half wears whichever bird this cook picked, so it
+                  // matches the avatar inside it whatever the pair is —
+                  // green against purple reads as well as blue against
+                  // amber. A cook who never picked one borrows the bird
+                  // at their seat rather than the unclaimed grey, which
+                  // is what "can't claim" already looks like.
+                  const bird = (cook.avatar && chefAvatar(cook.avatar)) || CHEF_AVATARS[i % CHEF_AVATARS.length];
                   return (
                     <button
                       key={cook.id}
                       type="button"
                       className={`btn lc-claim is-${playerKey(i)}`}
+                      style={{ "--claim": bird.bg, "--claim-ink": bird.ink }}
                       onClick={() => onClaim(id, cook.id)}
                       disabled={paused || Boolean(block)}
                       title={block || undefined}

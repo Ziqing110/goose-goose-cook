@@ -57,7 +57,15 @@
   background-size: contain;
   background-repeat: no-repeat;
 }
-.goose-art-shadow { filter: brightness(0); transform: translate(3px, 4px); }
+/* A tint of ink, not solid ink: at full black the silhouette read as a
+   second, darker goose. 0.18 matches the app's own shadow strength
+   (--kp-shadow-modal) while keeping the hard, blur-free print edge. */
+.goose-art-shadow { filter: brightness(0); opacity: 0.18; transform: translate(3px, 4px); }
+/* Mirrored on the left half so the goose faces the page, not the wall.
+   Only the art flips — the shadow keeps falling down-right like every
+   other ink shadow in the app. */
+.goose-figure.is-flipped .goose-art { transform: scaleX(-1); }
+.goose-figure.is-flipped .goose-art-shadow { transform: translate(3px, 4px) scaleX(-1); }
 
 /* Read aloud, never drawn — the state when the bubble is switched off. */
 .goose-sr-only {

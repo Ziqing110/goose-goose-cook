@@ -706,8 +706,26 @@
   line-height: 18px;
   animation: lc-attend 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
-/* Two halves of one bar, one per player: the accent while they can
-   take it, chip grey (with why) when they can't. */
+/* Two halves of one bar, one per player. They wear the player's own
+   colour, not the accent: the question a claim asks is "who", which is
+   what the avatar inside each half already answers. They are also nine
+   tiles' worth of buttons — solid accent on all eighteen left nothing
+   on the page louder than them, including the two "Take it" primaries
+   that are the actual focus.
+
+   --claim / --claim-ink are the cook's bird's own pair, set inline (see
+   TaskPoolBoard), so any of the eight pairings works — the palette
+   lives in utils/cooks.js and nothing is restated here. The fill is
+   that colour well diluted: at full strength the birds' pastels are
+   the loud board again in another hue. The edge is drawn in the ink
+   rather than the fill, because two birds can sit close in tint (blue
+   and purple are near-identical at 35%) while their inks stay apart —
+   and either way the bird and the name inside the half are what
+   actually tell the two apart.
+
+   The half still carries is-a / is-b. Nothing here styles it — it is
+   the seat, which the e2e selects on and which stays meaningful even
+   when both cooks' birds sit close in hue. */
 .lc-tile-claims { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; margin-top: auto; padding-top: 6px; }
 .ds-v4 .lc-claim {
   min-height: 44px;
@@ -718,16 +736,23 @@
   padding: 0 8px;
   border: none;
   border-radius: 0;
-  background: var(--accent);
-  color: #fff;
+  background: color-mix(in srgb, var(--claim, var(--ds-chip)) 35%, var(--paper));
+  color: var(--claim-ink, var(--ink));
   font-size: 14px;
   font-weight: 500;
-  box-shadow: 0 2px 0 color-mix(in srgb, var(--accent) 72%, #000);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--claim-ink, var(--ink)) 30%, transparent);
+  transition: background 120ms ease-out, color 120ms ease-out;
 }
 .ds-v4 .lc-claim:first-child { border-radius: var(--radius-control) 0 0 var(--radius-control); }
 .ds-v4 .lc-claim:last-child { border-radius: 0 var(--radius-control) var(--radius-control) 0; }
-.ds-v4 .lc-claim:hover:not(:disabled) { background: var(--ds-accent-hover); }
-.ds-v4 .lc-claim:active:not(:disabled) { transform: translateY(2px); box-shadow: none; }
+/* Hover deepens the same tint rather than filling solid: white sits at
+   2.6:1 on the warmer birds, and the label has to stay readable through
+   the tap. */
+.ds-v4 .lc-claim:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--claim, var(--ds-chip)) 55%, var(--paper));
+  box-shadow: inset 0 0 0 2px var(--claim-ink, var(--ink));
+}
+.ds-v4 .lc-claim:active:not(:disabled) { transform: translateY(1px); }
 .ds-v4 .lc-claim:disabled { background: var(--ds-chip); color: var(--ink-faint); box-shadow: none; cursor: not-allowed; }
 .ds-v4 .lc-claim:disabled .lc-avatar { opacity: 0.55; }
 .lc-claim-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

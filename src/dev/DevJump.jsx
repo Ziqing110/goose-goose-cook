@@ -11,6 +11,7 @@
 //   /jump/coop       Live cook, Co-op, run already started
 //   /jump/coop-done  Live cook, Co-op, completed results screen
 //   /jump/versus     Live cook, Versus, run already started (no countdown)
+//   /jump/versus-done Live cook, Versus, completed results screen
 //
 // Seeding starts a fresh session, which abandons any run in progress —
 // that is the API's invariant (see scripts/seed-session.mjs). Only
@@ -32,6 +33,7 @@ const TARGETS = {
   coop: { mode: "cooperation", path: "/session/live-cook" },
   "coop-done": { mode: "cooperation", path: "/session/live-cook", finished: true },
   versus: { mode: "competition", path: "/session/live-cook" },
+  "versus-done": { mode: "competition", path: "/session/live-cook", finished: true },
 };
 
 // Same run the Schedule page's "Go live" builds, from the same helpers,
@@ -46,23 +48,33 @@ async function startRun(session, kitchens, mode) {
   return { run, nodes };
 }
 
-// A deterministic completed Co-op run for visual QA of Service done. It
-// follows the computed plan's cook and timing assignments, but does not make
-// a tester tap through twenty task cards just to reach the results screen.
-function completeCoopRun(run, nodes) {
-  const durationSec = run.plan?.makespanSec || 1;
+// A deterministic completed run for visual QA of Service done. Co-op follows
+// the computed plan; Versus alternates claims so both player tickets contain
+// real work. Neither makes a tester tap through twenty task cards first.
+function completeRun(run, nodes, cooks) {
+  const versusOffsets = {};
+  const versusAssignments = {};
+  if (run.mode === "competition") {
+    nodes.forEach((node, index) => {
+      const cookId = cooks[index % cooks.length]?.id || null;
+      const startSec = versusOffsets[cookId] || 0;
+      versusAssignments[node.id] = { cookId, startSec };
+      versusOffsets[cookId] = startSec + (node.estimated_duration_sec || 1);
+    });
+  }
+  const durationSec = run.plan?.makespanSec || Math.max(1, ...Object.values(versusOffsets));
   const startedMs = Date.now() - durationSec * 1000;
   const cookFor = Object.entries(run.plan?.order || {}).flatMap(([cookId, ids]) =>
     ids.map((id) => [id, cookId]),
   );
   const cookByStep = Object.fromEntries(cookFor);
   const steps = Object.fromEntries(nodes.map((node) => {
-    const startSec = run.plan?.startSecById?.[node.id] || 0;
+    const startSec = run.plan?.startSecById?.[node.id] ?? versusAssignments[node.id]?.startSec ?? 0;
     const stepDuration = node.estimated_duration_sec || 1;
     return [node.id, {
       ...run.steps[node.id],
       status: "done",
-      cookId: cookByStep[node.id] || null,
+      cookId: cookByStep[node.id] || versusAssignments[node.id]?.cookId || null,
       startedAt: new Date(startedMs + startSec * 1000).toISOString(),
       endedAt: new Date(startedMs + (startSec + stepDuration) * 1000).toISOString(),
       source: "fixture",
@@ -119,7 +131,7 @@ export default function DevJump() {
         const { run, nodes } = await startRun(session, kitchens, spec.mode);
         if (spec.finished) {
           setStatus("Finishing the run…");
-          await sessionsApi.updateSession(sessionId, { run: completeCoopRun(run, nodes) });
+          await sessionsApi.updateSession(sessionId, { run: completeRun(run, nodes, session.cooks) });
         }
       }
       // Read back what the app will hydrate — the active session, not
