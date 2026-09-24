@@ -14,7 +14,8 @@
 import { useEffect, useRef, useState } from "react";
 import { GoosePrint } from "./GooseMarks.jsx";
 import KpIcon from "./KpIcon.jsx";
-import { CardGoose, PlayerAvatar, Stamp } from "../pages/LiveCookPage.jsx";
+import { CardGoose } from "../pages/LiveCookPage.jsx";
+import { PlayerAvatar, Stamp } from "./ServiceResults.jsx";
 import referee3 from "../assets/goose-referee-v1/referee-3-cut.png";
 import referee2 from "../assets/goose-referee-v1/referee-2-cut.png";
 import referee1 from "../assets/goose-referee-v1/referee-1-cut.png";

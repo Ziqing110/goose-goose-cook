@@ -9,7 +9,7 @@ const MAX_PHOTO_PX = 1200;
  * Snapshot of a finished cook. Frozen deliberately: it's a record of one
  * evening, so it shouldn't change later when scoring rules or quip copy do.
  */
-export function buildSummary({ outcome, cooks, dish, mode, photo = null, styledPhoto = null, photoSource = null }) {
+export function buildSummary({ outcome, cooks, dish, mode, dishOfStep = () => null, photo = null, styledPhoto = null, photoSource = null }) {
   const context = buildRunContext(outcome, outcome.scoreboard.map((b) => b.cookId).join("-"));
   const topPoints = outcome.scoreboard[0]?.points ?? 0;
 
@@ -20,6 +20,8 @@ export function buildSummary({ outcome, cooks, dish, mode, photo = null, styledP
     totalSec: outcome.totalSec,
     estimatedSec: outcome.estimatedSec,
     winnerCookIds: outcome.winnerCookIds,
+    doneCount: outcome.doneCount,
+    skippedCount: outcome.skippedCount,
     headline: headlineFor(context),
     cooks: outcome.scoreboard.map((entry, i) => {
       const stats = cookQuipStats(entry, outcome.perStep);
@@ -47,6 +49,19 @@ export function buildSummary({ outcome, cooks, dish, mode, photo = null, styledP
         _order: i,
       };
     }),
+    // Every step in the order the night went — the cook card's receipt,
+    // the same one Service done printed. `dish` is for "Most points from".
+    // Steps never reached stay in, as on Service done's receipt.
+    perStep: outcome.perStep.map((s) => ({
+      id: s.id,
+      label: s.label,
+      cookId: s.cookId,
+      status: s.status,
+      estSec: s.estSec,
+      actualSec: s.actualSec,
+      points: s.points,
+      dish: dishOfStep(s),
+    })),
     photo,
     styledPhoto,
     photoSource,

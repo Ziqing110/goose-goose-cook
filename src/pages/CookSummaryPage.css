@@ -1,82 +1,147 @@
-/* Cook journal — one run lifted out of Home's run log, so it borrows
-   Home's card language (grey card, white chips, divider rows) and sits
-   in the same shell container. */
-.cook-journal-page { width: min(720px, 100%); margin: 0 auto; padding: 24px 0; }
-.journal-sheet { display: flex; flex-direction: column; gap: 28px; padding: 24px 24px 0; background: var(--kp-bg-secondary); border-radius: 12px; overflow: hidden; }
-.journal-sheet.should-reveal { animation: ds-reveal 240ms ease-out both; }
-.journal-photo-frame { position: relative; width: 100%; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 8px; background: var(--kp-bg-tertiary); }
-.journal-photo-frame img { width: 100%; height: 100%; display: block; object-fit: cover; }
-.journal-photo-frame.is-styling img { filter: brightness(.58); }
-.journal-styling { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; color: #fff; font-size: 13px; font-weight: 500; }
-.journal-styling i { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.45); border-top-color: #fff; border-radius: 50%; animation: journal-spin .8s linear infinite; }
-@keyframes journal-spin { to { transform: rotate(360deg); } }
-.journal-photo-foot { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.journal-photo-foot > span { color: var(--kp-text-tertiary); font-size: 13px; line-height: 18px; }
-.journal-photo-foot .btn { flex: none; color: var(--kp-accent); white-space: nowrap; }
-.journal-no-photo { width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; background: var(--kp-bg); border: 1px dashed var(--kp-divider); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; text-align: center; }
-.journal-no-photo-geese { height: 82px; display: flex; align-items: end; gap: 2px; }
-.journal-no-photo p { margin: 0; font-size: 16px; line-height: 22px; font-weight: 500; }
-.journal-title-block { display: flex; flex-direction: column; gap: 10px; }
-.journal-eyebrow { color: var(--kp-text-tertiary); font-size: 13px; line-height: 18px; }
-.journal-title-block h1 { font-size: 30px; line-height: 36px; letter-spacing: -.01em; }
-.journal-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 16px; line-height: 22px; }
-.journal-dot { color: var(--kp-divider); }
-.journal-mode-chip { height: 28px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; background: var(--kp-bg); font-size: 13px; font-weight: 500; }
-.journal-mode-chip .kp-icon { color: var(--kp-text-secondary); }
-.journal-plan { color: var(--kp-text-secondary); }
-.journal-headline { margin: 0; color: var(--kp-text-secondary); font-size: 18px; line-height: 26px; }
-.journal-kitchen { display: flex; flex-direction: column; gap: 20px; }
-.journal-section-label { color: var(--kp-text-secondary); font-size: 13px; line-height: 18px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; }
-.journal-players { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; }
-.journal-player { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
-.journal-player-head { display: flex; align-items: center; gap: 12px; }
-.journal-avatar { width: 40px; height: 40px; flex: none; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--avatar-bg); box-shadow: inset 0 0 0 2px var(--kp-cook-a); }
-.journal-avatar.is-leo, .journal-avatar.is-b { box-shadow: inset 0 0 0 2px var(--kp-cook-b); }
-.journal-avatar img { width: 100%; height: 100%; object-fit: contain; }
-.journal-signature { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.journal-signature-line { min-width: 0; display: flex; align-items: center; gap: 8px; }
-.journal-signature h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 20px; line-height: 26px; }
-.journal-points { margin-left: auto; font-size: 16px; white-space: nowrap; }
-.journal-winner { flex: none; }
-.journal-step-count { color: var(--kp-text-tertiary); font-size: 12px; line-height: 18px; }
-.journal-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.journal-steps li { min-height: 38px; padding: 8px 0; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--kp-divider); }
-.journal-steps li:last-child { border-bottom: 0; }
-.journal-step-label { min-width: 0; font-size: 15px; line-height: 22px; }
-.journal-step-meta { flex: none; color: var(--kp-text-secondary); font-size: 12px; line-height: 18px; text-align: right; }
-.journal-steps li.is-skipped .journal-step-label { color: var(--kp-text-tertiary); text-decoration: line-through; }
-.journal-steps li.is-skipped .journal-step-meta { color: var(--kp-text-tertiary); }
-.journal-empty { margin: 0; color: var(--kp-text-tertiary); font-size: 15px; line-height: 22px; }
-.journal-notes { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
-.journal-notes p { position: relative; margin: 0; padding-left: 16px; color: var(--kp-text-secondary); font-size: 15px; line-height: 22px; font-style: italic; }
-.journal-notes p::before { content: ""; position: absolute; left: 0; top: 10px; width: 8px; height: 1px; background: var(--kp-divider); }
-.journal-actions { margin: 4px -24px 0; padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid var(--kp-divider); }
-.journal-actions-left { display: flex; align-items: center; gap: 4px; }
-.journal-error { margin: 8px 0 0; color: var(--kp-error-text); font-size: 13px; line-height: 18px; }
-.journal-missing { width: min(560px, 100%); min-height: 60vh; margin: 0 auto; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 12px; }
-.journal-missing h1 { font-size: 30px; line-height: 36px; }
-.journal-missing p { margin: 0 0 8px; color: var(--kp-text-secondary); font-size: 15px; line-height: 22px; }
-@media (max-width: 640px) {
-  .cook-journal-page { padding: 16px 0 24px; }
-  .journal-sheet { padding: 0; background: transparent; border-radius: 0; gap: 24px; }
-  .journal-mode-chip, .journal-no-photo { background: var(--kp-bg-secondary); }
-  .journal-actions { margin: 0; padding: 16px 0 0; }
-  .journal-players { grid-template-columns: 1fr; gap: 32px; }
-  .journal-steps li { align-items: flex-start; flex-wrap: wrap; gap: 2px 12px; }
-  .journal-step-label { flex: 1 1 190px; }
-  .journal-step-meta { flex: 0 1 auto; }
-  .journal-actions { align-items: stretch; }
-  .journal-actions-left { flex: 1 1 auto; flex-wrap: wrap; }
-  .journal-actions .btn { min-width: 0; }
+/* ---------------------------------------------------------------
+   Cook card (design: "Kitchen Path Cook Card v2") — the same evening
+   as Service done, pinned up. Tokens, buttons and the header marks
+   (eyebrow, underlined title, run facts, aside) come from
+   styles/design-v4.css; the tickets, final score, co-op bar and receipt
+   are Service done's own, from components/ServiceResults.css.
+
+   Service done is the scoreboard; this is the keepsake, so the result
+   tickets aren't repeated. Layout: the title row every stage has →
+   two columns, top-aligned: the evening (the photo print, one ledger of
+   how it went) held in view on the left, the record (the receipt of
+   every step) on the right → actions. No grey sheet: the paper sits
+   straight on the white page.
+----------------------------------------------------------------*/
+
+.ds-v4 .cook-card-page { gap: 0; }
+.cook-card-page.should-reveal { animation: ds-reveal 240ms ease-out both; }
+
+/* ---------------- title row ---------------- */
+.cc-title-row { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 26px 0 32px; }
+.cc-title-row h1 { margin: 0; font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.01em; }
+.cc-title-row .ds-title-mark { margin-top: 4px; }
+.cc-title-row .ds-run-facts { margin-top: 16px; }
+.cc-title-row .ds-aside { padding-top: 10px; }
+.cc-plan { font-weight: 500; }
+.cc-plan.is-under, .cc-plan.is-under .mono { color: var(--success); }
+.cc-plan.is-over, .cc-plan.is-over .mono { color: var(--warning-soft-ink); }
+
+/* ---------------- two columns ----------------
+   The evening sets the height; the receipt matches it and scrolls
+   inside (the cell is the grid item, the roll is taken out of flow),
+   as on Service done. */
+.cc-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; }
+.cc-evening { min-width: 0; display: flex; flex-direction: column; gap: 32px; }
+.cc-receipt-cell { position: relative; min-height: 460px; }
+.cc-receipt-cell .lc-receipt-roll { position: absolute; inset: 0 0 10px; }
+
+/* ---------------- the print ---------------- */
+.cc-print-slot { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 14px; }
+.cc-print {
+  position: relative;
+  width: 100%;
+  margin: 0;
+  padding: 14px 14px 0;
+  border: 1px solid var(--paper-edge);
+  border-radius: 4px;
+  background: var(--paper);
+  box-shadow: 0 2px 0 var(--paper-ledge);
+  rotate: -1deg;
 }
-@media (prefers-reduced-motion: reduce) {
-  .journal-sheet.should-reveal { animation: journal-fade 200ms ease-out both; }
-  .journal-styling i { animation-duration: 1.2s !important; }
+.cc-print-tape {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: -14px;
+  width: 112px;
+  height: 26px;
+  margin-left: -56px;
+  background: var(--paper-dash);
+  opacity: 0.55;
+  rotate: 2deg;
 }
-@keyframes journal-fade { from { opacity: 0; } to { opacity: 1; } }
+.cc-print-photo { position: relative; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 2px; background: var(--paper-punch); }
+.cc-print-photo > img { display: block; width: 100%; height: 100%; object-fit: cover; transition: opacity 200ms ease-out; }
+.cc-print-photo > img.is-styling { opacity: 0.4; }
+.cc-print-photo.is-empty { border: 2px dashed var(--paper-dash); }
+.cc-print-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; text-align: center; }
+.cc-print-empty p { margin: 0; max-width: 280px; font-size: 15px; line-height: 22px; font-weight: 500; text-wrap: pretty; }
+.cc-print-geese { display: flex; align-items: flex-end; gap: 4px; }
+.cc-styling {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--paper-edge);
+  border-radius: 999px;
+  background: var(--paper);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+}
+.cc-styling i { width: 14px; height: 14px; border: 2px solid var(--paper-dash); border-top-color: var(--ink); border-radius: 50%; animation: cc-spin 800ms linear infinite; }
+@keyframes cc-spin { to { transform: rotate(360deg); } }
+.cc-print-caption { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 2px; }
+.cc-print-date { font-size: 15px; line-height: 22px; font-weight: 500; color: var(--ink-soft); }
+.lc-stamp.is-honk { color: var(--ds-honk); }
+
+/* ---------------- the ledger ----------------
+   A row per player: avatar, name in their ink, the goose's stamp, and
+   their number in the play face — Service done's result language at
+   one line's size. The goose's lines hang under each. */
+.cc-ledger { display: flex; flex-direction: column; }
+.cc-ledger.is-coop .lc-share-bar { margin-bottom: 4px; }
+.cc-ledger-row { display: flex; flex-direction: column; gap: 8px; padding: 14px 0; border-top: 1px solid var(--line); }
+.cc-ledger-row:last-child { border-bottom: 1px solid var(--line); }
+.cc-ledger.is-coop .cc-ledger-row:first-of-type { border-top: 0; }
+.cc-ledger-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.cc-ledger-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-play); font-size: 26px; line-height: 30px; font-weight: 800; letter-spacing: -0.02em; color: var(--pc-ink); }
+.cc-ledger-num { margin-left: auto; display: inline-flex; align-items: baseline; gap: 6px; font-family: var(--font-play); font-size: 32px; line-height: 36px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--pc-ink); }
+.cc-ledger-unit { font-family: var(--font-body); font-size: 13px; line-height: 18px; font-weight: 400; letter-spacing: 0; color: var(--ink-soft); }
+.cc-quips { display: flex; flex-direction: column; gap: 6px; padding-left: 44px; }
+.cc-quip { display: flex; align-items: flex-start; gap: 9px; margin: 0; font-size: 15px; line-height: 22px; color: var(--ink-soft); text-wrap: pretty; }
+.cc-quip > svg { margin-top: 5px; }
+
+/* ---------------- actions ---------------- */
+.cc-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 36px; padding: 20px 0 8px; border-top: 1px solid var(--line); }
+.cc-actions-left { display: flex; align-items: center; gap: 4px; }
+.ds-v4 .cc-actions .btn-ghost.is-copied { color: var(--success); }
+.cc-error { margin: 8px 0 0; color: var(--crit); font-size: 13px; line-height: 18px; }
+
+/* ---------------- missing ---------------- */
+.ds-v4 .cook-card-page.cc-missing { min-height: 60vh; align-items: center; justify-content: center; gap: 28px; padding: 64px 0; text-align: center; }
+.cc-missing-art { display: flex; align-items: flex-end; gap: 8px; }
+.cc-missing-art .cc-print { width: 260px; }
+.cc-missing-art .cc-print-caption { min-height: 44px; }
+.cc-missing-copy { display: flex; flex-direction: column; gap: 6px; }
+.cc-missing-copy h1 { margin: 0; font-size: 20px; line-height: 26px; font-weight: 700; }
+.cc-missing-copy p { margin: 0; color: var(--ink-soft); font-size: 15px; line-height: 22px; }
+
+/* ---------------- narrow ---------------- */
+@media (max-width: 900px) {
+  .cc-body { grid-template-columns: minmax(0, 1fr); gap: 36px; }
+  .cc-receipt-cell { min-height: 0; }
+  .cc-receipt-cell .lc-receipt-roll { position: relative; inset: auto; margin-bottom: 10px; }
+  .cc-receipt-cell .lc-receipt { max-height: 70vh; }
+}
+@media (max-width: 720px) {
+  .cc-title-row { padding: 16px 0 24px; }
+  .cc-print { rotate: -0.5deg; }
+  .cc-quips { padding-left: 0; }
+  .cc-actions { flex-direction: column-reverse; align-items: stretch; }
+  .cc-actions-left { display: grid; grid-template-columns: 1fr 1fr; }
+  .ds-v4 .cc-actions .btn-lg { width: 100%; }
+  .cc-missing-art .cc-print { width: 200px; }
+}
+
 @media print {
-  .topbar, .journal-actions, .journal-error { display: none !important; }
-  .cook-journal-page { padding: 0; }
-  .journal-sheet { padding: 0; background: transparent; }
-  .journal-no-photo { display: none; }
+  .topbar, .cc-actions, .cc-error, .cc-print-slot > .btn { display: none !important; }
+  /* On paper the whole night prints, unscrolled. */
+  .cc-receipt-cell .lc-receipt-roll { position: relative; inset: auto; }
+  .cc-receipt-cell .lc-receipt { max-height: none; }
 }

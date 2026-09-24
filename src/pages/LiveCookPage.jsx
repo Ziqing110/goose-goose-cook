@@ -49,7 +49,8 @@ import { identifySpeaker } from "../api/speaker.js";
 import { decideSpeaker, hasHandover } from "../utils/speakerMatch.js";
 import { isNameOnlyTurn } from "../utils/addressing.js";
 import { buildSummary } from "../utils/summaryCard.js";
-import { chefAvatar } from "../utils/cooks.js";
+import { clock, playerKey, resultPlayers } from "../utils/serviceResults.js";
+import { CoopResult, PlayerAvatar, Stamp, StepReceipt, VersusResults } from "../components/ServiceResults.jsx";
 import KpIcon from "../components/KpIcon.jsx";
 import { GoosePrint, GooseTracks } from "../components/GooseMarks.jsx";
 import Modal from "../components/Modal.jsx";
@@ -57,11 +58,6 @@ import BabyGoose from "../components/BabyGoose.jsx";
 import summaryVersusArt from "../assets/summary-versus-v2-blue.png";
 import summaryCoopArt from "../assets/summary-coop-v2-blue.png";
 import "./LiveCookPage.css";
-
-// Player colors come from the index in cooks[] — player 1 is "a",
-// player 2 is "b" — never stored, never chosen (design-v4.css tokens).
-const PLAYER_KEYS = ["a", "b"];
-const playerKey = (index) => PLAYER_KEYS[index % PLAYER_KEYS.length];
 
 const EQUIPMENT_GLYPHS = { cutting_board: "cutting-board", stove_burner: "burner", pot: "pot", wok: "wok", oven: "oven" };
 
@@ -141,12 +137,6 @@ function onMomentDue(stepId, phase, index) {}
 
 const capitalize = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
-
-/** "12:48" — every clock on the page. */
-const clock = (sec) => {
-  const s = Math.max(0, Math.round(sec));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-};
 
 /** One clock for the page — not one per card. */
 function useNow(paused) {
@@ -285,22 +275,6 @@ function ScoreFly({ fly, fromEl, toEls, onDone }) {
   return (
     <span ref={ref} className={`mono lc-fly is-${fly.player}`} aria-hidden="true">
       +{fly.pts}
-    </span>
-  );
-}
-
-// The chef bird the player picked on the Cooks page, ringed in their
-// player color; the initial is the fallback for a cook who predates
-// avatars. Same identity system either way — the color is the key.
-export function PlayerAvatar({ cook, index, size = 32 }) {
-  const chef = cook?.avatar ? chefAvatar(cook.avatar) : null;
-  return (
-    <span
-      className={`lc-avatar is-${playerKey(index)} lc-avatar-${size} ${chef ? "has-chef" : ""}`}
-      style={chef ? { backgroundColor: chef.bg, backgroundImage: `url(${chef.src})` } : undefined}
-      aria-hidden="true"
-    >
-      {!chef && (cook?.name?.[0]?.toUpperCase() || "?")}
     </span>
   );
 }
@@ -745,6 +719,7 @@ export default function LiveCookPage() {
       cooks,
       dish: approved?.title || "Untitled cook",
       mode: run.mode,
+      dishOfStep: (s) => dishOf(byId[s.id]),
     });
     setSaveError(null);
     setSaving(true);
@@ -1138,9 +1113,9 @@ export default function LiveCookPage() {
               <path d="M2 7c68-4 144 1 220-2 58-2.5 134 3 206 .5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
             </svg>
           </span>
-          <p className="lc-subtitle">
+          <p className="ds-run-facts">
             {approved?.title || "Untitled cook"}
-            <span className="lc-mode-chip">
+            <span className="ds-mode-chip">
               <KpIcon glyph={isVersus ? "trophy" : "fork-branch"} size={14} />
               {isVersus ? "Versus" : "Co-op"}
             </span>
@@ -1456,12 +1431,6 @@ function cardFocus(cookId, run, byId, now) {
     .map((id) => ({ id, node: byId[id], state: momentState(byId[id], run.steps[id], now) }))
     .sort((a, b) => (a.state.nextInSec ?? -1) - (b.state.nextInSec ?? -1));
   return { activeId, node, focusMoment, cooking };
-}
-
-// The goose's rubber stamp — the same outlined, tilted pill as Schedule's
-// APPROVED badge, in the ink of whoever it is about.
-export function Stamp({ children, tone = "ink", className = "" }) {
-  return <span className={`lc-stamp is-${tone} ${className}`}>{children}</span>;
 }
 
 // What a step is worth, as a dashed tag pinned to the ticket's corner.
@@ -2233,29 +2202,7 @@ function AgentPanel({
 // against the plan and one shared bar of who did what. The receipt on
 // the right is every step, in the order the night went.
 function ServiceDone({ outcome, cooks, isVersus, title, byId, dishOf, onExit, saving, saveError }) {
-  const winners = outcome.winnerCookIds;
-  const tie = isVersus && winners.length > 1;
-  // Co-op: a run called off with more skipped than cooked is nothing
-  // to cheer.
-  const cooked = outcome.doneCount > 0 && outcome.doneCount >= outcome.skippedCount;
-  const players = cooks.slice(0, 2).map((cook, i) => {
-    const entry = outcome.scoreboard.find((b) => b.cookId === cook.id) || { points: 0, doneCount: 0, skippedCount: 0 };
-    const mine = outcome.perStep.filter((s) => s.cookId === cook.id && s.status === "done");
-    const longest = mine.reduce((best, s) => (!best || s.actualSec > best.actualSec ? s : best), null);
-    const byDish = {};
-    mine.forEach((s) => {
-      const dish = dishOf(byId[s.id]);
-      if (dish) byDish[dish] = (byDish[dish] || 0) + (s.points || 0);
-    });
-    const topDish = Object.entries(byDish).sort((a, b) => b[1] - a[1])[0];
-    return { cook, i, key: playerKey(i), entry, longest, topDish: topDish && topDish[1] > 0 ? topDish[0] : null, won: winners.includes(cook.id) };
-  });
-  const [pa, pb] = players;
-  const margin = pa && pb ? Math.abs(pa.entry.points - pb.entry.points) : 0;
-  const longestAll = outcome.perStep.filter((s) => s.status === "done").reduce((best, s) => (!best || s.actualSec > best.actualSec ? s : best), null);
-  // Only a run that got through everything has a fair "against the plan".
-  const showDelta = outcome.estimatedSec != null && outcome.skippedCount === 0 && outcome.doneCount > 0;
-  const deltaSec = showDelta ? outcome.totalSec - outcome.estimatedSec : 0;
+  const players = resultPlayers({ outcome, cooks, dishOfStep: (s) => dishOf(byId[s.id]) });
 
   return (
     <div className={`lc-service ${isVersus ? "is-versus" : "is-coop"}`}>
@@ -2269,66 +2216,10 @@ function ServiceDone({ outcome, cooks, isVersus, title, byId, dishOf, onExit, sa
         <img className="lc-service-art" src={isVersus ? summaryVersusArt : summaryCoopArt} alt="" />
 
         {isVersus ? (
-          <div className={`lc-results ${tie ? "is-tie" : ""}`}>
-            {tie && <span className="lc-banner is-tie">Dead heat</span>}
-            {pa && <ResultTicket p={pa} tie={tie} margin={margin} anyWinner={winners.length > 0} />}
-            <div className="lc-final">
-              <span className="lc-final-score">
-                <span className="is-a">{pa?.entry.points ?? 0}</span>
-                <span className="lc-final-colon">:</span>
-                <span className="is-b">{pb?.entry.points ?? 0}</span>
-              </span>
-              <span className="lc-meta">{tie ? "Level on points" : "Final score"}</span>
-            </div>
-            {pb && <ResultTicket p={pb} tie={tie} margin={margin} anyWinner={winners.length > 0} />}
-          </div>
+          <VersusResults players={players} winnerCookIds={outcome.winnerCookIds} />
         ) : (
-          <div className="lc-coop-result">
-            <h2 className="lc-coop-title">{cooked ? "Dinner’s up" : "Called it early"}</h2>
-            {showDelta && (
-              <div className="lc-coop-delta">
-                <span className={`lc-coop-delta-num ${deltaSec <= 0 ? "is-under" : "is-over"}`}>
-                  {clock(Math.abs(deltaSec))} {deltaSec <= 0 ? "under plan" : "over plan"}
-                </span>
-                <span className="lc-coop-times">
-                  <span>
-                    <Mono>{clock(outcome.totalSec)}</Mono> actual
-                  </span>
-                  <span>
-                    <Mono>{clock(outcome.estimatedSec)}</Mono> planned
-                  </span>
-                </span>
-              </div>
-            )}
-            {/* Teamwork as one object: a single bar split by who did what. */}
-            <div className="lc-share">
-              <div className="lc-share-legend">
-                {players.map((p) => (
-                  <span key={p.cook.id} className={`lc-share-who is-${p.key}`}>
-                    <PlayerAvatar cook={p.cook} index={p.i} size={20} />
-                    <span className="lc-share-name">{p.cook.name}</span>
-                    <Mono className="lc-share-n">{p.entry.doneCount}</Mono>
-                    <span className="lc-meta">{p.entry.doneCount === 1 ? "step" : "steps"}</span>
-                  </span>
-                ))}
-              </div>
-              <div className="lc-share-bar" aria-hidden="true">
-                {players.map((p) => (
-                  <span key={p.cook.id} className={`is-${p.key}`} style={{ flexGrow: p.entry.doneCount }} />
-                ))}
-              </div>
-              <span className="lc-meta">
-                <Mono>{outcome.doneCount}</Mono> done · <Mono>{outcome.skippedCount}</Mono> skipped
-                {longestAll && (
-                  <>
-                    {" "}· longest was {longestAll.label}, <Mono>{clock(longestAll.actualSec)}</Mono>
-                  </>
-                )}
-              </span>
-            </div>
-          </div>
+          <CoopResult outcome={outcome} players={players} />
         )}
-
       </div>
 
       {/* The receipt is as tall as the column beside it and scrolls
@@ -2338,61 +2229,7 @@ function ServiceDone({ outcome, cooks, isVersus, title, byId, dishOf, onExit, sa
           what becomes the cook card, so taking it is the handoff. */}
       <div className="lc-service-steps-cell">
         <div className="lc-receipt-roll">
-        <div className="lc-receipt">
-          <header className="lc-receipt-head">
-            <span className="lc-receipt-heading">
-              <h2 className="lc-receipt-title">Every step</h2>
-              <span className="lc-meta">{title}</span>
-            </span>
-            <span className="lc-meta">
-              <Mono>{outcome.perStep.length}</Mono> steps
-            </span>
-          </header>
-          <ul className="lc-step-list">
-            {outcome.perStep.map((s) => {
-              const i = cooks.findIndex((c) => c.id === s.cookId);
-              const done = s.status === "done";
-              return (
-                <li key={s.id} className={`lc-step-row ${done ? "" : "is-skipped"} ${i >= 0 ? `is-${playerKey(i)}` : ""}`}>
-                  {i >= 0 ? <PlayerAvatar cook={cooks[i]} index={i} size={20} /> : <span className="lc-receipt-dot" aria-hidden="true" />}
-                  <span className="lc-step-row-label">{s.label}</span>
-                  <span className="lc-leader" aria-hidden="true" />
-                  <Mono className="lc-step-row-time">{done ? clock(s.actualSec) : "skipped"}</Mono>
-                  {isVersus && <Mono className="lc-step-row-pts">{done && s.points > 0 ? `+${s.points}` : ""}</Mono>}
-                </li>
-              );
-            })}
-          </ul>
-          <footer className="lc-receipt-foot">
-            {isVersus
-              ? players.map((p) => (
-                  <span key={p.cook.id} className={`lc-receipt-total is-${p.key}`}>
-                    <PlayerAvatar cook={p.cook} index={p.i} size={20} />
-                    <span className="lc-receipt-total-label">{p.cook.name}</span>
-                    <Mono className="lc-receipt-total-value">{p.entry.points}</Mono>
-                  </span>
-                ))
-              : (
-                <>
-                  {outcome.estimatedSec != null && (
-                    <span className="lc-receipt-total">
-                      <span className="lc-receipt-total-label">Planned</span>
-                      <Mono className="lc-receipt-total-value">{clock(outcome.estimatedSec)}</Mono>
-                    </span>
-                  )}
-                  <span className="lc-receipt-total">
-                    <span className="lc-receipt-total-label">Cooked in</span>
-                    <Mono className={`lc-receipt-total-value ${showDelta && deltaSec <= 0 ? "is-under" : ""}`}>{clock(outcome.totalSec)}</Mono>
-                  </span>
-                </>
-              )}
-            <span className="lc-receipt-sign">
-              <GoosePrint depth="mid" size={12} rotate={-20} />
-              Kitchen closed. — Toque
-              <GoosePrint depth="mid" size={12} rotate={20} />
-            </span>
-          </footer>
-        </div>
+        <StepReceipt outcome={outcome} cooks={cooks} players={players} isVersus={isVersus} title={title} />
         <div className={`lc-receipt-stub ${saving ? "is-tearing" : ""}`}>
           <span className="lc-perforation" aria-hidden="true">
             <span>Tear here</span>
@@ -2408,61 +2245,6 @@ function ServiceDone({ outcome, cooks, isVersus, title, byId, dishOf, onExit, sa
         </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-// One player's result ticket: the same paper as the station tickets.
-function ResultTicket({ p, tie, margin, anyWinner }) {
-  const { cook, i, key, entry, longest, topDish, won } = p;
-  const winner = won && !tie;
-  return (
-    <div className={`lc-score-tile lc-result is-${key} ${winner ? "is-winner" : ""}`}>
-      {winner && <span className="lc-banner">Winner</span>}
-      <div className="lc-result-head">
-        <PlayerAvatar cook={cook} index={i} size={44} />
-        <span className="lc-result-id">
-          <span className="lc-result-name">{cook.name}</span>
-          {winner ? (
-            <span className="lc-meta">
-              by <Mono>{margin}</Mono> {margin === 1 ? "point" : "points"}
-            </span>
-          ) : tie ? (
-            <span className="lc-meta">Level on points</span>
-          ) : anyWinner ? (
-            <Stamp tone={key}>Good game</Stamp>
-          ) : null}
-        </span>
-      </div>
-      <div className="lc-result-stats">
-        <span className="lc-result-stat">
-          <span className="lc-result-num">{entry.doneCount}</span>
-          <span className="lc-meta">done</span>
-        </span>
-        <span className="lc-result-stat">
-          <span className="lc-result-num is-points">{entry.points}</span>
-          <span className="lc-meta">points</span>
-        </span>
-        <span className="lc-result-stat">
-          <span className="lc-result-num">{entry.skippedCount}</span>
-          <span className="lc-meta">skipped</span>
-        </span>
-      </div>
-      {longest && (
-        <div className="lc-result-fact">
-          <span className="lc-meta">Longest step</span>
-          <span className="lc-result-fact-row">
-            <span className="lc-result-fact-value">{longest.label}</span>
-            <Mono>{clock(longest.actualSec)}</Mono>
-          </span>
-        </div>
-      )}
-      {topDish && (
-        <div className="lc-result-fact">
-          <span className="lc-meta">Most points from</span>
-          <span className="lc-result-fact-value">{topDish}</span>
-        </div>
-      )}
     </div>
   );
 }

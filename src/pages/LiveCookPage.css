@@ -45,43 +45,11 @@
 @keyframes lc-goose-honk { 0%, 100% { transform: rotate(0deg) translateY(0); } 30% { transform: rotate(-5deg) translateY(-3px); } 65% { transform: rotate(3deg) translateY(0); } }
 @keyframes lc-fly { 0% { opacity: 0; transform: translate(0, 0) scale(0.9); } 16% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1.1); } }
 @keyframes lc-drawer-in { from { transform: translateX(100%); } to { transform: none; } }
-/* A stamp lands: a touch big, a touch small, then down. */
-@keyframes lc-stamp-in { 0% { opacity: 0; transform: scale(1.35); } 70% { opacity: 1; transform: scale(0.96); } 100% { opacity: 1; transform: scale(1); } }
 
 /* ---------------- shared bits ---------------- */
-.lc-meta { font-size: 13px; line-height: 18px; color: var(--ink-soft); }
-.lc-meta .mono { color: var(--ink); }
 /* Section labels: UP FOR GRABS · NOT YET · SERVICE DONE. */
 .lc-eyebrow-label { margin: 0; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
 
-/* Each player's colours, set once on whatever belongs to them. */
-.live-cook-page .is-a { --pc: var(--cook-a); --pc-ink: var(--cook-a-ink); --pc-bg: var(--cook-a-bg); --rule: var(--paper-rule-a); }
-.live-cook-page .is-b { --pc: var(--cook-b); --pc-ink: var(--cook-b-ink); --pc-bg: var(--cook-b-bg); --rule: var(--paper-rule-b); }
-
-/* PlayerAvatar — the chef bird the player picked, ringed in their
-   colour; the coloured circle with an initial is the fallback. */
-.lc-avatar {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  color: #fff;
-  font-weight: 700;
-  font-family: var(--kp-font);
-}
-.lc-avatar.is-a { background: var(--cook-a); }
-.lc-avatar.is-b { background: var(--cook-b); }
-.lc-avatar-20 { width: 20px; height: 20px; font-size: 11px; }
-.lc-avatar-24 { width: 24px; height: 24px; font-size: 12px; }
-.lc-avatar-28 { width: 28px; height: 28px; font-size: 13px; }
-.lc-avatar-32 { width: 32px; height: 32px; font-size: 14px; }
-.lc-avatar-40 { width: 40px; height: 40px; font-size: 17px; }
-.lc-avatar-44 { width: 44px; height: 44px; font-size: 18px; }
-.lc-avatar.has-chef { background-size: cover; background-position: center; box-shadow: 0 0 0 2px var(--cook-a); }
-.lc-avatar.has-chef.is-b { box-shadow: 0 0 0 2px var(--cook-b); }
-.lc-avatar-20.has-chef { box-shadow: 0 0 0 1.5px var(--cook-a); }
-.lc-avatar-20.has-chef.is-b { box-shadow: 0 0 0 1.5px var(--cook-b); }
 .lc-speaker-seg.is-selected .lc-avatar.has-chef { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85); }
 
 /* The agent — lavender, never a player color. */
@@ -97,30 +65,6 @@
 .lc-agent-avatar-20 { width: 20px; height: 20px; }
 .lc-offer-pulse { animation: lc-offer 4000ms ease-in-out infinite; }
 
-/* The goose's stamp: an outlined mono pill, tilted — Schedule's
-   APPROVED badge, in the ink of whoever it is about. */
-.lc-stamp {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  height: 26px;
-  padding: 0 11px;
-  border: 2px solid currentColor;
-  border-radius: 999px;
-  background: var(--paper);
-  color: var(--ink);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1;
-  font-weight: 500;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  rotate: -4deg;
-  animation: lc-stamp-in 260ms cubic-bezier(0.2, 1.5, 0.4, 1) both;
-}
-.lc-stamp.is-a, .lc-stamp.is-b { color: var(--pc-ink); }
-.lc-stamp.is-due { color: var(--warning-soft-ink); }
 
 /* What a step is worth: a dashed tag, neutral on the board until
    someone owns it, then in their colour. */
@@ -199,21 +143,7 @@
    three marks Conversation, Cooks and Schedule are built from. */
 .lc-title { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; flex: 1 1 auto; }
 .lc-title h1 { margin: 0; font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.01em; }
-.lc-subtitle { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; min-width: 0; font-size: 13px; line-height: 18px; color: var(--ink-soft); }
 .lc-title .ds-aside { padding-top: 4px; }
-.lc-mode-chip {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: var(--ds-chip);
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 500;
-}
 .lc-hud { display: flex; align-items: center; gap: 6px; flex: none; padding-top: 22px; }
 .ds-v4 .lc-hud .btn { min-height: 36px; padding: 0 14px; }
 .ds-v4 .lc-btn-plan { color: var(--ink-soft); }
@@ -972,116 +902,6 @@
 .lc-service-clock { font-size: 14px; font-weight: 500; }
 .lc-service-art { display: block; align-self: center; width: min(100%, 500px); height: auto; aspect-ratio: 2 / 1; margin: -4px 0 -6px; }
 
-/* Versus: ticket · final score · ticket. Both tickets are the same width
-   and top edge; the winner is marked by the banner and the tinted head. */
-.lc-results {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: stretch;
-  gap: 18px;
-  padding-top: 24px;
-}
-.lc-result {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 0 16px 14px 30px;
-  border: 1px solid var(--paper-edge);
-  border-radius: var(--radius-card);
-  background: var(--paper);
-  box-shadow: 0 2px 0 var(--paper-ledge);
-}
-.lc-result.is-a { rotate: -0.4deg; }
-.lc-result.is-b { rotate: 0.4deg; }
-.lc-result::before {
-  content: "";
-  position: absolute;
-  left: 9px;
-  top: 14px;
-  bottom: 14px;
-  width: 8px;
-  background-image: radial-gradient(circle, var(--paper-punch) 3px, var(--paper-edge) 3.4px, transparent 4px);
-  background-repeat: repeat-y;
-  background-size: 8px 22px;
-  pointer-events: none;
-}
-.lc-result-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 0 -16px 0 -30px;
-  padding: 18px 16px 12px 30px;
-  border-bottom: 3px solid var(--rule);
-  border-radius: var(--radius-card) var(--radius-card) 0 0;
-}
-.lc-result.is-winner .lc-result-head { background: var(--pc-bg); border-bottom-color: var(--pc); }
-.lc-result-id { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
-.lc-result-name {
-  max-width: 100%;
-  font-family: var(--font-play);
-  font-size: 40px;
-  line-height: 44px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--pc-ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.lc-result-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.lc-result-stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.lc-result-num { font-family: var(--font-play); font-size: 32px; line-height: 36px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-.lc-result-num.is-points { color: var(--pc-ink); }
-.lc-result-fact { display: flex; flex-direction: column; gap: 2px; padding-top: 10px; border-top: 1px solid var(--paper-edge); }
-.lc-result-fact-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.lc-result-fact-value { min-width: 0; font-size: 15px; line-height: 22px; font-weight: 500; }
-/* WINNER / DEAD HEAT — a ribbon with notched ends, in the goose's mono. */
-.lc-banner {
-  position: absolute;
-  z-index: 3;
-  left: -10px;
-  right: -10px;
-  top: -24px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--pc);
-  color: #fff;
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 50%, 100% 100%, 0 100%, 12px 50%);
-  animation: lc-stamp-in 320ms 200ms cubic-bezier(0.2, 1.5, 0.4, 1) both;
-}
-.lc-banner.is-tie { top: 0; left: -8px; right: -8px; background: var(--ink); color: var(--surface); }
-.lc-results.is-tie { padding-top: 44px; }
-.lc-final { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
-.lc-final-score { display: flex; align-items: baseline; gap: 6px; font-family: var(--font-play); font-size: 56px; line-height: 60px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-.lc-final-score .is-a { color: var(--cook-a-ink); }
-.lc-final-score .is-b { color: var(--cook-b-ink); }
-.lc-final-colon { color: var(--ink-faint); }
-
-/* Co-op: "Dinner's up", the night against the plan, one shared bar. */
-.lc-coop-result { display: flex; flex-direction: column; gap: 14px; }
-.lc-coop-title { margin: 0; font-family: var(--font-play); font-size: 40px; line-height: 44px; font-weight: 800; letter-spacing: -0.02em; }
-.lc-coop-delta { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-top: -6px; }
-.lc-coop-delta-num { font-family: var(--font-play); font-size: 56px; line-height: 60px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--success); }
-.lc-coop-delta-num.is-over { color: var(--warning-soft-ink); }
-.lc-coop-times { display: flex; flex-direction: column; font-size: 13px; line-height: 18px; color: var(--ink-soft); }
-.lc-coop-times .mono { color: var(--ink); }
-.lc-share { display: flex; flex-direction: column; gap: 8px; }
-.lc-share-legend { display: flex; justify-content: space-between; gap: 16px; }
-.lc-share-who { display: inline-flex; align-items: center; gap: 6px; }
-.lc-share-who.is-b { flex-direction: row-reverse; }
-.lc-share-name { font-size: 16px; font-weight: 700; }
-.lc-share-n { font-size: 16px; font-weight: 500; color: var(--pc-ink); }
-.lc-share-bar { display: flex; gap: 2px; height: 10px; border-radius: 999px; background: var(--line); overflow: hidden; }
-.lc-share-bar > span { flex-basis: 0; background: var(--pc); }
 .lc-service-error {
   width: 100%;
   margin: 0;
@@ -1093,29 +913,10 @@
   line-height: 22px;
 }
 
-/* The receipt: cream paper with a torn edge, one line per step with a
-   dotted leader, the finisher's avatar, the time and the points. It
-   matches the results column's height and scrolls inside. */
+/* The receipt (components/ServiceResults.css) matches the results
+   column's height here and scrolls inside. */
 .lc-service-steps-cell { position: relative; min-height: 460px; }
-/* The roll: the receipt with its stub still attached. A hairline that
-   follows the torn edge and the stub's notches too — a border can't. */
-.lc-receipt-roll {
-  position: absolute;
-  inset: 0 0 10px;
-  display: flex;
-  flex-direction: column;
-  filter: drop-shadow(1px 0 0 var(--paper-edge)) drop-shadow(-1px 0 0 var(--paper-edge)) drop-shadow(0 1px 0 var(--paper-edge)) drop-shadow(0 -1px 0 var(--paper-edge));
-}
-.lc-receipt {
-  position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 18px 20px 14px;
-  border-radius: var(--radius-card) var(--radius-card) 0 0;
-  background: var(--paper);
-}
+.lc-service-steps-cell .lc-receipt-roll { position: absolute; inset: 0 0 10px; }
 /* The tear-off stub: a perforated strip of the same paper, a notch
    punched in at each end of the perforation, holding the way on. It
    tips away as the card is being saved. */
@@ -1158,35 +959,6 @@
   color: var(--ink-faint);
 }
 .lc-receipt-stub .lc-service-error { padding: 10px 12px; font-size: 13px; line-height: 18px; }
-.lc-receipt-roll::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -10px;
-  height: 10px;
-  background:
-    linear-gradient(-45deg, transparent 7px, var(--paper) 0) 0 0 / 14px 10px repeat-x,
-    linear-gradient(45deg, transparent 7px, var(--paper) 0) 0 0 / 14px 10px repeat-x;
-}
-.lc-receipt-head { flex: none; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px dashed var(--paper-dash); }
-.lc-receipt-heading { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.lc-receipt-title { margin: 0; font-size: 20px; line-height: 26px; font-weight: 700; }
-.lc-step-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; list-style: none; margin: 0; padding: 8px 0; }
-.lc-step-row { display: flex; align-items: center; gap: 10px; min-height: 32px; font-size: 14px; line-height: 20px; }
-.lc-step-row-label { flex: 0 1 auto; min-width: 0; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lc-leader { flex: 1 1 12px; min-width: 12px; align-self: center; height: 0; margin-top: 8px; border-bottom: 2px dotted var(--paper-dash); }
-.lc-step-row-time { flex: none; font-size: 13px; }
-.lc-step-row-pts { flex: none; width: 3.5ch; text-align: right; font-size: 13px; color: var(--pc-ink, var(--ink-soft)); }
-.lc-step-row.is-skipped .lc-step-row-label { color: var(--ink-soft); text-decoration: line-through; }
-.lc-step-row.is-skipped .lc-step-row-time { color: var(--ink-soft); }
-.lc-receipt-dot { flex: none; width: 20px; height: 20px; border: 1.5px dashed var(--paper-dash); border-radius: 50%; }
-.lc-receipt-foot { flex: none; display: flex; flex-direction: column; gap: 6px; padding-top: 12px; border-top: 1px dashed var(--paper-dash); }
-.lc-receipt-total { display: flex; align-items: center; gap: 10px; font-size: 16px; line-height: 22px; font-weight: 700; }
-.lc-receipt-total-label { flex: 1 1 auto; min-width: 0; }
-.lc-receipt-total-value { font-size: 16px; font-weight: 500; color: var(--pc-ink, var(--ink)); }
-.lc-receipt-total-value.is-under { color: var(--success); }
-.lc-receipt-sign { align-self: center; display: inline-flex; align-items: center; gap: 8px; padding-top: 6px; font-size: 13px; color: var(--ink-soft); }
 
 /* ---------------- no run ---------------- */
 .lc-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; padding: 24px 0; }
@@ -1241,14 +1013,9 @@
   .lc-footer .btn-lg { flex: 1 1 auto; min-width: 0; }
 
   .lc-service { grid-template-columns: minmax(0, 1fr); gap: 28px; }
-  .lc-results { grid-template-columns: minmax(0, 1fr); padding-top: 28px; }
-  .lc-results.is-tie { padding-top: 44px; }
-  .lc-final { order: -1; }
-  .lc-result.is-a, .lc-result.is-b { rotate: none; }
-  .lc-result.is-winner { margin-top: 24px; }
   .lc-service-steps-cell { min-height: 0; }
-  .lc-receipt-roll { position: static; margin-bottom: 10px; }
-  .lc-receipt { max-height: 70vh; }
+  .lc-service-steps-cell .lc-receipt-roll { position: relative; inset: auto; margin-bottom: 10px; }
+  .lc-service-steps-cell .lc-receipt { max-height: 70vh; }
 }
 
 /* ---------------- reduced motion ----------------

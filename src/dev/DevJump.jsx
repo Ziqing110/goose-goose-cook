@@ -9,6 +9,7 @@
 //
 //   /jump/schedule   Schedule, no mode picked yet
 //   /jump/coop       Live cook, Co-op, run already started
+//   /jump/coop-done  Live cook, Co-op, completed results screen
 //   /jump/versus     Live cook, Versus, run already started (no countdown)
 //
 // Seeding starts a fresh session, which abandons any run in progress —
@@ -29,6 +30,7 @@ import { createRun } from "../utils/liveCook.js";
 const TARGETS = {
   schedule: { mode: null, path: "/session/schedule" },
   coop: { mode: "cooperation", path: "/session/live-cook" },
+  "coop-done": { mode: "cooperation", path: "/session/live-cook", finished: true },
   versus: { mode: "competition", path: "/session/live-cook" },
 };
 
@@ -41,6 +43,37 @@ async function startRun(session, kitchens, mode) {
   const opening = computeOpeningAssignment(nodes, session.cooks, kitchenProfile);
   const run = createRun({ nodes, mode, schedule, opening, now: new Date() });
   await sessionsApi.updateSession(session.id, { mode, run });
+  return { run, nodes };
+}
+
+// A deterministic completed Co-op run for visual QA of Service done. It
+// follows the computed plan's cook and timing assignments, but does not make
+// a tester tap through twenty task cards just to reach the results screen.
+function completeCoopRun(run, nodes) {
+  const durationSec = run.plan?.makespanSec || 1;
+  const startedMs = Date.now() - durationSec * 1000;
+  const cookFor = Object.entries(run.plan?.order || {}).flatMap(([cookId, ids]) =>
+    ids.map((id) => [id, cookId]),
+  );
+  const cookByStep = Object.fromEntries(cookFor);
+  const steps = Object.fromEntries(nodes.map((node) => {
+    const startSec = run.plan?.startSecById?.[node.id] || 0;
+    const stepDuration = node.estimated_duration_sec || 1;
+    return [node.id, {
+      ...run.steps[node.id],
+      status: "done",
+      cookId: cookByStep[node.id] || null,
+      startedAt: new Date(startedMs + startSec * 1000).toISOString(),
+      endedAt: new Date(startedMs + (startSec + stepDuration) * 1000).toISOString(),
+      source: "fixture",
+    }];
+  }));
+  return {
+    ...run,
+    startedAt: new Date(startedMs).toISOString(),
+    endedAt: new Date(startedMs + durationSec * 1000).toISOString(),
+    steps,
+  };
 }
 
 // What App.jsx's route guards would bounce on, checked here so a
@@ -83,7 +116,11 @@ export default function DevJump() {
       if (spec.mode) {
         setStatus("Starting the run…");
         const [session, kitchens] = await Promise.all([sessionsApi.getSession(sessionId), kitchensApi.listKitchens()]);
-        await startRun(session, kitchens, spec.mode);
+        const { run, nodes } = await startRun(session, kitchens, spec.mode);
+        if (spec.finished) {
+          setStatus("Finishing the run…");
+          await sessionsApi.updateSession(sessionId, { run: completeCoopRun(run, nodes) });
+        }
       }
       // Read back what the app will hydrate — the active session, not
       // the one just written — and refuse to jump if a guard would bounce.

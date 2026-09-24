@@ -255,6 +255,23 @@ body:has(.app-shell.ds-v4) { background: var(--kp-bg); }
   color: var(--ink-soft);
 }
 
+/* The run's facts under a title: the dish, the clock, the mode chip. */
+.ds-v4 .ds-run-facts { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; min-width: 0; font-size: 13px; line-height: 18px; color: var(--ink-soft); }
+.ds-v4 .ds-run-facts .mono { color: var(--ink); font-size: 14px; font-weight: 500; }
+.ds-v4 .ds-mode-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--ds-chip);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+
 /* A crooked hand-drawn underline. The SVG stretches to the width of
    whatever it is wrapped around (preserveAspectRatio="none"), so the
    mark is only ever as long as the words. It sits below the text and
