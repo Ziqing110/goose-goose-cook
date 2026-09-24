@@ -38,6 +38,11 @@ export function updateSession(id, patch, { keepalive = false } = {}) {
   return request(`/${id}`, { method: "PATCH", body: JSON.stringify(patch), keepalive });
 }
 
+/** Drop the recipes and shared steps a session's answers produced. */
+export function clearSessionPlan(sessionId) {
+  return request(`/${sessionId}/plan`, { method: "DELETE" });
+}
+
 export function createRecipeInstance(sessionId, recipe) {
   return request(`/${sessionId}/recipes`, { method: "POST", body: JSON.stringify(recipe) });
 }

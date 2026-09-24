@@ -30,8 +30,13 @@ export default function ApprovedPanel({ draft, approved, onRevise }) {
         <button type="button" className="btn btn-ghost" onClick={onRevise}>
           &larr; Revise
         </button>
+        {/* Named for where it lands. It used to read "Continue to
+            schedule" while going to the cooks, which is the step before
+            scheduling — so the button described a page it does not open,
+            and saying its own words out loud sent the voice agent at the
+            schedule route, which the session guards refuse. */}
         <button type="button" className="btn btn-primary" onClick={() => navigate("/session/voice-binding")}>
-          Continue to schedule &rarr;
+          Continue to the cooks &rarr;
         </button>
       </div>
     </section>

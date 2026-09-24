@@ -21,14 +21,20 @@ import "./ChefWorkingScreen.css";
 // 26 cells wide, the width the design's ticket is drawn for.
 const BAR_CELLS = 26;
 
-// The checklist lines and the fraction of the wait each one starts at.
-// A caller can pass its own; these are the recipe-generation ones.
+// The checklist lines and the point on the bar each one starts at.
+//
+// Generation is one request with no progress events — the server runs
+// its passes and answers once — so these are an honest guess at the
+// shape of the wait, not a report of it. The last line gets the widest
+// span on purpose: checking the graph over is the long pole, and giving
+// it a sliver left the screen sitting on a finished-looking checklist
+// for half a minute. A caller can pass its own.
 const DEFAULT_TASKS = [
   { at: 0, line: "Reading what you told me." },
-  { at: 0.16, line: "Working out the steps." },
-  { at: 0.42, line: "Counting what it needs." },
-  { at: 0.68, line: "Planning around your burners." },
-  { at: 0.86, line: "Checking it over. Twice." },
+  { at: 0.15, line: "Working out the steps." },
+  { at: 0.35, line: "Counting what it needs." },
+  { at: 0.55, line: "Planning around your burners." },
+  { at: 0.75, line: "Checking it over. Twice." },
 ];
 
 /** Elapsed seconds since mount, ticking 10× a second, frozen once done. */
@@ -54,23 +60,35 @@ export default function ChefWorkingScreen({
   orderNote,
   tasks = DEFAULT_TASKS,
   quote,
-  // Roughly how long the real work takes. Only paces the bar — the bar
-  // never reaches the end on its own, `done` is what completes it.
-  workSeconds = 48,
+  // Roughly how long the real work takes: generation is measured at
+  // about 29s for three dishes and 10s on the per-dish fallback (see
+  // api/recipes.js), against a 150s ceiling. Only paces the bar — the
+  // bar never reaches the end on its own, `done` is what completes it.
+  workSeconds = 30,
 }) {
   const t = useElapsed(done);
 
-  // Ease out, so the bar moves honestly at the start and slows as it
-  // runs past the estimate rather than sitting pinned at the end. The
-  // ceiling goes on after the easing, or the ease lifts it back to 99%
-  // and the ticket claims to be finished while the chef is still going.
-  let p = done ? 1 : 1 - Math.pow(1 - Math.min(1, t / workSeconds), 1.35);
-  p = done ? 1 : Math.min(0.96, p);
+  // Approach the end without ever arriving: 90% at the estimate, 99% at
+  // twice it, 1 never. Only finishing gets you to 1.
+  //
+  // The previous curve hit a hard 96% ceiling and stopped, which is what
+  // a wait that runs long actually looked like — a frozen bar next to a
+  // countdown reading "1 second left" for another half a minute. This
+  // one always has somewhere left to go, so an overrun reads as slow
+  // rather than stuck.
+  const p = done ? 1 : 1 - Math.exp((-t * Math.LN10) / workSeconds);
 
   // The line the chef is on: the last one whose threshold has passed.
   const current = done ? tasks.length : tasks.reduce((a, x, i) => (p >= x.at ? i : a), 0);
-  const secsLeft = Math.max(1, Math.round((1 - p) * workSeconds));
-  const filled = Math.round(p * BAR_CELLS);
+  // Counted from the estimate itself rather than from the eased bar, so
+  // it is a real countdown while it lasts. Once it is spent, saying a
+  // number would be inventing one.
+  const secsLeft = Math.ceil(workSeconds - t);
+  const overrun = secsLeft <= 0;
+  // The last cell and the hundredth percent belong to finishing, so a
+  // long wait can creep right up to the end without ever claiming it.
+  const filled = done ? BAR_CELLS : Math.min(BAR_CELLS - 1, Math.round(p * BAR_CELLS));
+  const pct = done ? 100 : Math.min(99, Math.round(p * 100));
 
   return (
     <section className={`page chef-working ${done ? "is-done" : ""}`} aria-live="polite" aria-busy={!done}>
@@ -141,14 +159,16 @@ export default function ChefWorkingScreen({
               aria-label={done ? doneLive : live}
               aria-valuemin={0}
               aria-valuemax={100}
-              aria-valuenow={Math.round(p * 100)}
+              aria-valuenow={pct}
             >
               {"█".repeat(filled)}
               {"░".repeat(BAR_CELLS - filled)}
             </span>
             <div className="chef-working-bar-row">
-              <span className="chef-working-pct">{Math.round(p * 100)}%</span>
-              <span className="chef-working-eta">{done ? "Ready" : `${secsLeft} second${secsLeft === 1 ? "" : "s"} left`}</span>
+              <span className="chef-working-pct">{pct}%</span>
+              <span className="chef-working-eta">
+                {done ? "Ready" : overrun ? "Any moment now" : `${secsLeft} second${secsLeft === 1 ? "" : "s"} left`}
+              </span>
             </div>
           </div>
 

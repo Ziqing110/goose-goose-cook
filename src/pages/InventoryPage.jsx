@@ -11,6 +11,7 @@
 // full width and the rail comes back as a panel over it, which is also
 // where a step is edited or added.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { useSessionRecipes } from "../state/useSessionRecipes.js";
 import { mergeRecipesForDisplay, cyclicDependencyIds, cloneGraph } from "../utils/graphLayout.js";
@@ -233,6 +234,7 @@ export default function InventoryPage() {
   const session = state.session;
   const { recipes, sharedSteps = [], outMaterialIds = [] } = session;
   const { catalog, catalogError, retryCatalog, generating } = useSessionRecipes();
+  const navigate = useNavigate();
   const [tab, setTab] = useState("ingredients");
   // The board panel: null, { mode: "impact" }, { mode: "edit", id } or
   // { mode: "add" }. Which card is open is view state — persisting it
@@ -383,7 +385,7 @@ export default function InventoryPage() {
     setPanel(null);
   };
 
-  // The voice equivalent of the "Approve and schedule" button, in the
+  // The voice equivalent of the "Approve the plan" button, in the
   // same words printed on it. Approving locks the graph, so it asks
   // first — and it refuses while a step is blocked, exactly as the
   // button does when disabled. A voice command that quietly does
@@ -708,11 +710,19 @@ export default function InventoryPage() {
         label: "Back to editing.",
         run: () => revise(),
       });
+      // What the "Continue to the cooks" button does, said out loud. It
+      // lands on the cooks, which is the next step of the session — the
+      // schedule is the one after that.
+      commands.push({
+        phrases: INVENTORY_VOICE.continueOn,
+        label: "On to the cooks.",
+        run: () => navigate("/session/voice-binding"),
+      });
     }
 
     return registerVoiceCommands(commands);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasDishes, catalog, approved, boardNodes, nodeById, dishIsUndoable, blockedIds, showEquipment, kitchenProfile, lackingKey, zoomPct]);
+  }, [hasDishes, catalog, approved, boardNodes, nodeById, dishIsUndoable, blockedIds, showEquipment, kitchenProfile, lackingKey, zoomPct, navigate]);
 
   // A guessed step reference — an "open X" that came back close but not
   // exact, or a "before X"/"between X and Y" task position. Same
@@ -1212,9 +1222,12 @@ export default function InventoryPage() {
                   Remove the blocked {blockedIds.length === 1 ? "step" : "steps"}
                 </button>
               )}
+              {/* No arrow: it does not take you anywhere. It writes the
+                  approved graphs, and the approved panel opens underneath
+                  carrying the button that does go onward. */}
               {!approved && (
                 <button type="button" className="btn btn-primary btn-lg" onClick={approve} disabled={dishIsUndoable}>
-                  Approve and schedule &rarr;
+                  Approve the plan
                 </button>
               )}
             </div>

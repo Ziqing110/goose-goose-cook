@@ -108,11 +108,11 @@ await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
 await page.waitForTimeout(400);
 await shot("inventory-board");
 
-await click(/Approve and schedule/);
+await click(/Approve the plan/);
 await page.waitForTimeout(800);
 await shot("inventory-approved");
 
-await click(/Continue to schedule/);
+await click(/Continue to the cooks/);
 await page.waitForTimeout(600);
 await shot("voice-binding-empty");
 

@@ -43,24 +43,53 @@ const BOX = { w: 160, h: 204 };
 const MARGIN = 16;
 const POS_KEY = "gooseVoice.pos";
 
-/** Last dragged position, clamped into the current window. */
-function readPos() {
-  const fallback = () => ({
-    x: Math.max(MARGIN, window.innerWidth - BOX.w - MARGIN),
-    y: Math.max(MARGIN, window.innerHeight - BOX.h - MARGIN),
-  });
-  try {
-    const saved = JSON.parse(localStorage.getItem(POS_KEY));
-    if (!saved || typeof saved.x !== "number" || typeof saved.y !== "number") return fallback();
-    return {
-      x: Math.max(MARGIN, Math.min(window.innerWidth - BOX.w - MARGIN, saved.x)),
-      y: Math.max(MARGIN, Math.min(window.innerHeight - BOX.h - MARGIN, saved.y)),
-    };
-  } catch {
-    return fallback();
-  }
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+// Where the goose sits is remembered as a distance from the two edges it
+// is nearest, not as pixels from the top-left.
+//
+// Pixels do not survive a resize. A goose parked in the bottom-right is
+// stranded in the middle when the window grows, and clamping it back
+// into a window that shrank overwrites the position it had — so growing
+// the window again never brings it back. It crept toward the top-left a
+// little on every resize. An anchor keeps it in its corner, and clamping
+// the anchor-derived pixels changes nothing that is stored.
+function anchorFrom({ x, y }) {
+  const right = x + BOX.w / 2 > window.innerWidth / 2;
+  const bottom = y + BOX.h / 2 > window.innerHeight / 2;
+  return {
+    right,
+    bottom,
+    dx: Math.max(0, right ? window.innerWidth - (x + BOX.w) : x),
+    dy: Math.max(0, bottom ? window.innerHeight - (y + BOX.h) : y),
+  };
 }
 
+function posFrom(a) {
+  const maxX = Math.max(MARGIN, window.innerWidth - BOX.w - MARGIN);
+  const maxY = Math.max(MARGIN, window.innerHeight - BOX.h - MARGIN);
+  return {
+    x: clamp(a.right ? window.innerWidth - BOX.w - a.dx : a.dx, MARGIN, maxX),
+    y: clamp(a.bottom ? window.innerHeight - BOX.h - a.dy : a.dy, MARGIN, maxY),
+  };
+}
+
+const DEFAULT_ANCHOR = { right: true, bottom: true, dx: MARGIN, dy: MARGIN };
+
+/** The anchor last dragged to, or the bottom-right corner. */
+function readAnchor() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(POS_KEY));
+    if (saved && typeof saved.dx === "number" && typeof saved.dy === "number") {
+      return { right: Boolean(saved.right), bottom: Boolean(saved.bottom), dx: saved.dx, dy: saved.dy };
+    }
+    // A position stored by an earlier build, in pixels.
+    if (saved && typeof saved.x === "number" && typeof saved.y === "number") return anchorFrom(saved);
+  } catch {
+    /* private window, or storage is off — the goose takes its corner */
+  }
+  return DEFAULT_ANCHOR;
+}
 export default function GooseVoiceAgent({
   state = "idle",
   tag,
@@ -76,7 +105,10 @@ export default function GooseVoiceAgent({
   onToggleSubtitles,
 }) {
   const [engaged, setEngaged] = useState(false);
-  const [pos, setPos] = useState(readPos);
+  // The anchor is the stored truth; `pos` is it resolved against the
+  // window this render.
+  const anchor = useRef(readAnchor());
+  const [pos, setPos] = useState(() => posFrom(anchor.current));
   const [dragging, setDragging] = useState(false);
   const leaveTimer = useRef(null);
   const drag = useRef(null);
@@ -123,8 +155,9 @@ export default function GooseVoiceAgent({
     if (d.moved) {
       setDragging(false);
       setPos((p) => {
+        anchor.current = anchorFrom(p);
         try {
-          localStorage.setItem(POS_KEY, JSON.stringify(p));
+          localStorage.setItem(POS_KEY, JSON.stringify(anchor.current));
         } catch {
           /* private window, or storage is full — the goose just forgets */
         }
@@ -151,22 +184,27 @@ export default function GooseVoiceAgent({
     [onPointerMove, onPointerUp],
   );
 
-  // Keep the goose on screen when the window resizes under it.
+  // A resize re-resolves the anchor rather than nudging the pixels, so
+  // the goose stays in the corner it was left in and a window that grows
+  // back puts it where it was.
   useEffect(() => {
-    const onResize = () =>
-      setPos((p) => ({
-        x: Math.max(MARGIN, Math.min(window.innerWidth - BOX.w - MARGIN, p.x)),
-        y: Math.max(MARGIN, Math.min(window.innerHeight - BOX.h - MARGIN, p.y)),
-      }));
+    const onResize = () => setPos(posFrom(anchor.current));
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
   // The bubble flips to whichever side has room.
   const onRight = pos.x + BOX.w / 2 > window.innerWidth / 2;
-  // Idle and warning always speak up: one says how to start, the other
-  // says the mic is gone. Neither is something subtitles should hide.
-  const showBubble = !dragging && Boolean(line) && (subtitlesOn || state === "idle" || state === "warning");
+  // Subtitles off means off, in every state. Idle and warning used to
+  // override it — one says how to start talking, the other says the mic
+  // is gone, and neither seemed like a thing to hide. But idle is the
+  // resting state, the one on screen almost all the time, so the effect
+  // was that pressing CC did nothing at all and the control looked dead.
+  // A toggle that ignores you on the screen you are usually looking at
+  // is worse than one that occasionally hides something useful. What the
+  // goose is doing still reads from its pose, and the line is still
+  // announced below for anyone not looking at it.
+  const showBubble = !dragging && Boolean(line) && subtitlesOn;
 
   return (
     <div
@@ -180,6 +218,15 @@ export default function GooseVoiceAgent({
       role="status"
       aria-label="Voice agent status"
     >
+      {/* With the bubble hidden there is nothing on screen to read, and
+          a mic that has stopped listening still has to be able to say
+          so. This carries the same words to a screen reader either way. */}
+      {!showBubble && Boolean(line) && (
+        <span className="goose-sr-only" role="status">
+          {tag ?? spec.tag}: {line}
+        </span>
+      )}
+
       {showBubble && (
         <div className={`goose-bubble ${onRight ? "is-left" : "is-right"}`}>
           <span className="goose-bubble-tab mono" style={{ background: spec.tab, color: spec.tabFg }}>

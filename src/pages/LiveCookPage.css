@@ -279,7 +279,7 @@
   .lc-cards {
     grid-template-rows: auto minmax(0, 1fr) auto auto;
     row-gap: 0;
-    min-height: clamp(360px, calc(100vh - var(--lc-chrome-above, 287px) - var(--voice-bar-height) - 16px), 480px);
+    min-height: clamp(360px, calc(100vh - var(--lc-chrome-above, 287px) - 16px), 480px);
   }
   .lc-cards > .lc-card { display: grid; grid-template-rows: subgrid; grid-row: span 4; row-gap: 0; }
   .lc-cards:not(:has(.lc-cooking, .lc-cooking-empty)) { grid-template-rows: auto minmax(0, 1fr) auto; }

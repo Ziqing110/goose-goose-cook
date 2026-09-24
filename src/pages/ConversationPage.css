@@ -14,7 +14,7 @@
 
 /* 32px between the answer row and the fixed VoiceBar (the shell's
    default is 28px), so Send never sits right on top of Mute. */
-.app-shell.ds-v4:has(.conversation-page) { padding-bottom: calc(var(--voice-bar-height) + 32px); }
+.app-shell.ds-v4:has(.conversation-page) { padding-bottom: 32px; }
 
 /* The split spans the shell's content column — the same width Home's
    panels use, so moving between the two pages doesn't shift the

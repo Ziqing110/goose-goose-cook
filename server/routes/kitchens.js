@@ -21,6 +21,18 @@ const updateStmt = db.prepare(`
 `);
 const deleteStmt = db.prepare("DELETE FROM kitchens WHERE id = ?");
 
+// Two kitchens with the same name cannot be told apart — not in the
+// picker, and not by voice, where a kitchen is chosen by saying a word
+// that belongs to exactly one of them (utils/kitchenPick.js). A second
+// "Home kitchen" makes that word ambiguous and the spoken pick stops
+// working for BOTH. Compared case-insensitively and trimmed, because
+// "Home Kitchen" and "home kitchen " are the same kitchen to everyone
+// except a string comparison.
+const nameTakenStmt = db.prepare(
+  "SELECT id FROM kitchens WHERE lower(trim(name)) = lower(trim(?)) AND id != ?"
+);
+const nameIsTaken = (name, selfId = "") => Boolean(nameTakenStmt.get(name, selfId));
+
 kitchensRouter.get("/", (req, res) => {
   res.json(listStmt.all().map(toApi));
 });
@@ -29,6 +41,9 @@ kitchensRouter.post("/", (req, res) => {
   const { name, burners, hasWok, hasOven, cuttingBoards, pots } = req.body;
   if (!name || typeof name !== "string" || !name.trim()) {
     return res.status(400).json({ error: "name is required" });
+  }
+  if (nameIsTaken(name)) {
+    return res.status(409).json({ error: `You already have a kitchen called “${name.trim()}”.` });
   }
   const now = new Date().toISOString();
   const row = {
@@ -51,6 +66,9 @@ kitchensRouter.put("/:id", (req, res) => {
   if (!existing) return res.status(404).json({ error: "kitchen not found" });
 
   const { name, burners, hasWok, hasOven, cuttingBoards, pots } = req.body;
+  if (name !== undefined && nameIsTaken(String(name), existing.id)) {
+    return res.status(409).json({ error: `You already have a kitchen called “${String(name).trim()}”.` });
+  }
   const row = {
     id: existing.id,
     name: name !== undefined ? String(name).trim() : existing.name,

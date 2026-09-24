@@ -199,6 +199,26 @@ sessionsRouter.delete("/:id", (req, res) => {
   res.status(204).end();
 });
 
+// Everything the conversation produced, without ending the session.
+//
+// Starting the conversation over has to discard the plan too: recipes
+// are generated from the answers once, and the client will not generate
+// again while any exist. Clearing them in the browser alone was not
+// enough — the rows stayed here, so a reload brought the old menu back
+// and a freshly generated one would have sat alongside it. The session,
+// its kitchen and its cooks all survive; only what the answers made goes.
+const clearPlanForSession = db.transaction((id) => {
+  deleteSharedStepsForSessionStmt.run(id);
+  deleteRecipesForSessionStmt.run(id);
+});
+
+sessionsRouter.delete("/:id/plan", (req, res) => {
+  const existing = getSessionStmt.get(req.params.id);
+  if (!existing) return res.status(404).json({ error: "session not found" });
+  clearPlanForSession(existing.id);
+  res.status(204).end();
+});
+
 const insertRecipeStmt = db.prepare(`
   INSERT INTO recipe_instances (id, session_id, template_id, position, draft_json, working_json, approved_json, custom_materials_json, updated_at)
   VALUES (@id, @session_id, @template_id, @position, @draft_json, @working_json, @approved_json, @custom_materials_json, @updated_at)
