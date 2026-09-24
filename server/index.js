@@ -12,10 +12,25 @@ import { agentRouter } from "./routes/agent.js";
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+// In dev the browser talks to Vite's proxy, same origin, so CORS never
+// comes up and an empty list means "allow everything". In the Pages build
+// the page is on github.io and this API is elsewhere, so the origin has to
+// be named: scheme and host only — a path like /goose-goose-cook is not
+// part of an origin and would make the header never match.
+//
+// This is a speed bump, not a gate: Origin is trivially forged outside a
+// browser. What actually bounds the bill is the session cap in
+// routes/voice.js.
+const allowed = (process.env.ALLOWED_ORIGINS || "").split(",").map((o) => o.trim()).filter(Boolean);
+app.use(cors(allowed.length ? { origin: allowed } : {}));
 // Summary photos travel as base64 data URLs, which blow past the default
 // 100kb body limit.
 app.use(express.json({ limit: "12mb" }));
+
+// Cheap liveness check. Render polls this to decide the service is up,
+// and it is what to point a warm-up ping at before a demo — it touches
+// no model and costs nothing, unlike every other route here.
+app.get("/api/health", (req, res) => res.json({ ok: true, key: Boolean(process.env.ASSEMBLYAI_API_KEY) }));
 
 app.use("/api/kitchens", kitchensRouter);
 app.use("/api/recipe-templates", recipeTemplatesRouter);

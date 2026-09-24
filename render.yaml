@@ -1,0 +1,35 @@
+# Render blueprint for the API half of the demo. The other half (the built
+# front end) goes to GitHub Pages; see DEPLOY.md.
+#
+# Using this instead of filling the dashboard in by hand keeps the build
+# command, the runtime and the non-secret config in the repo, where they
+# are reviewable and survive someone recreating the service.
+#
+# Render > New > Blueprint, point it at this repo. The only thing it will
+# ask for is ASSEMBLYAI_API_KEY.
+services:
+  - type: web
+    name: goose-goose-cook
+    runtime: node
+    plan: free
+    region: oregon
+    # Production deps only. The dev tree carries playwright and vite,
+    # neither of which the API runs — skipping them is a faster cold
+    # build, which matters on the free plan.
+    buildCommand: npm ci --omit=dev
+    startCommand: npm run server
+    healthCheckPath: /api/health
+    envVars:
+      # The only secret. sync:false means Render prompts for it rather
+      # than reading it from here — it must never be committed.
+      - key: ASSEMBLYAI_API_KEY
+        sync: false
+      # Which browser origin may call this API. Scheme and host ONLY:
+      # a path like /goose-goose-cook is not part of an origin and would
+      # make the check never match.
+      - key: ALLOWED_ORIGINS
+        value: https://ziqing110.github.io
+      # Must match .node-version / package.json engines. The start script
+      # uses --env-file-if-exists, which does not exist before Node 22.
+      - key: NODE_VERSION
+        value: "24"

@@ -10,6 +10,7 @@
 // open, not the audio sent, so an idle connection is a real charge.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { audioTap } from "../voice/audioTap.js";
+import { API_ORIGIN } from "../api/client.js";
 
 const WS_BASE = "wss://streaming.assemblyai.com/v3/ws";
 const CHUNK_MS = 50;
@@ -30,9 +31,28 @@ const TERMINATE_GRACE_MS = 3000;
 // this app is built for: an extractor fan sits above any sane audio
 // threshold indefinitely, so a loud empty kitchen never went idle and
 // never stopped billing.
+// Default only. Pages override it via config.idleMs, because the right
+// quiet period is not the same everywhere: mid-cook someone can silently
+// watch a pan for a long time, while a page that only takes commands has
+// no reason to hold a billing socket open for someone who has left.
 const IDLE_MS = 120_000;
 const IDLE_SERVER_BACKSTOP_S = 300;
 const IDLE_CHECK_MS = 5_000;
+
+// A socket can close without anyone asking it to: the session hits its
+// max duration, wifi drops, the server restarts. Until this existed that
+// was silent — onclose tore the audio down and set status idle, so the
+// mic simply stopped working mid-cook with nothing on screen to say so.
+//
+// Each attempt is a FULL reconnect, token fetch included, because
+// AssemblyAI tokens are single-use: reusing one is an instant reject.
+const MAX_RETRIES = 5;
+const RETRY_BASE_MS = 500;
+const RETRY_CAP_MS = 8_000;
+// Below this, a connection counts as flapping rather than working, so
+// its attempt budget is NOT refilled. Without this an open/close loop
+// would retry forever, opening a billable session each time.
+const STABLE_MS = 10_000;
 
 // Background noise can read as speech to the VAD, and a turn that never
 // stops hearing "speech" never reaches the silence that would end it. It
@@ -50,12 +70,26 @@ const EMPTY_TURN_MS = 9_000;
  * @param {boolean}  options.enabled      open the connection when true
  * @param {function} options.onTurn       (turn) => void, on each finalized turn
  * @param {object}   options.config       connection params (see buildParams)
- * @param {function} options.onError      (message) => void
- * @param {function} options.onIdle       () => void, after IDLE_MS of no speech
+ * @param {function} options.onError      (message, {fatal}) => void. fatal
+ *   means listening has stopped for good and only the user can restart it;
+ *   otherwise the hook is still trying and the socket may yet recover.
+ * @param {function} options.onIdle       () => void, after config.idleMs of no speech
+ *
+ * `config.idleMs` overrides how long "no words heard" runs before onIdle.
+ *
+ * status is idle|connecting|live|reconnecting|closing|error. `reconnecting`
+ * means the socket dropped on its own and is being reopened; the caller
+ * should say so rather than look muted.
  */
 export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, onIdle } = {}) {
   const [status, setStatus] = useState("idle"); // idle|connecting|live|closing|error
   const [partial, setPartial] = useState("");
+  // Speech was detected but has not resolved into words yet. The API
+  // sends SpeechStarted before a turn's first transcript, and it only
+  // fires once the model has an actual transcript, so it means "someone
+  // is talking", not "the room is loud". It exists so the UI can say
+  // "heard you" in ~300ms instead of waiting for text.
+  const [hearing, setHearing] = useState(false);
   const [level, setLevel] = useState(0);
 
   const wsRef = useRef(null);
@@ -63,6 +97,15 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
   const nodeRef = useRef(null);
   const streamRef = useRef(null);
   const terminateRef = useRef(null);
+  const retryTimerRef = useRef(null);
+  const retriesRef = useRef(0);
+  const openedAtRef = useRef(0);
+  // A close we should not fight: an Error the server will just repeat
+  // (bad token, bad config). Network drops and session expiry are not
+  // this, and are exactly what the retry is for.
+  const fatalRef = useRef(false);
+  // Bumping this re-runs the connect effect, which is the reconnect.
+  const [retryTick, setRetryTick] = useState(0);
 
   // Held in refs so a re-render with new callbacks doesn't tear down the
   // socket. The connection should outlive prop identity changes.
@@ -96,6 +139,7 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
     ctxRef.current = null;
     setLevel(0);
     setPartial("");
+    setHearing(false);
   }, []);
 
   /** Push keyterms / turn settings without reconnecting. */
@@ -125,7 +169,7 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
       }
 
       if (!lastVoiceRef.current) return;
-      if (Date.now() - lastVoiceRef.current >= IDLE_MS) {
+      if (Date.now() - lastVoiceRef.current >= (configRef.current.idleMs ?? IDLE_MS)) {
         lastVoiceRef.current = 0; // fire once, not every tick
         onIdleRef.current?.();
       }
@@ -133,12 +177,22 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
     return () => clearInterval(id);
   }, [enabled]);
 
+  // Muting and unmuting is a fresh start: clear anything the last run
+  // was retrying or refusing to retry.
+  useEffect(() => {
+    if (enabled) return undefined;
+    retriesRef.current = 0;
+    fatalRef.current = false;
+    clearTimeout(retryTimerRef.current);
+    return undefined;
+  }, [enabled]);
+
   useEffect(() => {
     if (!enabled) return undefined;
     let cancelled = false;
 
     (async () => {
-      setStatus("connecting");
+      setStatus((s) => (s === "reconnecting" ? s : "connecting"));
 
       let stream;
       try {
@@ -156,7 +210,7 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
       } catch (err) {
         if (!cancelled) {
           setStatus("error");
-          onErrorRef.current?.(`Microphone unavailable: ${err.message}`);
+          onErrorRef.current?.(`Microphone unavailable: ${err.message}`, { fatal: true });
         }
         return;
       }
@@ -169,25 +223,28 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
       const ctx = new AudioContext();
       ctxRef.current = ctx;
       try {
-        await ctx.audioWorklet.addModule("/pcm-processor.js");
+        // public/ file, so Vite leaves the path alone: it must carry the
+        // base path itself or the Pages build 404s here and the whole mic
+        // pipeline dies with nothing but this console error.
+        await ctx.audioWorklet.addModule(`${import.meta.env.BASE_URL}pcm-processor.js`);
       } catch (err) {
         if (!cancelled) {
           setStatus("error");
-          onErrorRef.current?.(`Audio worklet failed to load: ${err.message}`);
+          onErrorRef.current?.(`Audio worklet failed to load: ${err.message}`, { fatal: true });
         }
         return;
       }
 
       let token;
       try {
-        const res = await fetch("/api/voice/stt-token");
+        const res = await fetch(`${API_ORIGIN}/api/voice/stt-token`);
         const body = await res.json();
         if (!res.ok) throw new Error(body.error || `Token request failed (${res.status})`);
         token = body.token;
       } catch (err) {
         if (!cancelled) {
           setStatus("error");
-          onErrorRef.current?.(err.message);
+          onErrorRef.current?.(err.message, { fatal: true });
         }
         return;
       }
@@ -230,6 +287,7 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
         streamStartRef.current = Date.now();
         audioTap.reset(ctx.sampleRate, streamStartRef.current);
         wordsThisTurnRef.current = false;
+        openedAtRef.current = Date.now();
         setStatus("live");
       };
 
@@ -245,14 +303,20 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
                 msg.configuration.model !== configRef.current.speechModel) {
               onErrorRef.current?.(
                 `Model mismatch: asked for ${configRef.current.speechModel}, got ${msg.configuration.model}.`,
+                { fatal: false },
               );
             }
+            break;
+
+          case "SpeechStarted":
+            setHearing(true);
             break;
 
           case "Turn": {
             const heard = (msg.transcript || "").trim();
             if (msg.end_of_turn) {
               setPartial("");
+              setHearing(false);
               turnStartedRef.current = Date.now();
               wordsThisTurnRef.current = false;
               // Only words count as someone being here. Noise used to
@@ -294,8 +358,11 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
               onIdleRef.current?.();
               break;
             }
+            // Whatever this is, reopening would hit it again — a retry
+            // loop here just bills sessions to fail the same way.
+            fatalRef.current = true;
             setStatus("error");
-            onErrorRef.current?.(`${msg.error_code}: ${msg.error}`);
+            onErrorRef.current?.(`${msg.error_code}: ${msg.error}`, { fatal: true });
             break;
 
           default:
@@ -305,20 +372,49 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
 
       ws.onerror = () => {
         if (!cancelled) {
+          // Not fatal on its own: onclose follows and decides whether
+          // this is worth another attempt.
           setStatus("error");
-          onErrorRef.current?.("Connection failed.");
+          onErrorRef.current?.("Connection failed.", { fatal: false });
         }
       };
 
       ws.onclose = () => {
         wsRef.current = null;
         teardownAudio();
-        setStatus((s) => (s === "error" ? "error" : "idle"));
+
+        // `cancelled` means WE closed it — muting, unmounting, or the
+        // Termination that answers our own Terminate. Nothing to do.
+        if (cancelled) return;
+
+        // A connection that lasted a while earned its budget back; one
+        // that died immediately did not (see STABLE_MS).
+        if (openedAtRef.current && Date.now() - openedAtRef.current >= STABLE_MS) {
+          retriesRef.current = 0;
+        }
+        openedAtRef.current = 0;
+
+        // Already reported (the Error branch set this and said why).
+        if (fatalRef.current) {
+          setStatus("error");
+          return;
+        }
+        if (retriesRef.current >= MAX_RETRIES) {
+          setStatus("error");
+          onErrorRef.current?.("Lost the connection to the transcriber.", { fatal: true });
+          return;
+        }
+
+        const wait = Math.min(RETRY_BASE_MS * 2 ** retriesRef.current, RETRY_CAP_MS);
+        retriesRef.current += 1;
+        setStatus("reconnecting");
+        retryTimerRef.current = setTimeout(() => setRetryTick((t) => t + 1), wait);
       };
     })();
 
     return () => {
       cancelled = true;
+      clearTimeout(retryTimerRef.current);
       const ws = wsRef.current;
       if (ws?.readyState === WebSocket.OPEN) {
         setStatus("closing");
@@ -333,9 +429,9 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
         teardownAudio();
       }
     };
-  }, [enabled, teardownAudio]);
+  }, [enabled, teardownAudio, retryTick]);
 
-  return { status, partial, level, updateConfig };
+  return { status, partial, level, hearing, updateConfig };
 }
 
 /**
@@ -351,6 +447,23 @@ function buildParams(token, sampleRate, cfg) {
   p.set("speech_model", cfg.speechModel || "universal-3-5-pro");
   p.set("format_turns", String(cfg.formatTurns ?? true));
   if (cfg.mode) p.set("mode", cfg.mode);
+
+  // How the turn updates while someone is still talking. Both are
+  // universal-3-5-pro only, and both matter here because speaker_labels
+  // quietly changes their defaults: with diarization on, the server
+  // disables continuous partials, so a turn emits ONE early partial and
+  // then nothing at all until it ends. On a five-second sentence that
+  // reads as the app having stopped listening.
+  //
+  // interruption_delay is the wait before that first partial, and the
+  // server adds 300ms of its own on top (0 -> ~300ms, the balanced
+  // preset's 500 -> ~800ms).
+  if (cfg.continuousPartials != null) {
+    p.set("continuous_partials", String(cfg.continuousPartials));
+  }
+  if (cfg.interruptionDelay != null) {
+    p.set("interruption_delay", String(cfg.interruptionDelay));
+  }
 
   if (cfg.voiceFocus) {
     // universal-3-5-pro only, and it no-ops SILENTLY on anything else

@@ -90,7 +90,6 @@ const TICK_MIN_PX = 56;
 const RUNG_FULL_PX = 130;
 const RUNG_NAME_PX = 76;
 const RUNG_DURATION_PX = 48;
-const RUNG_WAIT_PX = 88;
 // Rough glyph width at the 13px block font, used to cut labels at a
 // word boundary instead of letting CSS leave "Dice oni…".
 const LABEL_PX_PER_CHAR = 6.6;

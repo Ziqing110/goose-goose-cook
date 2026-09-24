@@ -1,0 +1,68 @@
+# Builds the front end and publishes it to GitHub Pages at
+# https://ziqing110.github.io/goose-goose-cook/
+#
+# Only the static app ships here. The API needs ASSEMBLYAI_API_KEY and so
+# cannot live on Pages — anything in this build is public. It runs
+# separately (see DEPLOY.md) and its URL is supplied below.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a run finish rather than cancelling it, so a deploy is never half-done.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        # Where the API lives. The fallback is the URL render.yaml's service
+        # name produces, so in the normal case nothing needs setting by
+        # hand. Render appends a suffix if that name is already taken
+        # globally — if it does, set the repository variable to the real
+        # URL: Settings > Secrets and variables > Actions > Variables.
+        #
+        # A variable, not a secret: it is a public URL and it is baked
+        # into the bundle either way. Scheme and host, no trailing slash.
+        env:
+          VITE_API_BASE: ${{ vars.VITE_API_BASE || 'https://goose-goose-cook.onrender.com' }}
+        run: npm run build
+
+      - name: SPA fallback for deep links
+        # Pages has no rewrite rules, so /session/schedule entered directly
+        # or refreshed would hit GitHub's own 404. Serving index.html as the
+        # 404 page hands those URLs to the router instead.
+        run: cp dist/index.html dist/404.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

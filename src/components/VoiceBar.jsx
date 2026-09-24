@@ -12,7 +12,7 @@
 // Muting also switches the conversation page's answer bar into typing
 // mode, and typing there mutes this. That contract predates the real
 // microphone and still holds.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { useStreamingTranscript } from "../hooks/useStreamingTranscript.js";
@@ -33,7 +33,7 @@ import {
   subscribeVoiceRegistry,
   voiceCommandsAreExclusive,
 } from "../utils/voicePageCommands.js";
-import { voiceReachablePaths } from "../utils/routeGuards.js";
+import { ROUTES, voiceReachablePaths } from "../utils/routeGuards.js";
 import { routeVoiceTurn, turnConfidence } from "../utils/voiceTurn.js";
 
 
@@ -51,6 +51,16 @@ const CONFIRM_WINDOW_MS = 10_000;
 // small cruelty. Generous on purpose: the window expiring is harmless,
 // since expiring means nothing happens.
 const PHRASE_WINDOW_MS = 25_000;
+
+// How long "nobody said anything" runs before the mic mutes itself.
+//
+// Mid-cook, silence is normal: you can watch a pan or chop for minutes
+// without a word, and muting under someone who is simply busy is worse
+// than the meter running. Everywhere else the mic only exists to take a
+// command, so a quiet page means nobody is there — and the socket bills
+// by the second it stays open.
+const IDLE_MS_LIVE_COOK = 120_000;
+const IDLE_MS_ELSEWHERE = 30_000;
 
 // Turn detection for the pages that take commands rather than dictation.
 //
@@ -87,6 +97,15 @@ const STREAM_CONFIG = {
   // command longer than one word.
   vadThreshold: 0.45,
   turnDetection: COMMAND_TURN,
+  // Both of these are about the wait before you see your own words, not
+  // about accuracy. speakerLabels below turns continuous partials OFF
+  // server-side, which left a turn showing its first fragment and then
+  // nothing until it ended — long enough that people repeated themselves
+  // because the goose looked deaf. Ask for them back explicitly, and ask
+  // for the first partial as early as the API allows (0 plus the
+  // server's own 300ms floor) instead of the preset's 500.
+  continuousPartials: true,
+  interruptionDelay: 0,
   // Who said it, decided server-side, with no voice enrolled anywhere.
   // Two things came out of turning this on, measured by replaying the
   // kitchen takes with and without it:
@@ -134,7 +153,18 @@ export default function VoiceBar() {
   const hasSessionRef = useRef(false);
   hasSessionRef.current = Boolean(state.session);
 
-  const onError = useCallback((message) => setError(message), []);
+  // A fatal error means the hook has stopped trying, so mute to match:
+  // otherwise the bar reads "unmute to try again" while showing a mute
+  // button, and the pipeline is half up. A non-fatal one (a model
+  // mismatch, a blip the retry will handle) is worth showing and nothing
+  // more — muting there would kill a session that still works.
+  const onError = useCallback(
+    (message, { fatal = true } = {}) => {
+      setError(message);
+      if (fatal) dispatch({ type: "voice/setMuted", payload: { muted: true } });
+    },
+    [dispatch],
+  );
 
   const say = useCallback((line) => {
     speak(line);
@@ -285,9 +315,20 @@ export default function VoiceBar() {
     [say, run, runPageCommand, askToConfirm, clearPending],
   );
 
-  const { status, partial, updateConfig } = useStreamingTranscript({
+  // Not a dependency of the connect effect (the hook reads config through
+  // a ref), so crossing into or out of the live cook changes the quiet
+  // budget without dropping the socket.
+  const streamConfig = useMemo(
+    () => ({
+      ...STREAM_CONFIG,
+      idleMs: pathname === ROUTES.liveCook ? IDLE_MS_LIVE_COOK : IDLE_MS_ELSEWHERE,
+    }),
+    [pathname],
+  );
+
+  const { status, partial, hearing, updateConfig } = useStreamingTranscript({
     enabled: !muted,
-    config: STREAM_CONFIG,
+    config: streamConfig,
     onTurn,
     onError,
     onIdle,
@@ -337,9 +378,9 @@ export default function VoiceBar() {
 
   // One source of truth for the three places that describe state, so
   // the pill, the label and the body copy can never disagree.
-  const view = describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname, reachable });
+  const view = describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname, reachable, idleMs: streamConfig.idleMs });
 
-  const goose = describeGoose({ view, speaking, muted, status, partial, pending, feedback, error });
+  const goose = describeGoose({ view, speaking, muted, status, partial, hearing, pending, feedback, error });
   // ?goose=<state> pins a pose for design review (dev only).
   const pinned = devGooseState();
   const shown = pinned ? { ...GOOSE_PREVIEW[pinned], state: pinned } : goose;
@@ -379,7 +420,7 @@ const GOOSE_PREVIEW = {
  * hearing, then the resting states. `view` has already collapsed the
  * connection into copy, so this only decides the pose and reuses it.
  */
-function describeGoose({ view, speaking, muted, status, partial, pending, feedback, error }) {
+function describeGoose({ view, speaking, muted, status, partial, hearing, pending, feedback, error }) {
   if (error) return { state: "warning", tag: "Mic error", line: error, partial: false };
   // An open question outranks the fact that the goose is reading it out:
   // the answer is what the screen is waiting for, and the design files
@@ -397,11 +438,25 @@ function describeGoose({ view, speaking, muted, status, partial, pending, feedba
   // A live partial is "still resolving": the turn has not landed yet, so
   // the words can still change.
   if (partial) return { state: "thinking", tag: "Thinking", line: partial, partial: true };
+  // Words take a moment; the acknowledgement should not. SpeechStarted
+  // arrives before the first partial, so the pose changes as soon as the
+  // model agrees someone is speaking — which is the whole difference
+  // between a slow goose and a deaf one.
+  if (hearing) return { state: "thinking", tag: "Hearing", line: "…", partial: true };
   return { state: "listening", tag: "Listening", line: view.line, partial: false };
 }
 
 /** Collapse mute + connection status + error into one view model. */
-function describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname, reachable }) {
+// "30 seconds" / "two minutes" — the mic explaining itself, so the number
+// stays in step with IDLE_MS_* above instead of being written twice.
+function quietFor(ms) {
+  const seconds = Math.round((ms ?? 0) / 1000);
+  if (seconds < 60) return `${seconds} seconds`;
+  const minutes = Math.round(seconds / 60);
+  return minutes === 1 ? "a minute" : minutes === 2 ? "two minutes" : `${minutes} minutes`;
+}
+
+function describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname, reachable, idleMs }) {
   if (error) {
     return {
       label: "MIC ERROR",
@@ -415,7 +470,7 @@ function describe({ muted, status, error, idled, pending, feedback, partial, hin
   if (muted && idled) {
     return {
       label: "MIC OFF",
-      line: "Muted after two minutes of quiet, to stop the meter running.",
+      line: `Muted after ${quietFor(idleMs)} of quiet, to stop the meter running.`,
       sub: "Unmute whenever you're ready.",
       pill: "Muted",
       pillClass: "is-muted",
@@ -429,6 +484,18 @@ function describe({ muted, status, error, idled, pending, feedback, partial, hin
       sub: null,
       pill: "Muted",
       pillClass: "is-muted",
+      isPartial: false,
+    };
+  }
+  // The socket dropped on its own and the hook is reopening it. Say so:
+  // this used to look identical to the mic having quietly died.
+  if (status === "reconnecting") {
+    return {
+      label: "RECONNECTING",
+      line: "Lost the microphone connection. Picking it back up…",
+      sub: "Anything said right now may not be heard.",
+      pill: "Reconnecting",
+      pillClass: "is-connecting",
       isPartial: false,
     };
   }
