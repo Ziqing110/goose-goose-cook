@@ -8,22 +8,30 @@ import { layoutLevels } from "./graphLayout.js";
 // unreadable: the auto-layout couldn't know how tall a row was, so long
 // labels overlapped their neighbours before anyone dragged anything.
 export const CARD_W = 168;  /* the narrowest card, and the default */
-export const CARD_H = 68;   /* a two-line card; taller ones are computed */
+export const CARD_H = 72;   /* a two-line card; taller ones are computed */
 export const COL_GAP = 60;
 export const ROW_GAP = 14;
+/* The most the auto-layout will open a column up by to fill a tall
+   board. Bounded by a card's own height, not a flat number — past a
+   full card's height of empty paper between two notes, the column
+   stops reading as one run of steps and starts reading as several. */
+export const ROW_GAP_MAX = CARD_H;
 export const PAD = 16;
 const CLEAR = 10; // breathing room kept between cards when one is nudged
 const LANE = 16; // how far an edge detours clear of a card it would cross
 
 /* Card geometry, in the same units the positions use. */
 export const CARD_WIDTHS = [168, 204, 240];
-export const CARD_PAD_X = 12 + 10; /* left spine padding + right padding */
-export const CARD_NUM_W = 16; /* the step number's corner */
-export const LABEL_LINE_H = 17;
-export const CARD_CHROME_H = 8 + 2 + 15 + 8; /* padding, gap, meta line, padding */
+export const CARD_PAD_X = 12 + 12; /* the slip's padding, both sides */
+/* The number and the duration share the line above the label, so the
+   label has the card's full width rather than dodging a corner. */
+export const CARD_NUM_W = 0;
+export const LABEL_LINE_H = 19;
+export const CARD_CHROME_H = 14 + 15 + 4 + 9; /* top padding, number line, gap, bottom padding */
 export const MAX_LABEL_LINES = 4;
-/* The phase legend floats over the board's top-right corner; the last
-   column keeps clear of it rather than the board reserving a margin. */
+/* Two legends float over the board's top corners — the phase key on the
+   right, the paper key on the left. The end columns keep clear of them
+   rather than the board reserving a margin all the way across. */
 export const LEGEND_KEEPOUT = 34;
 
 /** Greedy word wrap against a text measurer; returns the line count. */
@@ -118,24 +126,42 @@ function orderLevels(nodes) {
  * Columns are ordered to minimise crossings and centred against the
  * tallest one, so edges run flat across the board instead of fanning
  * out from a top-aligned stack.
+ *
+ * `availableH` is the board's visible height, when the caller knows it.
+ * Cards then breathe out into whatever room is going spare instead of
+ * packing into the top of a tall board and leaving the bottom third
+ * bare — a big screen made the plan look smaller, not roomier. The gap
+ * is capped, so a board with two cards on it stays a board with two
+ * cards on it rather than one card at each end.
  */
-export function autoPositions(nodes, sizeOf = () => ({ w: CARD_W, h: CARD_H }), keepOutRight = LEGEND_KEEPOUT) {
+export function autoPositions(nodes, sizeOf = () => ({ w: CARD_W, h: CARD_H }), keepOut, availableH) {
+  const clearance = Math.max(LEGEND_KEEPOUT, Number(keepOut) || 0);
   const out = {};
   const levels = orderLevels(nodes);
-  const colHeight = (level) =>
-    level.reduce((sum, n) => sum + sizeOf(n).h, 0) + Math.max(0, level.length - 1) * ROW_GAP;
+  const cardsHeight = (level) => level.reduce((sum, n) => sum + sizeOf(n).h, 0);
+  // One gap for every column, sized off the fullest one: per-column
+  // spacing would stretch a two-card column to the same height as an
+  // eight-card one and read as two unrelated boards.
+  const fullest = levels.reduce((best, l) => (cardsHeight(l) > cardsHeight(best) ? l : best), levels[0] || []);
+  const room = Number(availableH) - 2 * PAD - clearance - cardsHeight(fullest);
+  const rowGap =
+    fullest.length > 1 && Number.isFinite(room) && room > 0
+      ? Math.min(ROW_GAP_MAX, Math.max(ROW_GAP, room / (fullest.length - 1)))
+      : ROW_GAP;
+  const colHeight = (level) => cardsHeight(level) + Math.max(0, level.length - 1) * rowGap;
   const tallest = Math.max(0, ...levels.map(colHeight));
   let x = PAD;
   levels.forEach((level, col) => {
     const width = Math.max(CARD_W, ...level.map((n) => sizeOf(n).w));
     let y = PAD + (tallest - colHeight(level)) / 2;
-    if (col === levels.length - 1 && levels.length > 1) y = Math.max(y, PAD + keepOutRight);
+    const underALegend = col === 0 || (col === levels.length - 1 && levels.length > 1);
+    if (underALegend) y = Math.max(y, PAD + clearance);
     level.forEach((node) => {
       // Cards in a column are centred on it, so a narrow card between
       // wide ones doesn't leave the edges kinked.
       const size = sizeOf(node);
       out[node.id] = { x: x + (width - size.w) / 2, y };
-      y += size.h + ROW_GAP;
+      y += size.h + rowGap;
     });
     x += width + COL_GAP;
   });
@@ -222,32 +248,123 @@ export function segmentHitsRect(a, b, r) {
 }
 
 /**
- * An SVG path from the right edge of `from` to the left edge of `to`.
- * If the direct run would cross any other card, it detours above or
- * below the cards in the way — whichever is the shorter deviation — so
- * the line stays visible instead of vanishing under a card.
+ * Right angles with rounded corners, through a list of points. Curves
+ * were read as decoration; a board wired like a diagram reads as one.
  */
-// `endDy` moves the landing point off the target's midline, so two
-// edges converging on one card keep separate arrowheads.
-export function edgePath(from, to, obstacles, endDy = 0) {
-  const start = { x: from.x + from.w, y: from.y + from.h / 2 };
-  const end = { x: to.x, y: to.y + to.h / 2 + endDy };
-  const blockers = obstacles.filter((o) => segmentHitsRect(start, end, o));
-
-  if (blockers.length === 0) {
-    const mid = (start.x + end.x) / 2;
-    return `M ${start.x} ${start.y} C ${mid} ${start.y}, ${mid} ${end.y}, ${end.x} ${end.y}`;
+export function roundPath(points, r = 6) {
+  const p = points.filter((q, i) => i === 0 || q.x !== points[i - 1].x || q.y !== points[i - 1].y);
+  if (p.length < 2) return "";
+  let d = `M ${p[0].x} ${p[0].y}`;
+  for (let i = 1; i < p.length - 1; i += 1) {
+    const a = p[i - 1];
+    const b = p[i];
+    const c = p[i + 1];
+    const l1 = Math.hypot(b.x - a.x, b.y - a.y);
+    const l2 = Math.hypot(c.x - b.x, c.y - b.y);
+    const rr = Math.min(r, l1 / 2, l2 / 2);
+    const p1 = { x: b.x - ((b.x - a.x) / (l1 || 1)) * rr, y: b.y - ((b.y - a.y) / (l1 || 1)) * rr };
+    const p2 = { x: b.x + ((c.x - b.x) / (l2 || 1)) * rr, y: b.y + ((c.y - b.y) / (l2 || 1)) * rr };
+    d += ` L ${p1.x} ${p1.y} Q ${b.x} ${b.y} ${p2.x} ${p2.y}`;
   }
+  const z = p[p.length - 1];
+  return `${d} L ${z.x} ${z.y}`;
+}
 
-  const above = Math.min(...blockers.map((o) => o.y)) - LANE;
-  const below = Math.max(...blockers.map((o) => o.y + o.h)) + LANE;
-  const viaY =
-    Math.abs(above - (start.y + end.y) / 2) <= Math.abs(below - (start.y + end.y) / 2) ? above : below;
-  const x1 = start.x + Math.max(24, (end.x - start.x) * 0.25);
-  const x2 = end.x - Math.max(24, (end.x - start.x) * 0.25);
-  return [
-    `M ${start.x} ${start.y}`,
-    `C ${x1} ${start.y}, ${x1} ${viaY}, ${(x1 + x2) / 2} ${viaY}`,
-    `C ${x2} ${viaY}, ${x2} ${end.y}, ${end.x} ${end.y}`,
-  ].join(" ");
+/**
+ * A lane of its own for every arrow.
+ *
+ * Routed naively, eighteen arrows leave and land on midlines, overlap
+ * each other for whole columns and arrive as one thick line — you can
+ * see that something feeds a step, not what. So each edge gets three
+ * things of its own:
+ *
+ *  - an exit point spread down the source's right edge, ordered by
+ *    where it is going, so the fan leaves in the order it arrives
+ *  - a landing point spread down the target's left edge, ordered by
+ *    where it came from, so two arrows into one card keep two heads
+ *  - a vertical lane in the gap in front of its column, a few pixels
+ *    apart from its neighbours, shortest run nearest the card
+ *
+ * Returns a Map of "from>to" -> { sy, ey, tx, ex } for edgePath.
+ */
+export function laneRouting(nodes, boxes, columnSnap = 10) {
+  const pairs = [];
+  nodes.forEach((n) => {
+    (n.depends_on || []).forEach((d) => {
+      if (boxes[d] && boxes[n.id]) pairs.push({ from: d, to: n.id });
+    });
+  });
+  const centreY = (id) => boxes[id].y + boxes[id].h / 2;
+  // Points spread down an edge of the card, clear of its corners.
+  const spread = (box, i, count) => box.y + 14 + ((box.h - 22) * (i + 1)) / (count + 1);
+
+  const outgoing = new Map();
+  const incoming = new Map();
+  pairs.forEach((p) => {
+    if (!outgoing.has(p.from)) outgoing.set(p.from, []);
+    if (!incoming.has(p.to)) incoming.set(p.to, []);
+    outgoing.get(p.from).push(p);
+    incoming.get(p.to).push(p);
+  });
+
+  outgoing.forEach((list, id) => {
+    list.sort((a, b) => centreY(a.to) - centreY(b.to));
+    list.forEach((p, i) => {
+      p.sy = spread(boxes[id], i, list.length);
+      // Staggered so two arrows leaving the same card don't run as one.
+      p.ex = boxes[id].x + boxes[id].w + 8 + i * 6;
+    });
+  });
+  incoming.forEach((list, id) => {
+    list.sort((a, b) => centreY(a.from) - centreY(b.from));
+    list.forEach((p, i) => {
+      p.ey = spread(boxes[id], i, list.length);
+    });
+  });
+
+  // One lane each, within the gap in front of the column they arrive in.
+  const gaps = new Map();
+  pairs.forEach((p) => {
+    const key = Math.round(boxes[p.to].x / columnSnap);
+    if (!gaps.has(key)) gaps.set(key, []);
+    gaps.get(key).push(p);
+  });
+  gaps.forEach((list) => {
+    // Shortest first: the arrow with the least climbing gets the lane
+    // closest to the cards, so lanes cross as little as possible.
+    list.sort((a, b) => a.ey - a.sy - (b.ey - b.sy));
+    const room = Math.max(12, COL_GAP - 26);
+    const step = list.length > 1 ? Math.min(7, room / (list.length - 1)) : 0;
+    const middle = (list.length - 1) / 2;
+    list.forEach((p, i) => {
+      p.tx = boxes[p.to].x - COL_GAP / 2 + (i - middle) * step;
+    });
+  });
+
+  return new Map(pairs.map((p) => [`${p.from}>${p.to}`, { sy: p.sy, ey: p.ey, tx: p.tx, ex: p.ex }]));
+}
+
+/**
+ * An SVG path from the right edge of `from` to the left edge of `to`,
+ * down the column's shared trunk. If the run along to the trunk would
+ * cross a card, it steps above or below the cards in the way — whichever
+ * is the shorter deviation — so the line stays visible.
+ */
+export function edgePath(from, to, obstacles, port = {}) {
+  const start = { x: from.x + from.w, y: port.sy ?? from.y + from.h / 2 };
+  const end = { x: to.x, y: port.ey ?? to.y + to.h / 2 };
+  // Never inside the card it is arriving at: a lane past the left edge
+  // would double back on itself.
+  const lane = Math.min(port.tx ?? to.x - 14, to.x - 10);
+  if (lane <= start.x + 4) return roundPath([start, end]);
+
+  const corner = { x: lane, y: start.y };
+  const blockers = obstacles.filter((o) => segmentHitsRect(start, corner, o));
+  if (!blockers.length) return roundPath([start, corner, { x: lane, y: end.y }, end]);
+
+  const exitX = port.ex ?? start.x + 12;
+  const above = Math.min(...blockers.map((o) => o.y)) - LANE / 2;
+  const below = Math.max(...blockers.map((o) => o.y + o.h)) + LANE / 2;
+  const viaY = Math.abs(above - end.y) <= Math.abs(below - end.y) ? above : below;
+  return roundPath([start, { x: exitX, y: start.y }, { x: exitX, y: viaY }, { x: lane, y: viaY }, { x: lane, y: end.y }, end]);
 }

@@ -381,7 +381,7 @@ export default function ConversationPage() {
           <span className="ds-title-mark convo-title-mark">
             <h1>What are we cooking tonight?</h1>
             <svg className="ds-underline ds-underline-title" viewBox="0 0 430 10" preserveAspectRatio="none" fill="none" aria-hidden="true">
-              <path d="M2 7c68-4 144 1 220-2 58-2.5 134 3 206 .5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+              <path d="M2 7c68-4 144 1 220-2 58-2.5 134 3 206 .5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
             </svg>
           </span>
           <p className="convo-sub">

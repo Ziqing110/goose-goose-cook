@@ -491,7 +491,7 @@ export default function HomePage() {
                 <path
                   d="M2 5c22-2.4 44 1.4 66-.8 16-1.6 36 1.8 50 .4"
                   stroke="currentColor"
-                  strokeWidth="2"
+                  strokeWidth="1.4"
                   strokeLinecap="round"
                   opacity="0.85"
                 />
@@ -638,7 +638,7 @@ export default function HomePage() {
               <path
                 d="M2 6.5c34-3.2 70 1.8 104-1.4 26-2.4 60 2.6 92 .6"
                 stroke="currentColor"
-                strokeWidth="2.2"
+                strokeWidth="1.6"
                 strokeLinecap="round"
                 opacity="0.85"
               />
@@ -667,7 +667,7 @@ export default function HomePage() {
               <path
                 d="M2 5c22-2.4 44 1.4 66-.8 16-1.6 36 1.8 50 .4"
                 stroke="currentColor"
-                strokeWidth="2"
+                strokeWidth="1.4"
                 strokeLinecap="round"
                 opacity="0.85"
               />
@@ -727,7 +727,7 @@ export default function HomePage() {
               <path
                 d="M2 5.4c20-2.6 40 1.2 60-1 14-1.4 32 2 46 .6"
                 stroke="currentColor"
-                strokeWidth="2"
+                strokeWidth="1.4"
                 strokeLinecap="round"
                 opacity="0.85"
               />

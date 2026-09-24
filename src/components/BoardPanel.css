@@ -83,13 +83,18 @@
 
 /* ---------------- fields ---------------- */
 .panel-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+/* The field's name has to out-rank its own value, or a field whose
+   value is itself a short grey sentence ("Nothing, can start right
+   away") reads as one run of text with no boundary. Weight and ink
+   carry that, not size. */
 .panel-field-label {
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 16px;
-  letter-spacing: 0.06em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--ink);
 }
 .panel-field-row { display: flex; gap: 16px; align-items: flex-start; }
 .panel-field-row > .panel-field { flex: 1 1 0; }
@@ -177,7 +182,9 @@
 .panel-chip-amount { font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint); }
 .panel-chip.is-on .panel-chip-amount { color: inherit; opacity: 0.75; }
 .panel-chip-dashed { border: 1px dashed var(--line-strong); background: transparent; }
-.panel-empty { font-size: 13px; line-height: 18px; color: var(--ink-faint); }
+/* An empty field says so in the panel's quietest voice: italic and
+   faint, so it can't be mistaken for a value or for the next label. */
+.panel-empty { font-size: 13px; line-height: 18px; font-style: italic; color: var(--ink-faint); }
 
 /* Primary/secondary actions in the footer use the shared .btn rules;
    the destructive ghost is the one local variant. */

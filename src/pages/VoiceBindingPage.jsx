@@ -634,7 +634,7 @@ export default function VoiceBindingPage() {
             <span className="ds-title-mark">
               <h1>Who&rsquo;s in the kitchen?</h1>
               <svg className="ds-underline ds-underline-title" viewBox="0 0 430 10" preserveAspectRatio="none" fill="none" aria-hidden="true">
-                <path d="M2 7c68-4 144 1 220-2 58-2.5 134 3 206 .5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+                <path d="M2 7c68-4 144 1 220-2 58-2.5 134 3 206 .5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
               </svg>
             </span>
             <BoundStamp bound={boundCount} total={cooks.length} nonce={stampNonce} />
@@ -705,7 +705,7 @@ export default function VoiceBindingPage() {
             <span className="ds-title-mark vb-panel-title">
               The line-up
               <svg className="ds-underline ds-underline-section" viewBox="0 0 120 8" preserveAspectRatio="none" fill="none" aria-hidden="true">
-                <path d="M2 5c22-2.4 44 1.4 66-.8 16-1.6 36 1.8 50 .4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.85" />
+                <path d="M2 5c22-2.4 44 1.4 66-.8 16-1.6 36 1.8 50 .4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity="0.85" />
               </svg>
             </span>
             <span className="vb-panel-note">Your bird&rsquo;s colour is your lane on the schedule.</span>

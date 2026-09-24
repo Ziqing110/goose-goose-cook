@@ -4,9 +4,10 @@
 // rules themselves live in graphLayout.computeStepAvailability and are
 // only *read back* here, never re-derived.
 import { MATERIAL_CATEGORY_LABELS, MATERIAL_CATEGORY_ORDER } from "../data/dishes.js";
+import { materialTotal } from "./materialAmounts.js";
+import { coverageNarration } from "./coverageNarration.js";
 import {
   computeDownstreamClosure,
-  computeMaterialTotals,
   computeStepAvailability,
   layoutLevels,
   mergeRecipesForDisplay,
@@ -67,6 +68,7 @@ export function buildInventory({ recipes, sharedSteps = [], catalog, outIds }) {
     .reduce((sum, n) => sum + (Number(n.estimated_duration_sec) || 0), 0);
   const unattendedSeconds = totalSeconds - attendedSeconds;
   const recipeTitle = (recipeId) => recipes.find((r) => r.id === recipeId)?.working.title || null;
+  const runDishTitles = recipes.map((r) => r.working.title);
   const dishesForNode = (n) => {
     if (n._shared) {
       const fromBreakdown = (n.usage_breakdown || []).map((u) => u.title).filter(Boolean);
@@ -79,7 +81,12 @@ export function buildInventory({ recipes, sharedSteps = [], catalog, outIds }) {
   // Player-added materials (recipe.custom_materials) win over the catalog.
   const materialsInfo = { ...(catalog || {}), ...(working.custom_materials || {}) };
   const labelOf = (id) => materialsInfo[id]?.label || id;
-  const totals = computeMaterialTotals(nodes, materialsInfo);
+  // The total follows the steps: it is the sum of what each one uses
+  // (utils/materialAmounts.js), so changing an amount on a step moves
+  // the number on this tab. A step that has never had an amount set
+  // contributes its even share, which leaves an untouched plan showing
+  // exactly the totals it always did.
+  const totalFor = (id) => materialTotal(nodes, id, materialsInfo);
   const closure = computeDownstreamClosure(nodes);
 
   const { impossible: blocked, affected: atRisk } = computeStepAvailability(nodes, out);
@@ -116,8 +123,8 @@ export function buildInventory({ recipes, sharedSteps = [], catalog, outIds }) {
       id,
       label: labelOf(id),
       category: materialsInfo[id]?.category || "other",
-      amount: totals[id]?.amount ?? materialsInfo[id]?.amount ?? null,
-      unit: totals[id]?.unit ?? materialsInfo[id]?.unit ?? "",
+      amount: totalFor(id).amount ?? materialsInfo[id]?.amount ?? null,
+      unit: totalFor(id).unit || materialsInfo[id]?.unit || "",
       // custom_materials also carries LLM-generated ingredients (see
       // recipeInstances.js) so they resolve to a label/amount/category
       // instead of a blank row — only a player-typed one is "added by
@@ -131,6 +138,10 @@ export function buildInventory({ recipes, sharedSteps = [], catalog, outIds }) {
         id: n.id,
         number: pad2(stepNumber.get(n.id)),
         label: n.label,
+        // Which dish's list this step belongs under, and whether it is
+        // the common ground both dishes lean on.
+        dish: n._shared ? null : recipeTitle(n._recipeId),
+        shared: Boolean(n._shared),
         phase: n.phase,
         durationSec: n.estimated_duration_sec,
         // So a 40-minute wait does not read like 40 minutes of standing
@@ -149,6 +160,9 @@ export function buildInventory({ recipes, sharedSteps = [], catalog, outIds }) {
           .map((u) => ({ title: u.title, amount: u.usage.amount, unit: u.usage.unit })),
       })),
       dishes: isMultiDish ? dishes : [],
+      // Used by every dish in the run: worth saying once rather than
+      // listing the whole menu on the row.
+      usesEveryDish: isMultiDish && runDishTitles.length > 1 && runDishTitles.every((t) => dishes.includes(t)),
     };
   });
 
@@ -166,15 +180,14 @@ export function buildInventory({ recipes, sharedSteps = [], catalog, outIds }) {
   const blockedCount = blocked.size;
   const atRiskCount = atRisk.size;
   const craftableCount = total - blockedCount - atRiskCount;
-  let tone = "done";
-  let summary = "Full inventory — every step is craftable";
-  if (blockedCount > 0) {
-    tone = "critical";
-    summary = `Run blocked — ${blockedCount} of ${total} steps can't be done`;
-  } else if (atRiskCount > 0) {
-    tone = "warning";
-    summary = `${atRiskCount} of ${total} steps at risk`;
-  }
+  // The verdict, the sentence and the goose's own reading of it all
+  // come from the same two counts — see utils/coverageNarration.js.
+  const narration = coverageNarration({
+    total,
+    blockedCount,
+    atRiskCount,
+    outLabels: [...out].filter((id) => ids.includes(id)).map(labelOf),
+  });
 
   // ---- impact panel: blocked first, then at risk, each in cook order ----
   const impactEntry = (n) => ({
@@ -194,7 +207,7 @@ export function buildInventory({ recipes, sharedSteps = [], catalog, outIds }) {
     title: working.title || "",
     servings: working.servings ?? null,
     isMultiDish,
-    dishTitles: recipes.map((r) => r.working.title),
+    dishTitles: runDishTitles,
     stepCount: total,
     totalSeconds,
     attendedSeconds,
@@ -203,7 +216,7 @@ export function buildInventory({ recipes, sharedSteps = [], catalog, outIds }) {
     ingredients,
     groups,
     onHandCount: ingredients.filter((i) => !i.out).length,
-    coverage: { total, craftable: craftableCount, atRisk: atRiskCount, blocked: blockedCount, tone, summary },
+    coverage: { total, craftable: craftableCount, atRisk: atRiskCount, blocked: blockedCount, ...narration },
     impact,
   };
 }

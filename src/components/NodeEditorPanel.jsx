@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppState } from "../state/AppStateContext.jsx";
-import { EQUIPMENT_OPTIONS, DIFFICULTY_OPTIONS, PHASE_OPTIONS, MATERIAL_CATEGORY_ORDER, MATERIAL_CATEGORY_LABELS, equipmentLabel } from "../data/dishes.js";
-import BoardPanel, { ChoiceChip, PanelField, Segmented } from "./BoardPanel.jsx";
+import { EQUIPMENT_OPTIONS, DIFFICULTY_OPTIONS, PHASE_OPTIONS, equipmentLabel } from "../data/dishes.js";
+import BoardPanel, { ChoiceChip, LinkPicker, LinkRow, MaterialsField, PanelField, Segmented } from "./BoardPanel.jsx";
+import { childrenOf, eligibleParents, eligibleChildren } from "../utils/boardLinks.js";
+import { stepMaterialAmount } from "../utils/materialAmounts.js";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 import { spokenNumber, NUMBER_TOKEN } from "../utils/understanding.js";
 import { matchStepName } from "../utils/stepNameMatch.js";
@@ -12,8 +14,6 @@ export const DIFFICULTY_SEGMENTS = DIFFICULTY_OPTIONS.map((d) => ({
   value: d,
   label: { low: "Low", medium: "Med", high: "High" }[d] || d,
 }));
-
-const ADD_NEW = "__new__";
 
 const EQUIPMENT_ARTICLE = { cutting_board: "a", stove_burner: "a", wok: "a", pot: "a", oven: "an" };
 
@@ -35,7 +35,13 @@ export default function NodeEditorPanel({
 }) {
   const { dispatch } = useAppState();
   const [draft, setDraft] = useState(node);
-  const [addingMaterial, setAddingMaterial] = useState(false);
+  // The steps that wait on this one. Held apart from the draft because
+  // it is not a property of this step — saving it rewrites THEIR
+  // depends_on. Seeded from the graph when the panel opens.
+  const [before, setBefore] = useState(() => childrenOf(allNodes, node.id));
+  // Which materials were already on the step when it opened: those rows
+  // read as part of the step, the ones added since as pending.
+  const [originalMaterials] = useState(() => new Set(node.required_materials || []));
 
   // Keyed on node.id deliberately, NOT on node. Re-seeding the draft
   // whenever the node object changes identity would discard whatever the
@@ -43,9 +49,20 @@ export default function NodeEditorPanel({
   // to a different step is the only time the draft should be replaced.
   useEffect(() => {
     setDraft(node);
-    setAddingMaterial(false);
+    setBefore(childrenOf(allNodes, node.id));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.id]);
+
+  // An arrow drawn on the board while this panel is open is about this
+  // step too: without this the panel would save the links as they stood
+  // when it opened and quietly undo the drag.
+  const graphDeps = (node.depends_on || []).join("|");
+  const graphChildren = childrenOf(allNodes, node.id).join("|");
+  useEffect(() => {
+    setDraft((d) => (d.depends_on.join("|") === graphDeps ? d : { ...d, depends_on: node.depends_on || [] }));
+    setBefore((b) => (b.join("|") === graphChildren ? b : childrenOf(allNodes, node.id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graphDeps, graphChildren]);
 
   const others = allNodes
     .filter((n) => n.id !== node.id)
@@ -61,16 +78,22 @@ export default function NodeEditorPanel({
 
   const toggleIn = (list, value) => (list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
 
-  const handleAddMaterial = (materialDraft) => {
-    const id = onRegisterMaterial?.(materialDraft);
-    if (id) patch((n) => (n.required_materials = [...new Set([...n.required_materials, id])]));
-    setAddingMaterial(false);
+  // Amounts are per step. A step that has never had one falls back to an
+  // even share of the material's total (utils/materialAmounts.js), so
+  // the Ingredients tab adds up to what it always did until someone
+  // actually changes a number.
+  const amountFor = (materialId) => {
+    const recorded = draft.material_usage?.[materialId];
+    if (recorded) return recorded;
+    return stepMaterialAmount(allNodes, node, materialId, materialsInfo || {});
+  };
+  const setAmount = (materialId, next) => {
+    const current = amountFor(materialId);
+    patch((n) => {
+      n.material_usage = { ...(n.material_usage || {}), [materialId]: { ...current, ...next } };
+    });
   };
 
-  const materialIds = Object.keys(materialsInfo || {}).sort((a, b) =>
-    materialsInfo[a].label.localeCompare(materialsInfo[b].label)
-  );
-  const unselectedMaterials = materialIds.filter((m) => !draft.required_materials.includes(m));
   const number = numberOf?.(node.id);
 
   // Every field here was mouse-only, including for a step voice itself
@@ -79,6 +102,8 @@ export default function NodeEditorPanel({
   // (not per keystroke), so values are read through a ref.
   const draftRef = useRef(draft);
   draftRef.current = draft;
+  const beforeRef = useRef(before);
+  beforeRef.current = before;
   const actionsRef = useRef();
   actionsRef.current = { onSave, onDelete, onClose };
 
@@ -168,7 +193,7 @@ export default function NodeEditorPanel({
       {
         phrases: EDIT_STEP_VOICE.save,
         run: () => {
-          actionsRef.current.onSave(node.id, draftRef.current);
+          actionsRef.current.onSave(node.id, draftRef.current, beforeRef.current);
           return null; // the panel is closing; the page will speak next
         },
       },
@@ -208,7 +233,7 @@ export default function NodeEditorPanel({
           <button type="button" className="btn panel-btn-danger" onClick={() => onDelete(node.id)}>
             Delete
           </button>
-          <button type="button" className="btn btn-primary" onClick={() => onSave(node.id, draft)}>
+          <button type="button" className="btn btn-primary" onClick={() => onSave(node.id, draft, before)}>
             Save
           </button>
         </>
@@ -272,144 +297,54 @@ export default function NodeEditorPanel({
         </div>
       </PanelField>
 
-      {materialsInfo && (
-        <PanelField label="Materials">
-          <div className="panel-chips">
-            {draft.required_materials.map((m) => (
-              <ChoiceChip
-                key={m}
-                on
-                title="Remove from this step"
-                onToggle={() => patch((n) => (n.required_materials = n.required_materials.filter((x) => x !== m)))}
-              >
-                {materialsInfo[m]?.label || m}
-                {materialsInfo[m]?.amount != null && (
-                  <span className="panel-chip-amount">
-                    {materialsInfo[m].amount} {materialsInfo[m].unit}
-                  </span>
-                )}
-              </ChoiceChip>
-            ))}
-            {draft.required_materials.length === 0 && <span className="panel-empty">No materials yet.</span>}
-          </div>
-          {addingMaterial ? (
-            <AddMaterialForm onAdd={handleAddMaterial} onCancel={() => setAddingMaterial(false)} />
-          ) : (
-            // Picking from the catalog keeps the chip row to what this
-            // step actually uses; the full list lives in the menu.
-            <select
-              className="panel-select node-editor-add-material"
-              value=""
-              aria-label="Add a material"
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v === ADD_NEW) setAddingMaterial(true);
-                else if (v) patch((n) => (n.required_materials = [...n.required_materials, v]));
-              }}
-            >
-              <option value="">+ Add a material</option>
-              {unselectedMaterials.map((m) => (
-                <option key={m} value={m}>
-                  {materialsInfo[m].label}
-                </option>
-              ))}
-              {onRegisterMaterial && <option value={ADD_NEW}>New material…</option>}
-            </select>
-          )}
-        </PanelField>
-      )}
+      <MaterialsField
+        materialsInfo={materialsInfo}
+        selected={draft.required_materials}
+        amountFor={amountFor}
+        onSetAmount={setAmount}
+        onRemove={(m) => patch((n) => (n.required_materials = n.required_materials.filter((x) => x !== m)))}
+        onPick={(m) => patch((n) => (n.required_materials = [...new Set([...n.required_materials, m])]))}
+        onRegisterMaterial={onRegisterMaterial}
+        onStepIds={originalMaterials}
+      />
 
       <PanelField label="Runs after">
-        <div className="panel-chips">
-          {others.length ? (
-            others.map((o) => {
-              // Ticking this would make the step wait on something that
-              // is already waiting on it — offered but refused, so the
-              // reason is visible rather than the option just missing.
-              const wouldLoop = blockedDependencyIds?.has(o.id) && !draft.depends_on.includes(o.id);
-              return (
-                <ChoiceChip
-                  key={o.id}
-                  on={draft.depends_on.includes(o.id)}
-                  disabled={wouldLoop}
-                  title={wouldLoop ? `Would create a cycle — "${o.label}" already comes after this step` : undefined}
-                  onToggle={() => patch((n) => (n.depends_on = toggleIn(n.depends_on, o.id)))}
-                >
-                  {numberOf && <span className="panel-chip-num">{numberOf(o.id)}</span>}
-                  {o.label}
-                </ChoiceChip>
-              );
-            })
-          ) : (
-            <span className="panel-empty">No other steps yet.</span>
-          )}
-        </div>
+        <LinkRow
+          ids={draft.depends_on}
+          allNodes={allNodes}
+          numberOf={numberOf}
+          empty="Nothing, can start right away"
+          removeHint="no longer waits on"
+          onRemove={(id) => patch((n) => (n.depends_on = n.depends_on.filter((x) => x !== id)))}
+        />
+        <LinkPicker
+          label="+ Add a step that comes before"
+          options={eligibleParents(allNodes, node.id, { deps: draft.depends_on, children: before })}
+          numberOf={numberOf}
+          onPick={(id) => patch((n) => (n.depends_on = [...n.depends_on, id]))}
+        />
+      </PanelField>
+
+      {/* The other direction. It is the same fact as "runs after" read
+          from the other end, but only one end of an arrow was ever
+          editable here, so re-pointing a step meant opening whichever
+          step happened to own the link. */}
+      <PanelField label="Unlocks next">
+        <LinkRow
+          ids={before}
+          allNodes={allNodes}
+          numberOf={numberOf}
+          empty="Nothing waits on this yet"
+          removeHint="no longer waits on this step"
+          onRemove={(id) => setBefore((b) => b.filter((x) => x !== id))}
+        />
+        <LinkPicker
+          label="+ Add a step that comes after"
+          options={eligibleChildren(allNodes, node.id, { deps: draft.depends_on, children: before })}
+          numberOf={numberOf}
+          onPick={(id) => setBefore((b) => [...b, id])}
+        />
       </PanelField>
     </BoardPanel>
-  );
-}
-
-// Inline "add a material this step needs but isn't in the list yet" —
-// registers it on the graph (available to every other step too, not
-// just this one) and turns it on for this step's in-progress draft.
-function AddMaterialForm({ onAdd, onCancel }) {
-  const [label, setLabel] = useState("");
-  const [category, setCategory] = useState(MATERIAL_CATEGORY_ORDER[0]);
-  const [amount, setAmount] = useState(1);
-  const [unit, setUnit] = useState("");
-
-  // Not a <form>: this sits inside the panel, and Enter should add the
-  // material rather than submit anything around it.
-  const submit = () => {
-    if (!label.trim()) return;
-    onAdd({ label, category, amount, unit });
-  };
-
-  return (
-    <div
-      className="add-material-form"
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          submit();
-        }
-      }}
-    >
-      <input
-        className="panel-input add-material-name"
-        type="text"
-        placeholder="Material name"
-        value={label}
-        autoFocus
-        onChange={(e) => setLabel(e.target.value)}
-      />
-      <select className="panel-select" value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Category">
-        {MATERIAL_CATEGORY_ORDER.map((cat) => (
-          <option key={cat} value={cat}>
-            {MATERIAL_CATEGORY_LABELS[cat] || cat}
-          </option>
-        ))}
-      </select>
-      <div className="add-material-qty">
-        <input
-          className="panel-input"
-          type="number"
-          min="0"
-          step="any"
-          aria-label="Amount"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-        />
-        <input className="panel-input" type="text" placeholder="unit" aria-label="Unit" value={unit} onChange={(e) => setUnit(e.target.value)} />
-      </div>
-      <div className="add-material-actions">
-        <button type="button" className="btn btn-ghost" onClick={onCancel}>
-          Cancel
-        </button>
-        <button type="button" className="btn" onClick={submit} disabled={!label.trim()}>
-          Add material
-        </button>
-      </div>
-    </div>
   );
 }

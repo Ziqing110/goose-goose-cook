@@ -65,8 +65,14 @@
      the wood (never fade: opacity drops red ink under 3:1 on it), and
      edges need a heavier grey than ink-faint to survive the tint. */
   --board: var(--kp-board);
+  --board-grain: var(--kp-board-grain);
   --board-edge: var(--kp-board-edge);
   --board-lip: var(--kp-board-lip);
+  /* The block's rim, lighter where the light falls and darker on the
+     lip it stands on. */
+  --board-rim: var(--kp-board-rim);
+  --board-rim-soft: color-mix(in oklch, var(--kp-board-rim), #f0e6d8 30%);
+  --board-rim-deep: color-mix(in oklch, var(--kp-board-rim), #1a1a1a 12%);
   --board-highlight: rgba(255, 255, 255, 0.6);
   --board-groove: rgba(122, 74, 0, 0.12);
   --board-card-dim: #f7f2ea;

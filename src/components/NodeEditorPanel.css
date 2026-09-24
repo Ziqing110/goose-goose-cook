@@ -14,3 +14,70 @@
 .add-material-qty { display: flex; gap: 8px; }
 .add-material-qty .panel-input:first-child { width: 88px; flex: none; }
 .add-material-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ---------------- materials, one row each ----------------
+   Amounts are per step now, so a material needs a row with its own two
+   fields rather than a chip. A material that was already on the step
+   reads as part of it; one added since this panel opened is still
+   pending, so it stays white until Save. */
+.panel-material-rows { display: flex; flex-direction: column; gap: 6px; }
+.panel-material-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px 5px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--ink);
+}
+.panel-material-row.is-on-step { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.panel-material-name { flex: 1 1 auto; min-width: 0; font-size: 14px; overflow-wrap: anywhere; }
+/* The fields stay white on both rows: an orange field reads as filled in
+   rather than as something to type in. */
+.panel-material-row .panel-input { height: 30px; background: var(--surface); color: var(--ink); }
+.panel-material-amount { flex: none; width: 64px; text-align: right; font-family: var(--font-mono); }
+.panel-material-unit { flex: none; width: 58px; }
+.panel-material-remove {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+.panel-material-row.is-on-step .panel-material-remove { color: rgba(255, 255, 255, 0.8); }
+.panel-material-remove:hover { background: var(--ds-chip); color: var(--ink); }
+.panel-material-row.is-on-step .panel-material-remove:hover { background: rgba(255, 255, 255, 0.18); color: #ffffff; }
+
+/* ---------------- links, both directions ---------------- */
+.panel-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.panel-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 4px 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 13px;
+}
+.panel-link-label { overflow-wrap: anywhere; }
+.panel-link-remove {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.panel-link-remove:hover { background: var(--ds-chip); color: var(--ink); }
+.panel-link-picker { margin-top: 8px; }

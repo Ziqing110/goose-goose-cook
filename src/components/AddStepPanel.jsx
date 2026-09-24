@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { PHASE_OPTIONS, EQUIPMENT_OPTIONS, equipmentLabel } from "../data/dishes.js";
-import BoardPanel, { ChoiceChip, PanelField, Segmented } from "./BoardPanel.jsx";
+import BoardPanel, { ChoiceChip, LinkPicker, LinkRow, MaterialsField, PanelField, Segmented } from "./BoardPanel.jsx";
 import { DIFFICULTY_SEGMENTS } from "./NodeEditorPanel.jsx";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 import { spokenNumber, NUMBER_TOKEN } from "../utils/understanding.js";
@@ -22,6 +22,8 @@ export default function AddStepPanel({
   recipes,
   nodes,
   numberOf,
+  materialsInfo,
+  onRegisterMaterial,
   onAdd,
   onClose,
   initialLabel = "",
@@ -37,6 +39,11 @@ export default function AddStepPanel({
   const [minutes, setMinutes] = useState(2);
   const [difficulty, setDifficulty] = useState("low");
   const [equipment, setEquipment] = useState([]);
+  // Ingredients are asked for here rather than after the fact: a step
+  // saved without them reads as craftable on the board and in the
+  // coverage line, which is a claim nobody made.
+  const [materials, setMaterials] = useState([]);
+  const [materialUsage, setMaterialUsage] = useState({});
   const [dependsOn, setDependsOn] = useState(initialDependsOn);
   // A step can't be both what this waits on and what waits on it — that's
   // a cycle through the very node being created — so picking one side
@@ -66,6 +73,8 @@ export default function AddStepPanel({
       runsBefore,
       difficulty,
       equipment,
+      materials,
+      materialUsage,
       durationSec: Math.max(15, Math.round(Number(minutes) * 60) || 0),
     });
     return true;
@@ -76,7 +85,7 @@ export default function AddStepPanel({
   // still dead-ends at a mouse click. The values read through a ref so
   // the commands don't have to re-register on every keystroke.
   const stateRef = useRef();
-  stateRef.current = { label, recipeId, phase, minutes, difficulty, equipment, dependsOn, runsBefore };
+  stateRef.current = { label, recipeId, phase, minutes, difficulty, equipment, materials, materialUsage, dependsOn, runsBefore };
   // Registered once per `nodes` change, so the command closures below must
   // not read `label`/`onAdd`/`onClose` directly — those go stale the
   // moment the effect doesn't re-run. Everything reads through these.
@@ -162,6 +171,8 @@ export default function AddStepPanel({
             runsBefore: s.runsBefore,
             difficulty: s.difficulty,
             equipment: s.equipment,
+            materials: s.materials,
+            materialUsage: s.materialUsage,
             durationSec: Math.max(15, Math.round(Number(s.minutes) * 60) || 0),
           });
           return null; // the panel is closing; the page will speak next
@@ -266,54 +277,62 @@ export default function AddStepPanel({
           </div>
         </PanelField>
 
+        <MaterialsField
+          materialsInfo={materialsInfo}
+          selected={materials}
+          amountFor={(m) => materialUsage[m] || { amount: materialsInfo?.[m]?.amount ?? null, unit: materialsInfo?.[m]?.unit || "" }}
+          onSetAmount={(m, next) =>
+            setMaterialUsage((cur) => ({
+              ...cur,
+              [m]: { ...(cur[m] || { amount: materialsInfo?.[m]?.amount ?? null, unit: materialsInfo?.[m]?.unit || "" }), ...next },
+            }))
+          }
+          onRemove={(m) => setMaterials((cur) => cur.filter((x) => x !== m))}
+          onPick={(m) => setMaterials((cur) => (cur.includes(m) ? cur : [...cur, m]))}
+          onRegisterMaterial={onRegisterMaterial && ((draft) => onRegisterMaterial(draft, recipeId))}
+        />
+
+        {/* Same pattern as the step editor: what is picked, as chips,
+            and a menu for the rest. A new step has no links yet, so the
+            only ineligible options are the ones already picked on the
+            other side. */}
         <PanelField label="Runs after">
-          <div className="panel-chips">
-            {sortedNodes.length === 0 ? (
-              <span className="panel-empty">Nothing to wait on yet.</span>
-            ) : (
-              sortedNodes.map((n) => (
-                <ChoiceChip
-                  key={n.id}
-                  on={dependsOn.includes(n.id)}
-                  disabled={runsBefore.includes(n.id)}
-                  onToggle={() => pickDependsOn(n.id)}
-                >
-                  {numberOf && <span className="panel-chip-num">{numberOf(n.id)}</span>}
-                  {n.label}
-                </ChoiceChip>
-              ))
-            )}
-          </div>
+          <LinkRow
+            ids={dependsOn}
+            allNodes={sortedNodes}
+            numberOf={numberOf}
+            empty="Nothing, can start right away"
+            removeHint="no longer comes before this step"
+            onRemove={(id) => pickDependsOn(id)}
+          />
+          <LinkPicker
+            label="+ Add a step that comes before"
+            options={sortedNodes.filter((n) => !dependsOn.includes(n.id) && !runsBefore.includes(n.id))}
+            numberOf={numberOf}
+            onPick={(id) => pickDependsOn(id)}
+          />
         </PanelField>
 
-        <PanelField label="Runs before">
-          <div className="panel-chips">
-            {sortedNodes.length === 0 ? (
-              <span className="panel-empty">Nothing to go in front of yet.</span>
-            ) : (
-              sortedNodes.map((n) => (
-                <ChoiceChip
-                  key={n.id}
-                  on={runsBefore.includes(n.id)}
-                  disabled={dependsOn.includes(n.id)}
-                  title={
-                    dependsOn.includes(n.id)
-                      ? "Already picked as something this waits on — a step can't wait on itself."
-                      : undefined
-                  }
-                  onToggle={() => pickRunsBefore(n.id)}
-                >
-                  {numberOf && <span className="panel-chip-num">{numberOf(n.id)}</span>}
-                  {n.label}
-                </ChoiceChip>
-              ))
-            )}
-          </div>
-          {/* Picking something here that already runs after one of THIS
-              step's own "Runs after" picks is exactly "insert between":
-              the redundant direct edge is dropped in favour of routing
-              through the new step — addNode (useStepEditing.js) does
-              that rewiring, not this form. */}
+        {/* Picking something here that already runs after one of THIS
+            step's own "Runs after" picks is exactly "insert between":
+            the redundant direct edge is dropped in favour of routing
+            through the new step — addNode (useStepEditing.js) does that
+            rewiring, not this form. */}
+        <PanelField label="Unlocks next">
+          <LinkRow
+            ids={runsBefore}
+            allNodes={sortedNodes}
+            numberOf={numberOf}
+            empty="Nothing waits on this yet"
+            removeHint="no longer waits on this step"
+            onRemove={(id) => pickRunsBefore(id)}
+          />
+          <LinkPicker
+            label="+ Add a step that comes after"
+            options={sortedNodes.filter((n) => !dependsOn.includes(n.id) && !runsBefore.includes(n.id))}
+            numberOf={numberOf}
+            onPick={(id) => pickRunsBefore(id)}
+          />
         </PanelField>
       </BoardPanel>
     </form>

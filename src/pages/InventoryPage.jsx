@@ -19,7 +19,6 @@ import { missingEquipment, EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
 import RecipeBoard from "../components/RecipeBoard.jsx";
 import AddStepPanel from "../components/AddStepPanel.jsx";
 import ApprovedPanel from "../components/ApprovedPanel.jsx";
-import BoardPanel from "../components/BoardPanel.jsx";
 import DeleteStepDialog from "../components/DeleteStepDialog.jsx";
 import ImpactList, { ImpactMark } from "../components/ImpactList.jsx";
 import Icon from "../components/Icon.jsx";
@@ -29,10 +28,10 @@ import { devPreview } from "../dev/preview.js";
 import NodeEditorPanel from "../components/NodeEditorPanel.jsx";
 import { useStepEditing } from "../state/useStepEditing.js";
 import { buildInventory, formatClock, formatStepDuration, PHASE_LABELS } from "../utils/inventory.js";
-import dishMapoTofu from "../assets/dish-mapo-tofu.png";
-import dishNoodleSoup from "../assets/dish-noodle-soup.png";
-import inventoryFallbackLeft from "../assets/inventory-fallback-left-v1.png";
-import inventoryFallbackRight from "../assets/inventory-fallback-right-v1.png";
+import { groupStepsByDish, dishPaper, SHARED_PAPER } from "../utils/ingredientGroups.js";
+import { categoryIconPaths } from "../utils/categoryIcons.js";
+import { GooseProfile } from "../components/GooseMarks.jsx";
+import gooseBanner from "../assets/goose-banner.png";
 import "./InventoryPage.css";
 
 // How long the thumbs-up frame holds once the recipes land.
@@ -42,13 +41,42 @@ import { normalizeUtterance, CONFIRM_YES_PATTERN, CONFIRM_NO_PATTERN } from "../
 import { matchStepName } from "../utils/stepNameMatch.js";
 import { INVENTORY_VOICE, ingredientVoicePhrases, parseAddTaskSpeech } from "../utils/pageVoiceGrammar.js";
 
-// The system's two dish marks. Matched by title keyword; a dish with
-// no mark simply shows none (the title carries the meaning).
-function dishMarkFor(title) {
-  const t = (title || "").toLowerCase();
-  if (t.includes("tofu")) return dishMapoTofu;
-  if (t.includes("noodle") || t.includes("soup")) return dishNoodleSoup;
-  return null;
+// One banner beside the title, whatever the dishes are. It replaces the
+// pair of dish marks: two illustrations competed with each other and
+// with the title, and neither said anything the title doesn't.
+// Served from public/ rather than imported, so a missing file is an
+// empty space rather than a failed build.
+// The goose and its basket, beside the title. One banner rather than
+// the pair of dish marks: two illustrations competed with each other and
+// with the title, and said nothing the title doesn't.
+const HEADER_BANNER = gooseBanner;
+
+// A webbed print, the goose's own tick. Small enough to sit in a line
+// of type, so the verdict stamp reads as pressed on rather than printed.
+const PAW_PATH =
+  "M13 3.2c1.6 0 2.2 1.6 2.4 3.4l.5 4.6c.1 1.2 1 1.6 2 1.1l3.6-1.8c1.6-.8 2.8.6 1.7 2L14.9 25c-1 1.3-2.6 1.3-3.5 0L2.9 12.6c-1-1.4.2-2.8 1.8-2l3.5 1.8c1 .5 1.9.1 2-1.1l.5-4.6C10.9 4.8 11.4 3.2 13 3.2Z";
+
+// Pressed into the panel when the basket is full: wax, dashes, a paw and
+// the goose's own word for it.
+function HonkSeal() {
+  return (
+    <span className="inv-seal" aria-hidden="true">
+      <svg viewBox="0 0 100 100" width="92" height="92">
+        <path
+          d="M50 4.5 61 10 73.5 8.2 80.6 18.3 92 23.5 90.8 35.9 96.5 47 89.2 57.2 90 69.6 78.4 74.3 71.9 84.9 59.6 83.6 50 91.5 40.4 83.6 28.1 84.9 21.6 74.3 10 69.6 10.8 57.2 3.5 47 9.2 35.9 8 23.5 19.4 18.3 26.5 8.2 39 10Z"
+          fill="#b8461f"
+        />
+        <circle cx="50" cy="50" r="33" fill="none" stroke="#f0d7cd" strokeWidth="1.6" strokeDasharray="4 4" opacity="0.85" />
+        <path
+          d="M50 30.5c2.6 0 3.6 2.6 3.9 5.5l.8 7.5c.2 1.9 1.6 2.6 3.2 1.8l5.9-2.9c2.6-1.3 4.6 1 2.8 3.2L53.1 65.4c-1.6 2.1-4.2 2.1-5.7 0L31.4 45.6c-1.7-2.2.3-4.5 2.9-3.2l5.7 2.9c1.6.8 3.1.1 3.2-1.8l.8-7.5c.4-2.9 1.4-5.5 4-5.5Z"
+          fill="#fdeada"
+        />
+        <text x="50" y="74" textAnchor="middle" className="inv-seal-word">
+          HONK
+        </text>
+      </svg>
+    </span>
+  );
 }
 
 // The overlay panel's width plus its inset — what the board keeps clear.
@@ -162,19 +190,49 @@ function StepLine({ step, statusLine, delay }) {
 // opens on its disclosure, its text or a dish pill, and an "out" row
 // opens itself (and lifts off the card) so the cook sees what they just
 // affected.
-function IngredientRow({ item, onToggle, statusLineFor, delay }) {
+/* The line icon at the head of an ingredient category, from the design
+   system's own set — see utils/categoryIcons.js. */
+function CategoryMark({ category }) {
+  const paths = categoryIconPaths(category);
+  if (!paths.length) return null;
+  return (
+    <svg
+      className="inv-card-icon"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {paths.map((d) => (
+        <path key={d} d={d} />
+      ))}
+    </svg>
+  );
+}
+
+function IngredientRow({ item, onToggle, statusLineFor, dishTitles, delay }) {
   const onHand = !item.out;
   const [opened, setOpened] = useState(false);
   const expanded = !onHand || opened;
   const detailId = `inv-detail-${item.id}`;
   const reachText = `${item.reach} ${item.reach === 1 ? "step" : "steps"}`;
   const reachTitle = onHand ? `Missing this would affect ${reachText}` : `Missing — affects ${reachText}`;
+  const toggleOpen = () => setOpened((v) => !v);
+  // Which dish each step belongs to, in dish order with the shared
+  // steps last. One group means the heading says nothing the row
+  // doesn't, so it isn't drawn.
+  const groups = groupStepsByDish(item.usedIn, dishTitles);
   return (
     <li className={`inv-row ${onHand ? "" : "is-out"} ${expanded ? "is-open" : ""}`} style={{ animationDelay: `${delay}ms` }}>
       <div className="inv-row-head">
         <Checkbox checked={onHand} label={item.label} onChange={onToggle} />
         <span className="inv-row-main">
-          <span className="inv-row-title-line" onClick={() => setOpened((v) => !v)}>
+          <span className="inv-row-title-line" onClick={toggleOpen}>
             <span className="inv-row-title">{item.label}</span>
             {item.amount != null && (
               <span className="inv-row-amount mono">
@@ -184,22 +242,25 @@ function IngredientRow({ item, onToggle, statusLineFor, delay }) {
             {!onHand && <span className="inv-chip inv-chip-out">Out</span>}
             {item.isCustom && <span className="inv-chip inv-chip-added">Added by you</span>}
           </span>
-          <span className="inv-row-meta">
-            <span onClick={() => setOpened((v) => !v)}>
+          {/* The dish names are a label, not a filter. Filtering by dish
+              here answered a question nobody had — an ingredient's
+              steps are worth seeing together — and cost a click before
+              the steps appeared at all. */}
+          <span className="inv-row-meta" onClick={toggleOpen}>
+            <span>
               used in {item.usedIn.length} {item.usedIn.length === 1 ? "step" : "steps"}
             </span>
-            {item.dishes.map((d) => (
-              <button
-                key={d}
-                type="button"
-                className="inv-dish-pill"
-                aria-controls={detailId}
-                title={`Where ${item.label} goes in ${d}`}
-                onClick={() => setOpened(true)}
-              >
-                {d}
-              </button>
-            ))}
+            {item.usesEveryDish ? (
+              <span className="inv-dish-pill" title={item.dishes.join(", ")}>
+                All &middot; {item.dishes.length} dishes
+              </span>
+            ) : (
+              item.dishes.map((d) => (
+                <span key={d} className="inv-dish-pill">
+                  {d}
+                </span>
+              ))
+            )}
           </span>
         </span>
         <span className={`inv-reach mono is-${item.reachTone}`} title={reachTitle} aria-label={reachTitle}>
@@ -211,7 +272,7 @@ function IngredientRow({ item, onToggle, statusLineFor, delay }) {
           aria-expanded={expanded}
           aria-controls={detailId}
           aria-label={`${expanded ? "Hide" : "Show"} the steps that use ${item.label}`}
-          onClick={() => setOpened((v) => !v)}
+          onClick={toggleOpen}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M6 9l6 6 6-6" />
@@ -220,8 +281,25 @@ function IngredientRow({ item, onToggle, statusLineFor, delay }) {
       </div>
       {expanded && (
         <div className="inv-row-detail" id={detailId}>
-          {item.usedIn.map((step, i) => (
-            <StepLine key={step.id} step={step} statusLine={statusLineFor(step)} delay={i * 60} />
+          {groups.map((group, gi) => (
+            <div key={group.name} className="inv-step-group">
+              {groups.length > 1 && (
+                <span className="inv-step-group-head">
+                  <span
+                    className="inv-step-group-swatch"
+                    aria-hidden="true"
+                    style={{ background: group.paper.bg, border: group.paper.border }}
+                  />
+                  <span className="mono inv-step-group-name">{group.name}</span>
+                  <span className="mono inv-step-group-count">
+                    {group.count} {group.count === 1 ? "step" : "steps"}
+                  </span>
+                </span>
+              )}
+              {group.steps.map((step, i) => (
+                <StepLine key={step.id} step={step} statusLine={statusLineFor(step)} delay={(gi * 2 + i) * 60} />
+              ))}
+            </div>
           ))}
         </div>
       )}
@@ -236,9 +314,9 @@ export default function InventoryPage() {
   const { catalog, catalogError, retryCatalog, generating } = useSessionRecipes();
   const navigate = useNavigate();
   const [tab, setTab] = useState("ingredients");
-  // The board panel: null, { mode: "impact" }, { mode: "edit", id } or
-  // { mode: "add" }. Which card is open is view state — persisting it
-  // meant a reload re-opened the editor on a step nobody had clicked.
+  // The board panel: null, { mode: "edit", id } or { mode: "add" }.
+  // Which card is open is view state — persisting it meant a reload
+  // re-opened the editor on a step nobody had clicked.
   const [panel, setPanel] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   // A voice guess waiting on a yes/no before it acts — a "before X" /
@@ -254,7 +332,28 @@ export default function InventoryPage() {
   const [editingKitchen, setEditingKitchen] = useState(false);
   const [kitchenError, setKitchenError] = useState(null);
   const tabRowRef = useRef(null);
+  // What the dish key on the board actually takes. Six dishes wrap it
+  // onto three lines, and the first column of cards has to start below
+  // whatever it ends up being.
+  const paperLegendRef = useRef(null);
+  const [legendKeepOut, setLegendKeepOut] = useState(0);
   const boardRef = useRef(null);
+  useEffect(() => {
+    const el = paperLegendRef.current;
+    if (!el) {
+      setLegendKeepOut(0);
+      return undefined;
+    }
+    const measure = () => setLegendKeepOut(Math.round(el.getBoundingClientRect().height) + 10);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+    // The key only exists on the graph tab; once it is there, the
+    // observer covers every reason its height changes — another dish,
+    // a narrower board, a longer name.
+  }, [tab]);
+
   // 0% is the fitted view; 100% is the ceiling above. Computed up here
   // (not just before the JSX that reads it) so the voice commands below
   // can drive the same zoom the slider does.
@@ -274,6 +373,8 @@ export default function InventoryPage() {
   // would rebuild everything keyed on it for no reason.
   const boardNodes = useMemo(() => working.nodes || [], [working.nodes]);
   const nodeById = useMemo(() => Object.fromEntries(boardNodes.map((n) => [n.id, n])), [boardNodes]);
+  // The legend only names the shared sheet when a step is actually on it.
+  const hasSharedStep = useMemo(() => boardNodes.some((n) => n._shared), [boardNodes]);
 
   // One source for status and numbering, so the HUD, bar, rail, rows
   // and board can't disagree.
@@ -327,20 +428,21 @@ export default function InventoryPage() {
     );
   };
 
+  // Which stock a step's slip is cut from: its dish's paper, or the
+  // dashed white sheet for one both dishes share.
+  const paperFor = (node) => (node._shared ? SHARED_PAPER : dishPaper(recipes.find((r) => r.id === node._recipeId)?.working.title, inv.dishTitles));
   const dishLabelFor = (node) =>
     node._shared ? "Shared" : recipes.find((r) => r.id === node._recipeId)?.working.title || null;
-  const { addNode, saveNode, deleteNode, deleteNodes, registerMaterial } = useStepEditing();
+  const { addNode, saveNode, deleteNode, deleteNodes, linkNodes, unlinkNodes, registerMaterial } = useStepEditing();
   // A step can carry materials the catalog doesn't know yet (added from
   // the editor), so the editor sees the catalog plus this run's own.
   const materialsInfo = { ...(catalog || {}), ...(working.custom_materials || {}) };
 
   const editingNode = !approved && panel?.mode === "edit" ? nodeById[panel.id] || null : null;
   const selectedId = editingNode?.id || null;
-  const panelOpen = !approved && (panel?.mode === "impact" || panel?.mode === "add" || Boolean(editingNode));
+  const panelOpen = !approved && (panel?.mode === "add" || Boolean(editingNode));
 
-  // Closing a step or the add form goes back to the impact list, if
-  // there's anything on it; closing the list dismisses the panel.
-  const closePanel = () => setPanel(panel?.mode !== "impact" && inv.impact.length > 0 ? { mode: "impact" } : null);
+  const closePanel = () => setPanel(null);
   const selectNode = (id) => {
     if (approved) return;
     if (selectedId === id) closePanel();
@@ -771,12 +873,7 @@ export default function InventoryPage() {
     }
   }
 
-  const legend = [`${coverage.craftable} craftable`];
-  if (coverage.atRisk) legend.push(`${coverage.atRisk} at risk`);
-  if (coverage.blocked) legend.push(`${coverage.blocked} blocked`);
-
   const allOnHand = inv.onHandCount === inv.ingredients.length;
-  const dishMarks = inv.dishTitles.map((t) => ({ title: t, src: dishMarkFor(t) })).filter((d) => d.src);
 
   // Caption under the board: where the cards you can't see are.
   const hiddenCount = offscreen.left.length + offscreen.right.length + offscreen.other.length;
@@ -823,13 +920,16 @@ export default function InventoryPage() {
     );
   }
 
-  const counterTone = coverage.blocked > 0 ? "critical" : "warning";
-
   return (
     <section className="page inventory-page">
       <header className="inv-title-row">
         <div className="inv-title">
-          <h1>Inventory</h1>
+          <span className="ds-title-mark">
+            <h1>Inventory</h1>
+            <svg className="ds-underline ds-underline-title" viewBox="0 0 430 10" preserveAspectRatio="none" fill="none" aria-hidden="true">
+              <path d="M2 7c68-4 144 1 220-2 58-2.5 134 3 206 .5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </span>
           {loading ? (
             <span className="inv-meta is-tertiary">Loading your ingredients…</span>
           ) : (
@@ -843,20 +943,9 @@ export default function InventoryPage() {
             </span>
           )}
         </div>
-        {dishMarks.length > 0 && (
-          <span className="inv-dish-marks" aria-hidden="true">
-            {dishMarks.map((d, i) => (
-              <img key={d.title} src={d.src} alt="" className="inv-dish-mark" style={{ animationDelay: `${120 + i * 80}ms` }} />
-            ))}
-          </span>
-        )}
-        {dishMarks.length === 0 && (
-          <span className="inv-inventory-fallbacks" aria-hidden="true">
-            {[inventoryFallbackLeft, inventoryFallbackRight].map((src, i) => (
-              <img key={src} src={src} alt="" className="inv-inventory-fallback" style={{ animationDelay: `${120 + i * 80}ms` }} />
-            ))}
-          </span>
-        )}
+        <div className="ds-scene">
+          <img src={HEADER_BANNER} alt="" className="ds-scene-art inv-banner" aria-hidden="true" />
+        </div>
       </header>
 
       {hasDishes && catalogError && (
@@ -872,7 +961,31 @@ export default function InventoryPage() {
         <>
           {/* ---- Coverage HUD: the whole plan, above both tabs ---- */}
           <div className="inv-hud">
-            <span className={`inv-summary is-${coverage.tone}`}>{coverage.summary}</span>
+            {coverage.showSeal && <HonkSeal />}
+            {/* The verdict before the sentence: a cook scanning the page
+                gets the answer from the stamp and the detail from the
+                line under it. */}
+            <span className={`inv-stamp is-${coverage.stampTone}`}>
+              <svg width="11" height="12" viewBox="0 0 26 28" fill="none" aria-hidden="true">
+                <path d={PAW_PATH} fill="currentColor" />
+              </svg>
+              {coverage.stampLabel}
+            </span>
+            <span className={`inv-summary is-${coverage.tone}`}>
+              {/* Drawn by hand rather than set in a box: the mark is the
+                  goose's, and a clean run is worth underlining. */}
+              {coverage.tone === "critical" && (
+                <svg className="inv-summary-strike" viewBox="0 0 200 30" preserveAspectRatio="none" aria-hidden="true">
+                  <path
+                    d="M2 9.5C40 6 92 5.2 140 6.4c22 .5 40 1.4 57 2.6l1 12.4c-28 1.8-66 2.6-104 2.2-34-.4-66-1.4-92-3.2Z"
+                    fill="#e8543c"
+                    fillOpacity="0.28"
+                  />
+                  <path d="M5 20.5c52 2 118 2.4 190-.6" stroke="#e8543c" strokeOpacity="0.22" strokeWidth="3" fill="none" strokeLinecap="round" />
+                </svg>
+              )}
+              <span className="inv-summary-text">{coverage.summary}</span>
+            </span>
             <div className="inv-stats">
               <div className="inv-stat">
                 <span className={`inv-stat-value mono inv-roll${allOnHand ? " is-done" : ""}`} style={{ animationDelay: "300ms" }}>
@@ -914,8 +1027,17 @@ export default function InventoryPage() {
                   <span key={s.id} className={`inv-stepbar-seg is-${s.status}`} />
                 ))}
               </div>
-              <span className="mono inv-stepbar-legend">{legend.join(" · ")}</span>
             </div>
+            {/* The goose's own reading of the same numbers. It is the
+                one line on the page that says what it would DO about
+                them. */}
+            <span className="inv-goose-line mono">
+              {/* The conversation's own profile picture
+                  (components/GooseMarks.jsx): one bird across the app
+                  rather than a different portrait per page. */}
+              <GooseProfile size={30} aria-hidden="true" />
+              {coverage.gooseLine}
+            </span>
           </div>
 
           {approved && <ApprovedPanel draft={draft} approved={approved} onRevise={revise} />}
@@ -944,42 +1066,33 @@ export default function InventoryPage() {
                     </button>
                   ))}
                 </div>
+                {/* Both live at the right end of the row: the tabs hold
+                    the left, and the instruction reads as a caption to
+                    the warning beside it rather than as a label on the
+                    tab it follows. */}
                 <div className="inv-tabrow-end">
-                  {tab === "ingredients" ? (
-                    <span className="inv-hint">Uncheck whatever you&rsquo;re out of.</span>
-                  ) : approved ? (
-                    <span className="inv-hint">Approved &mdash; revise the plan to change a step.</span>
-                  ) : (
-                    <>
-                      <span className="inv-hint inv-hint-board">Drag a card to move it. Click one to edit.</span>
-                      {inv.impact.length > 0 && (
-                        <button
-                          type="button"
-                          className={`inv-status-counter is-${counterTone}`}
-                          aria-pressed={panel?.mode === "impact"}
-                          onClick={() => setPanel(panel?.mode === "impact" ? null : { mode: "impact" })}
-                        >
-                          {coverage.blocked > 0 && (
-                            <span className="inv-counter-part">
-                              <span className="inv-counter-dot is-blocked" aria-hidden="true" />
-                              {coverage.blocked} blocked
-                            </span>
-                          )}
-                          {coverage.atRisk > 0 && (
-                            <span className="inv-counter-part">
-                              <span className="inv-counter-dot is-atRisk" aria-hidden="true" />
-                              {coverage.atRisk} at risk
-                            </span>
-                          )}
-                        </button>
+                  <span className="inv-hint">
+                    {tab === "ingredients"
+                      ? "Uncheck whatever you’re out of."
+                      : approved
+                        ? "Approved — revise the plan to change a step."
+                        : "Drag a card to move it. Click one to edit."}
+                  </span>
+                  {tab === "graph" && (coverage.blocked > 0 || coverage.atRisk > 0) && (
+                    <span className={`inv-status-counter is-${coverage.blocked > 0 ? "critical" : "warning"}`} role="status">
+                      {coverage.blocked > 0 && (
+                        <span className="inv-counter-part">
+                          <span className="inv-counter-dot is-blocked" aria-hidden="true" />
+                          {coverage.blocked} blocked
+                        </span>
                       )}
-                      <button type="button" className="btn inv-add-btn" aria-pressed={panel?.mode === "add"} onClick={() => setPanel({ mode: "add" })}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
-                          <path d="M12 5v14M5 12h14" />
-                        </svg>
-                        Add a task
-                      </button>
-                    </>
+                      {coverage.atRisk > 0 && (
+                        <span className="inv-counter-part">
+                          <span className="inv-counter-dot is-atRisk" aria-hidden="true" />
+                          {coverage.atRisk} at risk
+                        </span>
+                      )}
+                    </span>
                   )}
                 </div>
               </div>
@@ -1037,6 +1150,7 @@ export default function InventoryPage() {
                       <section key={g.key} className="inv-card" style={{ animationDelay: `${160 + gi * 60}ms` }} aria-labelledby={`inv-group-${g.key}`}>
                         <div className="inv-card-head">
                           <span id={`inv-group-${g.key}`} className="inv-card-title">
+                            <CategoryMark category={g.key} />
                             {g.label}
                           </span>
                           <span className={`mono inv-card-count${onHand === g.items.length ? " is-done" : ""}`}>
@@ -1050,6 +1164,7 @@ export default function InventoryPage() {
                               item={item}
                               onToggle={() => toggle(item.id)}
                               statusLineFor={statusLineFor}
+                              dishTitles={inv.dishTitles}
                               delay={220 + gi * 60 + i * 60}
                             />
                           ))}
@@ -1061,6 +1176,35 @@ export default function InventoryPage() {
               ) : (
                 <div className="inv-board-wrap" role="tabpanel" id="inv-tabpanel-graph" aria-labelledby="inv-tab-graph">
                   <div className="inv-board">
+                    {/* The hole a board hangs by. It is the detail that
+                        settles what the ground is: without it the wood
+                        is a texture, with it the graph is laid out on a
+                        chopping board. */}
+                    <span className="inv-board-hang" aria-hidden="true" />
+                    {/* Which stock each slip is cut from, on the board
+                        with the slips rather than in the caption
+                        under it. */}
+                    <span className="inv-paper-legend" ref={paperLegendRef}>
+                      {inv.dishTitles.map((title) => {
+                        const paper = dishPaper(title, inv.dishTitles);
+                        return (
+                          <span key={title} className="inv-paper-key">
+                            <span className="inv-paper-swatch" style={{ background: paper.bg, border: paper.border }} aria-hidden="true" />
+                            {title}
+                          </span>
+                        );
+                      })}
+                      {hasSharedStep && (
+                        <span className="inv-paper-key">
+                          <span
+                            className="inv-paper-swatch"
+                            style={{ background: SHARED_PAPER.bg, border: SHARED_PAPER.border }}
+                            aria-hidden="true"
+                          />
+                          Shared
+                        </span>
+                      )}
+                    </span>
                     <span className="inv-phase-legend" aria-label="Phase colours">
                       {["prep", "cook", "plate"].map((ph) => (
                         <span key={ph} className={`inv-phase-key is-${ph}`}>
@@ -1075,6 +1219,7 @@ export default function InventoryPage() {
                       positions={nodePositions}
                       selectedNodeId={selectedId}
                       dishLabelFor={dishLabelFor}
+                      paperOf={paperFor}
                       statusOf={statusOf}
                       numberOf={numberOf}
                       onSelect={selectNode}
@@ -1082,20 +1227,12 @@ export default function InventoryPage() {
                       reserveRight={panelOpen ? PANEL_RESERVE : 0}
                       onOffscreen={setOffscreen}
                       zoom={zoom}
+                      legendKeepOut={legendKeepOut}
                       onFitScale={setFitScale}
+                      onLink={linkNodes}
+                      onUnlink={unlinkNodes}
+                      readOnly={Boolean(approved)}
                     />
-
-                    {!approved && panel?.mode === "impact" && (
-                      <BoardPanel
-                        label="What this changes"
-                        title="What this changes"
-                        tone="ai"
-                        mark={<ImpactMark />}
-                        onClose={() => setPanel(null)}
-                      >
-                        <ImpactList entries={inv.impact} onPick={pickImpact} hint="Click a step to select it on the board." />
-                      </BoardPanel>
-                    )}
 
                     {editingNode && (
                       <NodeEditorPanel
@@ -1104,8 +1241,8 @@ export default function InventoryPage() {
                         numberOf={numberOf}
                         blockedDependencyIds={cyclicDependencyIds(boardNodes, editingNode.id)}
                         onClose={closePanel}
-                        onSave={(id, nodeDraft) => {
-                          saveNode(id, nodeDraft);
+                        onSave={(id, nodeDraft, children) => {
+                          saveNode(id, nodeDraft, { children });
                           closePanel();
                         }}
                         onDelete={(id) => {
@@ -1127,6 +1264,10 @@ export default function InventoryPage() {
                         recipes={recipes}
                         nodes={boardNodes}
                         numberOf={numberOf}
+                        materialsInfo={materialsInfo}
+                        onRegisterMaterial={(materialDraft, recipeId) =>
+                          registerMaterial(materialDraft, materialsInfo, null, recipeId)
+                        }
                         onClose={closePanel}
                         initialLabel={panel.initialLabel || ""}
                         initialDependsOn={panel.initialDependsOn || []}
@@ -1142,12 +1283,24 @@ export default function InventoryPage() {
 
                   <div className="inv-board-caption">
                     <span className="inv-board-count">
-                      <span>
-                        <Mono>{boardNodes.length}</Mono> {boardNodes.length === 1 ? "step" : "steps"} on the board
+                      <span className="inv-board-count-lead">
+                        {boardNodes.length} {boardNodes.length === 1 ? "step" : "steps"}
                       </span>
+                      {!approved && (
+                        <span className="inv-board-pan">Drag a card&rsquo;s side dot to link &middot; click an arrow to unlink</span>
+                      )}
                       {panHint && <span className="inv-board-pan">{panHint}</span>}
                     </span>
-                    <span className="inv-zoom">
+
+                    <span className="inv-board-tools">
+                      {!approved && (
+                        <button type="button" className="btn inv-add-btn" aria-pressed={panel?.mode === "add"} onClick={() => setPanel({ mode: "add" })}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                            <path d="M12 5v14M5 12h14" />
+                          </svg>
+                          Add a task
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="inv-zoom-step"
@@ -1157,17 +1310,6 @@ export default function InventoryPage() {
                       >
                         &minus;
                       </button>
-                      <input
-                        className="inv-zoom-slider"
-                        type="range"
-                        min={0}
-                        max={100}
-                        step={ZOOM_STEP}
-                        value={zoomPct}
-                        aria-label="Zoom"
-                        aria-valuetext={zoomPct === 0 ? "Fitted — every step visible" : `${zoomPct}% past the fitted view`}
-                        onChange={(e) => setZoomPct(Number(e.target.value))}
-                      />
                       <button
                         type="button"
                         className="inv-zoom-step"
@@ -1178,10 +1320,8 @@ export default function InventoryPage() {
                         +
                       </button>
                       <span className="inv-zoom-pct mono">{zoomPct > 0 ? `+${zoomPct}%` : "0%"}</span>
-                      <button type="button" className="inv-zoom-fit" disabled={zoom === null} onClick={() => setZoom(null)}>
-                        Fit
-                      </button>
                     </span>
+
                   </div>
                 </div>
               )}
@@ -1209,7 +1349,7 @@ export default function InventoryPage() {
           {/* ---- Footer band ---- */}
           <div className="inv-footer">
             <span className="mono inv-footer-tag">
-              {coverage.craftable} of {coverage.total} steps craftable
+              {inv.onHandCount} / {inv.ingredients.length} ingredients on hand
             </span>
             <div className="inv-footer-actions">
               {hasOut && (
