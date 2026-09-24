@@ -904,7 +904,7 @@ export default function LiveCookPage() {
           // Two voices ended up in this one turn, so the words cannot be
           // trusted to belong to one person asking for one thing.
           shared,
-          snapshot: buildAgentSnapshot({ run: latestRunRef.current, nodes, cooks, speakerId: cookId, paused: isPaused(latestRunRef.current) }),
+          snapshot: buildAgentSnapshot({ run: latestRunRef.current, nodes, cooks, speakerId: cookId, paused: isPaused(latestRunRef.current), conversation: state.session.conversation }),
         });
       } catch (err) {
         // Slow, down or unreachable: the keyword grammar still works.

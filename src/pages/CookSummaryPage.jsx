@@ -13,11 +13,16 @@ import { getSession, updateSession } from "../api/sessions.js";
 import { stylePhoto } from "../api/photo.js";
 import { fileToDataUrl, applyLocalStyle, renderShareCard, downloadDataUrl } from "../utils/summaryCard.js";
 import { clock, planDelta, resultPlayers, summaryOutcome } from "../utils/serviceResults.js";
+import { runTimeline } from "../utils/cookTimeline.js";
+import { allWorkingNodes } from "../utils/runStats.js";
 import { PlayerAvatar, Stamp, StepReceipt } from "../components/ServiceResults.jsx";
 import { GoosePrint } from "../components/GooseMarks.jsx";
 import BabyGoose from "../components/BabyGoose.jsx";
 import KpIcon from "../components/KpIcon.jsx";
 import "./CookSummaryPage.css";
+
+// Past tense, because the cook is over by the time anyone reads this.
+const VERB = { start: "Started", done: "Finished", skip: "Skipped", drop: "Handed back" };
 
 function formatDate(iso) {
   return iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
@@ -153,6 +158,14 @@ export default function CookSummaryPage() {
     const fromSession = (session?.cooks || []).filter((c) => inSummary.has(c.id));
     return fromSession.length ? fromSession : summary.cooks.map((c) => ({ id: c.cookId, name: c.name }));
   }, [session, summary]);
+  // What each cook actually did, read back out of the run's own event
+  // log. Nothing new is stored for this and no model is asked: the
+  // events were written during the cook, and getSession returns them
+  // alongside the summary. Older runs get it for free too.
+  const timeline = useMemo(() => {
+    if (!session?.run || !cooks.length) return [];
+    return runTimeline(session.run, allWorkingNodes(session), cooks).filter((c) => c.actions.length);
+  }, [session, cooks]);
   const players = useMemo(() => {
     if (!outcome) return [];
     const quips = Object.fromEntries(summary.cooks.map((c) => [c.cookId, (c.quips || []).slice(0, 2)]));
@@ -286,6 +299,41 @@ export default function CookSummaryPage() {
           </div>
         </div>
       </div>
+
+      {timeline.length > 0 && (
+        <section className="cc-did" aria-labelledby="cc-did-title">
+          <h2 id="cc-did-title" className="cc-did-title">What each of you did</h2>
+          <div className="cc-did-grid">
+            {timeline.map((cook) => (
+              <article key={cook.cookId} className="cc-did-cook">
+                <header className="cc-did-head">
+                  <h3>{cook.name}</h3>
+                  <p className="cc-did-tally">
+                    <span><span className="mono">{cook.done}</span> done</span>
+                    {cook.skipped > 0 && <span><span className="mono">{cook.skipped}</span> skipped</span>}
+                    {cook.dropped > 0 && <span><span className="mono">{cook.dropped}</span> handed back</span>}
+                    {cook.workingSec > 0 && <span><span className="mono">{clock(cook.workingSec)}</span> hands on</span>}
+                  </p>
+                </header>
+                <ol className="cc-did-list">
+                  {cook.actions.map((action, i) => (
+                    <li
+                      key={`${action.type}-${action.stepId}-${i}`}
+                      className={`cc-did-item is-${action.type}${action.undone ? " is-undone" : ""}`}
+                    >
+                      <span className="cc-did-verb">{VERB[action.type]}</span>
+                      <span className="cc-did-step">{action.label || "a step since removed"}</span>
+                      {action.seconds != null && (
+                        <span className="cc-did-time mono">{clock(action.seconds)}</span>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       <footer className="cc-actions">
         <div className="cc-actions-left">

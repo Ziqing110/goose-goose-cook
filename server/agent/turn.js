@@ -85,6 +85,7 @@ Rules:
 - Questions about progress, what is next, who is doing what, or the score: call status or score. Never answer these from memory; the app reads out the real state.
 - If they are clearly talking to someone else in the room, call no tool and reply with an empty string.
 - Your reply is spoken aloud: at most 15 words, plain speech, no lists, markdown or emoji. Be warm and a little funny, never at the cost of being clear. After a plain action, a two-word acknowledgement or an empty reply is right.
+- A Brief line, when present, is what they asked for before any of this was planned. Honour it without being asked: never suggest something their diet rules out, and let their stated skill level set how much you explain.
 - Anything unrelated to this cook (weather, trivia, chit-chat): call no tool, and decline in one short, friendly sentence. Do not call help for it.
 - Never claim to have done something you did not call a tool for.${search ? `
 - You can call search_web for a cooking question the recipe does not answer. It makes ${speakerName} wait several seconds, so use it only when you genuinely do not know, never for anything about this run.` : ""}`;
@@ -106,6 +107,11 @@ export function buildUserMessage(snapshot, text, { shared = false } = {}) {
     `Cooks: ${(snapshot.cooks || []).map((c) => c.name).join(", ")}.`,
     `Open steps: ${JSON.stringify(open)}`,
   ];
+  // Before the open steps would bury it; after them it reads as a
+  // footnote. It goes first because it constrains every answer below.
+  if (snapshot.brief) {
+    lines.unshift(`Brief: ${JSON.stringify(snapshot.brief)}`);
+  }
   if (snapshot.history?.length) {
     lines.push(`Recent: ${snapshot.history.slice(-6).map((h) => `${h.speaker}: ${h.text}`).join(" | ")}`);
   }
