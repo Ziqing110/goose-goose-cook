@@ -35,6 +35,7 @@ import {
 } from "../utils/voicePageCommands.js";
 import { ROUTES, voiceReachablePaths } from "../utils/routeGuards.js";
 import { routeVoiceTurn, turnConfidence } from "../utils/voiceTurn.js";
+import { speakerLabelTap } from "../voice/speakerLabelTap.js";
 
 
 // Long enough to read, short enough that the bar goes back to being a
@@ -279,6 +280,10 @@ export default function VoiceBar() {
   const onTurn = useCallback(
     (turn) => {
       const text = turn.transcript?.trim();
+      // Diarization tells voices apart without knowing whose they are.
+      // Recorded on every page, because the page that needs it (voice
+      // binding) asks about turns that have already gone by.
+      speakerLabelTap.push(turn.speaker_label, turn.startedAt ?? Date.now());
       const route = routeRef.current;
       const dictation = getVoiceDictation(route);
       const decision = routeVoiceTurn(text, {

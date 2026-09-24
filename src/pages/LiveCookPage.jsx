@@ -47,6 +47,7 @@ import { AGENT_NAME, speak } from "../voice/agentVoice.js";
 import { audioTap } from "../voice/audioTap.js";
 import { identifySpeaker } from "../api/speaker.js";
 import { decideSpeaker, hasHandover } from "../utils/speakerMatch.js";
+import { cookFromTurn } from "../utils/speakerLabels.js";
 import { isNameOnlyTurn } from "../utils/addressing.js";
 import { buildSummary } from "../utils/summaryCard.js";
 import { clock, playerKey, resultPlayers } from "../utils/serviceResults.js";
@@ -859,23 +860,34 @@ export default function LiveCookPage() {
   // match is clear, otherwise null and the speaker toggle stands: a wrong
   // credit is worse than no answer. Never throws; the service being off is
   // an ordinary state.
-  const whoSpoke = async (clip) => {
-    if (!clip || cooks.length < 2) return null;
+  //
+  // Below it sits AssemblyAI's own diarization, bound to a cook on the
+  // voice-binding page. It cannot name a voice by itself, but the label
+  // was tied to a cook there, and it is the only attribution the
+  // deployed app has -- the sidecar does not run there.
+  const whoSpoke = async (clip, turn) => {
+    if (cooks.length < 2) return null;
+    if (!clip) return cookFromTurn(turn, cooks).cookId;
     try {
       const result = await identifySpeaker({ pcm: clip.pcm, rate: clip.rate, candidates: cooks.map((c) => c.id) });
       const verdict = decideSpeaker(result);
       const named = Object.fromEntries(Object.entries(result.scores || {}).map(([id, v]) => [name(id), v]));
       console.info(`[speaker] ${verdict.cookId ? name(verdict.cookId) : "unsure"} (${verdict.reason})`, named, `margin ${result.margin}`);
-      return verdict.cookId;
+      // A voiceprint outranks a label: it was measured against this
+      // cook's own voice, not inferred from who else is in the room.
+      return verdict.cookId ?? cookFromTurn(turn, cooks).cookId;
     } catch (err) {
-      console.info("[speaker] unavailable, using the speaker toggle:", err.message);
-      return null;
+      console.info("[speaker] unavailable, trying the diarization label:", err.message);
+      return cookFromTurn(turn, cooks).cookId;
     }
   };
 
-  const askAgent = (text, cookId, { engaged = true, clip = null, shared = false } = {}) => {
+  // `sttTurn` is the recogniser's turn, not the agent's reply -- the
+  // inner scope already calls that one `turn`, and shadowing it here put
+  // the read before the declaration.
+  const askAgent = (text, cookId, { engaged = true, clip = null, shared = false, sttTurn = null } = {}) => {
     agentQueueRef.current = agentQueueRef.current.then(async () => {
-      const heardAs = await whoSpoke(clip);
+      const heardAs = await whoSpoke(clip, sttTurn);
       if (heardAs && heardAs !== cookId) {
         cookId = heardAs;
         setSpeakerId(heardAs); // so the toggle shows who was heard
@@ -985,7 +997,7 @@ export default function LiveCookPage() {
     // happened and asks which of them meant it.
     const shared = hasHandover(turn?.words);
     if (shared) console.info("[voice] two cooks in one turn:", text);
-    askAgent(text, speaker, { engaged, clip, shared });
+    askAgent(text, speaker, { engaged, clip, shared, sttTurn: turn });
   };
 
   const submitKeywordUtterance = (text) => {
