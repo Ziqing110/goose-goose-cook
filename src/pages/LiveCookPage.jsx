@@ -43,7 +43,7 @@ import { matchConfirmation } from "../utils/navCommands.js";
 import { registerVoiceDictation } from "../utils/voicePageCommands.js";
 import { buildAgentSnapshot } from "../utils/agentSnapshot.js";
 import { agentTurn, collectAnswer } from "../api/agent.js";
-import { AGENT_NAME, speak } from "../voice/agentVoice.js";
+import { AGENT_NAME, speak, takeInterrupted } from "../voice/agentVoice.js";
 import { audioTap } from "../voice/audioTap.js";
 import { identifySpeaker } from "../api/speaker.js";
 import { decideSpeaker, hasHandover } from "../utils/speakerMatch.js";
@@ -780,11 +780,20 @@ export default function LiveCookPage() {
   // The model only proposes. Each call goes through the same handler a tap
   // uses, on the newest run, so every rule (busy, not ready, equipment,
   // paused) is still enforced by the code that owns it.
+  // Three actions in one breath is already an unusual turn; reading back
+  // more than that stops being a confirmation and becomes a recital.
+  const MAX_SPOKEN_LINES = 3;
   const PAUSED_OK = new Set(["resume", "status", "score", "help"]);
   const applyAgentTurn = (turn, text, cookId) => {
     const at = () => new Date().toISOString();
     commit(appendTranscript(latestRunRef.current, { at: at(), speaker: cookId, text }));
     const spoken = [];
+    // Where the run log stands before any of this turn's actions. Each
+    // handler already writes the right sentence for what it did -- and,
+    // just as importantly, for what it refused -- so the confirmation
+    // below is a diff of the log rather than a second account that could
+    // disagree with it.
+    const logBefore = (latestRunRef.current.transcript || []).length;
 
     turn.calls.forEach((call) => {
       const cur = latestRunRef.current;
@@ -849,7 +858,40 @@ export default function LiveCookPage() {
     } else if (turn.reply) {
       console.info("[voice] not answering unaddressed talk:", text, "->", turn.reply);
     }
-    if (spoken.length) speak(spoken.join(" "));
+    // Say what changed.
+    //
+    // The model is told to keep replies to fifteen words and that an
+    // empty one is right after a plain action. In a quiet room that is
+    // good manners; over an extractor fan it leaves a cook who asked for
+    // two things unable to tell whether one, both or neither landed,
+    // short of looking at the screen -- the thing the voice interface
+    // exists to avoid.
+    //
+    // These lines are the handlers' own, so a refusal speaks as a
+    // refusal: "You're still on Cut tofu. Finish it first." A
+    // confirmation built from the model's tool calls would have
+    // announced that claim as granted.
+    //
+    // Only when the model said nothing itself -- two accounts of one
+    // action is worse than none.
+    if (!spoken.length) {
+      const added = (latestRunRef.current.transcript || [])
+        .slice(logBefore)
+        .filter((entry) => entry.speaker === "agent" && entry.text)
+        .map((entry) => entry.text)
+        .slice(0, MAX_SPOKEN_LINES);
+      spoken.push(...added);
+    }
+
+    if (spoken.length) {
+      speak(spoken.join(" "));
+    } else {
+      // Nothing to say, so finish the sentence somebody talked over.
+      // Taking it clears it: offered once, then forgotten, because a
+      // line two turns stale is not worth saying.
+      const resumed = takeInterrupted();
+      if (resumed) speak(resumed);
+    }
     // Only a question leaves the door open for an unnamed answer, and only
     // briefly. Statements and refusals don't.
     if (turn.reply && !chatter && /\?\s*$/.test(turn.reply)) engagedUntilRef.current = Date.now() + ENGAGED_MS;

@@ -23,6 +23,8 @@ import {
   setVoiceEnabled,
   speak,
   stop as stopSpeaking,
+  interrupt as interruptSpeaking,
+  takeInterrupted,
 } from "../voice/agentVoice.js";
 import GooseVoiceAgent from "./GooseVoiceAgent.jsx";
 import { devGooseState } from "../dev/preview.js";
@@ -167,7 +169,13 @@ export default function VoiceBar() {
     [dispatch],
   );
 
+  // Whether this turn has already been answered out loud. An
+  // interrupted line is only worth finishing when nothing has
+  // superseded it.
+  const spokeRef = useRef(false);
+
   const say = useCallback((line) => {
+    spokeRef.current = true;
     speak(line);
     clearTimeout(feedbackTimer.current);
     setFeedback(line);
@@ -305,9 +313,16 @@ export default function VoiceBar() {
       const answered = pendingRef.current;
       if (decision.clearPending) clearPending();
 
+      // The live cook owns every turn on its page, and its own resume
+      // with it -- it knows whether applying the turn produced a reply,
+      // which this cannot see.
+      if (decision.type === "takeover") return dictation.onFinal(text, turn);
+
+      spokeRef.current = false;
+      // Wrapped so the cases can keep returning while the resume below
+      // still runs.
+      (() => {
       switch (decision.type) {
-        case "takeover":
-          return dictation.onFinal(text, turn);
         case "dictate":
           return dictation.onFinal(text);
         case "perform":
@@ -329,6 +344,15 @@ export default function VoiceBar() {
           // most of what gets said near this app is ordinary
           // conversation. Logged, not announced.
           if (text) console.info(`[voice] ignored (${decision.reason}):`, text);
+      }
+      })();
+
+      // Nothing was said back, so finish the sentence somebody talked
+      // over. Taking it clears it: offered once, then forgotten, since a
+      // line two turns stale is not worth hearing.
+      if (!spokeRef.current) {
+        const resumed = takeInterrupted();
+        if (resumed) speak(resumed);
       }
     },
     // navigate is not listed: run() already closes over it, and
@@ -384,6 +408,22 @@ export default function VoiceBar() {
     }
     updateConfig(patch);
   }, [status, registryVersion, pathname, updateConfig]);
+
+  // Somebody started talking while the goose was talking. Stop, and let
+  // them finish -- being talked over by a cheerful bird is the fastest
+  // way to make a voice interface feel like something to fight.
+  //
+  // SpeechStarted, not the first partial: it arrives in about 300ms
+  // rather than a second, and a second of the agent still going is
+  // long enough to read as not listening.
+  //
+  // The agent's own voice can trip this through the microphone, and
+  // that is an acceptable trade here: a false barge-in costs one
+  // stopped sentence, which the line below then says again. Never
+  // hearing a real one costs the conversation.
+  useEffect(() => {
+    if (hearing) interruptSpeaking();
+  }, [hearing]);
 
   // Forward partials to a page taking dictation, so its input fills as
   // you speak instead of jumping all at once when the turn ends.

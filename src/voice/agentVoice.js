@@ -143,6 +143,40 @@ function speakWebSpeech(text, myToken) {
 }
 
 /** Cut the agent off mid-sentence (barge-in, mute, page change). */
+// The line currently coming out of the speaker, and the one a cook
+// talked over. Held here because this module is the only thing that
+// knows what is actually playing -- the pages call speak() and forget.
+let currentLine = null;
+let interruptedLine = null;
+
+/**
+ * A cook started talking over the agent: stop, and remember the line.
+ *
+ * Not the same as stop(). stop() means the line is finished with --
+ * replaced, muted, unmounted. This means it was cut off mid-sentence
+ * and still deserves to be heard, once the kitchen is quiet again.
+ *
+ * Interrupting when nothing is playing is a no-op, so the caller does
+ * not have to check first.
+ */
+export function interrupt() {
+  if (!speaking || !currentLine) return false;
+  interruptedLine = currentLine;
+  stop();
+  return true;
+}
+
+/**
+ * The line that was talked over, if it has not been superseded.
+ * Reading it clears it: it is offered once, then forgotten, because a
+ * line that is two turns stale is no longer worth saying.
+ */
+export function takeInterrupted() {
+  const line = interruptedLine;
+  interruptedLine = null;
+  return line;
+}
+
 export function stop() {
   token += 1;
   clearTimeout(tailTimer);
@@ -150,6 +184,7 @@ export function stop() {
   source = null;
   if ("speechSynthesis" in window) speechSynthesis.cancel();
   spans.end();
+  currentLine = null;
   setSpeaking(false);
 }
 
@@ -165,7 +200,12 @@ export async function speak(text) {
   // it out loud, so the subtitle bubble still carries the line.
   if (!voiceEnabled) return;
   stop();
+  // A new line supersedes whatever was talked over: the agent should
+  // not follow up an answer by repeating the thing it was saying
+  // before the question.
+  interruptedLine = null;
   const myToken = token;
+  currentLine = line;
   setSpeaking(true);
   try {
     const tts = await load();
