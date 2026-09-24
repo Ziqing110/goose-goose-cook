@@ -17,29 +17,32 @@ card is rendered on the client and downloaded as a PNG
 
 ## 1. The API, on Render
 
-New > Web Service, point it at this repo:
+**Render > New > Blueprint**, point it at this repo. `render.yaml` already
+declares the runtime, the build and start commands, the health check and
+`ALLOWED_ORIGINS`, so the only thing it asks for is
+**`ASSEMBLYAI_API_KEY`**. Paste it there; it must never be committed.
 
-- Build command `npm ci`
-- Start command `npm run server`
-- Instance type Free
-
-Environment variables — copy from `.env.example`, at minimum:
-
-```
-ASSEMBLYAI_API_KEY=...          # never commit this
-ALLOWED_ORIGINS=https://ziqing110.github.io
-```
+(New > Web Service by hand works too — build `npm ci --omit=dev`, start
+`npm run server`, plan Free — but then that config lives in a dashboard
+instead of the repo.)
 
 `PORT` is injected by Render and already respected by `server/index.js`.
 
-Note the service URL it gives you, e.g.
-`https://goose-goose-cook.onrender.com`.
+The service URL will be `https://goose-goose-cook.onrender.com`, which is
+what the Pages build already expects. Render adds a suffix if that name is
+taken globally — if yours differs, set the `VITE_API_BASE` repository
+variable to the real URL.
+
+Check it with `curl https://<your-url>/api/health` — `{"ok":true,"key":true}`
+means the service is up and can see its API key.
 
 ## 2. The front end, on Pages
 
-- Settings > Pages > Source: **GitHub Actions**
-- Settings > Secrets and variables > Actions > **Variables**: add
-  `VITE_API_BASE` = the Render URL, scheme and host, **no trailing slash**
+- Settings > Pages > Source: **GitHub Actions**. Do this before the first
+  run, or the deploy step fails with nothing to publish to.
+- Only if your Render URL is not `goose-goose-cook.onrender.com`:
+  Settings > Secrets and variables > Actions > **Variables**, add
+  `VITE_API_BASE` = the real URL, scheme and host, **no trailing slash**.
 
 Push to `main`, or run the *Deploy to GitHub Pages* workflow by hand.
 

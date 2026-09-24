@@ -27,6 +27,11 @@ app.use(cors(allowed.length ? { origin: allowed } : {}));
 // 100kb body limit.
 app.use(express.json({ limit: "12mb" }));
 
+// Cheap liveness check. Render polls this to decide the service is up,
+// and it is what to point a warm-up ping at before a demo — it touches
+// no model and costs nothing, unlike every other route here.
+app.get("/api/health", (req, res) => res.json({ ok: true, key: Boolean(process.env.ASSEMBLYAI_API_KEY) }));
+
 app.use("/api/kitchens", kitchensRouter);
 app.use("/api/recipe-templates", recipeTemplatesRouter);
 app.use("/api/materials", materialsRouter);

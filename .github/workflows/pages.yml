@@ -35,11 +35,16 @@ jobs:
       - run: npm ci
 
       - name: Build
-        # Repository variable, not a secret: it is a public URL and it gets
-        # baked into the bundle either way. Settings > Secrets and variables
-        # > Actions > Variables. Scheme and host, no trailing slash.
+        # Where the API lives. The fallback is the URL render.yaml's service
+        # name produces, so in the normal case nothing needs setting by
+        # hand. Render appends a suffix if that name is already taken
+        # globally — if it does, set the repository variable to the real
+        # URL: Settings > Secrets and variables > Actions > Variables.
+        #
+        # A variable, not a secret: it is a public URL and it is baked
+        # into the bundle either way. Scheme and host, no trailing slash.
         env:
-          VITE_API_BASE: ${{ vars.VITE_API_BASE }}
+          VITE_API_BASE: ${{ vars.VITE_API_BASE || 'https://goose-goose-cook.onrender.com' }}
         run: npm run build
 
       - name: SPA fallback for deep links
