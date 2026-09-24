@@ -14,6 +14,8 @@ import { stylePhoto } from "../api/photo.js";
 import { fileToDataUrl, applyLocalStyle, renderShareCard, downloadDataUrl } from "../utils/summaryCard.js";
 import { clock, planDelta, resultPlayers, summaryOutcome } from "../utils/serviceResults.js";
 import { runTimeline } from "../utils/cookTimeline.js";
+import { agentNarrate } from "../api/agent.js";
+import { AGENT_NAME } from "../voice/agentVoice.js";
 import { allWorkingNodes } from "../utils/runStats.js";
 import { PlayerAvatar, Stamp, StepReceipt } from "../components/ServiceResults.jsx";
 import { GoosePrint } from "../components/GooseMarks.jsx";
@@ -166,6 +168,43 @@ export default function CookSummaryPage() {
     if (!session?.run || !cooks.length) return [];
     return runTimeline(session.run, allWorkingNodes(session), cooks).filter((c) => c.actions.length);
   }, [session, cooks]);
+  // A few sentences about how it went, written once and then stored on
+  // the summary, so reopening the card never rewrites the evening.
+  //
+  // Beside the headline, never instead of it: cookQuips is deliberately
+  // deterministic, and a card that says something different each time
+  // you look is not a diary. If this fails the card is the card it
+  // always was.
+  useEffect(() => {
+    if (!summary || summary.story !== undefined || !timeline.length) return;
+    let live = true;
+    agentNarrate({
+      agentName: AGENT_NAME,
+      record: {
+        dish: summary.dish,
+        mode: summary.mode,
+        totalSec: summary.totalSec,
+        estimatedSec: summary.estimatedSec,
+        cooks: timeline,
+      },
+    }).then(({ story }) => {
+      if (!live) return;
+      // Stored even when empty, as a marker: without it a card whose
+      // narration came back blank would ask again on every open.
+      //
+      // Written straight through rather than via saveSummary, which is
+      // rebuilt every render and would either re-run this effect or
+      // need memoising for one caller.
+      const next = { ...summary, story: story || "" };
+      setSession((current) => ({ ...current, summary: next }));
+      updateSession(sessionId, { summary: next }).catch(() => {
+        // The story is a garnish; failing to persist it is not worth
+        // an error on a finished cook's diary page.
+      });
+    });
+    return () => { live = false; };
+  }, [summary, timeline, sessionId]);
+
   const players = useMemo(() => {
     if (!outcome) return [];
     const quips = Object.fromEntries(summary.cooks.map((c) => [c.cookId, (c.quips || []).slice(0, 2)]));
@@ -267,6 +306,9 @@ export default function CookSummaryPage() {
             </span>
           )}
         </p>
+        {summary.story ? (
+          <p className="cc-story">{summary.story}</p>
+        ) : null}
         {summary.headline && (
           <span className="ds-aside">
             <GoosePrint />

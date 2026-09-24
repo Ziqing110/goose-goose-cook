@@ -42,8 +42,16 @@ import { parseCommand, HELP_TEXT, isBareResume } from "../utils/voiceCommands.js
 import { matchConfirmation } from "../utils/navCommands.js";
 import { registerVoiceDictation } from "../utils/voicePageCommands.js";
 import { buildAgentSnapshot } from "../utils/agentSnapshot.js";
-import { agentTurn, collectAnswer } from "../api/agent.js";
+import { agentTurn, agentAside, collectAnswer } from "../api/agent.js";
+import { shouldCommentate } from "../utils/commentary.js";
+
+// Often enough that a lull is noticed while it is still a lull, rarely
+// enough to be free -- the decision it drives is pure and local. Module
+// scope because the interval is set up before this component's early
+// return, and a const declared after that would be in its TDZ.
+const ASIDE_CHECK_MS = 5000;
 import { AGENT_NAME, speak, takeInterrupted } from "../voice/agentVoice.js";
+import { explainStep } from "../utils/stepExplain.js";
 import { audioTap } from "../voice/audioTap.js";
 import { identifySpeaker } from "../api/speaker.js";
 import { decideSpeaker, hasHandover } from "../utils/speakerMatch.js";
@@ -521,6 +529,29 @@ export default function LiveCookPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now, paused, finished]);
 
+  // --- an unprompted remark into a quiet kitchen ---------------------
+  //
+  // Long silences are where a live cook stops feeling live. When it is
+  // welcome is decided in utils/commentary.js, and deliberately meanly;
+  // this supplies the clock and the state.
+  //
+  // Barge-in applies as to everything else: the line goes out through
+  // the same speak(), so a cook talking over it stops it dead. That is
+  // the backstop rather than the plan.
+  //
+  // Split in two because the hooks must run before this component's
+  // early return, while the work needs commit() and say(), which are
+  // declared after it. Same shape as voiceHandlerRef below.
+  const lastVoiceAtRef = useRef(Date.now());
+  const lastAsideAtRef = useRef(0);
+  const asideBusyRef = useRef(false);
+  const asideRunnerRef = useRef(null);
+
+  useEffect(() => {
+    const id = setInterval(() => asideRunnerRef.current?.(), ASIDE_CHECK_MS);
+    return () => clearInterval(id);
+  }, []);
+
   if (!run) {
     return (
       <section className="page live-cook-page">
@@ -783,7 +814,7 @@ export default function LiveCookPage() {
   // Three actions in one breath is already an unusual turn; reading back
   // more than that stops being a confirmation and becomes a recital.
   const MAX_SPOKEN_LINES = 3;
-  const PAUSED_OK = new Set(["resume", "status", "score", "help"]);
+  const PAUSED_OK = new Set(["resume", "status", "score", "help", "explain"]);
   const applyAgentTurn = (turn, text, cookId) => {
     const at = () => new Date().toISOString();
     commit(appendTranscript(latestRunRef.current, { at: at(), speaker: cookId, text }));
@@ -836,6 +867,19 @@ export default function LiveCookPage() {
           spoken.push(line);
           return commit(say(cur, line));
         }
+        case "explain": {
+          // The recipe's own words, not the model's recollection of them:
+          // the snapshot only carries the first 120 characters of a
+          // description, and a cook who asks what a step means should get
+          // what the plan actually says.
+          const line = explainStep(byId[stepId], {
+            skill: state.session.conversation?.answers?.skill,
+            equipmentLabel: (type) => EQUIPMENT_LABELS[type] || type,
+          });
+          if (!line) return undefined;
+          spoken.push(line);
+          return commit(say(cur, line));
+        }
         case "score": {
           const line = scoreLine();
           spoken.push(line);
@@ -884,6 +928,7 @@ export default function LiveCookPage() {
     }
 
     if (spoken.length) {
+      lastVoiceAtRef.current = Date.now();
       speak(spoken.join(" "));
     } else {
       // Nothing to say, so finish the sentence somebody talked over.
@@ -1006,7 +1051,44 @@ export default function LiveCookPage() {
   // What the microphone hears. The name check happens on the server, so
   // ordinary kitchen talk never reaches a model. Attribution is still the
   // speaker toggle until speaker identification exists.
+  asideRunnerRef.current = async () => {
+    const current = latestRunRef.current;
+    if (!current || asideBusyRef.current || finished || !cooks.length) return;
+    const now = Date.now();
+    const verdict = shouldCommentate({
+      busyCooks: cooks.filter((c) => activeStepFor(c.id, current, nodes, now)).length,
+      cookCount: cooks.length,
+      paused: isPaused(current),
+      ended: Boolean(current.endedAt),
+      msSinceVoice: now - lastVoiceAtRef.current,
+      msSinceComment: lastAsideAtRef.current ? now - lastAsideAtRef.current : Infinity,
+    });
+    if (!verdict.ok) return;
+
+    // Marked before the request, not after: the call takes seconds and a
+    // second tick inside that window would ask twice.
+    asideBusyRef.current = true;
+    lastAsideAtRef.current = now;
+    try {
+      const { line } = await agentAside({
+        agentName: AGENT_NAME,
+        snapshot: buildAgentSnapshot({ run: latestRunRef.current, nodes, cooks, speakerId: null, paused: false }),
+      });
+      // The kitchen may have started talking while this was in flight.
+      // Speaking now would be exactly the interruption the feature is
+      // trying not to be.
+      if (!line || Date.now() - lastVoiceAtRef.current < ASIDE_CHECK_MS) return;
+      lastVoiceAtRef.current = Date.now();
+      commit(say(latestRunRef.current, line));
+      speak(line);
+    } finally {
+      asideBusyRef.current = false;
+    }
+  };
+
   voiceHandlerRef.current = (text, turn) => {
+    // Somebody spoke. Whatever comes of it, the room is not quiet.
+    lastVoiceAtRef.current = Date.now();
     const confidence = (turn?.words || []).reduce((lowest, w) => Math.min(lowest, w.confidence ?? 1), 1);
     if (confidence < MIN_VOICE_CONFIDENCE) {
       console.info("[voice] too unclear to act on:", text);

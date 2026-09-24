@@ -17,10 +17,14 @@ import { SEARCH_TOOL } from "./search.js";
 /** Tool names are the intent names parseCommand already produces. */
 export const INTENTS = [
   "claim", "start", "done", "skip", "drop", "undo",
-  "pause", "resume", "finish_run", "status", "score", "help",
+  "pause", "resume", "finish_run", "status", "score", "help", "explain",
 ];
 
-const NEEDS_STEP = new Set(["claim", "start", "done", "skip", "drop"]);
+// explain needs one too, but unlike the others it may name a step
+// nobody is on and nobody can claim yet -- "what does mix sauce mean"
+// is a fair question about step nineteen. Its enum is built
+// separately, over everything still open.
+const NEEDS_STEP = new Set(["claim", "start", "done", "skip", "drop", "explain"]);
 const MAX_CALLS = 3;
 const MAX_REPLY_CHARS = 200;
 
@@ -38,6 +42,9 @@ export function buildTools(snapshot, { search = false } = {}) {
     done: steps.filter((s) => s.status === "active").map((s) => s.id),
     skip: steps.filter((s) => s.status === "active" || s.status === "pending").map((s) => s.id),
     drop: steps.filter((s) => s.status === "active").map((s) => s.id),
+    // Any step still on the board. Asking what something means is not
+    // acting on it, so readiness and ownership are beside the point.
+    explain: steps.map((s) => s.id),
   };
   const describe = {
     claim: "The speaker takes a step that is ready but not started.",
@@ -52,6 +59,7 @@ export function buildTools(snapshot, { search = false } = {}) {
     status: "Read out who is doing what and how far along the cook is.",
     score: "Read out the scoreboard.",
     help: "List what the agent can do.",
+    explain: "The speaker asked what a step means, how to do it, or how long it takes. The app reads the recipe's own wording back, so call this rather than describing the step yourself.",
   };
   const actions = INTENTS.filter((name) => !NEEDS_STEP.has(name) || ids[name].length).map((name) => ({
     type: "function",
@@ -62,7 +70,9 @@ export function buildTools(snapshot, { search = false } = {}) {
         ? {
             type: "object",
             properties: { step_id: { type: "string", enum: ids[name] } },
-            required: name === "claim" || name === "start" ? ["step_id"] : [],
+            // explain is always about a named step; there is no "the one
+            // I am on" reading of "what does that mean".
+            required: ["claim", "start", "explain"].includes(name) ? ["step_id"] : [],
           }
         : { type: "object", properties: {} },
     },
@@ -85,6 +95,7 @@ Rules:
 - Questions about progress, what is next, who is doing what, or the score: call status or score. Never answer these from memory; the app reads out the real state.
 - If they are clearly talking to someone else in the room, call no tool and reply with an empty string.
 - Your reply is spoken aloud: at most 15 words, plain speech, no lists, markdown or emoji. Be warm and a little funny, never at the cost of being clear. After a plain action, a two-word acknowledgement or an empty reply is right.
+- A short step name can hide what it actually involves. If they ask what a step means, how to do it, what it needs, or how long it takes, call explain with that step id rather than answering from the step name -- the app reads back the recipe's own wording, which you cannot see in full.
 - A Brief line, when present, is what they asked for before any of this was planned. Honour it without being asked: never suggest something their diet rules out, and let their stated skill level set how much you explain.
 - Anything unrelated to this cook (weather, trivia, chit-chat): call no tool, and decline in one short, friendly sentence. Do not call help for it.
 - Never claim to have done something you did not call a tool for.${search ? `

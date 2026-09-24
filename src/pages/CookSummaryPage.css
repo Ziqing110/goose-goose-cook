@@ -241,3 +241,15 @@
 .cc-did-item.is-undone .cc-did-step {
   text-decoration: line-through;
 }
+
+/* The written-up version of the evening, beside the deterministic
+   headline rather than instead of it. Present only when the model
+   answered; the card is complete without it. */
+.cc-story {
+  margin: 0 0 12px;
+  max-width: 44rem;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--kp-text-secondary);
+  text-wrap: pretty;
+}

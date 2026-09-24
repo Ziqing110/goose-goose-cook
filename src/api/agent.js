@@ -45,3 +45,36 @@ export function collectAnswer(pendingId) {
     signal: AbortSignal.timeout(ANSWER_TIMEOUT_MS),
   });
 }
+
+/**
+ * Ask for one unprompted remark about a quiet kitchen.
+ *
+ * Whether the silence has been earned is decided before this is called
+ * (see utils/commentary.js). Resolves to an empty line rather than
+ * throwing on any failure: the fallback for a remark nobody asked for is
+ * simply not making it, and a cook should never see an error about one.
+ *
+ * @returns {Promise<{line: string}>}
+ */
+export function agentAside({ agentName, snapshot }) {
+  return apiRequest("/api/agent", "/aside", {
+    method: "POST",
+    body: JSON.stringify({ agentName, snapshot }),
+  }).catch(() => ({ line: "" }));
+}
+
+/**
+ * A few sentences about how a finished cook went.
+ *
+ * Resolves to an empty story rather than throwing: the summary card is
+ * complete without it, and a diary page should never show an error where
+ * a nice paragraph was going to be.
+ *
+ * @returns {Promise<{story: string}>}
+ */
+export function agentNarrate({ agentName, record }) {
+  return apiRequest("/api/agent", "/narrate", {
+    method: "POST",
+    body: JSON.stringify({ agentName, record }),
+  }).catch(() => ({ story: "" }));
+}
