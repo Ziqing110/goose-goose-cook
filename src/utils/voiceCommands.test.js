@@ -1,4 +1,11 @@
-// English-only matcher coverage for live-cook voice commands.
+// Matcher coverage for live-cook voice commands.
+//
+// The tests above are the happy path: a phrase, the intent it should
+// produce, the step it should land on. The ones below the divider are the
+// kitchen cases -- two cooks, look-alike steps, a named step that is not
+// yours, Mandarin, and a cook holding nothing at all. They exist because
+// every one of them acts on the run, so being wrong is worse than being
+// unsure.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { parseCommand, isBareResume } from "./voiceCommands.js";
@@ -116,5 +123,130 @@ test("isBareResume: a short resume counts without the agent's name, talk about r
     "等会再继续", "先不继续", "pause", "done", "status", "", "I think we should probably resume the cook now",
   ]) {
     assert.equal(isBareResume(said), false, said);
+  }
+});
+// ---------------------------------------------------------------------
+// Edge cases
+// ---------------------------------------------------------------------
+
+// Two steps whose names overlap, one held and two claimable: the shape
+// that makes a dumb matcher guess.
+const busy = {
+  byId: {
+    dice_onion: { label: "Dice onion" },
+    mince_garlic: { label: "Mince garlic" },
+    mince_ginger: { label: "Mince ginger" },
+  },
+  activeStepId: "dice_onion",
+  claimable: ["mince_garlic", "mince_ginger"],
+  ownQueue: ["dice_onion"],
+  agentName: "Goose",
+};
+
+test("parseCommand: naming a step that is not yours does not complete the one that is", () => {
+  // The regression this guards: the no-name fallback fired whenever the
+  // spoken name matched nothing, so a cook holding the onion who said
+  // "done with the ginger" finished the ONION and was told so. Silence
+  // here is correct -- LiveCookPage turns a null stepId into "Which one
+  // did you finish?" rather than acting on a guess.
+  for (const said of ["done with mince ginger", "skip the mince garlic", "drop the mince ginger"]) {
+    const result = parseCommand(said, busy);
+    assert.equal(result.stepId, null, said);
+  }
+});
+
+test("parseCommand: saying nothing but the intent still acts on what you hold", () => {
+  // The other half of the rule above: no name at all is not ambiguity,
+  // it is shorthand for the step in your hands.
+  for (const [said, intent] of [
+    ["done", "done"], ["finish", "done"], ["got it", "done"], ["that's it", "done"],
+    ["skip", "skip"], ["drop", "drop"], ["drop it", "drop"], ["put it back", "drop"],
+  ]) {
+    const result = parseCommand(said, busy);
+    assert.equal(result.intent, intent, said);
+    assert.equal(result.stepId, "dice_onion", said);
+  }
+});
+
+test("parseCommand: a name that fits two steps asks instead of picking", () => {
+  // "mince" covers both mince steps completely, so the honest answer is
+  // both of them, not the first or the shortest.
+  for (const said of ["claim mince", "take the mince"]) {
+    const result = parseCommand(said, busy);
+    assert.equal(result.intent, "claim", said);
+    assert.equal(result.stepId, null, said);
+    assert.deepEqual([...result.candidates].sort(), ["mince_garlic", "mince_ginger"], said);
+  }
+});
+
+test("parseCommand: each intent only sees the steps it could mean", () => {
+  // Claiming is scoped to what is claimable, so a step already yours is
+  // not claimable again...
+  assert.equal(parseCommand("claim dice onion", busy).stepId, null);
+  // ...while starting looks at your queue and the pool together.
+  assert.equal(parseCommand("start mince ginger", busy).stepId, "mince_ginger");
+  assert.equal(parseCommand("start dice onion", busy).stepId, "dice_onion");
+});
+
+test("parseCommand: a cook holding nothing gets no step, not someone else's", () => {
+  const idle = { ...busy, activeStepId: null, ownQueue: [] };
+  for (const said of ["done", "skip", "drop", "start"]) {
+    const result = parseCommand(said, idle);
+    assert.equal(result.stepId, null, said);
+  }
+});
+
+test("parseCommand: the agent's name is addressing, not part of the step name", () => {
+  // Leaving "Goose" in dilutes every score by a word, which dropped a
+  // clear two-word match under the floor and turned it into a question.
+  const named = parseCommand("Goose, take the mince ginger", busy);
+  assert.equal(named.intent, "claim");
+  assert.equal(named.stepId, "mince_ginger");
+  assert.equal(named.confidence, "exact");
+});
+
+test("parseCommand: Mandarin run controls carry the same intents as English", () => {
+  // detectIntent matches on a loose normalizer for exactly this reason:
+  // the ASCII-only one erases Chinese, so every one of these came back
+  // "unknown" and the fallback path was useless in the case where it
+  // matters most -- the model being the thing that is unavailable.
+  for (const [said, intent] of [
+    ["暂停", "pause"],
+    ["继续", "resume"],
+    ["都做完了", "finish_run"],
+    ["还要多久", "status"],
+  ]) {
+    assert.equal(parseCommand(said, busy).intent, intent, said);
+  }
+});
+
+test("parseCommand: Mandarin acts on the step in hand", () => {
+  assert.equal(parseCommand("好了", busy).stepId, "dice_onion"); // "done"
+  assert.equal(parseCommand("开始", busy).stepId, "dice_onion"); // "start"
+});
+
+test("parseCommand: a Mandarin step NAME does not resolve (known limitation)", () => {
+  // Step labels are English and the name matcher is ASCII-only, so a
+  // spoken Chinese ingredient resolves to nothing. The intent still
+  // lands, so the cook is asked which step rather than ignored. If the
+  // matcher ever learns Chinese, this test should start failing.
+  const result = parseCommand("我来做蒜蓉", busy); // "I'll do the garlic"
+  assert.equal(result.intent, "claim");
+  assert.equal(result.stepId, null);
+});
+
+test("parseCommand: junk and missing input are unknown, not a crash", () => {
+  for (const said of ["", "   ", "!!!", null, undefined]) {
+    const result = parseCommand(said, busy);
+    assert.equal(result.intent, "unknown", JSON.stringify(said));
+    assert.equal(result.stepId, null, JSON.stringify(said));
+  }
+});
+
+test("parseCommand: ordinary kitchen talk is not a command", () => {
+  // The live cook hands every turn to this parser, so anything said near
+  // the microphone reaches it. Chatter has to fall through.
+  for (const said of ["pass the salt", "this smells great", "where are the plates"]) {
+    assert.equal(parseCommand(said, busy).intent, "unknown", said);
   }
 });

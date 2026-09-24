@@ -4,7 +4,7 @@
 // scoping*: "take the garlic" is trivially unambiguous against the 3
 // steps you could actually claim, even though it'd be a coin-flip
 // against all 20.
-import { normalize, normalizeLoose, matchStepName } from "./stepNameMatch.js";
+import { normalize, normalizeLoose, matchStepName, contentTokens } from "./stepNameMatch.js";
 
 // Order matters: "we're done" must not fire a step completion, and
 // "drop it" must not be read as "done".
@@ -78,7 +78,11 @@ function resolveStepRef(text, matched, candidates, byId, agentName) {
     ? spoken.split(" ").filter((w) => w !== normalize(agentName)).join(" ")
     : spoken;
   const { stepId, candidates: alternates, confidence } = matchStepName(rest, candidates, (id) => byId[id]?.label);
-  return { stepId, candidates: alternates, confidence };
+  // Whether a step was NAMED at all, which is not the same as one being
+  // matched. "done" names nothing; "done with the ginger" names something
+  // that may simply not be in scope. Those two need opposite answers, so
+  // the fallbacks below have to tell them apart.
+  return { stepId, candidates: alternates, confidence, named: contentTokens(rest).length > 0 };
 }
 
 /**
@@ -104,14 +108,22 @@ export function parseCommand(text, ctx) {
       ? [activeStepId, ...ownQueue]
       : ownQueue;
 
-  const resolved = resolveStepRef(text, matched, [...new Set(scope)], byId, agentName);
+  const { named, ...resolved } = resolveStepRef(text, matched, [...new Set(scope)], byId, agentName);
   if (resolved.stepId) return { ...base, ...resolved };
 
   // No name given: done/skip/drop fall back to whatever they're holding.
-  if (!resolved.candidates.length && activeStepId && ["done", "skip", "drop"].includes(intent)) {
+  //
+  // Only when no name was given. A name that resolved to nothing means the
+  // cook asked about a step that is not theirs to act on, and falling back
+  // there acted on a DIFFERENT one: "done with the ginger", said while
+  // holding the onion, completed the onion and announced it. Leaving
+  // stepId null reaches needTarget in LiveCookPage, which asks "Which one
+  // did you finish?" instead of acting on a guess.
+  const unnamed = !named && !resolved.candidates.length;
+  if (unnamed && activeStepId && ["done", "skip", "drop"].includes(intent)) {
     return { ...base, stepId: activeStepId, confidence: "exact" };
   }
-  if (!resolved.candidates.length && intent === "start" && ownQueue.length === 1) {
+  if (unnamed && intent === "start" && ownQueue.length === 1) {
     return { ...base, stepId: ownQueue[0], confidence: "exact" };
   }
   return { ...base, ...resolved };
