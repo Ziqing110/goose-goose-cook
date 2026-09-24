@@ -88,7 +88,7 @@ function honkIndexes(transcript, wrapped, seed) {
 }
 
 export default function ConversationPage() {
-  const { state, dispatch } = useAppState();
+  const { state, dispatch, resetConversation } = useAppState();
   const navigate = useNavigate();
   const { conversation } = state.session;
   const { transcript, answers, questionIndex, complete } = conversation;
@@ -352,8 +352,10 @@ export default function ConversationPage() {
     });
   };
 
+  // Clears the plan the old answers produced as well as the answers, so
+  // the next set of answers actually generates a new menu.
   const restart = () => {
-    dispatch({ type: "session/conversation/reset" });
+    resetConversation();
   };
 
   // Voice equivalent of "Check the inventory" — the hint above promises

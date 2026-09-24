@@ -176,10 +176,20 @@ export default function VoiceBar() {
       // Browser history rather than a route table: "next" after a "back"
       // should return you where you were, and the session guards already
       // redirect anything unreachable.
-      if (action === "goto") navigate(path);
-      else navigate(action === "back" ? -1 : 1);
+      if (action === "goto") return navigate(path);
+      // ...but only as far as the app goes. react-router numbers its own
+      // entries in history.state.idx, and idx 0 is the first page this
+      // visit opened. Going back from there leaves the app altogether:
+      // the tab lands on whatever preceded it, or on a blank page, the
+      // whole SPA unloads, and the voice agent goes with it — so the one
+      // thing that could undo it is gone too. A dead end you can talk
+      // your way into and not out of.
+      if (action === "back" && (window.history.state?.idx ?? 0) <= 0) {
+        return say("That’s as far back as I can go.");
+      }
+      navigate(action === "back" ? -1 : 1);
     },
-    [navigate],
+    [navigate, say],
   );
 
   const clearPending = useCallback(() => {

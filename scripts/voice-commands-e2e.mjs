@@ -923,7 +923,7 @@ try {
   if (await ingredientTab.getAttribute("aria-selected") !== "true") await ingredientTab.click({ force: true });
   if (await ginger.count() && await ginger.getAttribute("aria-checked") === "false") await ginger.click({ force: true });
   if (await recipeTab.getAttribute("aria-selected") !== "true") await recipeTab.click({ force: true });
-  const approveButton = inventoryPage.getByRole("button", { name: /Approve and schedule/ });
+  const approveButton = inventoryPage.getByRole("button", { name: /Approve the plan/ });
   if (await approveButton.count()) {
     await approveButton.evaluate((el) => el.click());
     await inventoryPage.waitForTimeout(250);
@@ -947,6 +947,16 @@ try {
     await inventoryPage.getByRole("button", { name: /Dice ginger/ }).waitFor({ state: "hidden", timeout: 1_500 });
   });
 
+  // Last, because it leaves the page: approving is the end of this step,
+  // and the command under test is the one that walks out of it.
+  await checkVoiceBehavior("Inventory: ‘continue to schedule’ moves on to the cooks", async () => {
+    const approveButton = inventoryPage.getByRole("button", { name: /Approve the plan/ });
+    if (await approveButton.count()) await approveButton.evaluate((el) => el.click());
+    await inventoryPage.locator(".approved-panel").waitFor({ state: "visible" });
+    await settleVoiceCommands(inventoryPage);
+    await inventoryStream.say("continue to schedule");
+    await inventoryPage.waitForURL(/session[/]voice-binding$/, { timeout: 3_000 });
+  });
   await inventoryPage.close();
   kitchen.hasWok = true;
 

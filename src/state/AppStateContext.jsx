@@ -152,9 +152,29 @@ function reducer(state, action) {
     case "session/conversation/update":
       if (!state.session) return state;
       return { ...state, session: { ...state.session, conversation: { ...state.session.conversation, ...action.payload } } };
+    // Starting the conversation over throws away what the old answers
+    // produced, not just the answers. The recipes are generated from them
+    // once and only once — useSessionRecipes will not run again while any
+    // exist — so clearing the questions alone left the previous menu on
+    // the board, and answering differently changed nothing. Everything
+    // downstream of the answers goes with them: the graphs, the shared
+    // prep, what was marked out of stock, and where the cards were
+    // dragged. The kitchen and the cooks are not downstream of the
+    // conversation, so they stay.
     case "session/conversation/reset":
       if (!state.session) return state;
-      return { ...state, session: { ...state.session, conversation: emptySessionConversation() } };
+      return {
+        ...state,
+        session: {
+          ...state.session,
+          conversation: emptySessionConversation(),
+          recipes: [],
+          sharedSteps: [],
+          selectedNodeId: null,
+          outMaterialIds: [],
+          nodePositions: {},
+        },
+      };
 
     case "session/recipes/add":
       if (!state.session) return state;
@@ -396,6 +416,25 @@ export function AppStateProvider({ children }) {
     }
   };
 
+  // Start the conversation over: the answers go, and so does everything
+  // they produced. The local clear alone left the rows on the server, so
+  // the old menu came back on the next load and generation never re-ran.
+  // Local first, so the page responds at once; the server catches up.
+  const resetConversation = async () => {
+    if (!state.session) return;
+    const sessionId = state.session.id;
+    dispatch({ type: "session/conversation/reset" });
+    setRecipesSyncedIds(new Set());
+    try {
+      await sessionsApi.clearSessionPlan(sessionId);
+    } catch (err) {
+      // The answers are already cleared and the questions are back. Say
+      // so in the log rather than on screen: a reload would bring the
+      // stale graphs back, but nothing in front of the cook is wrong yet.
+      console.error("Failed to clear the old plan server-side:", err);
+    }
+  };
+
   // Registers a brand-new shared step both locally and server-side
   // (explicitly, not via the debounced effect) so later PATCHes to it
   // never race its creation — mirrors addRecipeToSession above.
@@ -480,6 +519,7 @@ export function AppStateProvider({ children }) {
     addRecipeToSession,
     addSharedStepToSession,
     deleteSharedStepFromSession,
+    resetConversation,
   };
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

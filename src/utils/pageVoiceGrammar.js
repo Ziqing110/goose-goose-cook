@@ -58,6 +58,19 @@ export const INVENTORY_VOICE = {
   cookAnyway: [/\bcook it anyway\b/],
   revise: [/\brevise\b/, /\bunapprove\b/, /\bgo back to editing\b/],
   approve: [/\bapprove\b/],
+
+  // Moving on once the board is approved. "Continue to schedule" is the
+  // button's own wording, and with no command for it the phrase fell
+  // through to navigation, where "schedule" resolves to the schedule
+  // route — which the session guards refuse, because the cooks have not
+  // been picked yet. Saying what the button says was the one phrasing
+  // guaranteed not to work.
+  continueOn: [
+    /\bcontinue(?: to (?:the )?(?:schedule|scheduling|cooks|chefs))?\b/,
+    /\bmove on\b/,
+    /\bcarry on\b/,
+    /\bnext step\b/,
+  ],
 };
 
 export function ingredientVoicePhrases(name) {
