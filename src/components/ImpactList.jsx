@@ -5,6 +5,7 @@
 // takes you to that step on the board.
 import { useState } from "react";
 import Icon from "./Icon.jsx";
+import { GooseTracks } from "./GooseMarks.jsx";
 import { formatMinutes } from "../utils/inventory.js";
 import "./ImpactList.css";
 
@@ -28,6 +29,10 @@ export default function ImpactList({ entries, onPick, hint }) {
       <div className="impact-empty">
         <Icon glyph="checkmark-burst" size={24} />
         <span>Nothing &mdash; everything&rsquo;s craftable.</span>
+        {/* Nobody has been through here: the goose walked across the
+            empty panel instead, the same prints it leaves in an
+            unanswered slot on the conversation page. */}
+        <GooseTracks variant="up" />
       </div>
     );
   }

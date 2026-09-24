@@ -83,13 +83,17 @@
 
 .impact-hint { margin: 4px 0 0; font-size: 13px; line-height: 18px; color: var(--ink-faint); }
 
+/* Relative so the prints sit in its bottom-right corner, and clipped
+   so a print never escapes the panel. */
 .impact-empty {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 16px 0;
+  padding: 16px 0 40px;
   font-size: 15px;
   line-height: 22px;
   color: var(--ink-soft);
 }
-.impact-empty svg { color: var(--success); }
+.impact-empty > svg { color: var(--success); }

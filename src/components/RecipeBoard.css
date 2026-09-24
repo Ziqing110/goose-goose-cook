@@ -31,69 +31,100 @@
   inset: 0;
   pointer-events: none;
 }
-/* ink-faint vanishes into the wood; this grey at .55 is the lightest
-   that still reads. Touching the selection: accent, heavier. */
+/* Three weights, and only two colours. An ordinary arrow is the warm
+   grey that survives the wood; one worth following is ink. Accent is
+   deliberately not used: on this board orange-red is what a step in
+   trouble wears, and an accent arrow read as a second kind of alarm. */
 .board-edge {
   fill: none;
   stroke: var(--board-line);
-  stroke-width: 1.5;
-  opacity: 0.55;
+  stroke-width: 1.25;
+  opacity: 0.8;
 }
-.board-edge.is-active { stroke: var(--accent); stroke-width: 2.25; opacity: 1; }
+/* Along a trouble path, or touching the card being pointed at. */
+.board-edge.is-active { stroke: var(--ink); stroke-width: 1.75; opacity: 1; }
+/* Everything else, while there is something to follow. */
+.board-edge.is-quiet { opacity: 0.3; }
 .board-arrow-head { fill: var(--board-line); }
-.board-arrow-head.is-active { fill: var(--accent); }
+.board-arrow-head.is-active { fill: var(--ink); }
 
+/* A slip of paper on the block: the dish's own stock, a strip of tape
+   across the top, and pinned very slightly crooked (the angle comes
+   from the card's place in the list — see RecipeBoard.jsx). */
 .board-card {
   position: absolute;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  justify-content: space-between;
+  gap: 4px;
   align-items: flex-start;
-  justify-content: center;
   text-align: left;
-  padding: 8px 10px 8px 12px;
+  padding: 14px 12px 9px;
   overflow: hidden; /* the box is fixed; text clamps rather than growing it */
-  border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border: var(--card-edge, 1px solid rgba(60, 35, 10, 0.08));
+  border-radius: 2px;
   background: var(--surface);
   color: var(--ink);
   font: inherit;
   cursor: grab;
   touch-action: none; /* let pointermove drive the drag, not the scroller */
+  box-shadow: 0 1px 0 rgba(60, 35, 10, 0.1), 0 8px 14px -10px rgba(60, 35, 10, 0.45);
   transition: box-shadow 120ms ease-out, border-color 120ms ease-out, background 120ms ease-out;
 }
+/* Lives in the overlay (above the cards) so it can hang over the slip's
+   top edge the way a piece of tape does. */
+.board-tape {
+  position: absolute;
+  width: 46px;
+  height: 14px;
+  opacity: 0.42;
+  background: var(--board-phase, var(--line-strong));
+}
+.board-tape.phase-prep { --board-phase: var(--phase-prep); }
+.board-tape.phase-cook { --board-phase: var(--phase-cook); }
+.board-tape.phase-plate { --board-phase: var(--phase-plate); }
+.board-card-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; width: 100%; }
 .board-card:hover { border-color: var(--ink-soft); }
 .board-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* Status: border and ink. At risk vs blocked also differ without hue —
-   solid border on cream vs dashed border on pink. */
-.board-card.is-atRisk { background: var(--warning-soft); border-color: var(--warning-graphic); }
-.board-card.is-atRisk .board-card-meta { color: var(--warning-soft-ink); }
-.board-card.is-blocked { background: var(--crit-soft); border: 1px dashed var(--crit); }
+/* Status is said in the border and the ink, never in the fill: the
+   fill is the dish's paper, and a step does not change dish because an
+   ingredient ran out. Blocked and at risk differ in weight as well as
+   hue — red ink through the whole card against amber on the numbers. */
+.board-card.is-atRisk { border: 2px solid var(--warning-graphic); }
+.board-card.is-atRisk .board-card-num,
+.board-card.is-atRisk .board-card-meta { color: var(--warning-ink); }
+.board-card.is-blocked { border: 2px solid var(--crit); }
 .board-card.is-blocked .board-card-label,
+.board-card.is-blocked .board-card-num,
 .board-card.is-blocked .board-card-meta { color: var(--crit); }
 
-/* Away from the selection: the fill flattens toward the board, ink
-   stays at full strength. Blocked cards never get this class. */
-.board-card.is-dimmed { background: var(--board-card-dim); }
-.board-card.is-dimmed.is-craftable { border-color: var(--board-card-dim-edge); }
-.board-card.is-dimmed .board-card-label { color: var(--ink-soft); }
+/* Away from what is being followed, a card steps back. It fades rather
+   than flattening now that the fill carries the dish: a tint over the
+   paper would read as a different dish. A blocked card never gets this
+   class, so the one thing red ink is on never loses contrast. */
+.board-card.is-dimmed { opacity: 0.35; }
 
 /* Selected keeps its status fill. */
+/* No accent outline on the selection: on this board red means a step
+   that can't be done, and an accent ring around the card being edited
+   read as exactly that. The hand-drawn circle (.board-card-mark) says it
+   instead. */
 .board-card.is-selected,
-.board-card.is-selected:hover { border-color: var(--accent); border-style: solid; box-shadow: 0 0 0 2px var(--accent-soft); }
+.board-card.is-selected:hover { border-style: solid; }
+.board-card-mark {
+  position: absolute;
+  left: -18%;
+  top: -26%;
+  width: 136%;
+  height: 152%;
+  pointer-events: none;
+  overflow: visible;
+  mix-blend-mode: multiply;
+  z-index: 3;
+}
 
 /* Which part of the cook a step belongs to. */
-.board-card::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  border-radius: 10px 0 0 10px;
-  background: var(--board-phase, var(--line-strong));
-}
 .board-card.phase-prep { --board-phase: var(--phase-prep); }
 .board-card.phase-cook { --board-phase: var(--phase-cook); }
 .board-card.phase-plate { --board-phase: var(--phase-plate); }
@@ -103,34 +134,136 @@
   box-shadow: var(--shadow-modal);
 }
 
+/* Number and duration share the card's top line; the label sits under
+   them with the room it was sized for. */
 .board-card-num {
-  position: absolute;
-  top: 6px;
-  right: 8px;
   font-family: var(--font-mono);
-  font-size: 10px;
-  line-height: 13px;
-  color: var(--line-strong);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 15px;
+  color: var(--ink-faint);
 }
+.board-card.is-atRisk .board-card-num { color: var(--warning-ink); }
+.board-card.is-blocked .board-card-num { color: var(--crit); }
 
 /* The label is never truncated: the card was sized around it (see
    cardSize in utils/boardLayout.js), which is also what lets the layout
    promise no overlap and lets edges route around known rectangles. */
 .board-card-label {
-  padding-right: 16px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
-  line-height: 17px;
+  line-height: 19px;
   width: 100%;
   overflow-wrap: anywhere;
 }
 .board-card-meta {
+  flex: none;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 15px;
   color: var(--ink-soft);
-  width: 100%;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+/* ---------------- linking by hand ----------------
+   The overlay sits above the cards: a card clips its own overflow, and
+   both the selection ring and the ports hang outside their card's box.
+   Nothing in here takes the pointer except the ports and the pill. */
+.board-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.board-mark-slot,
+.board-ports { position: absolute; display: block; }
+
+/* A small dot in a generous hit area: the dot sits where the arrows
+   arrive, so at 11px it read as part of the wiring. The target stays
+   22px — the thing you grab is bigger than the thing you see. */
+.board-port {
+  position: absolute;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  margin-top: -11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  cursor: crosshair;
+  touch-action: none;
+  transition: opacity 120ms ease-out;
+}
+.board-port::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink);
+  transition: transform 120ms ease-out;
+}
+/* Grows under the pointer, so a small target still feels like one. */
+.board-port:hover::before { transform: scale(1.35); }
+/* Hollow on the left ("what comes before"), filled on the right ("what
+   comes next") — the arrows run left to right, so the dot that starts
+   one is the solid one. */
+.board-port.is-in { left: -11px; }
+.board-port.is-in::before { background: var(--surface); }
+.board-port.is-out { right: -11px; }
+.board-port.is-out::before { background: var(--ink); }
+
+/* The card under the pointer while a link is being drawn. */
+.board-ports.is-target { outline: 2px dashed var(--ink); outline-offset: 4px; border-radius: 10px; }
+
+.board-link-preview {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.75;
+  stroke-dasharray: 5 4;
+}
+
+/* A picked arrow: full strength, so it is obvious which one the pill
+   belongs to. */
+.board-edge.is-picked { stroke: var(--ink); stroke-width: 2.5; opacity: 1; }
+.board-edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 12;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.board-unlink {
+  position: absolute;
+  z-index: 8;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--bg);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 0 4px 12px -4px rgba(26, 26, 26, 0.4);
+}
+
+/* Why a link was refused. Sits over the board rather than in the page,
+   so it reads as an answer to the drag that just ended. */
+.board-toast {
+  position: absolute;
+  z-index: 8;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 13px;
+  line-height: 18px;
+  pointer-events: none;
 }
