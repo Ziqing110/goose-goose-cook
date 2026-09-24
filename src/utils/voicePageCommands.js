@@ -27,8 +27,23 @@
 // Layers register at a depth rather than in arrival order.
 let layers = [];
 
-const topLayer = () =>
-  layers.reduce((top, l) => (top === null || l.priority >= top.priority ? l : top), null);
+// Every layer at the highest priority is live, not just the last one
+// registered there. A page is free to register its commands in more than
+// one place — Inventory keeps the ingredient commands next to the
+// ingredient list and the board commands next to the board — and those
+// are peers, not a stack. Keeping only the last of them made the other
+// unreachable: "show the recipe graph" worked and "no ginger" did
+// nothing, on a page whose own hint told you to say it.
+//
+// Shadowing is still what priority is for. A dialog registers above the
+// page, so everything the page offers drops out while it is open.
+const livePriority = () =>
+  layers.reduce((top, l) => (top === null || l.priority > top ? l.priority : top), null);
+
+const liveLayers = () => {
+  const top = livePriority();
+  return top === null ? [] : layers.filter((l) => l.priority === top);
+};
 
 /**
  * @param {Array<object>} commands
@@ -75,8 +90,8 @@ const loosen = (said) => said.replace(FILLER_WORDS, " ").replace(BARE_ME, " ").r
  */
 export function matchPageCommand(said) {
   if (!said) return null;
-  const top = topLayer();
-  if (!top) return null;
+  const live = liveLayers();
+  if (!live.length) return null;
   // Tried in order — command grammar is closed and this only widens how
   // the same words can be padded, so the first hit either way is the
   // right one.
@@ -84,7 +99,7 @@ export function matchPageCommand(said) {
   const loosened = loosen(said);
   if (loosened && loosened !== said) candidates.push(loosened);
   for (const text of candidates) {
-    for (const c of top.commands) {
+    for (const c of live.flatMap((l) => l.commands)) {
       for (const p of c.phrases) {
         const match = p.exec(text);
         // The match comes back with the command so `run` can read what
@@ -106,7 +121,7 @@ export function matchPageCommand(said) {
  * the only way out is a command the dialog itself offers.
  */
 export function voiceCommandsAreExclusive() {
-  return Boolean(topLayer()?.exclusive);
+  return liveLayers().some((l) => l.exclusive);
 }
 
 /** For tests, and for making sure a stale page can't leave commands behind. */

@@ -498,16 +498,21 @@ const GOOSE_PREVIEW = {
  */
 function describeGoose({ view, speaking, muted, status, partial, pending, feedback, error }) {
   if (error) return { state: "warning", tag: "Mic error", line: error, partial: false };
-  // `feedback` is the line the agent just said, `pending` the question
-  // it just asked — either way, that is what is coming out of its beak.
-  if (speaking) return { state: "speaking", tag: "Speaking", line: pending || feedback || view.line, partial: false };
+  // An open question outranks the fact that the goose is reading it out:
+  // the answer is what the screen is waiting for, and the design files
+  // "pending confirm" under thinking rather than speaking. Ordering this
+  // the other way hid every confirmation behind a Speaking tag for as
+  // long as the question took to say.
+  if (pending) return { state: "thinking", tag: "Confirm", line: pending, partial: false };
+  // `feedback` is the line the agent just said — what is coming out of
+  // its beak when nothing is waiting on you.
+  if (speaking) return { state: "speaking", tag: "Speaking", line: feedback || view.line, partial: false };
   if (muted) return { state: "idle", tag: "Mic off", line: "Hover me and tap the mic to talk.", partial: false };
   if (status === "connecting" || status === "closing") {
     return { state: "thinking", tag: status === "closing" ? "Finishing" : "Connecting", line: view.line, partial: false };
   }
-  // A pending question and a live partial are both "still resolving":
-  // the turn has not landed yet, so the words can still change.
-  if (pending) return { state: "thinking", tag: "Confirm", line: pending, partial: false };
+  // A live partial is "still resolving": the turn has not landed yet, so
+  // the words can still change.
   if (partial) return { state: "thinking", tag: "Thinking", line: partial, partial: true };
   return { state: "listening", tag: "Listening", line: view.line, partial: false };
 }

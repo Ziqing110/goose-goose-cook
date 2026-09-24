@@ -259,7 +259,7 @@ async function mockStreamingSocket(page) {
       socket.send(JSON.stringify({ type: "Turn", transcript: text, end_of_turn: false }));
       if (inspectPartial) {
         await page.waitForFunction(
-          (expected) => document.querySelector(".voice-transcript-text")?.textContent === expected,
+          (expected) => document.querySelector(".goose-bubble-line")?.textContent === expected,
           text,
           { timeout: 5_000 },
         );
@@ -287,11 +287,46 @@ async function mockStreamingSocket(page) {
   };
 }
 
+/**
+ * Turn the agent's spoken voice off for the run.
+ *
+ * Every reply the agent says out loud logs a speech span, and a turn
+ * whose words were spoken inside one is discarded as the agent hearing
+ * itself. That is right in a kitchen and meaningless here, where the
+ * transcript is injected rather than heard — it just made whether a
+ * command registered depend on how recently the agent had spoken.
+ * Silencing it changes nothing the suite asserts: say() still sets the
+ * line, so the bubble reads the same.
+ */
+async function silenceAgent(page) {
+  await page.waitForFunction(() => Boolean(window.goose?.setVoiceEnabled));
+  await page.evaluate(() => window.goose.setVoiceEnabled(false));
+}
+
+// The mic lives in the goose's first egg, which only fans out while the
+// goose is hovered — so hover first, then click. The status pill is gone;
+// the goose's pose and its bubble tab carry the state instead.
 async function unmute(page, stream) {
-  await page.getByRole("button", { name: "Unmute" }).click({ force: true });
-  await page.getByRole("button", { name: "Mute" }).waitFor({ state: "visible" });
-  await page.locator(".voice-status-pill").filter({ hasText: "Listening" }).waitFor({ state: "visible" });
+  await page.locator(".goose-figure").hover();
+  await page.locator(".goose-eggs.is-open").waitFor({ state: "visible" });
+  await page.getByRole("button", { name: "Start listening" }).click();
+  await page.getByRole("button", { name: "Mute listening" }).waitFor({ state: "visible" });
+  await tagBecomes(page, "Listening");
   await stream.waitForAudio();
+}
+
+/**
+ * Wait for the goose's status tab to read `tag`.
+ *
+ * The tab is textContent, not innerText: CSS uppercases it for display,
+ * so the DOM still holds "Confirm" where the screen shows "CONFIRM".
+ */
+function tagBecomes(page, tag, timeout = 5_000) {
+  return page.waitForFunction(
+    (expected) => document.querySelector(".goose-bubble-tab")?.textContent === expected,
+    tag,
+    { timeout },
+  );
 }
 
 async function openVoicePage(browserContext, route, options = {}) {
@@ -301,6 +336,7 @@ async function openVoicePage(browserContext, route, options = {}) {
   const stream = await mockStreamingSocket(page);
   page.on("dialog", (dialog) => dialog.accept());
   await page.goto(BASE + route, { waitUntil: "networkidle" });
+  await silenceAgent(page);
   await unmute(page, stream);
   return { page, stream };
 }
@@ -360,8 +396,8 @@ async function checkVoiceBehavior(name, fn) {
     voiceFailures.push(name);
     const heard = diagnosticPage
       ? await diagnosticPage.evaluate(() => ({
-          label: document.querySelector(".voice-transcript-label")?.textContent || "",
-          text: document.querySelector(".voice-transcript-text")?.textContent || "",
+          label: document.querySelector(".goose-bubble-tab")?.textContent || "",
+          text: document.querySelector(".goose-bubble-line")?.textContent || "",
         })).catch(() => null)
       : null;
     console.log(
@@ -390,6 +426,7 @@ try {
   await mockApi(schedulePage);
   const scheduleStream = await mockStreamingSocket(schedulePage);
   await schedulePage.goto(BASE + "/session/schedule", { waitUntil: "networkidle" });
+  await silenceAgent(schedulePage);
   await schedulePage.getByRole("slider", { name: "Timeline zoom" }).waitFor({ state: "visible" });
   await unmute(schedulePage, scheduleStream);
   diagnosticPage = schedulePage;
@@ -398,7 +435,7 @@ try {
   assert.equal(await zoom.getAttribute("aria-valuetext"), "1×");
   await scheduleStream.say("zoom in");
   await waitForAttribute(zoom, "aria-valuetext", "115%");
-  assert.match(await schedulePage.locator(".voice-transcript-text").innerText(), /Zoom 115%/);
+  assert.match(await schedulePage.locator(".goose-bubble-line").innerText(), /Zoom 115%/);
 
   // Let the page replace its registered command closure after the zoom state
   // update, just as it can while the person listens to the spoken reply.
@@ -424,7 +461,7 @@ try {
   });
   await checkVoiceBehavior("Schedule: asking who is free returns the co-op free-time answer", async () => {
     await scheduleStream.say("when am I free");
-    await waitForPageCondition(schedulePage, () => /Free stretches|Nobody gets free time/.test(document.querySelector(".voice-transcript-text")?.textContent || ""));
+    await waitForPageCondition(schedulePage, () => /Free stretches|Nobody gets free time/.test(document.querySelector(".goose-bubble-line")?.textContent || ""));
   });
   await checkVoiceBehavior("Schedule: fit voice command selects the fitted timeline", async () => {
     await scheduleStream.say("fit the timeline");
@@ -522,13 +559,18 @@ try {
   const inventoryStream = await mockStreamingSocket(inventoryPage);
   inventoryPage.on("dialog", (dialog) => dialog.accept());
   await inventoryPage.goto(BASE + "/session/inventory", { waitUntil: "networkidle" });
+  await silenceAgent(inventoryPage);
   await inventoryPage.getByRole("tab", { name: /Ingredients/ }).waitFor({ state: "visible" });
   await unmute(inventoryPage, inventoryStream);
   diagnosticPage = inventoryPage;
   await settleVoiceCommands(inventoryPage);
 
-  const ginger = inventoryPage.locator(".inv-row", { hasText: "Ginger" }).getByRole("checkbox");
-  const water = inventoryPage.locator(".inv-row", { hasText: "Water" }).getByRole("checkbox");
+  // Scope each checkbox to its own row, taking the first match: an
+  // expanded row lists the steps that use the ingredient, so a bare
+  // hasText matches "Ginger" inside the Water row once a step named
+  // "Mince ginger" is showing, and the locator stops being unique.
+  const ginger = inventoryPage.locator(".inv-row", { hasText: "Ginger" }).first().getByRole("checkbox").first();
+  const water = inventoryPage.locator(".inv-row", { hasText: "Water" }).first().getByRole("checkbox").first();
   await checkVoiceBehavior("Inventory: ‘no ginger’ marks ginger out and blocks the step that needs it", async () => {
     await inventoryStream.say("no ginger");
     await waitForAttribute(ginger, "aria-checked", "false", 1_500);
@@ -555,8 +597,18 @@ try {
     await waitForAttribute(ginger, "aria-checked", "true", 1_500);
     await waitForAttribute(water, "aria-checked", "true", 1_500);
   });
+  // Housekeeping between checks, not an assertion — put both ingredients
+  // back on hand for what follows. Toggling one regroups the list, so the
+  // row can be mid-rerender here; a failure to find it must not take the
+  // rest of the suite down with it.
   for (const checkbox of [ginger, water]) {
-    if (await checkbox.getAttribute("aria-checked") === "false") await checkbox.click({ force: true });
+    try {
+      if (await checkbox.getAttribute("aria-checked", { timeout: 2_000 }) === "false") {
+        await checkbox.click({ force: true, timeout: 2_000 });
+      }
+    } catch {
+      /* left as it is; the checks that care assert their own state */
+    }
   }
 
   await checkVoiceBehavior("Inventory: equipment notice opens the kitchen editor and ‘cook it anyway’ dismisses it", async () => {
@@ -852,7 +904,7 @@ try {
     await waitForAttribute(ginger, "aria-checked", "false");
     if (await recipeTab.getAttribute("aria-selected") !== "true") await recipeTab.click({ force: true });
     await inventoryStream.say("remove the blocked steps");
-    await waitForPageCondition(inventoryPage, () => document.querySelector(".voice-transcript-label")?.textContent === "CONFIRM");
+    await waitForPageCondition(inventoryPage, () => document.querySelector(".goose-bubble-tab")?.textContent === "Confirm");
     await inventoryStream.say("yes");
     await inventoryPage.getByRole("button", { name: /Dice ginger/ }).waitFor({ state: "hidden", timeout: 1_500 });
   });
@@ -973,12 +1025,12 @@ try {
   }
   await checkVoiceBehavior("Home: ‘help’ shows usable voice guidance", async () => {
     await homeStream.say("help");
-    await waitForPageCondition(homePage, () => /Try:/.test(document.querySelector(".voice-transcript-text")?.textContent || ""));
+    await waitForPageCondition(homePage, () => /Try:/.test(document.querySelector(".goose-bubble-line")?.textContent || ""));
   });
   await checkVoiceBehavior("Home: abandon requires its exact passphrase; ‘yes’ leaves the run active", async () => {
     await homeStream.say("abandon the run");
-    await waitForPageCondition(homePage, () => document.querySelector(".voice-transcript-label")?.textContent === "CONFIRM");
-    assert.match(await homePage.locator(".voice-transcript-text").innerText(), /I want to abort this cooking session/);
+    await waitForPageCondition(homePage, () => document.querySelector(".goose-bubble-tab")?.textContent === "Confirm");
+    assert.match(await homePage.locator(".goose-bubble-line").innerText(), /I want to abort this cooking session/);
     await homeStream.say("yes");
     await homePage.getByRole("button", { name: "Resume the run" }).waitFor({ state: "visible" });
     assert.equal(homeFixture.status, "active");
@@ -991,7 +1043,7 @@ try {
     await homeStream.say("go to home");
     await homePage.waitForURL("**/", { timeout: 3_000 });
     await homeStream.say("abandon the run");
-    await waitForPageCondition(homePage, () => document.querySelector(".voice-transcript-label")?.textContent === "CONFIRM");
+    await waitForPageCondition(homePage, () => document.querySelector(".goose-bubble-tab")?.textContent === "Confirm");
     await homeStream.say("I want to abort this cooking session");
     await waitForObjectValue(homeFixture, "status", "abandoned");
     await homePage.getByRole("button", { name: "Start the run" }).waitFor({ state: "visible" });
@@ -1099,7 +1151,7 @@ try {
   });
   await checkVoiceBehavior("Voice Binding: removing a cook asks first and ‘yes’ removes that cook", async () => {
     await bindingStream.say("remove the cook Leo");
-    await waitForPageCondition(bindingPage, () => document.querySelector(".voice-transcript-label")?.textContent === "CONFIRM");
+    await waitForPageCondition(bindingPage, () => document.querySelector(".goose-bubble-tab")?.textContent === "Confirm");
     await bindingStream.say("yes");
     await waitForPageCondition(bindingPage, () => document.querySelectorAll(".cook-slot").length === 1);
     assert.equal(await bindingPage.locator(".cook-name-input").first().inputValue(), "Mia");
@@ -1132,7 +1184,7 @@ try {
   diagnosticPage = live.page;
   await checkVoiceBehavior("Schedule: ‘go live’ asks for confirmation and ‘yes’ opens Live Cook", async () => {
     await live.stream.say("go live");
-    await waitForPageCondition(live.page, () => document.querySelector(".voice-transcript-label")?.textContent === "CONFIRM");
+    await waitForPageCondition(live.page, () => document.querySelector(".goose-bubble-tab")?.textContent === "Confirm");
     await live.stream.say("yes");
     await live.page.waitForURL("**/session/live-cook", { timeout: 5_000 });
     await live.page.locator(".live-cook-page").waitFor({ state: "visible" });
@@ -1243,12 +1295,12 @@ try {
   diagnosticPage = abandonSchedule.page;
   await checkVoiceBehavior("Schedule: abandoning a cook requires the exact passphrase", async () => {
     await abandonSchedule.stream.say("abandon the cook");
-    await waitForPageCondition(abandonSchedule.page, () => document.querySelector(".voice-transcript-label")?.textContent === "CONFIRM");
-    assert.match(await abandonSchedule.page.locator(".voice-transcript-text").innerText(), /I want to abandon this cook/);
+    await waitForPageCondition(abandonSchedule.page, () => document.querySelector(".goose-bubble-tab")?.textContent === "Confirm");
+    assert.match(await abandonSchedule.page.locator(".goose-bubble-line").innerText(), /I want to abandon this cook/);
     await abandonSchedule.stream.say("yes");
     assert.ok(abandonFixture.run, "a yes/no answer alone leaves the cook active");
     await abandonSchedule.stream.say("abandon the cook");
-    await waitForPageCondition(abandonSchedule.page, () => document.querySelector(".voice-transcript-label")?.textContent === "CONFIRM");
+    await waitForPageCondition(abandonSchedule.page, () => document.querySelector(".goose-bubble-tab")?.textContent === "Confirm");
     await abandonSchedule.stream.say("I want to abandon this cook");
     await waitForObjectValue(abandonFixture, "run", null);
   });

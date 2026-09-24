@@ -6,6 +6,7 @@ import {
   registerVoiceCommands,
   matchPageCommand,
   clearVoiceCommands,
+  voiceCommandsAreExclusive,
   registerVoiceDictation,
   getVoiceDictation,
 } from "./voicePageCommands.js";
@@ -99,4 +100,41 @@ test("dictation forwards partial and final English transcript only on its route"
   }
 
   assert.equal(getVoiceDictation("/session/conversation"), null);
+});
+
+// Inventory registers its commands from two effects — the ingredient
+// list in one, the board and tabs in the other — and both land at the
+// default priority. Keeping only the last registration made the first
+// unreachable: the page's own hint said "say 'no ginger'" while nothing
+// listened for it, and only the board's commands answered.
+test("two layers at the same priority are peers, not a stack", () => {
+  clearVoiceCommands();
+  const fired = [];
+  registerVoiceCommands([{ phrases: [/\bno ginger\b/], run: () => fired.push("ginger") }]);
+  registerVoiceCommands([{ phrases: [/\bshow the recipe graph\b/], run: () => fired.push("graph") }]);
+
+  matchPageCommand("no ginger")?.run();
+  matchPageCommand("show the recipe graph")?.run();
+  assert.deepEqual(fired, ["ginger", "graph"]);
+});
+
+// Shadowing is still what priority is for: a dialog over the page takes
+// the microphone, and the page underneath goes quiet until it closes.
+test("a higher-priority layer still shadows every layer beneath it", () => {
+  clearVoiceCommands();
+  const fired = [];
+  registerVoiceCommands([{ phrases: [/\bno ginger\b/], run: () => fired.push("ginger") }]);
+  const closeDialog = registerVoiceCommands(
+    [{ phrases: [/\bcancel\b/], run: () => fired.push("cancel") }],
+    { priority: 10, exclusive: true },
+  );
+
+  assert.equal(matchPageCommand("no ginger"), null);
+  assert.equal(voiceCommandsAreExclusive(), true);
+  matchPageCommand("cancel")?.run();
+
+  closeDialog();
+  matchPageCommand("no ginger")?.run();
+  assert.deepEqual(fired, ["cancel", "ginger"]);
+  assert.equal(voiceCommandsAreExclusive(), false);
 });

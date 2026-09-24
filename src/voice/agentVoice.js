@@ -115,15 +115,28 @@ function playBuffer(buffer, myToken) {
   });
 }
 
+// Roughly three words a second, plus slack. A browser with no installed
+// voices accepts an utterance and then reports nothing at all — neither
+// onend nor onerror — so without a deadline this promise never settles,
+// speak() never reaches its finally, and the agent stays "speaking"
+// forever: stuck pose, and a speech span that never closes.
+const webSpeechBudget = (text) => 3_000 + (text.split(/\s+/).length / 3) * 1_000;
+
 function speakWebSpeech(text, myToken) {
   return new Promise((resolve) => {
     if (myToken !== token || !("speechSynthesis" in window)) return resolve();
     const u = new SpeechSynthesisUtterance(text);
-    u.onstart = () => spans.begin();
-    u.onend = u.onerror = () => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
       spans.end();
       resolve();
     };
+    const deadline = setTimeout(finish, webSpeechBudget(text));
+    u.onstart = () => spans.begin();
+    u.onend = u.onerror = finish;
     speechSynthesis.cancel();
     speechSynthesis.speak(u);
   });
@@ -188,6 +201,12 @@ if (import.meta.env.DEV && typeof window !== "undefined") {
     speak,
     stop,
     isSpeaking,
+    // The browser e2e injects transcripts instead of playing audio into
+    // a microphone, so the agent's own voice is pure nondeterminism
+    // there: every reply logs a speech span, and a turn that lands
+    // inside one is discarded as echo. Silencing it leaves the replies
+    // themselves intact — say() still sets the line the bubble shows.
+    setVoiceEnabled,
     /** A line long enough to still be talking when you cut in. */
     ramble: () =>
       speak(
