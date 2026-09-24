@@ -32,21 +32,21 @@
   color: var(--ink);
 }
 .panel-material-row.is-on-step { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.panel-material-name { flex: 1 1 auto; min-width: 0; font-size: 14px; overflow-wrap: anywhere; }
+.panel-material-name { flex: 1 1 auto; min-width: 0; font-size: 15px; overflow-wrap: anywhere; }
 /* The fields stay white on both rows: an orange field reads as filled in
    rather than as something to type in. */
-.panel-material-row .panel-input { height: 30px; background: var(--surface); color: var(--ink); }
-.panel-material-amount { flex: none; width: 64px; text-align: right; font-family: var(--font-mono); }
-.panel-material-unit { flex: none; width: 58px; }
+.panel-material-row .panel-input { height: 32px; background: var(--surface); color: var(--ink); }
+.panel-material-amount { flex: none; width: 68px; text-align: right; font-family: var(--font-mono); }
+.panel-material-unit { flex: none; width: 62px; }
 .panel-material-remove {
   flex: none;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--ink-faint);
-  font-size: 17px;
+  font-size: 18px;
   line-height: 1;
   cursor: pointer;
 }
@@ -60,22 +60,22 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 30px;
+  min-height: 32px;
   padding: 0 4px 0 10px;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   background: var(--surface);
-  font-size: 13px;
+  font-size: 14px;
 }
 .panel-link-label { overflow-wrap: anywhere; }
 .panel-link-remove {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border: 0;
   border-radius: 50%;
   background: transparent;
   color: var(--ink-faint);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1;
   cursor: pointer;
 }

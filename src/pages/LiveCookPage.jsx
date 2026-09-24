@@ -1108,12 +1108,7 @@ export default function LiveCookPage() {
       <header className="lc-header">
         <div className="lc-title">
           <span className="ds-run-eyebrow">Tonight&rsquo;s run</span>
-          <span className="ds-title-mark">
-            <h1>Live cook</h1>
-            <svg className="ds-underline ds-underline-title" viewBox="0 0 430 10" preserveAspectRatio="none" fill="none" aria-hidden="true">
-              <path d="M2 7c68-4 144 1 220-2 58-2.5 134 3 206 .5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </span>
+          <h1>Live cook</h1>
           <p className="ds-run-facts">
             {approved?.title || "Untitled cook"}
             <span className="ds-mode-chip">
