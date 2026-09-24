@@ -190,6 +190,30 @@ const normalize = (s) =>
     .replace(/\s+/g, " ")
     .trim();
 
+// Filler a command may carry and still be a command. Matches the page
+// commands' list (voicePageCommands.js), plus "lets" as transcribed
+// without its apostrophe.
+const FILLER =
+  /\b(?:please|kindly|just|go ahead and|could you|can you|would you|will you|i want to|i'd like to|let's|lets)\b/g;
+const stripFiller = (said) => said.replace(FILLER, " ").replace(/\s+/g, " ").trim();
+
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Whole words only. A substring test sent "show me the homemade sauce"
+// Home and "open the cooker" to the live cook.
+const DESTINATION_PATTERNS = DESTINATIONS.flatMap((dest) =>
+  dest.names.map((name) => ({ dest, re: new RegExp(`\\b${escapeRe(normalize(name))}\\b`) })),
+);
+
+// A name alone isn't a command — "the schedule looks tight" is talking
+// about it, not asking to go there. It needs a verb.
+const NAV_VERB = /\b(?:go|open|show|take me|jump|switch|navigate)\b/;
+
+function findDestination(said) {
+  if (!NAV_VERB.test(said)) return null;
+  return DESTINATION_PATTERNS.find(({ re }) => re.test(said))?.dest ?? null;
+}
+
 /**
  * @param {string} text              what was said
  * @param {object} ctx
@@ -215,30 +239,37 @@ export function matchNavCommand(text, { route = "/", reachable, confidence, stri
 
   // Named destinations first: "go to the schedule" contains "go", which
   // a bare movement pattern would otherwise swallow.
-  for (const dest of DESTINATIONS) {
-    for (const name of dest.names) {
-      if (!said.includes(normalize(name))) continue;
-      // A name alone isn't a command — "the schedule looks tight" is
-      // talking about it, not asking to go there. Require a verb.
-      if (!/\b(go|open|show|take me|jump|switch|navigate)\b/.test(said)) continue;
-      // While a page is taking dictation, a destination only counts if
-      // the whole utterance is short and clearly heard. "go back to
-      // home" is plainly navigation; "I want to go back to the recipe
-      // my mum used to make" names a page inside an answer, and typing
-      // it is the right call.
-      if (
-        strict &&
-        (countUnits(said) > STRICT_MAX_WORDS ||
-          (typeof confidence === "number" && confidence < MIN_BARE_CONFIDENCE))
-      ) {
-        continue;
-      }
+  const dest = findDestination(said);
+  if (dest) {
+    const units = countUnits(said);
+    const unsure = typeof confidence === "number" && confidence < MIN_BARE_CONFIDENCE;
+    const doubtful = unsure && confidence >= CONFIRM_CONFIDENCE;
+    // A subject means someone is talking about going somewhere, not
+    // asking to: "we should go home" is two cooks chatting. The filler
+    // a command is allowed ("can you", "I want to", "let's") is taken
+    // off first, so "can you take me home" still counts.
+    const talking = HAS_SUBJECT.test(stripFiller(said));
+    // While a page is taking dictation, a destination only counts if
+    // the whole utterance is short and clearly heard. "go back to home"
+    // is plainly navigation; "go back to the recipe my mum used to
+    // make" names a page inside an answer, and typing it is the right
+    // call. Falling through lets the answer box have it.
+    const skip = talking || (strict && (units > STRICT_MAX_WORDS || unsure)) || (unsure && !doubtful);
+    if (!skip) {
       if (dest.path === route) return { action: "already", path: dest.path };
       if (reachable && !reachable.includes(dest.path)) {
         return { action: "blocked", path: dest.path };
       }
+      // Heard, but not clearly. The same garbled turn that should not
+      // move anyone on a bare "back" should not move them here either —
+      // but a named page is worth asking about rather than dropping.
+      if (doubtful) return { action: "goto", path: dest.path, confirm: true };
       return { action: "goto", path: dest.path };
     }
+    // Naming a page and then being passed over is not a bare "back"
+    // either: "we should go back to the schedule" was said to someone,
+    // not to the app.
+    return { action: "none" };
   }
 
   // Bare movement words are never commands on a dictation page: "back"
@@ -289,13 +320,38 @@ export function matchNavCommand(text, { route = "/", reachable, confidence, stri
   return { action: "none" };
 }
 
-/** What to say on this page, for the VoiceBar hint. */
-export function navHintFor(route) {
-  const elsewhere = DESTINATIONS.find((d) => d.path !== route);
+/**
+ * What to say on this page, for the VoiceBar hint.
+ *
+ * The example destination is one you can actually reach. The first name
+ * on the list used to be offered regardless, which on Home was "go to
+ * kitchen setup" — a page that only exists when a kitchen was deleted,
+ * so the one suggestion on screen answered "not yet".
+ *
+ * @param {string} route
+ * @param {string[]} [reachable] as for matchNavCommand; omit to allow any
+ */
+export function navHintFor(route, reachable) {
+  const elsewhere = reachableDestinations(route, reachable).find((d) => d.path !== "/");
   return {
-    line: `Say “back”, “home”, or “go to ${elsewhere?.names[0] ?? "the schedule"}”.`,
+    line: elsewhere
+      ? `Say “go back”, “go home”, or “go to ${elsewhere.names[0]}”.`
+      : "Say “go back” or “go home”.",
     sub: "Each page also takes the words on its own buttons.",
   };
+}
+
+/** What "help" answers: the pages you could go to from here. */
+export function navHelpLine(route, reachable) {
+  const names = reachableDestinations(route, reachable).map((d) => d.names[0]);
+  if (!names.length) return "Try: “go back”.";
+  return `Try: “go back”, or “go to” ${names.slice(0, 3).join(", ")}.`;
+}
+
+// Later stages first: where you are headed is a better suggestion than
+// where you have been.
+function reachableDestinations(route, reachable) {
+  return DESTINATIONS.filter((d) => d.path !== route && (!reachable || reachable.includes(d.path))).reverse();
 }
 
 /** Destination names, for the "help" action. */

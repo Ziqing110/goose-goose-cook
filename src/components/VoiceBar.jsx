@@ -26,23 +26,15 @@ import {
 } from "../voice/agentVoice.js";
 import GooseVoiceAgent from "./GooseVoiceAgent.jsx";
 import { devGooseState } from "../dev/preview.js";
-import {
-  matchConfirmation,
-  matchesConfirmationPhrase,
-  matchNavCommand,
-  navCommandList,
-  isLikelyConversation,
-  navHintFor,
-  normalizeUtterance,
-  pathLabel,
-} from "../utils/navCommands.js";
+import { navHintFor } from "../utils/navCommands.js";
 import {
   getVoiceDictation,
   matchPageCommand,
   subscribeVoiceRegistry,
   voiceCommandsAreExclusive,
 } from "../utils/voicePageCommands.js";
-import { sessionStageStates } from "../utils/sessionSteps.js";
+import { voiceReachablePaths } from "../utils/routeGuards.js";
+import { routeVoiceTurn, turnConfidence } from "../utils/voiceTurn.js";
 
 
 // Long enough to read, short enough that the bar goes back to being a
@@ -59,10 +51,6 @@ const CONFIRM_WINDOW_MS = 10_000;
 // small cruelty. Generous on purpose: the window expiring is harmless,
 // since expiring means nothing happens.
 const PHRASE_WINDOW_MS = 25_000;
-
-// The live-cook page has its own command grammar, where "next" and
-// "back" mean something else entirely. Navigation stands down there.
-const NAV_OFF_ROUTES = ["/session/live-cook"];
 
 // Turn detection for the pages that take commands rather than dictation.
 //
@@ -136,16 +124,15 @@ export default function VoiceBar() {
   const routeRef = useRef(pathname);
   routeRef.current = pathname;
 
-  // Where the session guards would let you go: everything finished, plus
-  // the stage you're on. Home is always reachable — it's the entry
-  // point, not a wizard step.
-  const reachableRef = useRef([]);
-  reachableRef.current = [
-    "/",
-    ...sessionStageStates(state.session)
-      .filter((s) => s.state !== "future")
-      .map((s) => s.path),
-  ];
+  // Where the route guards would let you stay (routeGuards.js is shared
+  // with App's guards, so the two cannot disagree). Without it, "go to
+  // the live cook" navigates and is immediately bounced back, which reads
+  // as the command having failed rather than as being too early.
+  const reachable = voiceReachablePaths(state);
+  const reachableRef = useRef(reachable);
+  reachableRef.current = reachable;
+  const hasSessionRef = useRef(false);
+  hasSessionRef.current = Boolean(state.session);
 
   const onError = useCallback((message) => setError(message), []);
 
@@ -171,25 +158,16 @@ export default function VoiceBar() {
   // pushed onto agentVoice rather than read from React state there.
   useEffect(() => setVoiceEnabled(agentVoice), [agentVoice]);
 
+  // Browser history for "back" rather than a route table: back after a
+  // "go to" should return you where you were, and the session guards
+  // already redirect anything unreachable. Whether there is anywhere
+  // inside the app to go back to is decided before this is called.
   const run = useCallback(
-    (action, path) => {
-      // Browser history rather than a route table: "next" after a "back"
-      // should return you where you were, and the session guards already
-      // redirect anything unreachable.
-      if (action === "goto") return navigate(path);
-      // ...but only as far as the app goes. react-router numbers its own
-      // entries in history.state.idx, and idx 0 is the first page this
-      // visit opened. Going back from there leaves the app altogether:
-      // the tab lands on whatever preceded it, or on a blank page, the
-      // whole SPA unloads, and the voice agent goes with it — so the one
-      // thing that could undo it is gone too. A dead end you can talk
-      // your way into and not out of.
-      if (action === "back" && (window.history.state?.idx ?? 0) <= 0) {
-        return say("That’s as far back as I can go.");
-      }
-      navigate(action === "back" ? -1 : 1);
+    (decision) => {
+      if (decision.type === "navigate") navigate(decision.path);
+      else if (decision.type === "back") navigate(-1);
     },
-    [navigate, say],
+    [navigate],
   );
 
   const clearPending = useCallback(() => {
@@ -225,9 +203,8 @@ export default function VoiceBar() {
   // A pending question must not survive a page change — whatever it was
   // about is no longer what you're looking at.
   useEffect(() => {
-    pendingRef.current = null;
-    setPending(null);
-  }, [pathname]);
+    clearPending();
+  }, [pathname, clearPending]);
 
   // Nobody has spoken for two minutes. Close the socket rather than keep
   // billing for a mic pointed at an empty kitchen, and say why — a mic
@@ -237,179 +214,75 @@ export default function VoiceBar() {
     dispatch({ type: "voice/setMuted", payload: { muted: true } });
   }, [dispatch]);
 
+  // `run` gets the match, so a command can act on what was captured
+  // rather than only on having fired. It may return a line to show
+  // instead of the command's static label — "four burners" and "eight
+  // burners, the most this allows" are the same command with different
+  // outcomes, and the bar should say which one happened.
+  const runPageCommand = useCallback(
+    (command) => {
+      const spoken = command.run(command.match, command.spoken);
+      const line = typeof spoken === "string" ? spoken : command.label;
+      if (line) say(line);
+    },
+    [say],
+  );
+
+  // What to do is decided in voiceTurn.js, where it is unit tested; this
+  // only gathers the state it needs and carries the answer out.
   const onTurn = useCallback(
     (turn) => {
       const text = turn.transcript?.trim();
-      if (!text) return;
-      // The mic hears the agent's own voice. Judged by when the words
-      // were spoken, since the transcript lands after the agent is done.
-      if (agentWasSpeakingAt(turn.startedAt ?? Date.now())) {
-        console.info("[voice] the agent's own voice, ignored:", text);
-        return;
-      }
       const route = routeRef.current;
-
-      // A page with its own conversation gets every turn untouched, and
-      // navigation stays out of it.
-      const takeover = getVoiceDictation(route);
-      if (takeover?.takeover) {
-        takeover.onFinal(text, turn);
-        return;
-      }
-      if (NAV_OFF_ROUTES.includes(route)) return;
-
-      // Two signals the matcher can't get from the words alone.
-      //
-      // confidence: the lowest word confidence in the turn. A garbled
-      // transcript should not move anyone — from the R-core recording,
-      // genuine mishearings bottomed out near 0.2-0.4 while clean short
-      // commands sat above 0.9.
-      //
-      // reachable: the stages the session guards would actually allow.
-      // Without it, "go to the live cook" navigates and is immediately
-      // bounced back, which reads as the command having failed rather
-      // than as being too early.
-      const confidence = (turn.words || []).reduce(
-        (lowest, w) => Math.min(lowest, w.confidence ?? 1),
-        1,
-      );
-
-      // A page taking dictation wants the words, not a command read of
-      // them — "go back to basics" is an answer, and typing it is right.
-      //
-      // But "go back to home" is not an answer to anything, and typing
-      // it strands you on a page you asked to leave with no way out but
-      // the mouse. So navigation still gets a look first, in strict
-      // mode: only a named destination, said briefly and heard clearly.
-      // Bare "back" and "previous" never count here — they're ordinary
-      // words in an answer.
-      const dictating = getVoiceDictation(route);
-      if (dictating) {
-        const nav = matchNavCommand(text, {
-          route,
-          confidence,
-          reachable: reachableRef.current,
-          strict: true,
-        });
-        if (nav.action === "goto") return run("goto", nav.path);
-        // Naming a page you can't reach yet, or are already on, is still
-        // navigation — it just doesn't move you. Saying so beats typing
-        // "go to the live cook" into the answer box.
-        if (nav.action === "already") return say("You're already here.");
-        if (nav.action === "blocked") return say("Not yet — finish this step first.");
-        dictating.onFinal(text);
-        return;
-      }
-
-      // A question is open: this turn is an answer, not a command.
-      // Anything that isn't yes or no abandons it — someone who moved on
-      // to another subject has answered by not answering, and leaving
-      // the prompt up would make the next "next" ambiguous all over
-      // again.
-      if (pendingRef.current) {
-        const { perform, phrase } = pendingRef.current;
-        // A passphrase is not a yes/no question. Anything that isn't the
-        // phrase leaves the run alone — including "yes", which is the
-        // whole point: saying yes is exactly what a passphrase is meant
-        // to stop being sufficient.
-        if (phrase) {
-          clearPending();
-          if (matchesConfirmationPhrase(text, phrase)) return perform();
-          return say("That didn't match, so nothing changed.");
-        }
-        const answer = matchConfirmation(text);
-        clearPending();
-        if (answer === "yes") return perform();
-        if (answer === "no") return say("Cancelled.");
-        return;
-      }
-
-      // The page gets first refusal. Home can "resume the run", Inventory
-      // can mark an ingredient out, and neither is navigation — but both
-      // are things those pages already advertise in the hint, so they
-      // have to be heard before anything generic looks at the words.
-      const said = normalizeUtterance(text);
-      const pageCommand = matchPageCommand(said, text);
-      if (pageCommand) {
-        // Page commands get the same guards as navigation. Without this
-        // "resume" was protected but "we should resume later" fired.
-        if (!isLikelyConversation(said, confidence, { allowSubject: pageCommand.allowSubject })) {
-          // Irreversible commands ask first. You said "start cooking" —
-          // being misheard into starting a cook costs more than one
-          // extra sentence.
-          const done = () => {
-            // `run` gets the match, so a command can act on what was
-            // captured rather than only on having fired. It may return a
-            // line to show instead of the command's static label — "four
-            // burners" and "eight burners, the most this allows" are the
-            // same command with different outcomes, and the bar should
-            // say which one happened.
-            const spoken = pageCommand.run(pageCommand.match, pageCommand.spoken);
-            const line = typeof spoken === "string" ? spoken : pageCommand.label;
-            if (line) say(line);
-          };
-          if (pageCommand.confirmPhrase) {
-            askToConfirm(
-              `To confirm, say: “${pageCommand.confirmPhrase}”`,
-              done,
-              normalizeUtterance(pageCommand.confirmPhrase),
-            );
-          } else if (pageCommand.confirm) {
-            askToConfirm(pageCommand.confirm, done);
-          } else {
-            done();
-          }
-        }
-        return;
-      }
-
-      // A dialog is open and the words were not one of its commands.
-      // Navigating away now would abandon a half-filled form and read as
-      // the app throwing your work away, so nothing generic gets a look:
-      // the way out is the dialog's own "cancel".
-      if (voiceCommandsAreExclusive()) {
-        console.info("[voice] not a command for the open dialog:", text);
-        return;
-      }
-
-      const { action, path, confirm } = matchNavCommand(text, {
+      const dictation = getVoiceDictation(route);
+      const decision = routeVoiceTurn(text, {
         route,
-        confidence,
         reachable: reachableRef.current,
+        hasSession: hasSessionRef.current,
+        confidence: turnConfidence(turn.words),
+        echo: Boolean(text) && agentWasSpeakingAt(turn.startedAt ?? Date.now()),
+        dictation,
+        pending: pendingRef.current,
+        matchPage: matchPageCommand,
+        exclusive: voiceCommandsAreExclusive(),
+        // react-router numbers its own entries in history.state.idx, and
+        // idx 0 is the first page this visit opened.
+        canGoBack: (window.history.state?.idx ?? 0) > 0,
       });
 
-      // Plausible but not solid. Ask instead of guessing, and instead of
-      // dropping it — silence on a real command reads as the app
-      // ignoring you, which is its own kind of broken.
-      if (confirm && (action === "back" || action === "goto")) {
-        const what = action === "goto" ? `go to ${pathLabel(path)}` : "go back";
-        return askToConfirm(`Did you mean ${what}? Say yes or no.`, () => run(action, path));
-      }
+      // Read before clearing: "yes" performs the question being closed.
+      const answered = pendingRef.current;
+      if (decision.clearPending) clearPending();
 
-      switch (action) {
-        case "goto":
+      switch (decision.type) {
+        case "takeover":
+          return dictation.onFinal(text, turn);
+        case "dictate":
+          return dictation.onFinal(text);
+        case "perform":
+          return answered?.perform();
+        case "say":
+          return say(decision.line);
+        case "navigate":
         case "back":
-          run(action, path);
-          break;
-        case "already":
-          say("You're already here.");
-          break;
-        case "blocked":
-          say("Not yet — finish this step first.");
-          break;
-        case "help":
-          say(`Try: next, back, or go to ${navCommandList().slice(0, 3).join(", ")}.`);
-          break;
+          return run(decision);
+        case "page":
+          return runPageCommand(decision.command);
+        case "confirm": {
+          const { then } = decision;
+          const perform = then.type === "page" ? () => runPageCommand(then.command) : () => run(then);
+          return askToConfirm(decision.question, perform, decision.phrase);
+        }
         default:
           // Silence is the right response to ordinary conversation, and
           // most of what gets said near this app is ordinary
           // conversation. Logged, not announced.
-          console.info("[voice] not a command:", text);
+          if (text) console.info(`[voice] ignored (${decision.reason}):`, text);
       }
     },
     // navigate is not listed: run() already closes over it, and
     // including it would rebuild this handler on every route change.
-    [say, run, askToConfirm, clearPending],
+    [say, run, runPageCommand, askToConfirm, clearPending],
   );
 
   const { status, partial, updateConfig } = useStreamingTranscript({
@@ -464,7 +337,7 @@ export default function VoiceBar() {
 
   // One source of truth for the three places that describe state, so
   // the pill, the label and the body copy can never disagree.
-  const view = describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname });
+  const view = describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname, reachable });
 
   const goose = describeGoose({ view, speaking, muted, status, partial, pending, feedback, error });
   // ?goose=<state> pins a pose for design review (dev only).
@@ -528,7 +401,7 @@ function describeGoose({ view, speaking, muted, status, partial, pending, feedba
 }
 
 /** Collapse mute + connection status + error into one view model. */
-function describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname }) {
+function describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname, reachable }) {
   if (error) {
     return {
       label: "MIC ERROR",
@@ -594,7 +467,7 @@ function describe({ muted, status, error, idled, pending, feedback, partial, hin
       isPartial: false,
     };
   }
-  const navHint = navHintFor(pathname);
+  const navHint = navHintFor(pathname, reachable);
   return {
     label: partial ? "HEARING" : feedback ? "HEARD" : "LISTENING",
     line: partial || feedback || hint?.line || navHint.line,
