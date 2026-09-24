@@ -106,12 +106,18 @@ const goLive = async () => {
   await cards.first().waitFor({ state: "visible", timeout: 15000 });
   await page.waitForTimeout(600);
 };
-const primariesAboveBar = async () => {
-  const bar = await box(page.locator(".voice-bar"));
+// The fixed VoiceBar became a floating goose, so "above the bar" is no
+// longer the constraint — "on screen, and not behind the goose" is.
+const primariesOnScreen = async () => {
+  const viewport = page.viewportSize();
+  const goose = await box(page.locator(".goose-agent"));
   const xl = page.locator(".lc-card .lc-card-actions .lc-btn-xl");
   for (let i = 0; i < 2; i++) {
     const b = await box(xl.nth(i));
-    assert.ok(b.y + b.height <= bar.y, `primary ${i} bottom ${b.y + b.height} vs bar top ${bar.y}`);
+    assert.ok(b.y + b.height <= viewport.height, `primary ${i} bottom ${b.y + b.height} past viewport ${viewport.height}`);
+    const overlaps = b.x < goose.x + goose.width && b.x + b.width > goose.x
+      && b.y < goose.y + goose.height && b.y + b.height > goose.y;
+    assert.ok(!overlaps, `primary ${i} sits under the goose`);
   }
 };
 // The seeded template has no unattended step, and the "cooking on its
@@ -144,7 +150,7 @@ await page.waitForTimeout(800);
 await pickMode("Versus");
 await goLive();
 
-await check("versus: at 1280×800 both primaries are on screen above the VoiceBar", primariesAboveBar);
+await check("versus: at 1280×800 both primaries are on screen and clear of the goose", primariesOnScreen);
 
 await check("versus: one column — strip, cards 50/50 with a score each, the board beneath, Toque as one line", async () => {
   const strip = await box(page.locator(".lc-strip"));
@@ -342,15 +348,25 @@ await page.waitForTimeout(600);
 await pickMode("Co-op");
 await goLive();
 
-await check("co-op: at 1280×800 both primaries are on screen above the VoiceBar", primariesAboveBar);
+await check("co-op: at 1280×800 both primaries are on screen and clear of the goose", primariesOnScreen);
 
-await check("co-op: at 1280×800 the muted mic button sits in the gutter, clear of the page's content", async () => {
-  const bar = page.locator(".voice-bar.is-muted");
-  assert.equal(await bar.count(), 1, "the voice bar starts muted");
-  const mic = await box(bar);
+await check("co-op: at 1280×800 the muted goose sits in the gutter, clear of the page's content", async () => {
+  const goose = page.locator(".goose-agent");
+  assert.equal(await goose.count(), 1, "the goose is on screen");
+  // Muted is the goose's idle pose, and its bubble says how to start.
+  assert.equal(await page.locator(".goose-bubble-tab").textContent(), "Mic off", "the mic starts muted");
+  // The goose floats over the page rather than sitting in fixed chrome
+  // beside it, so it may share the content column's x range. What has to
+  // hold is that it does not cover anything: no 2D overlap with the run.
+  const mic = await box(goose);
   const shell = await box(page.locator(".lc-toque-line"));
-  assert.ok(mic.x >= shell.x + shell.width, `mic left ${mic.x} vs content right ${shell.x + shell.width}`);
-  assert.ok(await page.getByRole("button", { name: "Unmute" }).isVisible(), "still named Unmute for AT");
+  const overlaps = mic.x < shell.x + shell.width && mic.x + mic.width > shell.x
+    && mic.y < shell.y + shell.height && mic.y + mic.height > shell.y;
+  assert.ok(!overlaps, `goose ${JSON.stringify(mic)} covers the toque line ${JSON.stringify(shell)}`);
+  // The mic egg only fans out on hover, but it carries its own AT name.
+  await page.locator(".goose-figure").hover();
+  await page.locator(".goose-eggs.is-open").waitFor({ state: "visible" });
+  assert.ok(await page.getByRole("button", { name: "Start listening" }).isVisible(), "the mic egg is named for AT");
 });
 
 await check("co-op: 768 wide — the strip's note shrinks instead of widening the page", async () => {

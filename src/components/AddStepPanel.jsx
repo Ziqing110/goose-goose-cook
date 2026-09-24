@@ -90,8 +90,11 @@ export default function AddStepPanel({
     const commands = [
       {
         phrases: ADD_STEP_VOICE.name,
-        run: (m) => {
-          const name = m[1].trim();
+        run: (m, spoken) => {
+          // A name keeps the spelling it was said with: the matcher
+          // hands over the capture from the raw transcript, and only
+          // falls back to the normalized one if it could not re-match.
+          const name = (spoken?.[1] ?? m[1]).trim();
           if (!name) return null;
           setLabel(name);
           return `Called it “${name}.”`;

@@ -94,8 +94,11 @@ export default function KitchenProfileFormModal({ profile, notice, error, onSave
         // naming verb and everything after it. Without the verb this
         // would swallow every other command in the list.
         phrases: KITCHEN_PROFILE_VOICE.name,
-        run: (m) => {
-          const name = m[1].trim();
+        run: (m, spoken) => {
+          // A name keeps the spelling it was said with: the matcher
+          // hands over the capture from the raw transcript, and only
+          // falls back to the normalized one if it could not re-match.
+          const name = (spoken?.[1] ?? m[1]).trim();
           if (!name) return null;
           setDraft((d) => ({ ...d, name }));
           setNameError(false);

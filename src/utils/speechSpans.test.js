@@ -25,10 +25,26 @@ test("output latency at the front counts, earlier does not", () => {
   assert.equal(log.covers(800), false);
 });
 
-test("a span still playing covers everything after its start", () => {
+test("a span still playing covers the words being spoken over it", () => {
   const log = createSpanLog();
-  log.begin(1000);
-  assert.equal(log.covers(999999), true);
+  const now = Date.now();
+  log.begin(now - 1_000);
+  assert.equal(log.covers(now - 500), true);
+  assert.equal(log.covers(now), true);
+});
+
+// A voice that reports onstart and never onend — which is what a browser
+// with no installed voices does — used to leave the span open forever, and
+// an open span matched every later turn. The agent then heard its own
+// voice in everything anyone said and went deaf for the rest of the
+// session. An unclosed span is only believed for as long as speaking is
+// plausible.
+test("a span nobody closed stops covering once it outlasts any sentence", () => {
+  const log = createSpanLog({ maxOpenMs: 30_000 });
+  const now = Date.now();
+  log.begin(now - 60_000);
+  assert.equal(log.covers(now - 10_000), false);
+  assert.equal(log.covers(now), false);
 });
 
 test("someone speaking well before or after is not the agent", () => {

@@ -27,8 +27,27 @@
 // Layers register at a depth rather than in arrival order.
 let layers = [];
 
-const topLayer = () =>
-  layers.reduce((top, l) => (top === null || l.priority >= top.priority ? l : top), null);
+// Every layer at the highest priority is live, not just the last one
+// registered there. A page is free to register its commands in more than
+// one place — Inventory keeps the ingredient commands next to the
+// ingredient list and the board commands next to the board — and those
+// are peers, not a stack. Keeping only the last of them made the other
+// unreachable: "show the recipe graph" worked and "no ginger" did
+// nothing, on a page whose own hint told you to say it.
+//
+// Shadowing is still what priority is for. A dialog registers above the
+// page, so everything the page offers drops out while it is open.
+const livePriority = () =>
+  layers.reduce((top, l) => (top === null || l.priority > top ? l.priority : top), null);
+
+// Newest first among equals: the last layer registered at a priority
+// still answers a phrase before the ones under it, which is the
+// precedence a stack had. The change is only that the others are no
+// longer thrown away — a phrase nobody above claimed still reaches them.
+const liveLayers = () => {
+  const top = livePriority();
+  return top === null ? [] : layers.filter((l) => l.priority === top).reverse();
+};
 
 /**
  * @param {Array<object>} commands
@@ -66,17 +85,38 @@ const FILLER_WORDS =
 const BARE_ME = /\bme\b/g;
 const loosen = (said) => said.replace(FILLER_WORDS, " ").replace(BARE_ME, " ").replace(/\s+/g, " ").trim();
 
+// Match the same phrase against what was actually said.
+//
+// Phrases are matched against normalized text — lowercased, punctuation
+// stripped — which is right for deciding WHICH command fired and wrong
+// for what a command captures. "call it Flat 3 galley" names a kitchen,
+// and naming it "flat 3 galley" is not what anyone said. So once a
+// phrase has matched, it is run again over the raw transcript, case
+// insensitively, and that match is preferred when it succeeds. The
+// normalized match still decides everything; this only recovers the
+// original spelling of what it captured.
+function rawMatch(phrase, transcript) {
+  if (!transcript) return null;
+  const flags = phrase.flags.includes("i") ? phrase.flags : phrase.flags + "i";
+  try {
+    return new RegExp(phrase.source, flags).exec(transcript.trim());
+  } catch {
+    return null;
+  }
+}
+
 /**
  * First page command matching this utterance, or null.
  *
  * Page commands are checked BEFORE navigation, so a page can claim a
  * phrase that would otherwise move you. They get the same normalized
- * text the navigation matcher works on.
+ * text the navigation matcher works on; `transcript` is what was said
+ * before normalization, so free-text captures keep their own spelling.
  */
-export function matchPageCommand(said) {
+export function matchPageCommand(said, transcript) {
   if (!said) return null;
-  const top = topLayer();
-  if (!top) return null;
+  const live = liveLayers();
+  if (!live.length) return null;
   // Tried in order — command grammar is closed and this only widens how
   // the same words can be padded, so the first hit either way is the
   // right one.
@@ -84,14 +124,14 @@ export function matchPageCommand(said) {
   const loosened = loosen(said);
   if (loosened && loosened !== said) candidates.push(loosened);
   for (const text of candidates) {
-    for (const c of top.commands) {
+    for (const c of live.flatMap((l) => l.commands)) {
       for (const p of c.phrases) {
         const match = p.exec(text);
         // The match comes back with the command so `run` can read what
         // was captured — "set burners to four" has to tell the form
         // *four*, and a command that can only fire or not fire cannot
         // do that.
-        if (match) return { ...c, match };
+        if (match) return { ...c, match, spoken: rawMatch(p, transcript) };
       }
     }
   }
@@ -106,7 +146,7 @@ export function matchPageCommand(said) {
  * the only way out is a command the dialog itself offers.
  */
 export function voiceCommandsAreExclusive() {
-  return Boolean(topLayer()?.exclusive);
+  return liveLayers().some((l) => l.exclusive);
 }
 
 /** For tests, and for making sure a stale page can't leave commands behind. */
