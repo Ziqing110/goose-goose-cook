@@ -56,6 +56,16 @@ function sessionRowToApi(row, recipeRows, sharedStepRows) {
 // digging inside SQLite, so the big JSON columns never cross the wire.
 // The shape deliberately matches the compact row the client appends
 // locally when a run ends (see sessionSummary in AppStateContext).
+// DEMO ONLY. Which browser is asking. See the client_id note in db.js:
+// this is asserted by the client, not proven, so it separates honest
+// visitors from each other and nothing more. Never authorise on it.
+const clientOf = (req) => req.get("X-Kitchen-Client") || "";
+
+// Rows with no owner stay visible to everyone: that is what `npm run
+// seed` creates (it posts without the header), and seeded demo content
+// is meant to be shared. Only what a visitor makes is theirs alone.
+const OWNED_BY = "(client_id IS NULL OR client_id = '' OR client_id = ?)";
+
 function listSessionsStmt(statuses) {
   return db.prepare(`
     SELECT id, kitchen_profile_id, status, started_at, ended_at,
@@ -64,7 +74,8 @@ function listSessionsStmt(statuses) {
            json_extract(summary_json, '$.dish') AS summary_dish,
            summary_json IS NOT NULL AS has_summary
     FROM sessions
-    ${statuses.length ? `WHERE status IN (${statuses.map(() => "?").join(",")})` : ""}
+    WHERE ${OWNED_BY}
+    ${statuses.length ? `AND status IN (${statuses.map(() => "?").join(",")})` : ""}
     ORDER BY started_at DESC
   `);
 }
@@ -95,8 +106,8 @@ const getSessionStmt = db.prepare("SELECT * FROM sessions WHERE id = ?");
 const getRecipesForSessionStmt = db.prepare("SELECT * FROM recipe_instances WHERE session_id = ? ORDER BY position ASC");
 const getSharedStepsForSessionStmt = db.prepare("SELECT * FROM shared_steps WHERE session_id = ? ORDER BY id ASC");
 const insertSessionStmt = db.prepare(`
-  INSERT INTO sessions (id, kitchen_profile_id, status, started_at, ended_at, conversation_json, selected_node_id, cooks_json, mode, run_json, summary_json, out_material_ids_json, node_positions_json, updated_at)
-  VALUES (@id, @kitchen_profile_id, @status, @started_at, @ended_at, @conversation_json, @selected_node_id, @cooks_json, @mode, @run_json, @summary_json, @out_material_ids_json, @node_positions_json, @updated_at)
+  INSERT INTO sessions (id, kitchen_profile_id, status, started_at, ended_at, conversation_json, selected_node_id, cooks_json, mode, run_json, summary_json, out_material_ids_json, node_positions_json, updated_at, client_id)
+  VALUES (@id, @kitchen_profile_id, @status, @started_at, @ended_at, @conversation_json, @selected_node_id, @cooks_json, @mode, @run_json, @summary_json, @out_material_ids_json, @node_positions_json, @updated_at, @client_id)
 `);
 const updateSessionStmt = db.prepare(`
   UPDATE sessions SET kitchen_profile_id=@kitchen_profile_id, status=@status, ended_at=@ended_at,
@@ -110,15 +121,21 @@ const updateSessionStmt = db.prepare(`
 // reaches history. Starting a run therefore closes out any other active
 // session, making "at most one active" an invariant the API guarantees
 // rather than something the UI merely avoids tripping.
+// DEMO ONLY: scoped to one browser (@client_id). Unscoped, a second
+// visitor starting a cook would abandon the first visitor's run
+// mid-kitchen -- on one shared deployment that is not a stale-row
+// cleanup, it is one person's demo ending because someone else opened
+// the page.
 const abandonOtherActiveStmt = db.prepare(
-  "UPDATE sessions SET status='abandoned', ended_at=@now, updated_at=@now WHERE status='active' AND id != @id"
+  "UPDATE sessions SET status='abandoned', ended_at=@now, updated_at=@now WHERE status='active' AND id != @id AND ifnull(client_id, '') = @client_id"
 );
 
 sessionsRouter.post("/", (req, res) => {
   const { id, kitchenProfileId } = req.body;
   if (!id) return res.status(400).json({ error: "id is required" });
   const now = new Date().toISOString();
-  abandonOtherActiveStmt.run({ id, now });
+  const client_id = clientOf(req);
+  abandonOtherActiveStmt.run({ id, now, client_id });
   const row = {
     id,
     kitchen_profile_id: kitchenProfileId ?? null,
@@ -134,6 +151,7 @@ sessionsRouter.post("/", (req, res) => {
     node_positions_json: JSON.stringify({}),
     summary_json: null,
     updated_at: now,
+    client_id,
   };
   insertSessionStmt.run(row);
   res.status(201).json(sessionRowToApi(row, [], []));
@@ -141,15 +159,26 @@ sessionsRouter.post("/", (req, res) => {
 
 sessionsRouter.get("/", (req, res) => {
   const statuses = (req.query.status || "").split(",").filter(Boolean);
+  const client = clientOf(req);
   if (req.query.view === "list") {
-    return res.json(listSessionsStmt(statuses).all(...statuses).map(sessionRowToListApi));
+    return res.json(listSessionsStmt(statuses).all(client, ...statuses).map(sessionRowToListApi));
   }
-  const rows = statuses.length
-    ? db.prepare(`SELECT * FROM sessions WHERE status IN (${statuses.map(() => "?").join(",")}) ORDER BY started_at DESC`).all(...statuses)
-    : db.prepare("SELECT * FROM sessions ORDER BY started_at DESC").all();
+  const rows = db
+    .prepare(`
+      SELECT * FROM sessions
+      WHERE ${OWNED_BY}
+      ${statuses.length ? `AND status IN (${statuses.map(() => "?").join(",")})` : ""}
+      ORDER BY started_at DESC
+    `)
+    .all(client, ...statuses);
   res.json(rows.map((row) => sessionRowToApi(row, getRecipesForSessionStmt.all(row.id), getSharedStepsForSessionStmt.all(row.id))));
 });
 
+// Not scoped, on purpose: ids are uuids, so nothing enumerates them, and
+// a shared link to one cook should keep working. It does mean anyone
+// holding an id can read that session -- acceptable for a demo whose
+// data is dish names and timings, and another reason client_id is not a
+// security boundary.
 sessionsRouter.get("/:id", (req, res) => {
   const row = getSessionStmt.get(req.params.id);
   if (!row) return res.status(404).json({ error: "session not found" });
