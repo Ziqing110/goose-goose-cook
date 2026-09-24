@@ -81,14 +81,35 @@ const FILLER_WORDS =
 const BARE_ME = /\bme\b/g;
 const loosen = (said) => said.replace(FILLER_WORDS, " ").replace(BARE_ME, " ").replace(/\s+/g, " ").trim();
 
+// Match the same phrase against what was actually said.
+//
+// Phrases are matched against normalized text — lowercased, punctuation
+// stripped — which is right for deciding WHICH command fired and wrong
+// for what a command captures. "call it Flat 3 galley" names a kitchen,
+// and naming it "flat 3 galley" is not what anyone said. So once a
+// phrase has matched, it is run again over the raw transcript, case
+// insensitively, and that match is preferred when it succeeds. The
+// normalized match still decides everything; this only recovers the
+// original spelling of what it captured.
+function rawMatch(phrase, transcript) {
+  if (!transcript) return null;
+  const flags = phrase.flags.includes("i") ? phrase.flags : phrase.flags + "i";
+  try {
+    return new RegExp(phrase.source, flags).exec(transcript.trim());
+  } catch {
+    return null;
+  }
+}
+
 /**
  * First page command matching this utterance, or null.
  *
  * Page commands are checked BEFORE navigation, so a page can claim a
  * phrase that would otherwise move you. They get the same normalized
- * text the navigation matcher works on.
+ * text the navigation matcher works on; `transcript` is what was said
+ * before normalization, so free-text captures keep their own spelling.
  */
-export function matchPageCommand(said) {
+export function matchPageCommand(said, transcript) {
   if (!said) return null;
   const live = liveLayers();
   if (!live.length) return null;
@@ -106,7 +127,7 @@ export function matchPageCommand(said) {
         // was captured — "set burners to four" has to tell the form
         // *four*, and a command that can only fire or not fire cannot
         // do that.
-        if (match) return { ...c, match };
+        if (match) return { ...c, match: rawMatch(p, transcript) || match };
       }
     }
   }

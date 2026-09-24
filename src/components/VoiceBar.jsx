@@ -319,7 +319,7 @@ export default function VoiceBar() {
       // are things those pages already advertise in the hint, so they
       // have to be heard before anything generic looks at the words.
       const said = normalizeUtterance(text);
-      const pageCommand = matchPageCommand(said);
+      const pageCommand = matchPageCommand(said, text);
       if (pageCommand) {
         // Page commands get the same guards as navigation. Without this
         // "resume" was protected but "we should resume later" fired.

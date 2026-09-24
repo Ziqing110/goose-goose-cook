@@ -173,6 +173,22 @@ async function mockApi(page, { sessionState = session, kitchenProfiles = [kitche
       Object.assign(sessionState, request.postDataJSON());
       return route.fulfill({ json: clone(sessionState) });
     }
+    // Recipes are not patched through the session body — they have their
+    // own endpoint (server/routes/sessions.js), and adding a step goes
+    // through it. Without this the patch fell into the catch-all below,
+    // which answered with the session untouched, so a step added on the
+    // board was wiped by the next read and "add it to the board" looked
+    // like it had done nothing.
+    const recipePatch = url.pathname.match(/^\/api\/sessions\/[^/]+\/recipes\/([^/]+)$/);
+    if (recipePatch && request.method() === "PATCH") {
+      const recipe = sessionState.recipes.find((r) => r.id === recipePatch[1]);
+      if (!recipe) return route.fulfill({ status: 404, json: { error: "recipe instance not found" } });
+      const { working, approved, custom_materials } = request.postDataJSON() || {};
+      if (working !== undefined) recipe.working = working;
+      if (approved !== undefined) recipe.approved = approved;
+      if (custom_materials !== undefined) recipe.custom_materials = custom_materials;
+      return route.fulfill({ json: clone(recipe) });
+    }
     if (url.pathname.startsWith("/api/sessions/")) {
       return route.fulfill({ json: clone(sessionState) });
     }
@@ -569,12 +585,27 @@ try {
   // expanded row lists the steps that use the ingredient, so a bare
   // hasText matches "Ginger" inside the Water row once a step named
   // "Mince ginger" is showing, and the locator stops being unique.
+  // Only one tabpanel is mounted at a time, so the recipe board simply
+  // does not exist in the DOM while the ingredient list is showing.
+  // Anything asserted about a step has to be looked at from that tab.
+  const ingredientTab = inventoryPage.getByRole("tab", { name: /Ingredients/ });
+  const recipeTab = inventoryPage.getByRole("tab", { name: /Recipe graph/ });
+  const onTheBoard = async (assertion) => {
+    await recipeTab.click({ force: true });
+    try {
+      await assertion();
+    } finally {
+      await ingredientTab.click({ force: true });
+    }
+  };
+
   const ginger = inventoryPage.locator(".inv-row", { hasText: "Ginger" }).first().getByRole("checkbox").first();
   const water = inventoryPage.locator(".inv-row", { hasText: "Water" }).first().getByRole("checkbox").first();
   await checkVoiceBehavior("Inventory: ‘no ginger’ marks ginger out and blocks the step that needs it", async () => {
     await inventoryStream.say("no ginger");
     await waitForAttribute(ginger, "aria-checked", "false", 1_500);
-    await inventoryPage.getByRole("button", { name: /Dice ginger, blocked/ }).waitFor({ state: "visible" });
+    await onTheBoard(() =>
+      inventoryPage.getByRole("button", { name: /Dice ginger, blocked/ }).waitFor({ state: "visible" }));
   });
   await checkVoiceBehavior("Inventory: ‘got ginger’ restores an out ingredient", async () => {
     // Put it out by the visible control first so this checks the voice action.
@@ -586,7 +617,8 @@ try {
   await checkVoiceBehavior("Inventory: ‘no water’ marks water out and updates the dependent graph", async () => {
     await inventoryStream.say("no water");
     await waitForAttribute(water, "aria-checked", "false", 1_500);
-    await inventoryPage.getByRole("button", { name: /Boil water, blocked/ }).waitFor({ state: "visible" });
+    await onTheBoard(() =>
+      inventoryPage.getByRole("button", { name: /Boil water, blocked/ }).waitFor({ state: "visible" }));
   });
   await checkVoiceBehavior("Inventory: ‘everything’s on hand’ clears all out ingredients", async () => {
     if (await ginger.getAttribute("aria-checked") === "true") await ginger.click({ force: true });
@@ -880,10 +912,8 @@ try {
   });
   // Revise is meaningful only after approval. A mouse approval keeps that
   // assertion independent from the voice-approval scenario above.
-  const ingredientTab = inventoryPage.getByRole("tab", { name: /Ingredients/ });
   if (await ingredientTab.getAttribute("aria-selected") !== "true") await ingredientTab.click({ force: true });
   if (await ginger.count() && await ginger.getAttribute("aria-checked") === "false") await ginger.click({ force: true });
-  const recipeTab = inventoryPage.getByRole("tab", { name: /Recipe graph/ });
   if (await recipeTab.getAttribute("aria-selected") !== "true") await recipeTab.click({ force: true });
   const approveButton = inventoryPage.getByRole("button", { name: /Approve and schedule/ });
   if (await approveButton.count()) {

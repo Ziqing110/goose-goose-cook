@@ -90,6 +90,16 @@ export function useStepEditing() {
     const recipe = recipes.find((r) => r.id === recipeId);
     if (!recipe) return null;
     const id = nextNodeId("step");
+    // The new step and the links that point at it go in ONE pass, for
+    // the reason spelled out on deleteNode below: two
+    // updateRecipeWorking calls in the same tick both read `recipes`
+    // from the render closure, so the second silently overwrites the
+    // first. Here that cost the new step itself — adding a task that
+    // "runs before boil water" rewired a graph that predated the step,
+    // and dispatching it put the board back exactly as it had been.
+    // Targets in another recipe, or a shared step, dispatch somewhere
+    // else and so cannot clobber this one.
+    const elsewhere = [];
     updateRecipeWorking(recipe.id, (w) => {
       w.nodes.push({
         id,
@@ -103,10 +113,21 @@ export function useStepEditing() {
         status: "pending",
         phase,
       });
+
+      runsBefore.forEach((targetId) => {
+        if (targetId === id) return;
+        const target = w.nodes.find((n) => n.id === targetId);
+        if (!target) {
+          elsewhere.push(targetId);
+          return;
+        }
+        const current = target.depends_on || [];
+        const redundant = current.filter((d) => dependsOn.includes(d));
+        target.depends_on = [...new Set([...current.filter((d) => !redundant.includes(d)), id])];
+      });
     });
 
-    runsBefore.forEach((targetId) => {
-      if (targetId === id) return;
+    elsewhere.forEach((targetId) => {
       const found = findAnyNode(targetId);
       if (!found) return;
       const current = found.node.depends_on || [];
