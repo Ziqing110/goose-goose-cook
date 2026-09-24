@@ -34,9 +34,27 @@ Page names: **home** / the start · **kitchen setup** / the kitchen / equipment 
 **conversation** / the questions · **inventory** / the recipe / the board / ingredients ·
 **voice binding** / voices / the cooks · **schedule** / the timeline / the plan ·
 **live cook** / cooking / the cook.
-Saying a page you can't reach yet answers "Not yet — finish this step first."
+Page names match as whole words ("the homemade sauce" is not "home"). A destination
+with a subject is conversation ("we should go home"), but the forgiven filler above
+still counts ("can you take me home", "let's go to the schedule").
+
+A page you can't go to says why instead of moving: "Not yet — finish this step
+first." for a later stage, "Start a run first." with no run, and "This run already
+has its kitchen." for kitchen setup, which only opens when a run's kitchen was
+deleted. Reachable means the page's route guard would let you stay, so the voice bar
+and the guards can't disagree (`routeGuards.js`). Live cook counts once the run exists.
+
+A destination heard with middling confidence asks "Did you mean go to …? Say yes or
+no." instead of moving; a garbled one is dropped. "Go back" from the first page of
+the visit answers "That's as far back as I can go." rather than leaving the app.
+
 While a page takes dictation (Conversation) only a named destination in six words
 or fewer counts.
+
+An open question (a *asks* command, or "Did you mean…?") closes on anything that
+isn't yes or no, and what was said is then heard as a command in its own right.
+A passphrase is the exception: anything but the exact sentence answers "That didn't
+match, so nothing changed." and nothing else runs.
 
 ## Home
 
@@ -201,6 +219,9 @@ Free time follows the same rule as the lanes: hands-on steps and hands-on moment
 nothing running is a wait, not free time.
 
 ## Live cook
+
+Before "Go live" the page is empty and navigation works as anywhere else ("go back
+to the plan"). Once a run exists the page takes every turn and navigation stands down.
 
 Say the agent's name first: **"Goose, I'm done with the onion"**. Turns without it
 are ignored, and for a few seconds after Goose asks a question a short answer

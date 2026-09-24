@@ -11,29 +11,21 @@ import LiveCookPage from "./pages/LiveCookPage.jsx";
 import CookSummaryPage from "./pages/CookSummaryPage.jsx";
 import DevJump from "./dev/DevJump.jsx";
 import { useAppState } from "./state/AppStateContext.jsx";
-import { isFullyApproved } from "./utils/graphLayout.js";
-import { areCooksBound } from "./utils/cooks.js";
 import { currentSessionPath } from "./utils/sessionSteps.js";
+import { guardRedirect, ROUTES } from "./utils/routeGuards.js";
 
 // Route guards: Home is always reachable (it's the entry point, not a
 // wizard step). Everything under /session requires an in-progress
-// session, and the two inner guards encode ordering within it —
-// mirroring the old flat completion-flag guards, just scoped to the
-// session object instead of global state.
+// session, and each page requires the stages before it. The rules live
+// in routeGuards.js, shared with voice navigation, so "go to the
+// schedule" only moves you when the guard here would let you stay.
 //
 // Kitchen setup only happens on Home now (you can't start a session
-// without picking/adding a kitchen there), so `!kitchenProfileId` here
+// without picking/adding a kitchen there), so a missing kitchenProfileId
 // is purely the edge case of the active profile being deleted mid-
 // session. If no profiles exist at all in that case, there's nothing
-// to pick — bounce all the way back to Home instead of a dead-end page.
-function nextRequiredPath(state) {
-  if (!state.session) return "/";
-  if (!state.session.kitchenProfileId) {
-    return state.kitchenProfiles.length === 0 ? "/" : "/session/kitchen-setup";
-  }
-  return null;
-}
-
+// to pick — the guard bounces all the way back to Home instead of a
+// dead-end page.
 function RequireSession({ children }) {
   const { state } = useAppState();
   // Sessions are fetched from the server on load (no longer synchronously
@@ -44,48 +36,10 @@ function RequireSession({ children }) {
   return children;
 }
 
-function RequireKitchenProfile({ children }) {
+function RequireStage({ path, children }) {
   const { state } = useAppState();
-  const redirect = nextRequiredPath(state);
+  const redirect = guardRedirect(path, state);
   if (redirect) return <Navigate to={redirect} replace />;
-  return children;
-}
-
-function RequireConversationComplete({ children }) {
-  const { state } = useAppState();
-  const redirect = nextRequiredPath(state);
-  if (redirect) return <Navigate to={redirect} replace />;
-  if (!state.session.conversation.complete) return <Navigate to="/session/conversation" replace />;
-  return children;
-}
-
-function RequireRecipeApproved({ children }) {
-  const { state } = useAppState();
-  const redirect = nextRequiredPath(state);
-  if (redirect) return <Navigate to={redirect} replace />;
-  if (!state.session.conversation.complete) return <Navigate to="/session/conversation" replace />;
-  if (!isFullyApproved(state.session.recipes, state.session.sharedSteps)) return <Navigate to="/session/inventory" replace />;
-  return children;
-}
-
-function RequireCooksBound({ children }) {
-  const { state } = useAppState();
-  const redirect = nextRequiredPath(state);
-  if (redirect) return <Navigate to={redirect} replace />;
-  if (!state.session.conversation.complete) return <Navigate to="/session/conversation" replace />;
-  if (!isFullyApproved(state.session.recipes, state.session.sharedSteps)) return <Navigate to="/session/inventory" replace />;
-  if (!areCooksBound(state.session.cooks)) return <Navigate to="/session/voice-binding" replace />;
-  return children;
-}
-
-function RequireModeSelected({ children }) {
-  const { state } = useAppState();
-  const redirect = nextRequiredPath(state);
-  if (redirect) return <Navigate to={redirect} replace />;
-  if (!state.session.conversation.complete) return <Navigate to="/session/conversation" replace />;
-  if (!isFullyApproved(state.session.recipes, state.session.sharedSteps)) return <Navigate to="/session/inventory" replace />;
-  if (!areCooksBound(state.session.cooks)) return <Navigate to="/session/voice-binding" replace />;
-  if (!state.session.mode) return <Navigate to="/session/schedule" replace />;
   return children;
 }
 
@@ -93,8 +47,9 @@ function RequireModeSelected({ children }) {
 // to wherever they actually left off.
 function SessionIndexRedirect() {
   const { state } = useAppState();
-  const redirect = nextRequiredPath(state);
-  if (redirect) return <Navigate to={redirect} replace />;
+  // Needs a kitchen, like every stage; the stages themselves come next.
+  const redirect = guardRedirect(ROUTES.conversation, state);
+  if (redirect && redirect !== ROUTES.conversation) return <Navigate to={redirect} replace />;
   // Same stage order as the progress chrome and Home's run card, so
   // "resume" lands on the stage those show as current. A finished run
   // resumes to its summary, which lives on the live-cook page.
@@ -120,41 +75,41 @@ export default function App() {
           <Route
             path="conversation"
             element={
-              <RequireKitchenProfile>
+              <RequireStage path={ROUTES.conversation}>
                 <ConversationPage />
-              </RequireKitchenProfile>
+              </RequireStage>
             }
           />
           <Route
             path="inventory"
             element={
-              <RequireConversationComplete>
+              <RequireStage path={ROUTES.inventory}>
                 <InventoryPage />
-              </RequireConversationComplete>
+              </RequireStage>
             }
           />
           <Route
             path="voice-binding"
             element={
-              <RequireRecipeApproved>
+              <RequireStage path={ROUTES.voiceBinding}>
                 <VoiceBindingPage />
-              </RequireRecipeApproved>
+              </RequireStage>
             }
           />
           <Route
             path="schedule"
             element={
-              <RequireCooksBound>
+              <RequireStage path={ROUTES.schedule}>
                 <SchedulePage />
-              </RequireCooksBound>
+              </RequireStage>
             }
           />
           <Route
             path="live-cook"
             element={
-              <RequireModeSelected>
+              <RequireStage path={ROUTES.liveCook}>
                 <LiveCookPage />
-              </RequireModeSelected>
+              </RequireStage>
             }
           />
         </Route>

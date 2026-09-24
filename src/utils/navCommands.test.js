@@ -7,6 +7,8 @@ import {
   matchConfirmation,
   matchesConfirmationPhrase,
   navCommandList,
+  navHelpLine,
+  navHintFor,
   normalizeUtterance,
 } from "./navCommands.js";
 import { HOME_VOICE, SCHEDULE_VOICE } from "./pageVoiceGrammar.js";
@@ -164,4 +166,58 @@ test("nav: destructive actions require the page's exact normalized passphrase", 
     assert.equal(matchesConfirmationPhrase("yes", phrase), false, phrase);
     assert.equal(matchesConfirmationPhrase(`${phrase} please`, phrase), false, phrase);
   }
+});
+
+test("nav: a destination with a subject is conversation, not a command", () => {
+  for (const said of ["we should go home", "they'll show the board later", "you can open the schedule"]) {
+    const r = matchNavCommand(said, { route: "/session/inventory", reachable: ALL, confidence: 1 });
+    assert.equal(r.action, "none", said);
+  }
+});
+
+test("nav: polite filler around a destination is still a command", () => {
+  for (const said of ["can you take me home", "I want to go to the schedule", "lets go to the schedule", "please show the plan"]) {
+    const r = matchNavCommand(said, { route: "/session/inventory", reachable: ALL, confidence: 1 });
+    assert.equal(r.action, "goto", said);
+  }
+});
+
+test("nav: destination names match whole words only", () => {
+  const cases = {
+    "show me the homemade sauce": "none",
+    "open the cooker": "none",
+    "go to the cooks": "goto",
+    "take me back to the cook": "goto",
+  };
+  for (const [said, action] of Object.entries(cases)) {
+    const r = matchNavCommand(said, { route: "/", reachable: ALL, confidence: 1 });
+    assert.equal(r.action, action, said);
+  }
+  assert.equal(matchNavCommand("go to the cooks", { route: "/", reachable: ALL }).path, "/session/voice-binding");
+  assert.equal(matchNavCommand("take me back to the cook", { route: "/", reachable: ALL }).path, "/session/live-cook");
+});
+
+test("nav: destination confidence bands — act, ask, drop", () => {
+  const at = (confidence) => matchNavCommand("go to the schedule", { route: "/", reachable: ALL, confidence });
+  assert.deepEqual(at(0.9), { action: "goto", path: "/session/schedule" });
+  assert.deepEqual(at(0.5), { action: "goto", path: "/session/schedule", confirm: true });
+  assert.deepEqual(at(0.3), { action: "none" });
+  // Not reachable is a fact about the page, not the hearing: no question.
+  const blocked = matchNavCommand("go to the schedule", { route: "/", reachable: ["/"], confidence: 0.5 });
+  assert.deepEqual(blocked, { action: "blocked", path: "/session/schedule" });
+});
+
+test("nav: the hint only suggests a page you can reach", () => {
+  // It used to be the first name on the list, which on Home was kitchen
+  // setup — a page that answers "not yet" for almost everyone.
+  assert.equal(navHintFor("/", ["/"]).line, "Say “go back” or “go home”.");
+  assert.match(navHintFor("/", ["/", "/session/conversation", "/session/inventory"]).line, /go to inventory/);
+  assert.doesNotMatch(navHintFor("/session/inventory", ALL).line, /inventory/);
+});
+
+test("nav: help never offers a page you are on or can't reach", () => {
+  const line = navHelpLine("/session/inventory", ["/", "/session/conversation", "/session/inventory"]);
+  assert.match(line, /conversation/);
+  assert.match(line, /home/);
+  assert.doesNotMatch(line, /inventory|schedule|next/);
 });
