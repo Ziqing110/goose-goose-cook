@@ -2,7 +2,16 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  // The Pages build is served from
+  // https://ziqing110.github.io/goose-goose-cook/, not a domain root, so
+  // every emitted asset URL needs the repo name in front.
+  //
+  // Build only. Applying it in dev too would move the dev server to
+  // localhost:5173/goose-goose-cook/ and break every URL the seed and e2e
+  // scripts print. Read it back in code as import.meta.env.BASE_URL
+  // (trailing slash included) — never hardcode the repo name.
+  base: command === "build" ? "/goose-goose-cook/" : "/",
   plugins: [react()],
   server: {
     port: 5173,
@@ -23,4 +32,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

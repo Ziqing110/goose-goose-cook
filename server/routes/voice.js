@@ -68,11 +68,24 @@ voiceRouter.get("/stt-token", async (req, res) => {
     // Short: the token only has to survive the hop from this fetch to
     // the WebSocket opening.
     expires_in_seconds: clamp(req.query.expires_in_seconds, 1, 600, 60),
+    // Streaming bills on how long the socket stays OPEN, idle or not, and
+    // a tab that closes without sending Terminate keeps billing until the
+    // session times out. At the 3h ceiling that abandoned tab is $1.35 of
+    // universal-3-5-pro; 90 min halves it.
+    //
+    // Not lower, even though it would be cheaper: hitting this cap is a
+    // BAD failure. There is no reconnect — ws.onclose just tears down the
+    // audio and goes idle, so the mic dies mid-cook and the only way back
+    // is toggling mute off and on, with nothing on screen saying why.
+    // 90 min is the long cook this project designs for.
+    //
+    // In practice there is slack: the socket only lives while unmuted
+    // (VoiceBar's toggle), so this budget is unmuted time, not cook time.
     max_session_duration_seconds: clamp(
       req.query.max_session_duration_seconds,
       60,
       10800,
-      10800,
+      Number(process.env.AAI_MAX_SESSION_SECONDS) || 5400,
     ),
   });
   await mint(res, `https://streaming.assemblyai.com/v3/token?${params}`, API_KEY);

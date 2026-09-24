@@ -12,7 +12,7 @@
 // Muting also switches the conversation page's answer bar into typing
 // mode, and typing there mutes this. That contract predates the real
 // microphone and still holds.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { useStreamingTranscript } from "../hooks/useStreamingTranscript.js";
@@ -60,9 +60,21 @@ const CONFIRM_WINDOW_MS = 10_000;
 // since expiring means nothing happens.
 const PHRASE_WINDOW_MS = 25_000;
 
+const LIVE_COOK_ROUTE = "/session/live-cook";
+
 // The live-cook page has its own command grammar, where "next" and
 // "back" mean something else entirely. Navigation stands down there.
-const NAV_OFF_ROUTES = ["/session/live-cook"];
+const NAV_OFF_ROUTES = [LIVE_COOK_ROUTE];
+
+// How long "nobody said anything" runs before the mic mutes itself.
+//
+// Mid-cook, silence is normal: you can watch a pan or chop for minutes
+// without a word, and muting under someone who is simply busy is worse
+// than the meter running. Everywhere else the mic only exists to take a
+// command, so a quiet page means nobody is there — and the socket bills
+// by the second it stays open.
+const IDLE_MS_LIVE_COOK = 120_000;
+const IDLE_MS_ELSEWHERE = 30_000;
 
 // Turn detection for the pages that take commands rather than dictation.
 //
@@ -156,7 +168,18 @@ export default function VoiceBar() {
       .map((s) => s.path),
   ];
 
-  const onError = useCallback((message) => setError(message), []);
+  // A fatal error means the hook has stopped trying, so mute to match:
+  // otherwise the bar reads "unmute to try again" while showing a mute
+  // button, and the pipeline is half up. A non-fatal one (a model
+  // mismatch, a blip the retry will handle) is worth showing and nothing
+  // more — muting there would kill a session that still works.
+  const onError = useCallback(
+    (message, { fatal = true } = {}) => {
+      setError(message);
+      if (fatal) dispatch({ type: "voice/setMuted", payload: { muted: true } });
+    },
+    [dispatch],
+  );
 
   const say = useCallback((line) => {
     speak(line);
@@ -421,9 +444,20 @@ export default function VoiceBar() {
     [say, run, askToConfirm, clearPending],
   );
 
+  // Not a dependency of the connect effect (the hook reads config through
+  // a ref), so crossing into or out of the live cook changes the quiet
+  // budget without dropping the socket.
+  const streamConfig = useMemo(
+    () => ({
+      ...STREAM_CONFIG,
+      idleMs: pathname === LIVE_COOK_ROUTE ? IDLE_MS_LIVE_COOK : IDLE_MS_ELSEWHERE,
+    }),
+    [pathname],
+  );
+
   const { status, partial, hearing, updateConfig } = useStreamingTranscript({
     enabled: !muted,
-    config: STREAM_CONFIG,
+    config: streamConfig,
     onTurn,
     onError,
     onIdle,
@@ -473,7 +507,7 @@ export default function VoiceBar() {
 
   // One source of truth for the three places that describe state, so
   // the pill, the label and the body copy can never disagree.
-  const view = describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname });
+  const view = describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname, idleMs: streamConfig.idleMs });
 
   const goose = describeGoose({ view, speaking, muted, status, partial, hearing, pending, feedback, error });
   // ?goose=<state> pins a pose for design review (dev only).
@@ -542,7 +576,16 @@ function describeGoose({ view, speaking, muted, status, partial, hearing, pendin
 }
 
 /** Collapse mute + connection status + error into one view model. */
-function describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname }) {
+// "30 seconds" / "two minutes" — the mic explaining itself, so the number
+// stays in step with IDLE_MS_* above instead of being written twice.
+function quietFor(ms) {
+  const seconds = Math.round((ms ?? 0) / 1000);
+  if (seconds < 60) return `${seconds} seconds`;
+  const minutes = Math.round(seconds / 60);
+  return minutes === 1 ? "a minute" : minutes === 2 ? "two minutes" : `${minutes} minutes`;
+}
+
+function describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname, idleMs }) {
   if (error) {
     return {
       label: "MIC ERROR",
@@ -556,7 +599,7 @@ function describe({ muted, status, error, idled, pending, feedback, partial, hin
   if (muted && idled) {
     return {
       label: "MIC OFF",
-      line: "Muted after two minutes of quiet, to stop the meter running.",
+      line: `Muted after ${quietFor(idleMs)} of quiet, to stop the meter running.`,
       sub: "Unmute whenever you're ready.",
       pill: "Muted",
       pillClass: "is-muted",
@@ -570,6 +613,18 @@ function describe({ muted, status, error, idled, pending, feedback, partial, hin
       sub: null,
       pill: "Muted",
       pillClass: "is-muted",
+      isPartial: false,
+    };
+  }
+  // The socket dropped on its own and the hook is reopening it. Say so:
+  // this used to look identical to the mic having quietly died.
+  if (status === "reconnecting") {
+    return {
+      label: "RECONNECTING",
+      line: "Lost the microphone connection. Picking it back up…",
+      sub: "Anything said right now may not be heard.",
+      pill: "Reconnecting",
+      pillClass: "is-connecting",
       isPartial: false,
     };
   }

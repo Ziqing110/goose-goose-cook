@@ -24,3 +24,6 @@ UNATTENDED_TASK_FRONTEND.md
 # Local AI design prompts; keep them out of the product repository.
 design/claude-design-*.md
 design/*-chatgpt-prompt.md
+
+# Vite writes these next to the config when it loads an ESM config file.
+vite.config.js.timestamp-*
