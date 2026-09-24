@@ -490,7 +490,7 @@
   padding: 16px 20px;
 }
 .sch-card-foot > .sch-detail { flex: 1 1 100%; }
-.sch-card-foot .sch-detail { scroll-margin-bottom: calc(var(--voice-bar-height) + 110px); }
+.sch-card-foot .sch-detail { scroll-margin-bottom: 110px; }
 
 .sch-legend { display: flex; align-items: center; gap: 20px; }
 .sch-legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-soft); }
@@ -1049,9 +1049,9 @@
   position: fixed;
   left: 0;
   right: 0;
-  bottom: var(--voice-bar-height);
+  bottom: 0;
   z-index: 41;
-  max-height: min(60vh, calc(100vh - var(--voice-bar-height) - 48px));
+  max-height: min(60vh, calc(100vh - 48px));
   overflow-y: auto;
   border: none;
   border-top: 1px solid var(--line);
@@ -1285,14 +1285,16 @@
    goose walk (footprints) leading up to the weighted-key CTA. */
 .sch-footer {
   position: sticky;
-  bottom: var(--voice-bar-height);
+  bottom: 0;
   z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
   margin-top: 4px;
-  padding: 16px 22px;
+  /* Right padding keeps "Start cooking" out from under the floating
+     goose, which parks in this same corner. */
+  padding: 16px var(--goose-agent-inset) 16px 22px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 14px;

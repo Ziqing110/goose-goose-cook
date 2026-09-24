@@ -13,7 +13,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: calc(100vh - var(--voice-bar-height, 0px) - 260px);
+  min-height: calc(100vh - 260px);
   animation: goose-rise 240ms ease-out both;
 }
 .goose-sprite {

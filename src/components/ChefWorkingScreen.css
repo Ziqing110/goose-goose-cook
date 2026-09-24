@@ -35,7 +35,7 @@
   align-items: center;
   /* Fill the viewport below the topbar so the ticket centres in what's
      left, but never past it: a loading beat shouldn't scroll. */
-  min-height: calc(100dvh - var(--voice-bar-height) - 176px);
+  min-height: calc(100dvh - 176px);
 }
 .chef-working.is-done { animation: chef-working-out 320ms 380ms ease-in both; }
 .chef-working-stage {
@@ -156,7 +156,7 @@
   .chef-working-foot { display: none; }
 }
 @media (max-width: 720px) {
-  .chef-working { --chef-goose-w: 92px; --chef-ticket-w: 100%; min-height: calc(100dvh - var(--voice-bar-height) - 220px); }
+  .chef-working { --chef-goose-w: 92px; --chef-ticket-w: 100%; min-height: calc(100dvh - 220px); }
   .chef-working-title { font-size: 24px; line-height: 30px; }
   .chef-working-ticket { padding: 24px 20px 16px; }
   .chef-working-blocks { font-size: 16px; }
