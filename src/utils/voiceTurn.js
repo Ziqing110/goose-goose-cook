@@ -12,7 +12,9 @@
 //   1. the agent's own voice, echoed back by the mic   -> ignored
 //   2. a page that owns every turn (the live cook)     -> handed over
 //   3. an open question                                -> answered
-//   4. a page taking dictation (Conversation)          -> strict nav, else typed
+//   4. a page taking dictation (Conversation)          -> its whileDictating
+//                                                         commands, strict
+//                                                         nav, else typed
 //   5. the page's own commands                         -> run, or asked first
 //   6. an open dialog                                  -> nothing else heard
 //   7. navigation
@@ -101,7 +103,19 @@ function routeCommand(said, ctx) {
   // back to home" is not an answer to anything, and typing it strands you
   // on a page you asked to leave. So navigation gets a strict look first:
   // a named destination, said briefly and heard clearly.
+  const normalized = normalizeUtterance(said);
+
   if (ctx.dictation) {
+    // A few whole sentences are never an answer — "start over", "go
+    // back" — and the page marks those to be heard anyway. Everything
+    // else it registered stands down, so "check the inventory" said
+    // mid-question is still typed. They come before navigation, as page
+    // commands do everywhere, so the page can ask before "go home"
+    // takes someone out of the middle of its questions.
+    const command = ctx.matchPage?.(normalized, said, { dictating: true });
+    if (command && !isLikelyConversation(normalized, confidence, { allowSubject: command.allowSubject })) {
+      return pageDecision(command);
+    }
     const nav = matchNavCommand(said, { route, confidence, reachable, strict: true });
     if (nav.action === "goto" || nav.action === "already" || nav.action === "blocked") {
       return navDecision(nav, ctx);
@@ -112,7 +126,6 @@ function routeCommand(said, ctx) {
   // The page gets first refusal. Home can "resume the run", Inventory can
   // mark an ingredient out; neither is navigation, but both are in the
   // hint, so they are heard before anything generic looks at the words.
-  const normalized = normalizeUtterance(said);
   const command = ctx.matchPage?.(normalized, said);
   if (command) {
     // The same guards as navigation. Without them "resume" was protected
@@ -120,19 +133,7 @@ function routeCommand(said, ctx) {
     if (isLikelyConversation(normalized, confidence, { allowSubject: command.allowSubject })) {
       return { type: "ignore", reason: "conversation" };
     }
-    const then = { type: "page", command };
-    // Irreversible commands ask first; the most destructive ones make you
-    // read a sentence back.
-    if (command.confirmPhrase) {
-      return {
-        type: "confirm",
-        question: `To confirm, say: “${command.confirmPhrase}”`,
-        phrase: normalizeUtterance(command.confirmPhrase),
-        then,
-      };
-    }
-    if (command.confirm) return { type: "confirm", question: command.confirm, then };
-    return then;
+    return pageDecision(command);
   }
 
   // A dialog is open and the words were not one of its commands.
@@ -141,6 +142,22 @@ function routeCommand(said, ctx) {
   if (ctx.exclusive) return { type: "ignore", reason: "dialog-open" };
 
   return navDecision(matchNavCommand(said, { route, confidence, reachable }), ctx);
+}
+
+function pageDecision(command) {
+  const then = { type: "page", command };
+  // Irreversible commands ask first; the most destructive ones make you
+  // read a sentence back.
+  if (command.confirmPhrase) {
+    return {
+      type: "confirm",
+      question: `To confirm, say: “${command.confirmPhrase}”`,
+      phrase: normalizeUtterance(command.confirmPhrase),
+      then,
+    };
+  }
+  if (command.confirm) return { type: "confirm", question: command.confirm, then };
+  return then;
 }
 
 function navDecision(nav, ctx) {

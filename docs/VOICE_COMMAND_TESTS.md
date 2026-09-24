@@ -66,6 +66,8 @@ removed.
 | Dictate an answer to the current question. Partial speech appears while you speak; the final transcript is submitted. | `scripts/voice-commands-e2e.mjs` checks partial and final dictation. `src/utils/voicePageCommands.test.js` checks shared dictation routing. |
 | While dictating, use a short, clear named-destination command to navigate. | `src/utils/navCommands.test.js` tests named navigation during dictation. |
 | After the conversation is complete: `check inventory`, `continue to inventory`, `go to inventory`. | `src/utils/pageVoiceGrammar.test.js` covers all three phrases. The browser e2e checks a separate navigation sequence to Inventory. |
+| An answer that isn't one (fillers, wrong units, off-topic sentences, English or Chinese) is asked about again; "Did you mean …?" readings take a yes. | `src/utils/understanding.test.js` covers the offline reader. `scripts/voice-commands-e2e.mjs` runs it in the browser with the answer model unavailable. |
+| Any time, including while dictating: `start over`, `start again`, `let's start over`, `restart`; `go back`, `go back home`, `go home`, `take me home` (goes Home); `go back to the last question`, `previous question`, `go back a question`. All three ask for confirmation. Only as the whole utterance. | `src/utils/pageVoiceGrammar.test.js` checks the phrases and that longer answers containing them do not match. `src/utils/voiceTurn.test.js` checks they are heard while dictating. `scripts/voice-commands-e2e.mjs` checks them in the browser. |
 
 ## Inventory and recipe board
 

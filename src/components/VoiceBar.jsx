@@ -215,18 +215,34 @@ export default function VoiceBar() {
    * destroy something — the words themselves become the authorisation,
    * and nobody says them by accident.
    */
-  const askToConfirm = useCallback((question, perform, phrase) => {
-    pendingRef.current = { perform, phrase };
-    setPending(question);
-    speak(question);
+  // Expires on its own. A question left hanging would make a later "yes"
+  // get read as an answer to something asked a minute ago.
+  const armPendingTimer = useCallback(() => {
     clearTimeout(pendingTimer.current);
-    // Expires on its own. A question left hanging would make a later
-    // "yes" get read as an answer to something asked a minute ago.
+    const phrase = pendingRef.current?.phrase;
     pendingTimer.current = setTimeout(() => {
       pendingRef.current = null;
       setPending(null);
     }, phrase ? PHRASE_WINDOW_MS : CONFIRM_WINDOW_MS);
   }, []);
+
+  const askToConfirm = useCallback((question, perform, phrase) => {
+    pendingRef.current = { perform, phrase };
+    setPending(question);
+    speak(question);
+    armPendingTimer();
+  }, [armPendingTimer]);
+
+  // The window runs from when the question has been SAID, not asked. The
+  // voice can take seconds to start — longer the first time, while its
+  // model loads — and a window started at the ask had often run out by
+  // the time the goose finished asking, so the "yes" that answered it was
+  // heard as nothing in particular: on the conversation page, an answer.
+  useEffect(() => {
+    if (!pendingRef.current) return;
+    if (speaking) clearTimeout(pendingTimer.current);
+    else armPendingTimer();
+  }, [speaking, armPendingTimer]);
 
   useEffect(() => () => clearTimeout(pendingTimer.current), []);
 

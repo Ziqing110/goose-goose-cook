@@ -98,6 +98,16 @@ test("nav: confirmation yes/no", () => {
   assert.equal(matchConfirmation("no, the other jar beside the pan"), null);
 });
 
+test("nav: a filler in front of the answer is still the answer", () => {
+  for (const said of ["Uh, yes.", "um yeah", "oh yes", "well okay", "uh uh yes"]) {
+    assert.equal(matchConfirmation(said), "yes", said);
+  }
+  for (const said of ["Um, no.", "oh no", "uh nope"]) {
+    assert.equal(matchConfirmation(said), "no", said);
+  }
+  assert.equal(matchConfirmation("uh"), null);
+});
+
 test("nav: a named destination still works while the page is taking dictation", () => {
   const r = matchNavCommand("go to inventory", {
     route: "/session/conversation",

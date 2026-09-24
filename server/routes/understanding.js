@@ -120,6 +120,11 @@ Work out what the person means, not just what parses. "me and three mates"
 is 4 servings. "half an hour" is 30 minutes. "an hour and a half" is 90.
 Never invent a dish they did not name. The answer may be lightly garbled:
 it came from speech recognition in a kitchen.
+An answer that does not answer the question at all is needs-followup,
+never confirmed: a name or a stray word for diet ("Megan"), no number
+for servings or targetTime. When it sounds like a real answer misheard
+("Megan" is one sound from "vegan"), the followUp asks whether they
+meant that: "Did you mean vegan?".
 
 For servings and targetTime, a vague quantity ALWAYS needs a follow-up:
 "a few", "some", "a handful", "a couple of hours". The serving count

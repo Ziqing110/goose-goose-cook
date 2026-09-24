@@ -278,7 +278,10 @@
   padding-top: 20px;
 }
 .convo-done { font-size: 13px; line-height: 20px; color: var(--ink-soft); }
-.convo-done-actions { display: flex; align-items: center; gap: 14px; }
+/* margin-left: auto keeps the buttons on the right when the line above
+   is too long to share a row with them. space-between alone sends a
+   wrapped item to the start, which left them hanging under the message. */
+.convo-done-actions { display: flex; align-items: center; gap: 14px; margin-left: auto; }
 
 @media (max-width: 720px) {
   .convo-title-row { padding: 16px 0; }

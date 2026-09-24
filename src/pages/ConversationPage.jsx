@@ -103,6 +103,9 @@ export default function ConversationPage() {
   // session state because it is about this turn, not about the run — a
   // reload should re-ask the question, not resume half of it.
   const [pendingFollowUp, setPendingFollowUp] = useState(null);
+  // What that follow-up offered, if it was a "Did you mean vegan?", so a
+  // plain yes can take it.
+  const [pendingSuggestion, setPendingSuggestion] = useState(null);
   // True while the reader is thinking. The answer bar shows it, so a
   // network round trip does not look like the app ignoring you.
   const [reading, setReading] = useState(false);
@@ -255,7 +258,7 @@ export default function ConversationPage() {
       type: "voice/setHint",
       payload: {
         hint: complete
-          ? { line: "Say “check the inventory” when you're ready.", sub: null }
+          ? { line: "Say “check the inventory” when you're ready.", sub: "Or “start over” to answer again." }
           : {
               // Reads correctly in both states: an invitation while
               // muted, a description of what's happening while live.
@@ -285,7 +288,7 @@ export default function ConversationPage() {
 
       let result;
       try {
-        result = await readAnswer(currentQuestion, text, pendingFollowUp);
+        result = await readAnswer(currentQuestion, text, pendingFollowUp, pendingSuggestion);
       } finally {
         setReading(false);
       }
@@ -297,6 +300,7 @@ export default function ConversationPage() {
       // answering it.
       if (result.status === "needs-followup" && result.followUp) {
         setPendingFollowUp(result.followUp);
+        setPendingSuggestion(result.suggestion || null);
         dispatch({
           type: "session/conversation/update",
           payload: {
@@ -311,6 +315,7 @@ export default function ConversationPage() {
       }
 
       setPendingFollowUp(null);
+      setPendingSuggestion(null);
       const nextIndex = questionIndex + 1;
       const isLast = nextIndex >= ELICITATION_QUESTIONS.length;
       const nextLine = isLast ? "Got it — drafting your recipe graph now." : ELICITATION_QUESTIONS[nextIndex].agentText;
@@ -327,7 +332,7 @@ export default function ConversationPage() {
         },
       });
     },
-    [answers, understanding, questionIndex, transcript, currentQuestion, pendingFollowUp, dispatch],
+    [answers, understanding, questionIndex, transcript, currentQuestion, pendingFollowUp, pendingSuggestion, dispatch],
   );
 
   const confirmReading = (id) => {
@@ -340,38 +345,138 @@ export default function ConversationPage() {
   };
 
   // A correction is the cook's word, so it's confirmed however it parses.
+  //
+  // It is also said in the chat. A note changed on the right used to leave
+  // the conversation untouched, so the transcript still showed the old
+  // reading and nothing moved on. The goose acknowledges the change and,
+  // if a question is still open, asks it again, so the last thing in the
+  // log is always the thing waiting on an answer.
   const correctReading = (id, text) => {
     const question = ELICITATION_QUESTIONS.find((q) => q.id === id);
-    const { value, display } = interpretAnswer(question, text);
+    const reading = interpretAnswer(question, text, { alreadyAsked: true });
+    const { value, display } = reading;
+    const label = question.slotLabel.toLowerCase();
+    const stillAsking = isComplete ? null : pendingFollowUp || currentQuestion.agentText;
+    // Still not an answer ("okay" typed as the servings): the note keeps
+    // what it had, and the goose says why rather than storing nothing.
+    if (reading.status === "needs-followup") {
+      const kept = understanding[id]?.display;
+      const refusal = `I can't use “${text.trim()}” for ${label}${kept ? `, so it stays “${kept}”` : ""}.`;
+      dispatch({
+        type: "session/conversation/update",
+        payload: { transcript: [...transcript, { speaker: "agent", text: stillAsking ? `${refusal} ${stillAsking}` : refusal }] },
+      });
+      return;
+    }
+    const ack = `Got it — ${label} is now “${display}”.`;
     dispatch({
       type: "session/conversation/update",
       payload: {
         answers: { ...answers, [id]: value },
         understanding: { ...understanding, [id]: { value, display, status: "confirmed" } },
+        transcript: [...transcript, { speaker: "agent", text: stillAsking ? `${ack} ${stillAsking}` : ack }],
       },
     });
   };
 
+  // One question back, to be answered again. Its old answer stays in
+  // `answers` until the new one lands — leaving the page halfway through
+  // should not lose it — but its note goes back to "Asking now…".
+  const lastAnswered = Math.min(questionIndex, total) - 1;
+  const backOneQuestion = () => {
+    const previous = ELICITATION_QUESTIONS[lastAnswered];
+    if (!previous) return;
+    const nextUnderstanding = { ...understanding };
+    delete nextUnderstanding[previous.id];
+    // A follow-up still open on the question being left goes with it.
+    if (currentQuestion && nextUnderstanding[currentQuestion.id]?.status === "asking-again") {
+      delete nextUnderstanding[currentQuestion.id];
+    }
+    setPendingFollowUp(null);
+    setPendingSuggestion(null);
+    dispatch({
+      type: "session/conversation/update",
+      payload: {
+        questionIndex: lastAnswered,
+        complete: false,
+        understanding: nextUnderstanding,
+        transcript: [...transcript, { speaker: "agent", text: `Back one. ${previous.agentText}` }],
+      },
+    });
+  };
+  const backOneQuestionRef = useRef(backOneQuestion);
+  backOneQuestionRef.current = backOneQuestion;
+
   // Clears the plan the old answers produced as well as the answers, so
   // the next set of answers actually generates a new menu.
   const restart = () => {
+    // A follow-up half asked must not ride into question one.
+    setPendingFollowUp(null);
+    setPendingSuggestion(null);
     resetConversation();
   };
+  // resetConversation is rebuilt every render, and the voice commands
+  // below should not re-register on each one; they call through this.
+  const restartRef = useRef(restart);
+  restartRef.current = restart;
 
-  // Voice equivalent of "Check the inventory" — the hint above promises
-  // this exact phrase, and VoiceInput's dictation unmounts once the
+  // "Start over", "go home" and "go back to the last question" are heard
+  // mid-question as well as at the end: none is ever an answer, so the
+  // page claims them while it is taking dictation. All three ask first.
+  // Start over clears answers that can't be brought back; the other two
+  // take you away from the question in front of you, and a misheard
+  // "go back" from across the kitchen shouldn't. The button doesn't ask,
+  // because a click is not something you do by accident.
+  //
+  // "Check the inventory" is only offered at the end. The hint promises
+  // that exact phrase, and VoiceInput's dictation unmounts once the
   // conversation is done, so without a command it just falls through to
   // navigation, which doesn't know "check" as a movement verb. Said and
   // ignored is worse than not promised at all.
   useEffect(() => {
-    if (!isComplete) return undefined;
-    return registerVoiceCommands([
+    const commands = [
       {
+        phrases: CONVERSATION_VOICE.startOver,
+        whileDictating: true,
+        allowSubject: true,
+        confirm: "Start over? That clears every answer so far. Say yes or no.",
+        label: "Starting over.",
+        run: () => restartRef.current(),
+      },
+      {
+        phrases: CONVERSATION_VOICE.goHome,
+        whileDictating: true,
+        confirm: "Go back home? Your answers so far are kept. Say yes or no.",
+        run: () => navigate("/"),
+      },
+      previousQuestionCommand(),
+    ];
+    if (isComplete) {
+      commands.push({
         phrases: CONVERSATION_VOICE.continueInventory,
         run: () => navigate("/session/inventory"),
-      },
-    ]);
-  }, [isComplete, navigate]);
+      });
+    }
+    return registerVoiceCommands(commands);
+    // previousQuestionCommand reads these three; it is defined inline so
+    // it can't drift from them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isComplete, navigate, lastAnswered, readingsLocked]);
+
+  // Only asks when there is somewhere to go back to. Otherwise it says why
+  // straight away, rather than asking a yes/no that could only fail.
+  function previousQuestionCommand() {
+    const base = { phrases: CONVERSATION_VOICE.previousQuestion, whileDictating: true, allowSubject: true };
+    if (readingsLocked) {
+      return { ...base, run: () => "The recipes are already drafted from these answers — say “start over” to answer again." };
+    }
+    if (lastAnswered < 0) return { ...base, run: () => "This is the first question — nothing to go back to yet." };
+    return {
+      ...base,
+      confirm: "Go back to the last question? Say yes or no.",
+      run: () => backOneQuestionRef.current(),
+    };
+  }
 
   return (
     <section className="page conversation-page">
@@ -551,7 +656,7 @@ export default function ConversationPage() {
                   whether anything still wants a second look. */}
               <span className="convo-done mono">
                 {lowReadings
-                  ? `${lowReadings} note${lowReadings > 1 ? "s" : ""} still need a look. Or don’t. I’ll guess.`
+                  ? `${lowReadings} ${lowReadings > 1 ? "notes still need" : "note still needs"} a look. Or don’t. I’ll guess.`
                   : `${total} for ${total}. Graph’s on the way.`}
               </span>
               <div className="convo-done-actions">
