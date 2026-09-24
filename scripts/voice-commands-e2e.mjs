@@ -351,6 +351,7 @@ async function openVoicePage(browserContext, route, options = {}) {
   await mockApi(page, options);
   const stream = await mockStreamingSocket(page);
   page.on("dialog", (dialog) => dialog.accept());
+  page.on("console", (m) => { if (m.text().startsWith("[dbg6]")) console.log("   ", m.text()); });
   await page.goto(BASE + route, { waitUntil: "networkidle" });
   await silenceAgent(page);
   await unmute(page, stream);
@@ -574,6 +575,7 @@ try {
   await mockApi(inventoryPage);
   const inventoryStream = await mockStreamingSocket(inventoryPage);
   inventoryPage.on("dialog", (dialog) => dialog.accept());
+  inventoryPage.on("console", (m) => { if (m.text().startsWith("[dbg6]")) console.log("   ", m.text()); });
   await inventoryPage.goto(BASE + "/session/inventory", { waitUntil: "networkidle" });
   await silenceAgent(inventoryPage);
   await inventoryPage.getByRole("tab", { name: /Ingredients/ }).waitFor({ state: "visible" });
@@ -854,9 +856,12 @@ try {
     await inventoryPage.getByRole("dialog", { name: "Edit step" }).getByRole("button", { name: "Save" }).evaluate((el) => el.click());
   }
   await checkVoiceBehavior("Edit Step dialog: ‘cancel’ closes the editor", async () => {
-    const card = inventoryPage.locator(".board-card-label", { hasText: "Toast seeds" }).first();
+    // Reopen it the way the suite opens it everywhere else. Clicking a
+    // board card only selects the step; "open the step" is what puts the
+    // editor up, and this check is about cancel, not about how it opened.
     if (!(await inventoryPage.getByRole("dialog", { name: "Edit step" }).count())) {
-      await card.evaluate((el) => el.closest("button")?.click());
+      await inventoryPage.locator(".board-card-label", { hasText: "Toast seeds" }).first().waitFor({ state: "visible" });
+      await inventoryStream.say("open the step Toast seeds");
     }
     const editor = inventoryPage.getByRole("dialog", { name: "Edit step" });
     await editor.waitFor({ state: "visible" });
@@ -908,7 +913,10 @@ try {
     await inventoryStream.say("approve");
     await inventoryPage.getByText(/Approve the board and move to scheduling/).waitFor({ state: "visible", timeout: 1_500 });
     await inventoryStream.say("yes");
-    await inventoryPage.getByText(/Approved/).waitFor({ state: "visible" });
+    // The word "Approved" is on the page three times over once the board
+    // locks — the panel's own title, the diff summary under it, and the
+    // tab hint. The panel appearing is the thing being asserted.
+    await inventoryPage.locator(".approved-panel").waitFor({ state: "visible" });
   });
   // Revise is meaningful only after approval. A mouse approval keeps that
   // assertion independent from the voice-approval scenario above.

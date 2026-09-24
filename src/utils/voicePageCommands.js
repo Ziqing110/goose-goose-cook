@@ -40,9 +40,13 @@ let layers = [];
 const livePriority = () =>
   layers.reduce((top, l) => (top === null || l.priority > top ? l.priority : top), null);
 
+// Newest first among equals: the last layer registered at a priority
+// still answers a phrase before the ones under it, which is the
+// precedence a stack had. The change is only that the others are no
+// longer thrown away — a phrase nobody above claimed still reaches them.
 const liveLayers = () => {
   const top = livePriority();
-  return top === null ? [] : layers.filter((l) => l.priority === top);
+  return top === null ? [] : layers.filter((l) => l.priority === top).reverse();
 };
 
 /**
@@ -127,7 +131,7 @@ export function matchPageCommand(said, transcript) {
         // was captured — "set burners to four" has to tell the form
         // *four*, and a command that can only fire or not fire cannot
         // do that.
-        if (match) return { ...c, match: rawMatch(p, transcript) || match };
+        if (match) return { ...c, match, spoken: rawMatch(p, transcript) };
       }
     }
   }

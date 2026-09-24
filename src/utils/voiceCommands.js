@@ -21,7 +21,7 @@ const INTENTS = [
   { intent: "drop", patterns: [/\bdrop\b/, /put (?:it|this) back/, /someone else (?:can )?take/, /give (?:it|this) (?:back|up)/] },
   { intent: "claim", patterns: [/我来|我做|给我/, /\bclaim\b/, /i'?ll take\b/, /i'?ll do\b/, /\btake\b/, /i'?ve got\b/, /give me\b/, /\bmine\b/] },
   { intent: "skip", patterns: [/\bskip\b/, /forget (?:that|it)/, /not doing\b/, /cancel that/] },
-  { intent: "done", patterns: [/好了|做好|完成|弄好/, /\bdone\b/, /\bfinished?\b/, /\bcomplete(?:d)?\b/, /got it\b/, /that'?s it\b/] },
+  { intent: "done", patterns: [/好了|做好|完成|弄好/, /\bdone\b/, /\bfinish(?:ed)?\b/, /\bcomplete(?:d)?\b/, /got it\b/, /that'?s it\b/] },
   { intent: "start", patterns: [/开始|我上/, /\bstart(?:ing)?\b/, /\bbegin\b/, /let'?s go\b/, /\bon it\b/, /\bgo\b/] },
 ];
 

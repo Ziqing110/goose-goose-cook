@@ -334,7 +334,7 @@ export default function VoiceBar() {
             // burners" and "eight burners, the most this allows" are the
             // same command with different outcomes, and the bar should
             // say which one happened.
-            const spoken = pageCommand.run(pageCommand.match);
+            const spoken = pageCommand.run(pageCommand.match, pageCommand.spoken);
             const line = typeof spoken === "string" ? spoken : pageCommand.label;
             if (line) say(line);
           };
