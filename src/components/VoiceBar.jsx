@@ -39,6 +39,7 @@ import { ROUTES, voiceReachablePaths } from "../utils/routeGuards.js";
 import { isPaused } from "../utils/liveCook.js";
 import { routeVoiceTurn, turnConfidence } from "../utils/voiceTurn.js";
 import { speakerLabelTap } from "../voice/speakerLabelTap.js";
+import { voiceLog } from "../voice/voiceLog.js";
 
 
 // Long enough to read, short enough that the bar goes back to being a
@@ -187,6 +188,7 @@ export default function VoiceBar() {
 
   const say = useCallback((line) => {
     spokeRef.current = true;
+    voiceLog.spoke(line);
     speak(line);
     clearTimeout(feedbackTimer.current);
     setFeedback(line);
@@ -299,6 +301,12 @@ export default function VoiceBar() {
   const onTurn = useCallback(
     (turn) => {
       const text = turn.transcript?.trim();
+      // Everything heard goes in the record, whatever becomes of it.
+      // A turn that was ignored is exactly the one somebody wants to
+      // look at afterwards. The live cook keeps its own transcript, so
+      // it would be a second copy there.
+      if (text && routeRef.current !== ROUTES.liveCook) voiceLog.heard(text);
+
       // Diarization tells voices apart without knowing whose they are.
       // Recorded on every page, because the page that needs it (voice
       // binding) asks about turns that have already gone by.

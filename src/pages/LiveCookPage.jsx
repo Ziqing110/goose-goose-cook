@@ -43,6 +43,7 @@ import { matchConfirmation } from "../utils/navCommands.js";
 import { routeConfirmReply } from "../utils/confirmReply.js";
 import { opensFollowUp } from "../utils/followUp.js";
 import { rejectionLines } from "../utils/agentRejection.js";
+import { voiceLog } from "../voice/voiceLog.js";
 import { registerVoiceDictation } from "../utils/voicePageCommands.js";
 import { buildAgentSnapshot } from "../utils/agentSnapshot.js";
 import { agentTurn, agentAside, collectAnswer } from "../api/agent.js";
@@ -545,6 +546,8 @@ export default function LiveCookPage() {
   // Split in two because the hooks must run before this component's
   // early return, while the work needs commit() and say(), which are
   // declared after it. Same shape as voiceHandlerRef below.
+
+
   const lastVoiceAtRef = useRef(Date.now());
   const lastAsideAtRef = useRef(0);
   const asideBusyRef = useRef(false);
@@ -572,6 +575,7 @@ export default function LiveCookPage() {
   // Frozen at the moment of the pause, so a reload mid-break shows the
   // same numbers as the tab that paused rather than counting the break.
   const clockNow = paused ? Date.parse(run.pausedAt) : now;
+
   const progress = runProgress(run, nodes, clockNow);
   const board = scoreboard(run, nodes, cooks);
   const ready = readyStepIds(nodes, run);
@@ -822,9 +826,9 @@ export default function LiveCookPage() {
   // more than that stops being a confirmation and becomes a recital.
   const MAX_SPOKEN_LINES = 3;
   const PAUSED_OK = new Set(["resume", "status", "score", "help", "explain"]);
-  const applyAgentTurn = (turn, text, cookId) => {
+  const applyAgentTurn = (turn, text, cookId, via = null) => {
     const at = () => new Date().toISOString();
-    commit(appendTranscript(latestRunRef.current, { at: at(), speaker: cookId, text }));
+    commit(appendTranscript(latestRunRef.current, { at: at(), speaker: cookId, text, via }));
     const spoken = [];
     // Where the run log stands before any of this turn's actions. Each
     // handler already writes the right sentence for what it did -- and,
@@ -981,9 +985,16 @@ export default function LiveCookPage() {
   // voice-binding page. It cannot name a voice by itself, but the label
   // was tied to a cook there, and it is the only attribution the
   // deployed app has -- the sidecar does not run there.
+  //
+  // Returns how it decided as well as who. A claim that went to the
+  // wrong cook is almost impossible to unpick without knowing whether
+  // the voice was matched or the toggle was simply left where it was.
   const whoSpoke = async (clip, turn) => {
     if (cooks.length < 2) return null;
-    if (!clip) return cookFromTurn(turn, cooks).cookId;
+    if (!clip) {
+      const byLabel = cookFromTurn(turn, cooks).cookId;
+      return byLabel ? { cookId: byLabel, via: "label" } : null;
+    }
     try {
       const result = await identifySpeaker({ pcm: clip.pcm, rate: clip.rate, candidates: cooks.map((c) => c.id) });
       const verdict = decideSpeaker(result);
@@ -991,10 +1002,13 @@ export default function LiveCookPage() {
       console.info(`[speaker] ${verdict.cookId ? name(verdict.cookId) : "unsure"} (${verdict.reason})`, named, `margin ${result.margin}`);
       // A voiceprint outranks a label: it was measured against this
       // cook's own voice, not inferred from who else is in the room.
-      return verdict.cookId ?? cookFromTurn(turn, cooks).cookId;
+      if (verdict.cookId) return { cookId: verdict.cookId, via: "voiceprint" };
+      const byLabel = cookFromTurn(turn, cooks).cookId;
+      return byLabel ? { cookId: byLabel, via: "label" } : null;
     } catch (err) {
       console.info("[speaker] unavailable, trying the diarization label:", err.message);
-      return cookFromTurn(turn, cooks).cookId;
+      const byLabel = cookFromTurn(turn, cooks).cookId;
+      return byLabel ? { cookId: byLabel, via: "label" } : null;
     }
   };
 
@@ -1003,10 +1017,17 @@ export default function LiveCookPage() {
   // the read before the declaration.
   const askAgent = (text, cookId, { engaged = true, clip = null, shared = false, sttTurn = null } = {}) => {
     agentQueueRef.current = agentQueueRef.current.then(async () => {
-      const heardAs = await whoSpoke(clip, sttTurn);
-      if (heardAs && heardAs !== cookId) {
-        cookId = heardAs;
-        setSpeakerId(heardAs); // so the toggle shows who was heard
+      // Cleared at every exit below -- answered, refused, unaddressed or
+      // thrown. A thinking row that never clears is worse than none.
+      voiceLog.setThinking(Date.now());
+      const heard = await whoSpoke(clip, sttTurn);
+      // Nothing recognised it, so the turn belongs to whoever the
+      // toggle was left on. Worth recording as such: it is a guess
+      // nobody made deliberately.
+      const via = heard?.via ?? "toggle";
+      if (heard?.cookId && heard.cookId !== cookId) {
+        cookId = heard.cookId;
+        setSpeakerId(heard.cookId); // so the toggle shows who was heard
       }
       let turn;
       try {
@@ -1025,6 +1046,7 @@ export default function LiveCookPage() {
       } catch (err) {
         // Slow, down or unreachable: the keyword grammar still works.
         console.warn("Agent unavailable, using the keyword grammar:", err.message);
+        voiceLog.setThinking(null);
         submitKeywordUtterance(text);
         return;
       }
@@ -1032,13 +1054,15 @@ export default function LiveCookPage() {
         // Shows what the recogniser heard instead of the name, which is
         // how a chronically misheard agent name gets caught.
         console.info("[voice] not addressed:", text);
+        voiceLog.setThinking(null);
         return;
       }
-      applyAgentTurn(turn, text, cookId);
+      applyAgentTurn(turn, text, cookId, via);
       // The agent is reading something up. Collect it OUTSIDE this
       // queue: the whole point is that the next command does not wait
       // behind a question. Deliberately not awaited here.
       if (turn.pendingId) awaitAnswer(turn.pendingId, cookId);
+      voiceLog.setThinking(null);
     });
   };
 
@@ -1607,6 +1631,7 @@ export default function LiveCookPage() {
           </div>
         </Modal>
       )}
+
     </section>
   );
 }

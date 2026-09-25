@@ -1,0 +1,108 @@
+/* ---- Conversation rail ---------------------------------------------
+   Beside the board, never over it: the point is to glance at what just
+   happened without covering the thing it happened to. Deliberately
+   plain for now — the shape is what is being judged, not the paint. */
+.lc-rail {
+  position: fixed;
+  top: 88px;
+  right: 16px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: 22rem;
+  max-width: calc(100vw - 32px);
+  /* Stops above the VoiceBar rather than running under it. */
+  max-height: calc(100vh - 200px);
+  border: 1px solid var(--kp-divider, #e8e6e1);
+  border-radius: var(--radius-card);
+  background: var(--kp-bg, #fff);
+  box-shadow: var(--shadow-md);
+  font-size: 0.875rem;
+}
+
+.lc-rail.is-closed {
+  width: auto;
+}
+
+.lc-rail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--kp-divider, #e8e6e1);
+}
+
+.lc-rail-head h2 {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--kp-text-secondary, #6e6e6b);
+}
+
+.lc-rail.is-closed .lc-rail-head {
+  border-bottom: 0;
+}
+
+.lc-rail-list {
+  margin: 0;
+  padding: 8px 12px 12px;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.lc-rail-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--kp-divider, #e8e6e1);
+  line-height: 1.45;
+}
+
+.lc-rail-row:last-of-type {
+  border-bottom: 0;
+}
+
+.lc-rail-who {
+  font-weight: 700;
+}
+
+/* An action is what the run DID, so it reads differently from talk. */
+.lc-rail-row.is-action {
+  color: var(--kp-text, #1a1a1a);
+}
+
+.lc-rail-row.is-run,
+.lc-rail-row.is-thinking {
+  color: var(--kp-text-secondary, #6e6e6b);
+  font-style: italic;
+}
+
+.lc-rail-row.is-agent .lc-rail-who {
+  color: var(--kp-accent, #d4552a);
+}
+
+/* How something was attributed — quiet, because it only matters when
+   you are working out why the wrong thing happened. */
+.lc-rail-via {
+  color: var(--kp-text-tertiary, #a3a29e);
+  font-size: 0.75rem;
+}
+
+.lc-rail-via::before {
+  content: "· ";
+}
+
+@media (max-width: 1400px) {
+  /* Too narrow to sit beside the board without crowding it: collapse to
+     the header, which the toggle reopens over the page deliberately. */
+  .lc-rail {
+    top: auto;
+    bottom: 96px;
+    max-height: 40vh;
+  }
+}
