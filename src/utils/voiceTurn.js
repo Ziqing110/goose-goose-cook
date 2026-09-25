@@ -18,7 +18,7 @@
 //   5. the page's own commands                         -> run, or asked first
 //   6. an open dialog                                  -> nothing else heard
 //   7. navigation
-import { matchConfirmation, matchesConfirmationPhrase, matchNavCommand, navHelpLine, normalizeUtterance, pathLabel, isLikelyConversation } from "./navCommands.js";
+import { matchConfirmation, matchesConfirmationPhrase, matchNavCommand, navHelpLine, normalizeUtterance, pathLabel, isLikelyConversation, hasSubject } from "./navCommands.js";
 import { ROUTES } from "./routeGuards.js";
 
 export const LINES = {
@@ -128,10 +128,25 @@ function routeCommand(said, ctx) {
   // hint, so they are heard before anything generic looks at the words.
   const command = ctx.matchPage?.(normalized, said);
   if (command) {
-    // The same guards as navigation. Without them "resume" was protected
-    // but "we should resume later" fired.
-    if (isLikelyConversation(normalized, confidence, { allowSubject: command.allowSubject })) {
+    // The same guards as navigation. Without them "resume" was
+    // protected but "we should resume later" fired.
+    //
+    // The two halves of that guard deserve different answers, though,
+    // and treating them alike is why "go live" could be said four
+    // times into total silence. A sentence with a subject in it is
+    // somebody talking; dropping it is right. A command heard poorly
+    // is somebody talking TO us, badly heard -- and the honest answer
+    // to that is to ask, which is exactly what navigation already does
+    // with a plausible-but-not-solid match.
+    if (hasSubject(normalized) && !command.allowSubject) {
       return { type: "ignore", reason: "conversation" };
+    }
+    if (isLikelyConversation(normalized, confidence, { allowSubject: true })) {
+      return {
+        type: "confirm",
+        question: `Did you mean “${command.heardAs ?? said}”? Say yes or no.`,
+        then: { type: "page", command },
+      };
     }
     return pageDecision(command);
   }

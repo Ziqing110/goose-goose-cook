@@ -283,9 +283,26 @@ test("page: a subject makes it conversation, unless the command opts in", () => 
   assert.equal(turn("I'm Mia", { route: ROUTES.voiceBinding }).type, "page");
 });
 
-test("page: a garbled page command is not run", () => {
+test("page: a garbled page command asks rather than firing or vanishing", () => {
+  // It used to be dropped outright, which is how "go live" could be
+  // said four times into total silence: matched, judged too unclear,
+  // discarded without a word. Somebody speaking badly-heard words AT
+  // the app is not somebody chatting near it, and the honest answer is
+  // the one navigation already gives a shaky match -- ask.
   registerVoiceCommands([{ phrases: HOME_VOICE.resume, run: noop }]);
-  assert.deepEqual(turn("resume", { route: ROUTES.home, confidence: 0.2 }), { type: "ignore", reason: "conversation" });
+  const shaky = turn("resume", { route: ROUTES.home, confidence: 0.2 });
+  assert.equal(shaky.type, "confirm");
+  assert.match(shaky.question, /did you mean/i);
+  assert.equal(shaky.then.type, "page");
+});
+
+test("page: a sentence with a subject is still dropped without a word", () => {
+  // "We should resume later" is a sentence about resuming. Asking
+  // "did you mean resume?" every time two cooks discuss the run would
+  // be worse than the silence this replaces.
+  registerVoiceCommands([{ phrases: HOME_VOICE.resume, run: noop }]);
+  assert.deepEqual(turn("we should resume later", { route: ROUTES.home }), { type: "ignore", reason: "conversation" });
+  assert.deepEqual(turn("we should resume later", { route: ROUTES.home, confidence: 0.2 }), { type: "ignore", reason: "conversation" });
 });
 
 test("page: irreversible commands ask first, destructive ones want the sentence", () => {

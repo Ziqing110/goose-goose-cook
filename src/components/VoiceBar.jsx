@@ -251,6 +251,12 @@ export default function VoiceBar() {
   const askToConfirm = useCallback((question, perform, phrase) => {
     pendingRef.current = { perform, phrase };
     setPending(question);
+    // Recorded and counted as having spoken, like any other line. This
+    // went straight to speak(), so a question the goose asked out loud
+    // never reached the record -- leaving a log that showed somebody
+    // being asked nothing and then answering.
+    spokeRef.current = true;
+    voiceLog.spoke(question);
     speak(question);
     armPendingTimer();
   }, [armPendingTimer]);
