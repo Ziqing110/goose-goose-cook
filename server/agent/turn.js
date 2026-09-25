@@ -28,6 +28,15 @@ const NEEDS_STEP = new Set(["claim", "start", "done", "skip", "drop", "explain"]
 
 // Tools that answer rather than act, and so survive a two-speaker turn.
 const READ_ONLY = new Set(["explain", "search_web"]);
+
+// Verbs that may be done on another cook's behalf. Taking work for
+// someone is ordinary kitchen talk ("Zoe will take the garlic"), and
+// it is the only way to give anyone a task when the app cannot tell
+// the voices apart. Finishing, skipping or dropping stay the
+// speaker's own: saying somebody else is done is a claim about them,
+// not an instruction, and crediting it is how the wrong cook gets the
+// points.
+const ASSIGNABLE = new Set(["claim", "start"]);
 const MAX_CALLS = 3;
 const MAX_REPLY_CHARS = 200;
 
@@ -39,6 +48,7 @@ const MAX_REPLY_CHARS = 200;
  */
 export function buildTools(snapshot, { search = false } = {}) {
   const steps = snapshot.steps || [];
+  const cookNames = (snapshot.cooks || []).map((c) => c.name).filter(Boolean);
   const ids = {
     claim: steps.filter((s) => s.status === "pending" && s.ready).map((s) => s.id),
     start: steps.filter((s) => s.status === "pending" && s.ready).map((s) => s.id),
@@ -52,8 +62,8 @@ export function buildTools(snapshot, { search = false } = {}) {
     explain: [...steps.map((s) => s.id), ...(snapshot.finished || []).map((s) => s.id)],
   };
   const describe = {
-    claim: "The speaker takes a step that is ready but not started.",
-    start: "The speaker starts a step they own or just claimed.",
+    claim: "Someone takes a step that is ready but not started. Set cook_name when they say whose it is (\"Zoe will take the garlic\"); leave it out when they mean themselves.",
+    start: "Someone starts a step they own or just claimed. Set cook_name when they name whose it is; leave it out when they mean themselves.",
     done: "The speaker finished a step. Omit step_id for the one they are on.",
     skip: "Skip a step. Omit step_id for the speaker's current one.",
     drop: "The speaker gives a step back so someone else can take it.",
@@ -74,7 +84,17 @@ export function buildTools(snapshot, { search = false } = {}) {
       parameters: NEEDS_STEP.has(name)
         ? {
             type: "object",
-            properties: { step_id: { type: "string", enum: ids[name] } },
+            properties: {
+              step_id: { type: "string", enum: ids[name] },
+              // Taking work for somebody else is a real thing people
+              // say -- and the only way to hand out a task at all when
+              // the app cannot tell the voices apart, which on the
+              // deployed build is always. An enum of the cooks present,
+              // so a name can only ever be one of them.
+              ...(ASSIGNABLE.has(name) && cookNames.length
+                ? { cook_name: { type: "string", enum: cookNames } }
+                : null),
+            },
             // explain is always about a named step; there is no "the one
             // I am on" reading of "what does that mean".
             required: ["claim", "start", "explain"].includes(name) ? ["step_id"] : [],
@@ -100,6 +120,7 @@ Rules:
 - Questions about progress, what is next, who is doing what, or the score: call status or score. Never answer these from memory; the app reads out the real state.
 - If they are clearly talking to someone else in the room, call no tool and reply with an empty string.
 - Your reply is spoken aloud: at most 15 words, plain speech, no lists, markdown or emoji. Be warm and a little funny, never at the cost of being clear. After a plain action, a two-word acknowledgement or an empty reply is right.
+- Work can be taken on somebody else's behalf: "Zoe will take the garlic", "give the onion to Nora". Pass their name as cook_name on claim or start. Without it the step goes to whoever is speaking, which is wrong when they named someone else. Finishing, skipping and dropping are never done on another's behalf -- if they say somebody ELSE is done, call no tool and say that person needs to say it themselves.
 - The step ids you are given per tool are the only legal ones for it. If they say they finished, skipped or are dropping a step whose id is not in that tool's list, they have not taken it yet: say so in one line and call no tool. Do not ask which step they meant -- you already know which, it is simply not theirs.
 - A short step name can hide what it actually involves. If they ask what a step means, how to do it, what it needs, or how long it takes, call explain with that step id rather than answering from the step name -- the app reads back the recipe's own wording, which you cannot see in full.
 - A Brief line, when present, is what they asked for before any of this was planned. Honour it without being asked: never suggest something their diet rules out, and let their stated skill level set how much you explain.
@@ -257,7 +278,16 @@ export function parseChoice(choice, snapshot, { shared = false } = {}) {
       rejected.push({ name, reason: "step_not_eligible", stepId });
       continue;
     }
-    calls.push({ name, stepId });
+    // A name the snapshot does not list is dropped rather than
+    // guessed at: assigning work to a cook who is not in the kitchen
+    // is worse than assigning it to the speaker.
+    const cookName = ASSIGNABLE.has(name) && args.cook_name ? String(args.cook_name) : null;
+    if (cookName && !(snapshot.cooks || []).some((c) => c.name === cookName)) {
+      rejected.push({ name, reason: "unknown_cook", cookName });
+      continue;
+    }
+
+    calls.push({ name, stepId, ...(cookName ? { cookName } : null) });
   }
 
   return { calls, reply: cleanReply(message.content), rejected };

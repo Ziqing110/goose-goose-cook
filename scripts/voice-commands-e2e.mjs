@@ -965,7 +965,9 @@ try {
     const editor = inventoryPage.getByRole("dialog", { name: "Edit step" });
     await editor.waitFor({ state: "visible" });
     await inventoryStream.say("delete this step");
-    await inventoryPage.getByText(/Delete this step\?/).waitFor({ state: "visible", timeout: 1_500 });
+    // The rail logs every question the goose asks aloud, so these words
+    // are on the page twice. The assertion is that the question appeared.
+    await inventoryPage.getByText(/Delete this step\?/).first().waitFor({ state: "visible", timeout: 1_500 });
     await inventoryStream.say("yes");
     const deleteDialog = inventoryPage.getByRole("dialog", { name: "Remove step" });
     await deleteDialog.waitFor({ state: "visible" });

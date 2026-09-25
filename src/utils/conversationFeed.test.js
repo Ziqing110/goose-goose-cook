@@ -198,3 +198,30 @@ test("the cook list wins over a self-declared name", () => {
   });
   assert.equal(row.name, "Mia");
 });
+
+test("when an action and the line about it share a timestamp, the action comes first", () => {
+  // Finishing a step writes the event and the goose's reply in the same
+  // millisecond. Sorting on time alone printed "+10 for Nora" above
+  // "Nora finished Mince garlic" -- the comment before its cause.
+  const same = at(5);
+  const rows = buildConversationFeed({
+    transcript: [
+      { at: same, speaker: "mia", text: "Goose, I'm done with the garlic" },
+      { at: same, speaker: "agent", text: "+10 for Mia. Mince garlic, 0:14." },
+    ],
+    events: [{ at: same, type: "done", cookId: "mia", stepId: "garlic", source: "voice" }],
+    byId,
+    cooks,
+  });
+  assert.deepEqual(rows.map((r) => r.kind), ["said", "action", "agent"]);
+});
+
+test("time still beats kind when the timestamps differ", () => {
+  const rows = buildConversationFeed({
+    transcript: [{ at: at(9), speaker: "agent", text: "later" }],
+    events: [{ at: at(1), type: "done", cookId: "mia", stepId: "garlic" }],
+    byId,
+    cooks,
+  });
+  assert.deepEqual(rows.map((r) => r.kind), ["action", "agent"]);
+});

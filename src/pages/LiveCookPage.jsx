@@ -844,6 +844,17 @@ export default function LiveCookPage() {
         commit(say(cur, "We're paused — say \"resume\" when you're ready."));
         return;
       }
+      // "Zoe will take the garlic." The server only allows a name on
+      // claim and start, and only one of the cooks present, so this is
+      // a lookup rather than a decision.
+      //
+      // It matters most where speaker recognition is absent -- the
+      // deployed build has no sidecar, so every turn is credited to
+      // whoever the toggle was left on, and saying whose it is was the
+      // only way to give the other cook anything.
+      const named = call.cookName ? cooks.find((c) => c.name === call.cookName)?.id : null;
+      const actor = named ?? cookId;
+
       // done, skip and drop without a name mean "the one I'm on".
       const own = ["done", "skip", "drop"].includes(call.name) ? activeStepFor(cookId, cur, nodes) : null;
       const stepId = call.stepId ?? own;
@@ -862,8 +873,8 @@ export default function LiveCookPage() {
         return;
       }
       switch (call.name) {
-        case "claim": return doClaim(stepId, cookId, "voice", cur);
-        case "start": return doStart(stepId, cookId, "voice", cur);
+        case "claim": return doClaim(stepId, actor, "voice", cur);
+        case "start": return doStart(stepId, actor, "voice", cur);
         case "done": return doDone(stepId, cookId, "voice", cur);
         case "skip": return doSkip(stepId, cookId, "voice", cur);
         case "drop": return doDrop(stepId, cookId, "voice", cur);
@@ -1242,7 +1253,10 @@ export default function LiveCookPage() {
     const ownQueue = isVersus
       ? claimSuggestions({ nodes, run, cookId })
       : [assignments?.byCook[cookId]?.stepId].filter(Boolean);
-    const result = parseCommand(text, { byId, activeStepId, claimable: ready, ownQueue, agentName: AGENT_NAME });
+    const result = parseCommand(text, { byId, activeStepId, claimable: ready, ownQueue, agentName: AGENT_NAME, cooks });
+    // "Zoe will take the garlic", with no model in the loop. Same rule
+    // as the agent path: a name only ever redirects taking work on.
+    const actor = result.cookId ?? cookId;
 
     const heard = appendTranscript(run, { at: new Date().toISOString(), speaker: cookId, text });
 
@@ -1263,7 +1277,10 @@ export default function LiveCookPage() {
     // steps that read alike — gets checked before it fires, instead of
     // guessing which "cut the onion" was meant.
     if (result.stepId && result.confidence === "confirm" && ["done", "start", "claim", "skip", "drop"].includes(result.intent)) {
-      setPendingConfirm({ intent: result.intent, stepId: result.stepId, cookId, label: byId[result.stepId]?.label, candidates: result.candidates });
+      // `actor`, not the speaker: "Mia will take the tofu" that has to
+      // be confirmed is still Mia’s when the yes arrives. Storing the
+      // speaker here quietly handed the step back to whoever was talking.
+      setPendingConfirm({ intent: result.intent, stepId: result.stepId, cookId: actor, label: byId[result.stepId]?.label, candidates: result.candidates });
       return commit(say(heard, `Did you mean “${byId[result.stepId]?.label}”? Say yes or no.`));
     }
 
@@ -1273,10 +1290,10 @@ export default function LiveCookPage() {
         return doDone(result.stepId, cookId, "voice", heard);
       case "start":
         if (!result.stepId) return needTarget("Which one are you starting?");
-        return doStart(result.stepId, cookId, "voice", heard);
+        return doStart(result.stepId, actor, "voice", heard);
       case "claim":
         if (!result.stepId) return needTarget("Which one? Tap it or say the name.");
-        return doClaim(result.stepId, cookId, "voice", heard);
+        return doClaim(result.stepId, actor, "voice", heard);
       case "skip":
         if (!result.stepId) return needTarget("Which one should I skip?");
         return doSkip(result.stepId, cookId, "voice", heard);

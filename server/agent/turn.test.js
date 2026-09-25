@@ -201,3 +201,64 @@ test("two voices: status and score are still refused", () => {
   assert.deepEqual(result.calls, []);
   assert.equal(result.rejected[0].reason, "two_speakers");
 });
+
+const withCooks = {
+  ...snapshot,
+  cooks: [{ name: "Nora" }, { name: "Zoe" }],
+};
+
+test("claim and start can name a cook; the others cannot", () => {
+  // Taking work for someone is ordinary kitchen talk, and the only way
+  // to hand out a task at all when the app cannot tell voices apart.
+  const params = Object.fromEntries(
+    buildTools(withCooks).map((t) => [t.function.name, t.function.parameters.properties]),
+  );
+  assert.deepEqual(params.claim.cook_name.enum, ["Nora", "Zoe"]);
+  assert.deepEqual(params.start.cook_name.enum, ["Nora", "Zoe"]);
+  for (const name of ["done", "skip", "drop"]) {
+    assert.equal(params[name].cook_name, undefined, `${name} is the speaker's own`);
+  }
+});
+
+test("a named cook rides along on the call", () => {
+  const result = parseChoice(
+    { message: { tool_calls: [call("claim", { step_id: "s1", cook_name: "Zoe" })], content: "" } },
+    withCooks,
+  );
+  assert.deepEqual(result.calls, [{ name: "claim", stepId: "s1", cookName: "Zoe" }]);
+});
+
+test("no name means the speaker, and carries no cookName at all", () => {
+  const result = parseChoice(
+    { message: { tool_calls: [call("claim", { step_id: "s1" })], content: "" } },
+    withCooks,
+  );
+  assert.deepEqual(result.calls, [{ name: "claim", stepId: "s1" }]);
+});
+
+test("a cook who is not in the kitchen is refused, not guessed at", () => {
+  // Assigning work to somebody who is not there is worse than assigning
+  // it to the speaker.
+  const result = parseChoice(
+    { message: { tool_calls: [call("claim", { step_id: "s1", cook_name: "Mallory" })], content: "" } },
+    withCooks,
+  );
+  assert.deepEqual(result.calls, []);
+  assert.equal(result.rejected[0].reason, "unknown_cook");
+});
+
+test("a name on a verb that may not take one is ignored, not obeyed", () => {
+  // "Zoe is done with the rice" is a claim about Zoe, not an instruction.
+  const result = parseChoice(
+    { message: { tool_calls: [call("done", { step_id: "s2", cook_name: "Zoe" })], content: "" } },
+    withCooks,
+  );
+  assert.deepEqual(result.calls, [{ name: "done", stepId: "s2" }]);
+});
+
+test("cook_name is not offered when nobody is listed", () => {
+  const params = Object.fromEntries(
+    buildTools(snapshot).map((t) => [t.function.name, t.function.parameters.properties]),
+  );
+  assert.equal(params.claim.cook_name, undefined);
+});

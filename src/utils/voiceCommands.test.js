@@ -250,3 +250,46 @@ test("parseCommand: ordinary kitchen talk is not a command", () => {
     assert.equal(parseCommand(said, busy).intent, "unknown", said);
   }
 });
+
+// Two cooks, so a claim can name whose it is.
+const pair = [{ id: "nora", name: "Nora" }, { id: "zoe", name: "Zoe" }];
+
+test("parseCommand: a claim can say whose task it is", () => {
+  // The only way to hand anyone a task when the app cannot tell the
+  // voices apart -- which on the deployed build is always.
+  const result = parseCommand("Zoe will take mince garlic", { ...busy, cooks: pair });
+  assert.equal(result.intent, "claim");
+  assert.equal(result.stepId, "mince_garlic");
+  assert.equal(result.cookId, "zoe");
+});
+
+test("parseCommand: starting can name a cook too", () => {
+  const result = parseCommand("Nora start dice onion", { ...busy, cooks: pair });
+  assert.equal(result.intent, "start");
+  assert.equal(result.cookId, "nora");
+});
+
+test("parseCommand: no name means the speaker, not a guess", () => {
+  assert.equal(parseCommand("claim mince garlic", { ...busy, cooks: pair }).cookId, null);
+  assert.equal(parseCommand("claim mince garlic", busy).cookId, null, "no cook list at all");
+});
+
+test("parseCommand: finishing on someone else's behalf is not a thing", () => {
+  // "Zoe is done with the onion" is a claim about Zoe, not an
+  // instruction, and crediting it is how the wrong cook gets the points.
+  for (const said of ["Zoe is done with dice onion", "Zoe skip dice onion", "Zoe drop dice onion"]) {
+    assert.equal(parseCommand(said, { ...busy, cooks: pair }).cookId, null, said);
+  }
+});
+
+test("parseCommand: a name nobody has does not redirect the task", () => {
+  assert.equal(parseCommand("Mallory will take mince garlic", { ...busy, cooks: pair }).cookId, null);
+});
+
+test("parseCommand: naming a cook does not stop the step resolving", () => {
+  // The name is stripped from what is matched against step labels, so
+  // "Zoe" does not dilute the score the way the agent's name used to.
+  const result = parseCommand("Zoe takes mince ginger", { ...busy, cooks: pair });
+  assert.equal(result.cookId, "zoe");
+  assert.equal(result.stepId, "mince_ginger");
+});

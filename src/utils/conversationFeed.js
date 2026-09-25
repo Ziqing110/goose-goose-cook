@@ -117,7 +117,21 @@ export function buildConversationFeed({
 
   rows.push(...(extraRows || []));
 
-  rows.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  // Ties are common: finishing a step writes the event and the goose's
+  // line about it in the same millisecond. Sorting on time alone left
+  // that to the stable sort, which kept the order things were pushed in
+  // -- all talk, then all events -- and printed "+10 for Nora" above
+  // "Nora finished Mince garlic". The comment before the thing it is
+  // about, every time.
+  //
+  // So a tie falls back to cause and effect: somebody speaks, the run
+  // changes, the goose says something about it.
+  const ORDER = { said: 0, action: 1, run: 1, agent: 2, thinking: 3 };
+  rows.sort(
+    (a, b) =>
+      Date.parse(a.at) - Date.parse(b.at) ||
+      (ORDER[a.kind] ?? 9) - (ORDER[b.kind] ?? 9),
+  );
 
   // The goose is mid-turn. Always last, because it is happening now.
   if (thinkingSince) {
