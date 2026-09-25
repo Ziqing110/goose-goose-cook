@@ -213,7 +213,7 @@
    short ascenders and a taller leading would make the lines drift. */
 .chat-bubble-wrap { position: relative; }
 .chat-agent .chat-bubble {
-  border: 2.5px solid var(--goose-ink, #1a1a1a);
+  border: 2px solid var(--goose-ink, #1a1a1a);
   border-radius: 14px 14px 14px 3px;
   font-family: var(--font-hand);
   font-size: 17px;
@@ -272,15 +272,18 @@
 .convo-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px 16px;
   padding-top: 20px;
 }
 .convo-done { font-size: 13px; line-height: 20px; color: var(--ink-soft); }
-/* margin-left: auto keeps the buttons on the right when the line above
-   is too long to share a row with them. space-between alone sends a
-   wrapped item to the start, which left them hanging under the message. */
+/* margin-left: auto, not justify-content: space-between on the row —
+   the note above can run long enough ("N notes still need a look…") to
+   wrap onto its own line, leaving the actions alone on the next one.
+   space-between packs a lone flex item to the START of its line, which
+   is what put "Check the inventory" in the middle of the row instead of
+   against its right edge. auto-margin still pushes to the end even
+   when this is the only thing on the line. */
 .convo-done-actions { display: flex; align-items: center; gap: 14px; margin-left: auto; }
 
 @media (max-width: 720px) {

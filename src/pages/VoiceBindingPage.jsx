@@ -702,12 +702,7 @@ export default function VoiceBindingPage() {
       ) : (
         <div className="vb-panel">
           <div className="vb-panel-head">
-            <span className="ds-title-mark vb-panel-title">
-              The line-up
-              <svg className="ds-underline ds-underline-section" viewBox="0 0 120 8" preserveAspectRatio="none" fill="none" aria-hidden="true">
-                <path d="M2 5c22-2.4 44 1.4 66-.8 16-1.6 36 1.8 50 .4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity="0.85" />
-              </svg>
-            </span>
+            <span className="vb-panel-title">The line-up</span>
             <span className="vb-panel-note">Your bird&rsquo;s colour is your lane on the schedule.</span>
           </div>
 

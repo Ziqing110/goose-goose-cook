@@ -252,7 +252,7 @@
   animation: sch-rise 240ms ease-out both;
 }
 .sch-empty-speech { display: inline-flex; align-items: flex-end; gap: 10px; padding-bottom: 2px; }
-.sch-empty-goose { animation: sch-bob 4s ease-in-out infinite; transform: rotate(10deg); }
+.sch-empty-goose { display: inline-block; animation: sch-bob 4s ease-in-out infinite; transform: rotate(10deg); }
 .sch-empty-bubble {
   display: inline-flex;
   align-items: center;
@@ -326,6 +326,17 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .sch-mode-stamp { animation: none; }
+}
+
+/* Clips the fall to the card's own rounded rect — .sch-mode itself
+   can't clip (the stamp above pokes out past its corner), so this sits
+   as its own layer, sized to match. */
+.sch-mode-feather-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 .sch-mode-chip {

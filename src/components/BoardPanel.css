@@ -12,7 +12,7 @@
   right: 16px;
   /* Clears the board's 7px lip. */
   bottom: 23px;
-  width: min(376px, calc(100% - 32px));
+  width: min(412px, calc(100% - 32px));
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -34,8 +34,8 @@
   flex: 1 1 auto;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 13px;
+  line-height: 17px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -89,8 +89,8 @@
    carry that, not size. */
 .panel-field-label {
   font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 13px;
+  line-height: 17px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -110,12 +110,12 @@
   background: var(--surface);
   color: var(--ink);
   font: inherit;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 500;
 }
 .panel-input,
-.panel-select { height: 40px; }
-.panel-textarea { min-height: 58px; padding: 8px 10px; line-height: 20px; font-weight: 400; resize: vertical; }
+.panel-select { height: 44px; }
+.panel-textarea { min-height: 64px; padding: 8px 10px; line-height: 22px; font-weight: 400; resize: vertical; }
 .panel-input::placeholder,
 .panel-textarea::placeholder { color: var(--ink-faint); font-weight: 400; }
 .app-shell.ds-v4 .panel-input:focus-visible,
@@ -127,8 +127,8 @@
 }
 
 .panel-minutes { display: flex; align-items: center; gap: 8px; }
-.panel-minutes .panel-input { width: 64px; }
-.panel-minutes-unit { font-size: 14px; color: var(--ink-soft); }
+.panel-minutes .panel-input { width: 68px; }
+.panel-minutes-unit { font-size: 15px; color: var(--ink-soft); }
 
 /* ---------------- segmented ---------------- */
 .panel-seg {
@@ -140,14 +140,14 @@
 }
 .panel-seg-btn {
   flex: 1 1 0;
-  min-height: 34px;
+  min-height: 36px;
   padding: 0 10px;
   border: none;
   border-radius: 6px;
   background: transparent;
   color: var(--ink-soft);
   font: inherit;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   cursor: pointer;
   transition: background 120ms ease-out, color 120ms ease-out;
@@ -161,14 +161,14 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 32px;
+  min-height: 34px;
   padding: 0 12px;
   border: none;
   border-radius: 999px;
   background: var(--surface);
   color: var(--ink-soft);
   font: inherit;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   cursor: pointer;
   transition: transform 120ms ease-out, background 120ms ease-out, color 120ms ease-out;
@@ -178,13 +178,13 @@
 .panel-chip.is-on,
 .panel-chip.is-on:hover { background: var(--accent); color: var(--accent-ink); }
 .panel-chip:disabled { background: var(--ds-chip); color: var(--line-strong); cursor: not-allowed; }
-.panel-chip-num { font-family: var(--font-mono); font-size: 12px; opacity: 0.75; }
-.panel-chip-amount { font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint); }
+.panel-chip-num { font-family: var(--font-mono); font-size: 13px; opacity: 0.75; }
+.panel-chip-amount { font-family: var(--font-mono); font-size: 13px; color: var(--ink-faint); }
 .panel-chip.is-on .panel-chip-amount { color: inherit; opacity: 0.75; }
 .panel-chip-dashed { border: 1px dashed var(--line-strong); background: transparent; }
 /* An empty field says so in the panel's quietest voice: italic and
    faint, so it can't be mistaken for a value or for the next label. */
-.panel-empty { font-size: 13px; line-height: 18px; font-style: italic; color: var(--ink-faint); }
+.panel-empty { font-size: 14px; line-height: 20px; font-style: italic; color: var(--ink-faint); }
 
 /* Primary/secondary actions in the footer use the shared .btn rules;
    the destructive ghost is the one local variant. */
