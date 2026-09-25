@@ -425,7 +425,7 @@ export default function LiveCookPage() {
     const hint = finished
       ? { line: "Service done — see the cook card when you're ready.", sub: null }
       : paused
-        ? { line: "Paused — say “resume” to pick it back up.", sub: "Every clock is stopped; nothing else lands until then." }
+        ? { line: "Paused — say “resume” to pick it back up.", sub: "No need for my name while we're paused. Every clock is stopped." }
         : {
             line: `Say “${AGENT_NAME}” first — “${AGENT_NAME}, I'm done with the onion.”`,
             sub: pendingConfirm
@@ -715,7 +715,11 @@ export default function LiveCookPage() {
 
   const togglePause = (base = run) => {
     const at = new Date().toISOString();
-    if (paused) {
+    // Read the run being acted on, not the render's `paused`. Voice
+    // reaches this after an await, by which time the flag captured at
+    // render can be a pause older than the one on screen -- and getting
+    // it wrong here pauses a run somebody just asked to resume.
+    if (isPaused(base)) {
       commit(say(applyResume({ run: base, at }), "Back on. Clock's running again."));
     } else {
       commit(say(applyPause({ run: base, at }), "Paused. Nothing's being timed until you say go."));
@@ -1069,6 +1073,37 @@ export default function LiveCookPage() {
   // which owns that state; everything else goes to the agent.
   const submitUtterance = (text) => {
     if (!text) return;
+    // Resuming is heard here, by the app, before anything else looks at
+    // the words.
+    //
+    // The hint says to say "resume", and it does not ask for the
+    // agent's name -- correctly, because a paused kitchen has nothing
+    // else going on and the word means only one thing. But the
+    // addressing gate lives on the server and threw the turn away for
+    // want of a name, so the app said "say resume" and then ignored
+    // people saying it.
+    //
+    // Doing it locally also means resuming still works with no network,
+    // no key and no model -- the one control you most need when
+    // something is already wrong. parseCommand covers the Mandarin
+    // forms too.
+    if (isPaused(latestRunRef.current)) {
+      const { intent } = parseCommand(text, {
+        byId,
+        activeStepId: null,
+        claimable: [],
+        ownQueue: [],
+        agentName: AGENT_NAME,
+      });
+      if (intent === "resume") {
+        return togglePause(appendTranscript(latestRunRef.current, {
+          at: new Date().toISOString(),
+          speaker,
+          text,
+        }));
+      }
+    }
+
     if (pendingConfirm) {
       // An answer is an answer, and the keyword path owns resolving it.
       if (routeConfirmReply(text).type === "resolve") return submitKeywordUtterance(text);
