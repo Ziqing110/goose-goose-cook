@@ -15,7 +15,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "tts-lab": "node tts-lab/server.js",
-    "speaker": ".venv-voice\\Scripts\\python.exe speaker-sidecar/server.py",
+    "speaker": "node scripts/run-speaker.mjs",
     "lint": "eslint . --ext .js,.jsx --max-warnings 0",
     "test": "node --test src/utils/*.test.js server/**/*.test.js",
     "test:e2e": "node scripts/livecook-e2e.mjs",

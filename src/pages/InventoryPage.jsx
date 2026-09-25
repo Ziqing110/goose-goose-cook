@@ -80,7 +80,8 @@ function HonkSeal() {
 }
 
 // The overlay panel's width plus its inset — what the board keeps clear.
-const PANEL_RESERVE = 376 + 16;
+// Must track .board-panel's own width in BoardPanel.css.
+const PANEL_RESERVE = 412 + 16;
 
 // The zoom slider reads 0% at "everything visible" and counts up from
 // there, so the number means how far past the fitted view you are —

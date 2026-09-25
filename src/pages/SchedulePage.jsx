@@ -36,6 +36,7 @@ import ChefWorkingScreen from "../components/ChefWorkingScreen.jsx";
 import { devPreview } from "../dev/preview.js";
 import { devQuickstart } from "../dev/quickstart.js";
 import VersusCountdown from "../components/VersusCountdown.jsx";
+import { GooseFeather, GooseFeatherMark } from "../components/GooseMarks.jsx";
 import "./SchedulePage.css";
 
 // Player colors come from the index in cooks[] — player 1 is "a",
@@ -680,7 +681,7 @@ export default function SchedulePage() {
               <path
                 d="M2 7c68-4 144 1 220-2 58-2.5 134 3 206 .5"
                 stroke="currentColor"
-                strokeWidth="2.6"
+                strokeWidth="1.8"
                 strokeLinecap="round"
               />
             </svg>
@@ -741,10 +742,9 @@ export default function SchedulePage() {
         // bird nudges the choice without gating any control.
         <div className="sch-empty-plan">
           <span className="sch-empty-speech">
-            <svg viewBox="0 0 46 76" width="26" height="43" fill="none" aria-hidden="true" className="sch-empty-goose">
-              <path d="M33 5c6 16 3 33-6 44-4 5-9 9-13 11 1-13 4-24 8-33" fill="#f6cfa6" stroke="#8a5b34" strokeWidth="2.6" strokeLinejoin="round" />
-              <path d="M33 5c-7 12-13 24-16 35-2 8-3 15-3 20" fill="#fffdf7" stroke="#8a5b34" strokeWidth="2.6" strokeLinejoin="round" />
-            </svg>
+            <span className="sch-empty-goose" aria-hidden="true">
+              <GooseFeatherMark width={26} height={43} />
+            </span>
             <Mono className="sch-empty-bubble">Waiting on you two.</Mono>
           </span>
           <span className="sch-empty-title">No board until someone picks</span>
@@ -942,6 +942,18 @@ function ModeCard({ glyph, title, body, selected, locked, onSelect }) {
         // a neutral "Selected" chip.
         <span className="sch-mode-stamp" aria-hidden="true">GOOSE PICKS</span>
       )}
+      {selected && (
+        // The same feather that falls when a conversation reading is
+        // confirmed — picking a mode is the same kind of "the goose
+        // just decided something" moment. Clipped to the card, not the
+        // whole button, so it doesn't cut into the stamp poking out
+        // past the corner above. React keeps this instance mounted for
+        // as long as the card stays selected, so the one-shot fall
+        // plays once per pick rather than replaying on every re-render.
+        <span className="sch-mode-feather-clip" aria-hidden="true">
+          <GooseFeather />
+        </span>
+      )}
       <KpIcon glyph={glyph} size={24} className="sch-mode-glyph" />
       <span className="sch-mode-title">{title}</span>
       <span className="sch-mode-body" id={bodyId}>
@@ -997,23 +1009,7 @@ function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepId
   return (
     <div className="sch-card">
       <div className="sch-card-head">
-        <span className="sch-card-title sch-title-mark">
-          Who does what, when
-          <svg
-            className="sch-underline sch-underline-section"
-            viewBox="0 0 250 10"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-            fill="none"
-          >
-            <path
-              d="M2 7c40-4 84 1 128-2 34-2.5 78 3 118 .5"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-            />
-          </svg>
-        </span>
+        <span className="sch-card-title">Who does what, when</span>
         {headerTiles}
         <div className="sch-card-tools">
           {/* Legend — matches the standalone design's three-swatch
@@ -1431,7 +1427,7 @@ function TaskDetail({ step, node, dish, cook, cookIndex, isCritical, waitLabel, 
               aria-hidden="true"
               fill="none"
             >
-              <path d="M2 5c22-2 46 1 70-1 18-1.5 34 2 46 .4" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+              <path d="M2 5c22-2 46 1 70-1 18-1.5 34 2 46 .4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
             </svg>
           </span>
           <TendingChip node={node} />
@@ -1521,23 +1517,7 @@ function OpeningHand({ opening, cooks, byId, dishOf, headerTiles }) {
   return (
     <div className="sch-card sch-card-versus">
       <div className="sch-card-head">
-        <span className="sch-card-title sch-title-mark">
-          The opening hand
-          <svg
-            className="sch-underline sch-underline-section"
-            viewBox="0 0 200 10"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-            fill="none"
-          >
-            <path
-              d="M2 7c34-4 70 1 108-2 28-2.5 64 3 88 .5"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-            />
-          </svg>
-        </span>
+        <span className="sch-card-title">The opening hand</span>
         <div className="sch-card-head-right">
           {!contested && skewSec > 0 && <Mono className="sch-card-meta">{formatClock(skewSec)} apart at the start</Mono>}
           {headerTiles}

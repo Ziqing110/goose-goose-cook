@@ -28,30 +28,40 @@ export function GooseProfile({ size = 30, delay = 0, className = "", ...rest }) 
   );
 }
 
-// Falls across a card the moment its reading is confirmed. Asymmetric on
-// purpose — two vanes of unequal width either side of an off-centre
-// shaft that runs past the barbs into a bare quill. A symmetric oval
-// with a centre line reads as a leaf.
+// The feather's artwork, shared by every page that draws one — see
+// GooseFeather below (falls once, on confirm) and Schedule's empty-state
+// goose (sits still, just bobs). One drawing, not a copy redrawn per
+// page with its own colours and a quill that quietly went missing.
+// Asymmetric on purpose — two vanes of unequal width either side of an
+// off-centre shaft that runs past the barbs into a bare quill. A
+// symmetric oval with a centre line reads as a leaf.
+export function GooseFeatherMark({ width = 24, height = 40 }) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 46 76" fill="none">
+      <path
+        d="M33 5c6 16 3 33-6 44-4 5-9 9-13 11 1-13 4-24 8-33"
+        fill="#f7f2e6"
+        stroke="#8a7a58"
+        strokeWidth="2.4"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M33 5c-7 12-13 24-16 35-2 8-3 15-3 20"
+        fill="#fffdf7"
+        stroke="#8a7a58"
+        strokeWidth="2.4"
+        strokeLinejoin="round"
+      />
+      <path d="M33 5 14 60v12" stroke="#8a7a58" strokeWidth="2.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// Falls across a card the moment its reading is confirmed.
 export function GooseFeather() {
   return (
     <span className="goose-feather anim" aria-hidden="true">
-      <svg width="24" height="40" viewBox="0 0 46 76" fill="none">
-        <path
-          d="M33 5c6 16 3 33-6 44-4 5-9 9-13 11 1-13 4-24 8-33"
-          fill="#f7f2e6"
-          stroke="#8a7a58"
-          strokeWidth="2.4"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M33 5c-7 12-13 24-16 35-2 8-3 15-3 20"
-          fill="#fffdf7"
-          stroke="#8a7a58"
-          strokeWidth="2.4"
-          strokeLinejoin="round"
-        />
-        <path d="M33 5 14 60v12" stroke="#8a7a58" strokeWidth="2.4" strokeLinecap="round" />
-      </svg>
+      <GooseFeatherMark />
     </span>
   );
 }
