@@ -36,6 +36,7 @@ import {
   voiceCommandsAreExclusive,
 } from "../utils/voicePageCommands.js";
 import { ROUTES, voiceReachablePaths } from "../utils/routeGuards.js";
+import { isPaused } from "../utils/liveCook.js";
 import { routeVoiceTurn, turnConfidence } from "../utils/voiceTurn.js";
 import { speakerLabelTap } from "../voice/speakerLabelTap.js";
 
@@ -64,6 +65,16 @@ const PHRASE_WINDOW_MS = 25_000;
 // by the second it stays open.
 const IDLE_MS_LIVE_COOK = 120_000;
 const IDLE_MS_ELSEWHERE = 30_000;
+// A PAUSED run is the one state where the mic sleeping is worse than
+// the meter running: a pause is by definition a quiet stretch, and
+// "resume" is the only way out of it by voice. At two minutes the mic
+// was muting itself part-way through every pause, so resume was
+// physically never heard and the feature read as broken.
+//
+// Longer, not unlimited. A pause somebody walked away from should
+// still stop billing eventually, and the copy below says what
+// happened so the way back is obvious.
+const IDLE_MS_PAUSED = 600_000;
 
 // Turn detection for the pages that take commands rather than dictation.
 //
@@ -363,12 +374,17 @@ export default function VoiceBar() {
   // Not a dependency of the connect effect (the hook reads config through
   // a ref), so crossing into or out of the live cook changes the quiet
   // budget without dropping the socket.
+  const runPaused = pathname === ROUTES.liveCook && isPaused(state.session?.run);
   const streamConfig = useMemo(
     () => ({
       ...STREAM_CONFIG,
-      idleMs: pathname === ROUTES.liveCook ? IDLE_MS_LIVE_COOK : IDLE_MS_ELSEWHERE,
+      idleMs: runPaused
+        ? IDLE_MS_PAUSED
+        : pathname === ROUTES.liveCook
+          ? IDLE_MS_LIVE_COOK
+          : IDLE_MS_ELSEWHERE,
     }),
-    [pathname],
+    [pathname, runPaused],
   );
 
   const { status, partial, hearing, updateConfig } = useStreamingTranscript({
@@ -439,7 +455,7 @@ export default function VoiceBar() {
 
   // One source of truth for the three places that describe state, so
   // the pill, the label and the body copy can never disagree.
-  const view = describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname, reachable, idleMs: streamConfig.idleMs });
+  const view = describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname, reachable, idleMs: streamConfig.idleMs, runPaused });
 
   const goose = describeGoose({ view, speaking, muted, status, partial, hearing, pending, feedback, error });
   // ?goose=<state> pins a pose for design review (dev only).
@@ -517,7 +533,7 @@ function quietFor(ms) {
   return minutes === 1 ? "a minute" : minutes === 2 ? "two minutes" : `${minutes} minutes`;
 }
 
-function describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname, reachable, idleMs }) {
+function describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname, reachable, idleMs, runPaused }) {
   if (error) {
     return {
       label: "MIC ERROR",
@@ -531,7 +547,12 @@ function describe({ muted, status, error, idled, pending, feedback, partial, hin
   if (muted && idled) {
     return {
       label: "MIC OFF",
-      line: `Muted after ${quietFor(idleMs)} of quiet, to stop the meter running.`,
+      // During a pause, "muted after ten minutes of quiet" is true and
+      // useless: what the cook needs to know is that the way to resume
+      // by voice is gone and the button is the way back.
+      line: runPaused
+        ? "The mic slept while you were paused — tap it to wake me, or hit Resume."
+        : `Muted after ${quietFor(idleMs)} of quiet, to stop the meter running.`,
       sub: "Unmute whenever you're ready.",
       pill: "Muted",
       pillClass: "is-muted",

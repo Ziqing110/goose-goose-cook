@@ -42,6 +42,7 @@ import { parseCommand, HELP_TEXT, isBareResume } from "../utils/voiceCommands.js
 import { matchConfirmation } from "../utils/navCommands.js";
 import { routeConfirmReply } from "../utils/confirmReply.js";
 import { opensFollowUp } from "../utils/followUp.js";
+import { rejectionLines } from "../utils/agentRejection.js";
 import { registerVoiceDictation } from "../utils/voicePageCommands.js";
 import { buildAgentSnapshot } from "../utils/agentSnapshot.js";
 import { agentTurn, agentAside, collectAnswer } from "../api/agent.js";
@@ -898,7 +899,23 @@ export default function LiveCookPage() {
     // to someone, would be answered out loud, and each answer would open
     // the window for the next.
     const chatter = !turn.named && !turn.calls.length;
-    if (turn.reply && !chatter) {
+
+    // The app refused something the model asked for, and the model
+    // cannot see refusals -- so its reply is written around a call that
+    // did not happen. Saying what actually stopped it OUTRANKS that.
+    //
+    // This is the "I'm done with the onion" case in competition mode:
+    // the step was never claimed, so it was never in the done enum, so
+    // the call was dropped and the model asked a confused question
+    // about dicing other things. The app knew the answer all along.
+    const refusals = rejectionLines(turn.rejected, byId);
+    if (refusals.length) {
+      refusals.forEach((line) => {
+        spoken.push(line);
+        commit(say(latestRunRef.current, line));
+      });
+      if (turn.reply) console.info("[voice] refused, so not saying:", turn.reply);
+    } else if (turn.reply && !chatter) {
       spoken.unshift(turn.reply);
       commit(say(latestRunRef.current, turn.reply));
     } else if (turn.reply) {
