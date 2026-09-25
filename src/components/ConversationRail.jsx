@@ -52,7 +52,15 @@ export default function ConversationRail() {
   // A run keeps its own record and it outlives the page, so it is read
   // only where it is the subject. On Home it would be last night’s cook
   // presented as what is happening now.
-  const run = pathname === ROUTES.liveCook ? state.session?.run : null;
+  const inLiveCook = pathname === ROUTES.liveCook;
+  const run = inLiveCook ? state.session?.run : null;
+
+  // Who was heard, and whether a step was tapped or spoken, only
+  // matter where several people are talking and the answer decides
+  // who gets credited. Everywhere else there is one person at one
+  // screen: the question is only whether the goose heard, and what it
+  // said, so the badges would be noise around the answer.
+  const showAttribution = inLiveCook;
   const cooks = state.session?.cooks || [];
   // Step labels, for naming what an action was done to. Only a session
   // in progress has any; on Home there is no recipe at all, and
@@ -92,9 +100,9 @@ export default function ConversationRail() {
     if (open) endRef.current?.scrollIntoView({ block: "end" });
   }, [feed.length, open]);
 
-  // Nothing has happened yet. An empty panel is furniture. Checked
-  // after every hook, so the hook order never changes.
-  if (!feed.length) return null;
+  // Deliberately not hidden when empty. Somewhere permanent that says
+  // what the goose heard is the point: a panel that appears only once
+  // something has worked cannot tell you that nothing has.
 
   return (
     <aside className={`lc-rail ${open ? "is-open" : "is-closed"}`} aria-label="Conversation record">
@@ -107,6 +115,14 @@ export default function ConversationRail() {
 
       {open && (
         <ol className="lc-rail-list">
+          {feed.length === 0 && (
+            <li className="lc-rail-row is-empty">
+              <span className="lc-rail-text">
+                Nothing heard yet. Whatever you say, and whatever {AGENT_NAME} does
+                about it, shows up here.
+              </span>
+            </li>
+          )}
           {feed.map((row, i) => (
             <li key={feedKey(row, i)} className={`lc-rail-row is-${row.kind}`}>
               {row.kind === "said" && (
@@ -116,7 +132,9 @@ export default function ConversationRail() {
                   {/* Only ever shown when the app knows how it decided.
                       The toggle is the one worth seeing: it is a guess
                       nobody made deliberately. */}
-                  {row.via && <span className="lc-rail-via">heard {row.via}</span>}
+                  {showAttribution && row.via && (
+                    <span className="lc-rail-via">heard {row.via}</span>
+                  )}
                 </>
               )}
               {row.kind === "agent" && (
@@ -129,7 +147,9 @@ export default function ConversationRail() {
                 <span className="lc-rail-text">
                   <strong>{row.name}</strong> {row.verb}{" "}
                   {row.label || "a step since removed"}
-                  {row.source && <span className="lc-rail-via">{row.source === "tap" ? "tapped" : "by voice"}</span>}
+                  {showAttribution && row.source && (
+                    <span className="lc-rail-via">{row.source === "tap" ? "tapped" : "by voice"}</span>
+                  )}
                 </span>
               )}
               {row.kind === "run" && <span className="lc-rail-text">{row.text}</span>}

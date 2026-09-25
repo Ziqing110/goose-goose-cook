@@ -106,3 +106,11 @@
     max-height: 40vh;
   }
 }
+
+/* Nothing has happened yet. The panel stays: somewhere permanent that
+   says what the goose heard is the point, and one that appears only
+   once something has worked cannot tell you that nothing has. */
+.lc-rail-row.is-empty {
+  border-bottom: 0;
+  color: var(--kp-text-tertiary, #a3a29e);
+}
