@@ -38,9 +38,10 @@ import {
   applyUndo, canUndo, endRun, appendTranscript, scoreStep, DIFFICULTY_POINTS,
   isPaused, applyPause, applyResume,
 } from "../utils/liveCook.js";
-import { parseCommand, HELP_TEXT, isBareResume } from "../utils/voiceCommands.js";
+import { parseCommand, HELP_TEXT } from "../utils/voiceCommands.js";
 import { matchConfirmation } from "../utils/navCommands.js";
 import { routeConfirmReply } from "../utils/confirmReply.js";
+import { findSelfIntro } from "../utils/selfIntro.js";
 import { opensFollowUp } from "../utils/followUp.js";
 import { rejectionLines } from "../utils/agentRejection.js";
 import { voiceLog } from "../voice/voiceLog.js";
@@ -1026,12 +1027,14 @@ export default function LiveCookPage() {
   // `sttTurn` is the recogniser's turn, not the agent's reply -- the
   // inner scope already calls that one `turn`, and shadowing it here put
   // the read before the declaration.
-  const askAgent = (text, cookId, { engaged = true, clip = null, shared = false, sttTurn = null } = {}) => {
+  const askAgent = (text, cookId, { engaged = true, clip = null, shared = false, sttTurn = null, saidBy = null } = {}) => {
     agentQueueRef.current = agentQueueRef.current.then(async () => {
       // Cleared at every exit below -- answered, refused, unaddressed or
       // thrown. A thinking row that never clears is worse than none.
       voiceLog.setThinking(Date.now());
-      const heard = await whoSpoke(clip, sttTurn);
+      // Somebody who just said who they are outranks every guess about
+      // it: not knowing their voice is precisely why they had to say so.
+      const heard = saidBy ? { cookId: saidBy, via: "said so" } : await whoSpoke(clip, sttTurn);
       // Nothing recognised it, so the turn belongs to whoever the
       // toggle was left on. Worth recording as such: it is a guess
       // nobody made deliberately.
@@ -1058,7 +1061,7 @@ export default function LiveCookPage() {
         // Slow, down or unreachable: the keyword grammar still works.
         console.warn("Agent unavailable, using the keyword grammar:", err.message);
         voiceLog.setThinking(null);
-        submitKeywordUtterance(text);
+        submitKeywordUtterance(text, saidBy);
         return;
       }
       if (!turn.addressed) {
@@ -1106,24 +1109,55 @@ export default function LiveCookPage() {
 
   // An open question ("did you mean…?") is answered by the keyword path,
   // which owns that state; everything else goes to the agent.
-  const submitUtterance = (text) => {
-    if (!text) return;
+  // Everything decided before addressing, ownership or the model get a
+  // look in. Shared, because the microphone and the typed box are two
+  // doors into the same room and every one of these rules was written
+  // for a person, not for a transport.
+  //
+  // Returns null when the utterance is already dealt with; otherwise
+  // what is left of it and who said it.
+  const preRoute = (text) => {
+    // "I'm Toni, and I'll start the bay leaf." Who is talking and what
+    // they want, in one breath. Taking only the second is how a step
+    // ended up with whoever the toggle was last left on -- which, with
+    // no voiceprint sidecar deployed, is every turn.
+    //
+    // Ahead of the addressing gate on purpose: telling the app who you
+    // are is addressed to the app, and needing the agent's name first
+    // would make the fix for a misattributed turn depend on the thing
+    // that is already going wrong.
+    const intro = findSelfIntro(text, cooks);
+    let said = text;
+    let saidBy = null;
+    if (intro) {
+      setSpeakerId(intro.cookId);
+      saidBy = intro.cookId;
+      said = intro.rest;
+      commit(appendTranscript(latestRunRef.current, {
+        at: new Date().toISOString(),
+        speaker: intro.cookId,
+        text,
+        via: "said so",
+      }));
+      // Nothing but the introduction: say hello and stop. Anything more
+      // is now theirs, and carries on as them.
+      if (!said) {
+        const line = `Got it, ${name(intro.cookId)}. You're the one I'm hearing now.`;
+        commit(say(latestRunRef.current, line));
+        speak(line);
+        return null;
+      }
+    }
+
     // Resuming is heard here, by the app, before anything else looks at
-    // the words.
-    //
-    // The hint says to say "resume", and it does not ask for the
-    // agent's name -- correctly, because a paused kitchen has nothing
-    // else going on and the word means only one thing. But the
-    // addressing gate lives on the server and threw the turn away for
-    // want of a name, so the app said "say resume" and then ignored
-    // people saying it.
-    //
-    // Doing it locally also means resuming still works with no network,
-    // no key and no model -- the one control you most need when
-    // something is already wrong. parseCommand covers the Mandarin
-    // forms too.
+    // the words. The hint says to say "resume" and does not ask for the
+    // agent's name -- correctly, since a paused kitchen has nothing else
+    // going on -- but the addressing gate lives on the server and threw
+    // the turn away for want of one. Locally it also survives having no
+    // network, no key and no model, which is when you need it most.
+    // parseCommand covers the Mandarin forms too.
     if (isPaused(latestRunRef.current)) {
-      const { intent } = parseCommand(text, {
+      const { intent } = parseCommand(said, {
         byId,
         activeStepId: null,
         claimable: [],
@@ -1131,26 +1165,38 @@ export default function LiveCookPage() {
         agentName: AGENT_NAME,
       });
       if (intent === "resume") {
-        return togglePause(appendTranscript(latestRunRef.current, {
+        togglePause(appendTranscript(latestRunRef.current, {
           at: new Date().toISOString(),
-          speaker,
-          text,
+          speaker: saidBy ?? speaker,
+          text: said,
         }));
+        return null;
       }
     }
 
     if (pendingConfirm) {
       // An answer is an answer, and the keyword path owns resolving it.
-      if (routeConfirmReply(text).type === "resolve") return submitKeywordUtterance(text);
-      // Anything else means they moved on. The question goes, and what
+      if (routeConfirmReply(said).type === "resolve") {
+        submitKeywordUtterance(said, saidBy);
+        return null;
+      }
+      // Anything else means they moved on. The question goes and what
       // they said instead is handled on its own merits -- by the model,
-      // as it would have been if the question had never been asked.
+      // as it would have been had the question never been asked.
       // Sending it to the keyword grammar answered a fair question with
       // "I didn't catch that". voiceTurn.js has always done this on
-      // every other page; the live cook's own confirmation predated it.
+      // every other page; the live cook's confirmation predated the rule.
       setPendingConfirm(null);
     }
-    askAgent(text, speaker);
+
+    return { said, saidBy };
+  };
+
+  const submitUtterance = (text) => {
+    if (!text) return;
+    const routed = preRoute(text);
+    if (!routed) return;
+    askAgent(routed.said, routed.saidBy ?? speaker, { saidBy: routed.saidBy });
   };
 
   // What the microphone hears. The name check happens on the server, so
@@ -1199,19 +1245,22 @@ export default function LiveCookPage() {
       console.info("[voice] too unclear to act on:", text);
       return;
     }
-    if (pendingConfirm) return submitKeywordUtterance(text);
-    // Paused, and all they said was "resume" — exactly what the paused
-    // screen tells them to say. It needs no name and no model round trip:
-    // it is the only thing that does anything until the clock is back on.
-    if (paused && isBareResume(text)) return submitKeywordUtterance(text);
+    // The same rules the typed box gets. These lived only on that path
+    // for a while, which meant the microphone -- the way anybody
+    // actually uses this -- still could not resume by voice, still
+    // answered a question asked during a confirmation with "I didn't
+    // catch that", and had no idea what "I'm Toni" meant.
+    const routed = preRoute(text);
+    if (!routed) return;
+
     // "Goose." on its own is somebody getting the agent's attention before
     // saying the thing. The recogniser ends the turn in that pause, so the
     // instruction lands in the NEXT turn with no name on it — and would be
     // thrown away as kitchen chatter. Hold the door open instead of acting
     // on a turn that asked for nothing.
-    if (isNameOnlyTurn(text, AGENT_NAME)) {
+    if (isNameOnlyTurn(routed.said, AGENT_NAME)) {
       engagedUntilRef.current = Date.now() + NAME_CARRY_MS;
-      console.info("[voice] name only, waiting for the rest:", text);
+      console.info("[voice] name only, waiting for the rest:", routed.said);
       return;
     }
     // This turn's audio, cut out by its word timestamps with a little
@@ -1225,13 +1274,16 @@ export default function LiveCookPage() {
     // it is wrong, so nothing is acted on: the agent is told what
     // happened and asks which of them meant it.
     const shared = hasHandover(turn?.words);
-    if (shared) console.info("[voice] two cooks in one turn:", text);
-    askAgent(text, speaker, { engaged, clip, shared, sttTurn: turn });
+    if (shared) console.info("[voice] two cooks in one turn:", routed.said);
+    askAgent(routed.said, routed.saidBy ?? speaker, { engaged, clip, shared, sttTurn: turn, saidBy: routed.saidBy });
   };
 
-  const submitKeywordUtterance = (text) => {
+  const submitKeywordUtterance = (text, saidBy = null) => {
     if (!text) return;
-    const cookId = speaker;
+    // setSpeakerId has not reached `speaker` yet when somebody has just
+    // introduced themselves -- it is state, and this runs in the same
+    // turn -- so who they are is passed in rather than read back.
+    const cookId = saidBy ?? speaker;
 
     // A question is pending: this utterance is the answer, not a new
     // command. Anything that isn't clearly yes or no abandons the
