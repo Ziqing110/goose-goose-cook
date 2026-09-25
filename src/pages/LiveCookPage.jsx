@@ -40,6 +40,8 @@ import {
 } from "../utils/liveCook.js";
 import { parseCommand, HELP_TEXT, isBareResume } from "../utils/voiceCommands.js";
 import { matchConfirmation } from "../utils/navCommands.js";
+import { routeConfirmReply } from "../utils/confirmReply.js";
+import { opensFollowUp } from "../utils/followUp.js";
 import { registerVoiceDictation } from "../utils/voicePageCommands.js";
 import { buildAgentSnapshot } from "../utils/agentSnapshot.js";
 import { agentTurn, agentAside, collectAnswer } from "../api/agent.js";
@@ -937,9 +939,15 @@ export default function LiveCookPage() {
       const resumed = takeInterrupted();
       if (resumed) speak(resumed);
     }
-    // Only a question leaves the door open for an unnamed answer, and only
-    // briefly. Statements and refusals don't.
-    if (turn.reply && !chatter && /\?\s*$/.test(turn.reply)) engagedUntilRef.current = Date.now() + ENGAGED_MS;
+    // Answering opens the door for an unnamed follow-up; acting does not.
+    // See utils/followUp.js -- demanding the name again for the obvious
+    // next question is what made this a command line you speak at rather
+    // than something you talk to.
+    //
+    // Still never for unaddressed chatter: a turn only let through
+    // because the door was already open must not hold it open for the
+    // rest of the room.
+    if (!chatter && opensFollowUp(turn)) engagedUntilRef.current = Date.now() + ENGAGED_MS;
   };
 
   // Who was that? Asks the local speaker service, which compares the turn's
@@ -1044,7 +1052,17 @@ export default function LiveCookPage() {
   // which owns that state; everything else goes to the agent.
   const submitUtterance = (text) => {
     if (!text) return;
-    if (pendingConfirm) return submitKeywordUtterance(text);
+    if (pendingConfirm) {
+      // An answer is an answer, and the keyword path owns resolving it.
+      if (routeConfirmReply(text).type === "resolve") return submitKeywordUtterance(text);
+      // Anything else means they moved on. The question goes, and what
+      // they said instead is handled on its own merits -- by the model,
+      // as it would have been if the question had never been asked.
+      // Sending it to the keyword grammar answered a fair question with
+      // "I didn't catch that". voiceTurn.js has always done this on
+      // every other page; the live cook's own confirmation predated it.
+      setPendingConfirm(null);
+    }
     askAgent(text, speaker);
   };
 

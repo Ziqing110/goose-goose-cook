@@ -15,6 +15,16 @@ const MAX_DESC = 120;
 // The brief is four short values; anything longer is somebody pasting
 // an essay into the free-text box.
 const MAX_BRIEF = 80;
+// Steps already finished or skipped, carried for one reason: so
+// "what was that tofu step?" can be answered after the fact. Id and
+// label only -- nothing can be DONE to a finished step, so its
+// description, holder and readiness are all tokens for nothing.
+//
+// The most recent, not all of them: a cook asking about a step they
+// have finished almost always means one from the last few minutes,
+// and forty of these on every turn would cost more than the question
+// is worth.
+const MAX_FINISHED = 12;
 
 /**
  * @param {object} args
@@ -79,8 +89,16 @@ export function buildAgentSnapshot({ run, nodes, cooks, speakerId, paused = fals
 
   const brief = briefFrom(conversation);
 
+  const finished = nodes
+    .map((n) => ({ node: n, record: run.steps[n.id] }))
+    .filter(({ record }) => record && (record.status === "done" || record.status === "skipped"))
+    .sort((a, b) => String(b.record.endedAt || "").localeCompare(String(a.record.endedAt || "")))
+    .slice(0, MAX_FINISHED)
+    .map(({ node }) => ({ id: node.id, label: node.label }));
+
   return {
     mode: run.mode === "competition" ? "versus" : "coop",
+    ...(finished.length ? { finished } : null),
     ...(brief ? { brief } : null),
     paused,
     speakerName: nameOf(speakerId) ?? "Someone",

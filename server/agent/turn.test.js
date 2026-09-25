@@ -115,3 +115,89 @@ test("two cooks in one turn: the model is told, in the words it reads", () => {
   assert.ok(/TWO COOKS SPOKE AT ONCE/.test(both));
   assert.ok(/Take no action/.test(both));
 });
+
+// A run where one step is over and two are still open.
+const withFinished = {
+  ...snapshot,
+  finished: [{ id: "s0", label: "Drain the tofu" }],
+};
+
+test("explain reaches a finished step; nothing else does", () => {
+  // "What was that tofu step?" is a fair question once the tofu is done.
+  // Finishing it again is not.
+  const tools = Object.fromEntries(
+    buildTools(withFinished).map((t) => [t.function.name, t.function.parameters.properties?.step_id?.enum]),
+  );
+  assert.ok(tools.explain.includes("s0"), "explain can name it");
+  for (const name of ["done", "skip", "drop", "claim", "start"]) {
+    assert.ok(!tools[name]?.includes("s0"), `${name} cannot`);
+  }
+});
+
+test("a finished step is a known step, not an unknown one", () => {
+  // The two rejections mean different things: unknown_step is a made-up
+  // id, step_not_eligible is a real step this verb may not touch. A
+  // finished step is the second.
+  const explained = parseChoice(
+    { message: { tool_calls: [call("explain", { step_id: "s0" })], content: "" } },
+    withFinished,
+  );
+  assert.deepEqual(explained.calls, [{ name: "explain", stepId: "s0" }]);
+  assert.deepEqual(explained.rejected, []);
+
+  const refinished = parseChoice(
+    { message: { tool_calls: [call("done", { step_id: "s0" })], content: "" } },
+    withFinished,
+  );
+  assert.deepEqual(refinished.calls, []);
+  assert.equal(refinished.rejected[0].reason, "step_not_eligible");
+});
+
+test("a made-up id is still rejected as unknown, finished list or not", () => {
+  const result = parseChoice(
+    { message: { tool_calls: [call("explain", { step_id: "nope" })], content: "" } },
+    withFinished,
+  );
+  assert.deepEqual(result.calls, []);
+  assert.equal(result.rejected[0].reason, "unknown_step");
+});
+
+test("the user message lists finished steps, and says they are explain-only", () => {
+  const message = buildUserMessage(withFinished, "what was the tofu one?");
+  assert.ok(message.includes("Drain the tofu"), "the label, so it can be matched");
+  assert.ok(/can only be explained, never acted on/i.test(message));
+});
+
+test("a run with nothing finished says nothing about finished steps", () => {
+  assert.ok(!/already finished/i.test(buildUserMessage(snapshot, "hello")));
+});
+
+test("two voices in one turn: reading is allowed, writing is not", () => {
+  // Getting the speaker wrong on a claim credits the wrong cook. Getting
+  // it wrong on "what does that mean" reads the recipe out to a room
+  // that already contains both of them.
+  const result = parseChoice(
+    {
+      message: {
+        tool_calls: [call("explain", { step_id: "s1" }), call("done", { step_id: "s2" })],
+        content: "",
+      },
+    },
+    snapshot,
+    { shared: true },
+  );
+  assert.deepEqual(result.calls, [{ name: "explain", stepId: "s1" }]);
+  assert.deepEqual(result.rejected, [{ name: "done", reason: "two_speakers" }]);
+});
+
+test("two voices: status and score are still refused", () => {
+  // They read the kitchen out, but they are answers to a question whose
+  // asker is a coin flip, and the app speaks them aloud to everyone.
+  const result = parseChoice(
+    { message: { tool_calls: [call("status", {})], content: "" } },
+    snapshot,
+    { shared: true },
+  );
+  assert.deepEqual(result.calls, []);
+  assert.equal(result.rejected[0].reason, "two_speakers");
+});

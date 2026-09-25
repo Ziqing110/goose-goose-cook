@@ -25,6 +25,9 @@ export const INTENTS = [
 // is a fair question about step nineteen. Its enum is built
 // separately, over everything still open.
 const NEEDS_STEP = new Set(["claim", "start", "done", "skip", "drop", "explain"]);
+
+// Tools that answer rather than act, and so survive a two-speaker turn.
+const READ_ONLY = new Set(["explain", "search_web"]);
 const MAX_CALLS = 3;
 const MAX_REPLY_CHARS = 200;
 
@@ -42,9 +45,11 @@ export function buildTools(snapshot, { search = false } = {}) {
     done: steps.filter((s) => s.status === "active").map((s) => s.id),
     skip: steps.filter((s) => s.status === "active" || s.status === "pending").map((s) => s.id),
     drop: steps.filter((s) => s.status === "active").map((s) => s.id),
-    // Any step still on the board. Asking what something means is not
-    // acting on it, so readiness and ownership are beside the point.
-    explain: steps.map((s) => s.id),
+    // Any step on the board, finished ones included. Asking what
+    // something means is not acting on it, so readiness, ownership and
+    // being over are all beside the point -- and "what was that tofu
+    // step?" is a fair question once the tofu is done.
+    explain: [...steps.map((s) => s.id), ...(snapshot.finished || []).map((s) => s.id)],
   };
   const describe = {
     claim: "The speaker takes a step that is ready but not started.",
@@ -118,6 +123,12 @@ export function buildUserMessage(snapshot, text, { shared = false } = {}) {
     `Cooks: ${(snapshot.cooks || []).map((c) => c.name).join(", ")}.`,
     `Open steps: ${JSON.stringify(open)}`,
   ];
+  // Labels, so a question about a finished step can be matched to one.
+  // Explain-only: the tool enums are what stop anything being done to
+  // them, and the prompt says so too.
+  if (snapshot.finished?.length) {
+    lines.push(`Already finished (can only be explained, never acted on): ${JSON.stringify(snapshot.finished)}`);
+  }
   // Before the open steps would bury it; after them it reads as a
   // footnote. It goes first because it constrains every answer below.
   if (snapshot.brief) {
@@ -203,12 +214,18 @@ export function parseChoice(choice, snapshot, { shared = false } = {}) {
   for (const raw of message.tool_calls || []) {
     if (calls.length >= MAX_CALLS) break; // cap what survives, not what was attempted
     const name = raw?.function?.name;
-    // Two cooks in one turn: nothing fires, whatever the model decided.
-    // The prompt asks it to hold off and ask instead, but a prompt is a
-    // request and this is the guarantee — acting on a turn whose speaker
-    // is a coin flip is the exact failure we set out to stop, and it is
-    // not worth leaving to a model having a bad day.
-    if (shared && name !== "search_web") {
+    // Two cooks in one turn: nothing that CHANGES anything fires,
+    // whatever the model decided. The prompt asks it to hold off and ask
+    // instead, but a prompt is a request and this is the guarantee —
+    // acting on a turn whose speaker is a coin flip is the exact failure
+    // we set out to stop, and it is not worth leaving to a model having
+    // a bad day.
+    //
+    // explain and search_web are exempt because neither writes anything.
+    // Getting the speaker wrong on a claim credits the wrong cook;
+    // getting it wrong on "what does that mean" reads the recipe out to
+    // a room that already contains both of them.
+    if (shared && !READ_ONLY.has(name)) {
       rejected.push({ name, reason: "two_speakers" });
       continue;
     }
@@ -227,7 +244,10 @@ export function parseChoice(choice, snapshot, { shared = false } = {}) {
       continue;
     }
     const stepId = args.step_id ? String(args.step_id) : null;
-    if (stepId && !steps.some((s) => s.id === stepId)) {
+    // Finished steps are real steps; they are simply not actionable.
+    // The per-tool enum below is what keeps them explain-only.
+    const known = [...steps, ...(snapshot.finished || [])];
+    if (stepId && !known.some((s) => s.id === stepId)) {
       rejected.push({ name, reason: "unknown_step", stepId });
       continue;
     }
