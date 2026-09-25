@@ -38,7 +38,7 @@ import {
   applyUndo, canUndo, endRun, appendTranscript, scoreStep, DIFFICULTY_POINTS,
   isPaused, applyPause, applyResume,
 } from "../utils/liveCook.js";
-import { parseCommand, HELP_TEXT } from "../utils/voiceCommands.js";
+import { parseCommand, HELP_TEXT, isBareResume } from "../utils/voiceCommands.js";
 import { matchConfirmation } from "../utils/navCommands.js";
 import { registerVoiceDictation } from "../utils/voicePageCommands.js";
 import { buildAgentSnapshot } from "../utils/agentSnapshot.js";
@@ -959,6 +959,10 @@ export default function LiveCookPage() {
       return;
     }
     if (pendingConfirm) return submitKeywordUtterance(text);
+    // Paused, and all they said was "resume" — exactly what the paused
+    // screen tells them to say. It needs no name and no model round trip:
+    // it is the only thing that does anything until the clock is back on.
+    if (paused && isBareResume(text)) return submitKeywordUtterance(text);
     // "Goose." on its own is somebody getting the agent's attention before
     // saying the thing. The recogniser ends the turn in that pause, so the
     // instruction lands in the NEXT turn with no name on it — and would be

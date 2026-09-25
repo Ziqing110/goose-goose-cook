@@ -13,7 +13,7 @@ import {
   registerVoiceCommands,
   voiceCommandsAreExclusive,
 } from "./voicePageCommands.js";
-import { AVATAR_PICKER_VOICE, CONVERSATION_VOICE, HOME_VOICE, SCHEDULE_VOICE } from "./pageVoiceGrammar.js";
+import { AVATAR_PICKER_VOICE, CONVERSATION_VOICE, HOME_VOICE, INVENTORY_VOICE, SCHEDULE_VOICE, ingredientVoicePhrases } from "./pageVoiceGrammar.js";
 
 const ALL = Object.values(ROUTES);
 const UP_TO_INVENTORY = [ROUTES.home, ROUTES.conversation, ROUTES.inventory];
@@ -173,6 +173,39 @@ test("page: a page command outranks navigation on the same words", () => {
   const r = turn("go back", { route: ROUTES.home });
   assert.equal(r.type, "page");
   assert.equal(r.command.label, "Closed.");
+});
+
+test("page: leaving the recipe graph by voice switches the tab, not the page", () => {
+  // Unclaimed, "back to the ingredients" is a bare "back" and leaves the
+  // page, and "go back to ingredients" names the page you are on.
+  assert.equal(turn("back to the ingredients").type, "back");
+  assert.deepEqual(turn("go back to ingredients"), { type: "say", line: LINES.already });
+
+  registerVoiceCommands([{ phrases: INVENTORY_VOICE.showIngredients, run: noop, label: "tab" }]);
+  for (const said of ["back to the ingredients", "go back to ingredients", "switch to ingredients", "ingredients"]) {
+    const r = turn(said);
+    assert.equal(r.type, "page", said);
+    assert.equal(r.command.label, "tab");
+  }
+});
+
+test("page: an ingredient marked out comes back by voice, subject and all", () => {
+  // As the Inventory page registers them: out first, both with the subject allowed.
+  const ginger = ingredientVoicePhrases("ginger");
+  registerVoiceCommands([
+    { phrases: ginger.out, allowSubject: true, run: noop, label: "out" },
+    { phrases: ginger.onHand, allowSubject: true, run: noop, label: "back" },
+  ]);
+  for (const said of ["I have ginger", "we found the ginger", "add ginger back", "put the ginger back", "ginger back"]) {
+    const r = turn(said);
+    assert.equal(r.type, "page", said);
+    assert.equal(r.command.label, "back", said);
+  }
+  for (const said of ["I don't have ginger", "we're out of ginger"]) {
+    assert.equal(turn(said).command?.label, "out", said);
+  }
+  // An ingredient that isn't on the list does not become a trip back a page.
+  assert.equal(turn("add the paprika back").type, "ignore");
 });
 
 test("page: a subject makes it conversation, unless the command opts in", () => {

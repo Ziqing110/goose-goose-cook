@@ -109,7 +109,11 @@ const RecipeBoard = forwardRef(function RecipeBoard({
   const [edgeSel, setEdgeSel] = useState(null);
   const [linkMessage, setLinkMessage] = useState(null);
   const messageTimer = useRef(null);
-  const [fitScale, setFitScale] = useState(1);
+  // null until the frame has been measured. 1 stands in for drawing the
+  // first frame, but it is not a fit, and reporting it made the page
+  // zoom off a scale the board never had.
+  const [measuredFit, setFitScale] = useState(null);
+  const fitScale = measuredFit ?? 1;
   const scale = zoom ?? fitScale;
   const ghostRef = useRef(null);
   ghostRef.current = ghost;
@@ -437,7 +441,9 @@ const RecipeBoard = forwardRef(function RecipeBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedNodeId, reserveRight, scale]);
 
-  useEffect(() => onFitScale?.(fitScale), [fitScale, onFitScale]);
+  useEffect(() => {
+    if (measuredFit !== null) onFitScale?.(measuredFit);
+  }, [measuredFit, onFitScale]);
 
   // Voice's "scroll right"/"scroll to step X" have no card or slider to
   // click, so the scroll container needs an imperative door in. Kept

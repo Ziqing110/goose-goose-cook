@@ -66,19 +66,39 @@ test("Inventory ingredient, tab, zoom, pan, step, approval, and notice commands 
     "found some spring onion", "spring onion is back", "spring onion is on hand", "mark spring onion on hand",
   ]);
   assert.equal(hear(ingredients.out, "spring onion"), null, "bare ingredient names are not commands");
-
-  assertMatches(INVENTORY_VOICE.everythingOnHand, [
-    "everything's on hand", "everything is on hand", "everything on hand", "mark everything on hand", "all on hand",
+  // Bringing one back, the ways people say it.
+  assertMatches(ingredients.onHand, [
+    "add spring onion back", "add back the spring onion", "add the spring onion", "put the spring onion back",
+    "bring back the spring onion", "spring onion back", "mark the spring onion as on hand", "check spring onion",
+    "spring onion is here", "we're not out of spring onion",
   ]);
+  assertMatches(ingredients.out, [
+    "we ran out of spring onion", "spring onion is gone", "haven't got any spring onion", "uncheck the spring onion",
+    "mark the spring onion as out",
+  ]);
+  // A shopping trip is not a restock; not being out is not being out.
+  assert.equal(hear(ingredients.onHand, "we need to get spring onion"), null, "get alone is not back on hand");
+  assert.equal(hear(ingredients.out, "we're not out of spring onion"), null, "not out of is not out");
+
   assertMatches(INVENTORY_VOICE.addTask, [
     "add a task", "add another task", "add a step", "add another step", "add task called Toast seeds",
   ]);
   assertMatches(INVENTORY_VOICE.showIngredients, [
     "show ingredients", "show me the ingredients", "ingredients tab", "go to the ingredients",
+    // How people actually leave the graph. "back to the ingredients"
+    // used to be a bare "back" and left the page.
+    "back to the ingredients", "go back to ingredients", "switch to ingredients", "switch back to the ingredients",
+    "open the ingredients", "show the ingredient list", "ingredient list", "ingredients",
   ]);
   assertMatches(INVENTORY_VOICE.showGraph, [
     "show the recipe graph", "show me the board", "recipe graph", "go to the recipe graph", "go to board",
+    "back to the graph", "go back to the board", "switch to the graph", "open the recipe board", "graph tab",
   ]);
+  for (const other of ["no ginger", "got the ginger", "ingredients look fine", "the board is a mess"]) {
+    assert.equal(hear(INVENTORY_VOICE.showIngredients, other), null, other);
+    assert.equal(hear(INVENTORY_VOICE.showGraph, other), null, other);
+  }
+  assertMatches(INVENTORY_VOICE.restoreLast, ["put it back", "add it back", "bring that back", "undo that", "I have it"]);
   assertMatches(INVENTORY_VOICE.zoomIn, ["zoom in", "zoom closer", "zoom in closer"]);
   assertMatches(INVENTORY_VOICE.zoomOut, ["zoom out"]);
   assertMatches(INVENTORY_VOICE.fit, ["fit the board", "fit graph", "reset zoom", "zoom to fit"]);
@@ -91,7 +111,7 @@ test("Inventory ingredient, tab, zoom, pan, step, approval, and notice commands 
   assertCapture(INVENTORY_VOICE.editStep, "open the step dice onion", "dice onion");
   assertCapture(INVENTORY_VOICE.editStep, "edit step dice onion", "dice onion");
   assertCapture(INVENTORY_VOICE.editStep, "select the step dice onion", "dice onion");
-  assertMatches(INVENTORY_VOICE.approve, ["approve"]);
+  assertMatches(INVENTORY_VOICE.approve, ["approve", "approve the plan"]);
   assertMatches(INVENTORY_VOICE.revise, ["revise", "unapprove", "go back to editing"]);
   assertMatches(INVENTORY_VOICE.removeBlocked, ["remove blocked step", "remove the blocked steps", "drop blocked steps"]);
   assertMatches(INVENTORY_VOICE.editKitchen, ["edit kitchen profile", "edit the kitchen", "edit my kitchen"]);

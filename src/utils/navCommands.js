@@ -82,6 +82,9 @@ const NOT_NAVIGATION = [
   /\bnext (?:week|time|day|month|year|morning|one)\b/,
   /\bback (?:in|up|off)\b/,
   /\bcontinue (?:to|with|cooking|stirring|until)\b/,
+  // Putting a thing back, not going back: "add the ginger back", "put it
+  // back". On Inventory this left the page mid-checklist.
+  /\b(?:put|bring|add|give|take|get)\b(?: \S+){0,3} back\b/,
 ];
 
 // A command has no subject. You say "next", not "we should go next" —

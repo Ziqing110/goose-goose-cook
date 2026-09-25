@@ -96,7 +96,6 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
   const ctxRef = useRef(null);
   const nodeRef = useRef(null);
   const streamRef = useRef(null);
-  const terminateRef = useRef(null);
   const retryTimerRef = useRef(null);
   const retriesRef = useRef(0);
   const openedAtRef = useRef(0);
@@ -104,6 +103,11 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
   // (bad token, bad config). Network drops and session expiry are not
   // this, and are exactly what the retry is for.
   const fatalRef = useRef(false);
+  // Which connect run is the live one. A muted run keeps its socket open
+  // for a few seconds to hear the last turn out, and a new run can start
+  // inside that window; the old one must then leave the shared state —
+  // status, refs, the audio tap — to the new one.
+  const runRef = useRef(0);
   // Bumping this re-runs the connect effect, which is the reconnect.
   const [retryTick, setRetryTick] = useState(0);
 
@@ -190,11 +194,29 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
   useEffect(() => {
     if (!enabled) return undefined;
     let cancelled = false;
+    const runId = ++runRef.current;
+    const isCurrent = () => runRef.current === runId;
+    // This run's own audio, so it can always let go of it — the shared
+    // refs may already belong to the run after it.
+    let stream = null;
+    let ctx = null;
+    let node = null;
+    // The grace timer after Terminate, per run for the same reason.
+    let terminateTimer = null;
+    const releaseAudio = () => {
+      if (isCurrent()) {
+        teardownAudio();
+        return;
+      }
+      node?.port.close();
+      node?.disconnect();
+      stream?.getTracks().forEach((t) => t.stop());
+      ctx?.close().catch(() => {});
+    };
 
     (async () => {
       setStatus((s) => (s === "reconnecting" ? s : "connecting"));
 
-      let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           audio: {
@@ -220,7 +242,7 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
       }
       streamRef.current = stream;
 
-      const ctx = new AudioContext();
+      ctx = new AudioContext();
       ctxRef.current = ctx;
       try {
         // public/ file, so Vite leaves the path alone: it must carry the
@@ -257,12 +279,14 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
       ws.onopen = () => {
         const chunkSamples = Math.round((ctx.sampleRate * CHUNK_MS) / 1000);
         const source = ctx.createMediaStreamSource(stream);
-        const node = new AudioWorkletNode(ctx, "pcm-processor", {
+        node = new AudioWorkletNode(ctx, "pcm-processor", {
           processorOptions: { chunkSamples },
         });
         nodeRef.current = node;
 
         node.port.onmessage = ({ data }) => {
+          // Superseded: a newer run owns the meter, the tap and the mic.
+          if (!isCurrent()) return;
           setLevel(data.peak);
           if (ws.readyState === WebSocket.OPEN) {
             // Raw binary frame. Wrapping this in JSON or base64 is the
@@ -347,7 +371,7 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
           }
 
           case "Termination":
-            clearTimeout(terminateRef.current);
+            clearTimeout(terminateTimer);
             ws.close();
             break;
 
@@ -380,12 +404,19 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
       };
 
       ws.onclose = () => {
-        wsRef.current = null;
-        teardownAudio();
+        clearTimeout(terminateTimer);
+        if (wsRef.current === ws) wsRef.current = null;
+        releaseAudio();
 
         // `cancelled` means WE closed it — muting, unmounting, or the
-        // Termination that answers our own Terminate. Nothing to do.
-        if (cancelled) return;
+        // Termination that answers our own Terminate. The wind-down is
+        // over, so the mic is free again. Returning without this left
+        // status on "closing", which disables the mic button: once muted,
+        // it could never be switched back on.
+        if (cancelled) {
+          if (isCurrent()) setStatus("idle");
+          return;
+        }
 
         // A connection that lasted a while earned its budget back; one
         // that died immediately did not (see STABLE_MS).
@@ -423,10 +454,10 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
         // Terminate goes out silently discards the last transcript and
         // any SpeakerRevision. Wait for Termination, with a timeout so a
         // dropped connection can't hang this forever.
-        terminateRef.current = setTimeout(() => ws.close(), TERMINATE_GRACE_MS);
+        terminateTimer = setTimeout(() => ws.close(), TERMINATE_GRACE_MS);
       } else {
         ws?.close();
-        teardownAudio();
+        releaseAudio();
       }
     };
   }, [enabled, teardownAudio, retryTick]);

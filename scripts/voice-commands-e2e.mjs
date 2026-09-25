@@ -9,6 +9,7 @@
 //   npx playwright install chromium  # once per machine
 //   npm run test:voice-e2e
 //   HEADED=1 npm run test:voice-e2e
+//   E2E_SYNTH_MIC=1 npm run test:voice-e2e  # macOS, if the mic never opens
 import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -274,7 +275,7 @@ async function mockStreamingSocket(page) {
       if (!nonSilentFrames) await waitForFrame(audioFrames + 1, true);
       assert.ok(nonSilentFrames > 0, "the fake microphone sent non-silent PCM audio");
     },
-    async say(text, inspectPartial) {
+    async say(text, inspectPartial, { startedAgoMs = 10_000 } = {}) {
       assert.ok(socket, "the streaming socket opened after unmuting");
       await waitForFrame(audioFrames + 1);
       assert.ok(audioFrames > 0, "microphone PCM audio reached the socket");
@@ -295,7 +296,7 @@ async function mockStreamingSocket(page) {
         // The synthetic transcript represents a person speaking before
         // the UI's asynchronous TTS reply begins. E2E coverage asserts
         // command effects, not acoustic echo suppression.
-        startedAt: Date.now() - 10_000,
+        startedAt: Date.now() - startedAgoMs,
         words: text.split(/\s+/).map((word, i) => ({
           text: word,
           confidence: 0.99,
@@ -446,6 +447,28 @@ try {
     ],
   });
   context = await browser.newContext({ permissions: ["microphone"], reducedMotion: "reduce" });
+  // On macOS the fake capture device still waits on the system microphone
+  // permission of whatever launched the browser, and getUserMedia hangs
+  // forever when that app was never granted it. E2E_SYNTH_MIC=1 swaps in
+  // a tone generated inside the page instead: the samples still go through
+  // the app's own AudioWorklet and socket, only the device is replaced.
+  if (process.env.E2E_SYNTH_MIC === "1") {
+    await context.addInitScript(() => {
+      if (!navigator.mediaDevices) return;
+      navigator.mediaDevices.getUserMedia = async () => {
+        const audio = new AudioContext();
+        await audio.resume();
+        const tone = audio.createOscillator();
+        const gain = audio.createGain();
+        const out = audio.createMediaStreamDestination();
+        tone.frequency.value = 440;
+        gain.gain.value = 0.2;
+        tone.connect(gain).connect(out);
+        tone.start();
+        return out.stream;
+      };
+    });
+  }
   const schedulePage = await context.newPage();
   await mockApi(schedulePage);
   const scheduleStream = await mockStreamingSocket(schedulePage);
@@ -503,6 +526,25 @@ try {
     await waitForChecked(profile.locator("#kp-hasOven"), true);
     await scheduleStream.say("cancel");
     await profile.waitFor({ state: "hidden" });
+  });
+
+  await checkVoiceBehavior("Voice bar: after muting, the mic can be switched back on and hears again", async () => {
+    await schedulePage.locator(".goose-figure").hover();
+    await schedulePage.getByRole("button", { name: "Mute listening" }).click();
+    const start = schedulePage.getByRole("button", { name: "Start listening" });
+    await start.waitFor({ state: "visible" });
+    // The old socket gets up to 3s to hear the last turn out, and the
+    // button is disabled meanwhile. It used to stay disabled for good.
+    await schedulePage.mouse.move(0, 0);
+    await schedulePage.waitForTimeout(3_500);
+    assert.equal(await start.isEnabled(), true, "the mic button comes back after muting");
+    // Off the goose and back on, so the hover opens the eggs again.
+    await unmute(schedulePage, scheduleStream);
+    const before = await zoom.getAttribute("aria-valuetext");
+    await scheduleStream.say("zoom in");
+    const heardBy = Date.now() + 2_000;
+    while ((await zoom.getAttribute("aria-valuetext")) === before && Date.now() < heardBy) await schedulePage.waitForTimeout(50);
+    assert.notEqual(await zoom.getAttribute("aria-valuetext"), before, "a command is heard after unmuting");
   });
 
   await scheduleStream.say("go to inventory");
@@ -600,11 +642,11 @@ try {
   const ingredientTab = inventoryPage.getByRole("tab", { name: /Ingredients/ });
   const recipeTab = inventoryPage.getByRole("tab", { name: /Recipe graph/ });
   const onTheBoard = async (assertion) => {
-    await recipeTab.click({ force: true });
+    await recipeTab.evaluate((el) => el.click());
     try {
       await assertion();
     } finally {
-      await ingredientTab.click({ force: true });
+      await ingredientTab.evaluate((el) => el.click());
     }
   };
 
@@ -618,10 +660,22 @@ try {
   });
   await checkVoiceBehavior("Inventory: ‘got ginger’ restores an out ingredient", async () => {
     // Put it out by the visible control first so this checks the voice action.
-    if (await ginger.getAttribute("aria-checked") === "true") await ginger.click({ force: true });
+    if (await ginger.getAttribute("aria-checked") === "true") await ginger.evaluate((el) => el.click());
     await waitForAttribute(ginger, "aria-checked", "false");
     await inventoryStream.say("got ginger");
     await waitForAttribute(ginger, "aria-checked", "true", 1_500);
+  });
+  await checkVoiceBehavior("Inventory: an ingredient marked out comes back by voice, however it's said", async () => {
+    // "Add ginger back" and "put it back" used to fall through to the
+    // navigation "back" and leave the page; "I have ginger" was ignored as
+    // chatter for having a subject.
+    for (const said of ["add ginger back", "I have ginger", "put it back", "we found the ginger"]) {
+      await inventoryStream.say("I don't have ginger");
+      await waitForAttribute(ginger, "aria-checked", "false", 1_500);
+      await inventoryStream.say(said);
+      await waitForAttribute(ginger, "aria-checked", "true", 1_500);
+      assert.match(inventoryPage.url(), /session[/]inventory$/, said);
+    }
   });
   await checkVoiceBehavior("Inventory: ‘no water’ marks water out and updates the dependent graph", async () => {
     await inventoryStream.say("no water");
@@ -629,14 +683,14 @@ try {
     await onTheBoard(() =>
       inventoryPage.getByRole("button", { name: /Boil water, blocked/ }).waitFor({ state: "visible" }));
   });
-  await checkVoiceBehavior("Inventory: ‘everything’s on hand’ clears all out ingredients", async () => {
-    if (await ginger.getAttribute("aria-checked") === "true") await ginger.click({ force: true });
-    if (await water.getAttribute("aria-checked") === "true") await water.click({ force: true });
+  await checkVoiceBehavior("Inventory: with ingredients out there is no ‘Mark everything on hand’ button", async () => {
+    // Removed: it came and went with the out list, shoving the footer
+    // buttons around, and outlived the ingredients it was about once
+    // their steps were removed. Each row's own checkbox restores it.
+    if (await ginger.getAttribute("aria-checked") === "true") await ginger.evaluate((el) => el.click());
     await waitForAttribute(ginger, "aria-checked", "false");
-    await waitForAttribute(water, "aria-checked", "false");
-    await inventoryStream.say("everything's on hand");
-    await waitForAttribute(ginger, "aria-checked", "true", 1_500);
-    await waitForAttribute(water, "aria-checked", "true", 1_500);
+    await inventoryPage.getByRole("button", { name: /Remove the blocked/ }).waitFor({ state: "visible" });
+    assert.equal(await inventoryPage.getByRole("button", { name: /Mark everything on hand/ }).count(), 0);
   });
   // Housekeeping between checks, not an assertion — put both ingredients
   // back on hand for what follows. Toggling one regroups the list, so the
@@ -672,46 +726,55 @@ try {
     await inventoryStream.say("show ingredients");
     await waitForAttribute(inventoryPage.getByRole("tab", { name: /Ingredients/ }), "aria-selected", "true");
   });
-  const boardZoom = inventoryPage.getByRole("slider", { name: "Zoom" });
+  await checkVoiceBehavior("Inventory: ‘back to the ingredients’ leaves the graph for the ingredients tab, not the page", async () => {
+    for (const said of ["back to the ingredients", "go back to ingredients", "switch to ingredients"]) {
+      await inventoryStream.say("recipe graph");
+      await waitForAttribute(recipeTab, "aria-selected", "true");
+      await inventoryStream.say(said);
+      await waitForAttribute(ingredientTab, "aria-selected", "true");
+      assert.match(inventoryPage.url(), /session[/]inventory$/, said);
+    }
+  });
+  // The board's zoom is two buttons and a readout since #19 ("0%", "+5%").
+  const zoomReadout = inventoryPage.locator(".inv-zoom-pct");
+  const zoomInButton = inventoryPage.getByRole("button", { name: "Zoom in", exact: true });
+  const zoomOutButton = inventoryPage.getByRole("button", { name: "Zoom out", exact: true });
+  const zoomPercent = async () => Number((await zoomReadout.textContent()).replace(/[^0-9]/g, ""));
+  const waitForZoom = (text) =>
+    inventoryPage.waitForFunction((t) => document.querySelector(".inv-zoom-pct")?.textContent === t, text, { timeout: 1_500 });
+  // Set the zoom by the buttons, the way a click would, before a voice check.
+  const zoomTo = async (target) => {
+    for (let i = 0; i < 25 && (await zoomPercent()) !== target; i += 1) {
+      const button = (await zoomPercent()) < target ? zoomInButton : zoomOutButton;
+      if (await button.isDisabled()) break;
+      await button.evaluate((el) => el.click());
+    }
+    await inventoryPage.waitForTimeout(200);
+  };
   await checkVoiceBehavior("Inventory: ‘zoom in’ increases the board zoom", async () => {
     await inventoryStream.say("show the recipe graph");
-    await boardZoom.waitFor({ state: "visible" });
-    await boardZoom.focus();
-    await boardZoom.press("Home");
-    await waitForInputValue(boardZoom, "0");
-    await inventoryPage.waitForTimeout(200);
+    await zoomReadout.waitFor({ state: "visible" });
+    await zoomTo(0);
     await inventoryStream.say("zoom in");
-    await waitForInputValue(boardZoom, "5");
+    await waitForZoom("+5%");
   });
   await checkVoiceBehavior("Inventory: ‘zoom out’ decreases the board zoom", async () => {
-    await boardZoom.focus();
-    await boardZoom.press("End");
-    await waitForInputValue(boardZoom, "100");
-    await inventoryPage.waitForTimeout(200);
+    await zoomTo(100);
     await inventoryStream.say("zoom out");
-    await waitForInputValue(boardZoom, "95");
+    await waitForZoom("+95%");
   });
   await checkVoiceBehavior("Inventory: ‘zoom closer’ increases the board zoom", async () => {
-    await boardZoom.focus();
-    await boardZoom.press("Home");
-    await waitForInputValue(boardZoom, "0");
-    await inventoryPage.waitForTimeout(200);
+    await zoomTo(0);
     await inventoryStream.say("zoom closer");
-    await waitForInputValue(boardZoom, "5");
+    await waitForZoom("+5%");
   });
   await checkVoiceBehavior("Inventory: ‘fit the board’ resets the board zoom", async () => {
-    await boardZoom.focus();
-    await boardZoom.press("End");
-    await waitForInputValue(boardZoom, "100");
-    await inventoryPage.waitForTimeout(200);
+    await zoomTo(100);
     await inventoryStream.say("fit the board");
-    await waitForInputValue(boardZoom, "0");
+    await waitForZoom("0%");
   });
   const boardScroll = inventoryPage.locator(".board-scroll");
-  await boardZoom.focus();
-  await boardZoom.press("End");
-  await waitForInputValue(boardZoom, "100");
-  await inventoryPage.waitForTimeout(200);
+  await zoomTo(100);
   const overflow = await boardScroll.evaluate((el) => ({
     x: el.scrollWidth - el.clientWidth,
     y: el.scrollHeight - el.clientHeight,
@@ -763,7 +826,9 @@ try {
   const addTaskForm = inventoryPage.getByRole("dialog", { name: "Add a task" });
   const addTaskName = addTaskForm.locator('input[placeholder="e.g. Toast the sesame seeds"]');
   const addTaskAfter = addTaskForm.locator(".panel-field").filter({ hasText: "Runs after" });
-  const addTaskBefore = addTaskForm.locator(".panel-field").filter({ hasText: "Runs before" });
+  // Since #19 a picked link is a chip in its field, and "Runs before" is "Unlocks next".
+  const addTaskBefore = addTaskForm.locator(".panel-field").filter({ hasText: "Unlocks next" });
+  const linkIn = (field, name) => field.locator(".panel-link", { hasText: name });
   await checkVoiceBehavior("Add Task dialog: ‘call it’ fills the task name", async () => {
     await inventoryStream.say("call it Toast sesame seeds");
     await waitForInputValue(addTaskName, "Toast sesame seeds");
@@ -786,11 +851,11 @@ try {
   });
   await checkVoiceBehavior("Add Task dialog: ‘runs after’ selects the prerequisite step", async () => {
     await inventoryStream.say("runs after Dice ginger");
-    await waitForAttribute(addTaskAfter.getByRole("button", { name: /Dice ginger/ }), "aria-pressed", "true");
+    await linkIn(addTaskAfter, "Dice ginger").waitFor({ state: "visible" });
   });
   await checkVoiceBehavior("Add Task dialog: ‘runs before’ selects the following step", async () => {
     await inventoryStream.say("runs before Boil water");
-    await waitForAttribute(addTaskBefore.getByRole("button", { name: /Boil water/ }), "aria-pressed", "true");
+    await linkIn(addTaskBefore, "Boil water").waitFor({ state: "visible" });
   });
   if (await addTaskForm.count()) {
     if (!(await addTaskName.inputValue())) await addTaskName.fill("Toast sesame seeds");
@@ -846,11 +911,11 @@ try {
   });
   await checkVoiceBehavior("Edit Step dialog: ‘runs after’ adds the selected dependency", async () => {
     await inventoryStream.say("runs after Dice ginger");
-    await waitForAttribute(editStepAfter.getByRole("button", { name: /Dice ginger/ }), "aria-pressed", "true");
+    await linkIn(editStepAfter, "Dice ginger").waitFor({ state: "visible" });
   });
   await checkVoiceBehavior("Edit Step dialog: ‘stop waiting on’ removes the dependency", async () => {
     await inventoryStream.say("stop waiting on Dice ginger");
-    await waitForAttribute(editStepAfter.getByRole("button", { name: /Dice ginger/ }), "aria-pressed", "false");
+    await linkIn(editStepAfter, "Dice ginger").waitFor({ state: "hidden" });
   });
   const editedLabel = editStepForm.locator("input.panel-input").first();
   if (await editedLabel.count() && await editedLabel.inputValue() !== "Toast seeds") await editedLabel.fill("Toast seeds");
@@ -916,20 +981,30 @@ try {
   });
 
   await settleVoiceCommands(inventoryPage);
-  await checkVoiceBehavior("Inventory: approve asks for confirmation and locks the board", async () => {
-    await inventoryStream.say("approve");
-    await inventoryPage.getByText(/Approve the board and move to scheduling/).waitFor({ state: "visible", timeout: 1_500 });
-    await inventoryStream.say("yes");
+  await checkVoiceBehavior("Inventory: ‘approve the plan’ locks the board at once, with no yes/no", async () => {
+    await inventoryStream.say("approve the plan");
     // The word "Approved" is on the page three times over once the board
     // locks — the panel's own title, the diff summary under it, and the
     // tab hint. The panel appearing is the thing being asserted.
-    await inventoryPage.locator(".approved-panel").waitFor({ state: "visible" });
+    await inventoryPage.locator(".approved-panel").waitFor({ state: "visible", timeout: 1_500 });
+    assert.notEqual(await inventoryPage.locator(".goose-bubble-tab").textContent(), "Confirm");
+    assert.match(await inventoryPage.locator(".goose-bubble-line").textContent(), /Approved/);
+  });
+  await checkVoiceBehavior("Inventory: an approved plan's checklist is locked, by click and by voice", async () => {
+    await inventoryStream.say("back to the ingredients");
+    await waitForAttribute(ingredientTab, "aria-selected", "true");
+    assert.equal(await ginger.isDisabled(), true, "the checkbox is disabled once approved");
+    await ginger.evaluate((el) => el.click());
+    assert.equal(await ginger.getAttribute("aria-checked"), "true");
+    await inventoryStream.say("no ginger");
+    await waitForPageCondition(inventoryPage, () => /approved/i.test(document.querySelector(".goose-bubble-line")?.textContent || ""));
+    assert.equal(await ginger.getAttribute("aria-checked"), "true", "voice does not change an approved checklist");
   });
   // Revise is meaningful only after approval. A mouse approval keeps that
   // assertion independent from the voice-approval scenario above.
-  if (await ingredientTab.getAttribute("aria-selected") !== "true") await ingredientTab.click({ force: true });
-  if (await ginger.count() && await ginger.getAttribute("aria-checked") === "false") await ginger.click({ force: true });
-  if (await recipeTab.getAttribute("aria-selected") !== "true") await recipeTab.click({ force: true });
+  if (await ingredientTab.getAttribute("aria-selected") !== "true") await ingredientTab.evaluate((el) => el.click());
+  if (await ginger.count() && await ginger.getAttribute("aria-checked") === "false") await ginger.evaluate((el) => el.click());
+  if (await recipeTab.getAttribute("aria-selected") !== "true") await recipeTab.evaluate((el) => el.click());
   const approveButton = inventoryPage.getByRole("button", { name: /Approve the plan/ });
   if (await approveButton.count()) {
     await approveButton.evaluate((el) => el.click());
@@ -941,13 +1016,16 @@ try {
   });
   if (!(await inventoryPage.getByRole("button", { name: "Add a task" }).count())) {
     const reviseButton = inventoryPage.getByRole("button", { name: /Revise/ });
-    if (await reviseButton.count()) await reviseButton.click({ force: true });
+    if (await reviseButton.count()) await reviseButton.evaluate((el) => el.click());
   }
   await checkVoiceBehavior("Inventory: removing blocked steps confirms, then removes the unavailable dependency chain", async () => {
-    if (await ingredientTab.getAttribute("aria-selected") !== "true") await ingredientTab.click({ force: true });
+    if (await ingredientTab.getAttribute("aria-selected") !== "true") await ingredientTab.evaluate((el) => el.click());
     if (await ginger.count() && await ginger.getAttribute("aria-checked") === "true") await ginger.evaluate((el) => el.click());
     await waitForAttribute(ginger, "aria-checked", "false");
-    if (await recipeTab.getAttribute("aria-selected") !== "true") await recipeTab.click({ force: true });
+    if (await recipeTab.getAttribute("aria-selected") !== "true") await recipeTab.evaluate((el) => el.click());
+    await inventoryStream.say("approve");
+    await waitForPageCondition(inventoryPage, () => /Can't approve yet/.test(document.querySelector(".goose-bubble-line")?.textContent || ""));
+    assert.equal(await inventoryPage.locator(".approved-panel").count(), 0, "a blocked plan is not approved by voice");
     await inventoryStream.say("remove the blocked steps");
     await waitForPageCondition(inventoryPage, () => document.querySelector(".goose-bubble-tab")?.textContent === "Confirm");
     await inventoryStream.say("yes");
@@ -1259,6 +1337,30 @@ try {
     await live.stream.say("接着");
     await live.page.locator(".live-cook-page:not(.is-paused)").waitFor({ state: "visible" });
   });
+  // The shared mock fails every agent call, which sends even unnamed words
+  // down the keyword path. The real server answers unnamed words with
+  // addressed:false and the page ignores them — which is how "resume",
+  // the phrase the paused screen asks for, did nothing. Stand that gate
+  // up for this check.
+  const serverNameGate = (route) => {
+    const { text } = route.request().postDataJSON() || {};
+    if (/goose/i.test(text || "")) return route.fallback();
+    return route.fulfill({ json: { addressed: false, named: false, calls: [], reply: "", rejected: [], ms: 0, model: null } });
+  };
+  await live.page.route("**/api/agent/turn", serverNameGate);
+  await checkVoiceBehavior("Live Cook: paused by the button, a bare ‘resume’ restarts the run", async () => {
+    await live.page.getByRole("button", { name: "Pause", exact: true }).click();
+    await live.page.locator(".live-cook-page.is-paused").waitFor({ state: "visible" });
+    await live.stream.say("we'll resume after the call");
+    await live.page.waitForTimeout(400);
+    assert.equal(await live.page.locator(".live-cook-page.is-paused").count(), 1, "talk about resuming is not a resume");
+    await live.stream.say("resume");
+    await live.page.locator(".live-cook-page:not(.is-paused)").waitFor({ state: "visible", timeout: 2_000 });
+  });
+  if (await live.page.locator(".live-cook-page.is-paused").count()) {
+    await live.page.getByRole("button", { name: "Resume", exact: true }).click();
+  }
+  await live.page.unroute("**/api/agent/turn", serverNameGate);
   await checkVoiceBehavior("Live Cook: spoken start, done, undo, and skip update the step state", async () => {
     const mia = live.page.locator(".lc-card.is-a");
     const stepName = await mia.locator(".lc-step-title").innerText();
