@@ -11,7 +11,8 @@
 // that the reading carries `source` so a bug can be traced to the right
 // half.
 import { apiRequest } from "./client.js";
-import { interpretAnswer } from "../utils/understanding.js";
+import { interpretAnswer, matchChineseConfirmation } from "../utils/understanding.js";
+import { matchConfirmation } from "../utils/navCommands.js";
 
 // Comfortably above what this actually takes — measured 1.1-1.5s end to
 // end, warm — but below the point where a cook decides the app has hung.
@@ -27,17 +28,26 @@ const READ_TIMEOUT_MS = 12_000;
  * @param {string} [followUpAsked]  the follow-up already put to them, so a
  *        bare "three" is read as answering THAT rather than the original
  *        question
+ * @param {object} [suggestion]  { value, display } that follow-up offered
+ *        ("Did you mean vegan?"), for a yes to accept
  * @returns {Promise<{value, display, status, followUp, source}>}
  *          Always resolves. There is no error path on purpose: a failed
  *          read is a worse reading, never a broken page.
  */
-export async function readAnswer(question, text, followUpAsked) {
+export async function readAnswer(question, text, followUpAsked, suggestion = null) {
   // A quick-answer chip is the cook picking an exact option. There is
   // nothing to interpret, so don't spend a network round trip — or risk
   // an LLM second-guessing a button they deliberately pressed.
   const chosen = question.options.find((o) => o.label === text.trim());
   if (chosen) {
     return { value: chosen.value, display: chosen.label, status: "confirmed", followUp: null, source: "option" };
+  }
+
+  // A yes or no to "Did you mean vegan?" is settled here. Only this page
+  // knows what was offered; a model handed a bare "yes" would have to guess.
+  const local = { alreadyAsked: Boolean(followUpAsked), suggestion };
+  if (suggestion && (matchConfirmation(text) || matchChineseConfirmation(text))) {
+    return { followUp: null, ...interpretAnswer(question, text, local), source: "local" };
   }
 
   try {
@@ -63,5 +73,6 @@ export async function readAnswer(question, text, followUpAsked) {
     console.info("[understanding] falling back to local reader:", err.message);
   }
 
-  return { ...interpretAnswer(question, text), followUp: null, source: "local" };
+  // followUp first, so a reader that asks again keeps its question.
+  return { followUp: null, ...interpretAnswer(question, text, local), source: "local" };
 }

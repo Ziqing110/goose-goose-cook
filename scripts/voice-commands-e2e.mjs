@@ -1084,14 +1084,167 @@ try {
   assert.deepEqual(understandingInputs, [spokenAnswer]);
   assert.match(await conversationPage.getByRole("log").innerText(), /ramen/);
 
-  await checkVoiceBehavior("Conversation: a named destination navigates instead of entering the answer", async () => {
+  await checkVoiceBehavior("Conversation: ‘start over’ mid-question asks, then clears the answers", async () => {
+    await conversationStream.say("start over");
+    await tagBecomes(conversationPage, "Confirm");
+    assert.equal(await progress.getAttribute("aria-valuenow"), "1", "nothing is cleared before yes");
+    await conversationStream.say("yes");
+    await waitForAttribute(progress, "aria-valuenow", "0");
+    assert.doesNotMatch(await conversationPage.getByRole("log").innerText(), /ramen/);
+    assert.deepEqual(understandingInputs, [spokenAnswer], "‘start over’ was not sent as an answer");
+  });
+  await checkVoiceBehavior("Conversation: an answer that contains ‘go back’ is still typed", async () => {
+    await conversationStream.say("go back to basics");
+    await waitForAttribute(progress, "aria-valuenow", "1");
+    assert.equal(understandingInputs.at(-1), "go back to basics");
+  });
+  await checkVoiceBehavior("Conversation: a note fixed on the right is said in the chat, and the open question asked again", async () => {
+    const dishes = conversationPage.locator(".us-card", { hasText: "Dishes" });
+    await dishes.getByRole("button", { name: "Edit" }).click();
+    const field = conversationPage.getByRole("textbox", { name: "Correct dishes" });
+    await field.fill("Pad thai");
+    await field.press("Enter");
+    const last = conversationPage.locator(".chat-agent .chat-bubble").last();
+    await waitForPageCondition(conversationPage, () => /dishes is now/i.test([...document.querySelectorAll(".chat-agent .chat-bubble")].at(-1)?.textContent || ""));
+    assert.match(await last.textContent(), /How many people are we cooking for\?/, "the open question comes after the change");
+    assert.equal(await progress.getAttribute("aria-valuenow"), "1", "fixing a note does not skip a question");
+  });
+  await checkVoiceBehavior("Conversation: ‘go back to the last question’ asks, then asks that question again", async () => {
+    await conversationStream.say("go back to the last question");
+    await tagBecomes(conversationPage, "Confirm");
+    assert.match(await conversationPage.locator(".goose-bubble-line").textContent(), /last question/);
+    await conversationStream.say("yes");
+    await waitForAttribute(progress, "aria-valuenow", "0");
+    assert.match(await conversationPage.locator(".chat-agent .chat-bubble").last().textContent(), /Back one\. What are we cooking tonight/);
+  });
+  await checkVoiceBehavior("Conversation: ‘go home’ asks first, and ‘yes’ goes Home", async () => {
     await conversationStream.say("go to home");
+    await tagBecomes(conversationPage, "Confirm");
+    assert.match(new URL(conversationPage.url()).pathname, /conversation$/, "nothing moves before yes");
+    await conversationStream.say("yes");
     await conversationPage.waitForURL("**/", { timeout: 3_000 });
   });
   await conversationPage.close();
 
+  const inProgressConversation = () => ({
+    ...clone(originalSession),
+    conversation: { complete: false, answers: { cooks: "2" }, transcript: [], understanding: {}, questionIndex: 0 },
+    recipes: [],
+    sharedSteps: [],
+    mode: null,
+  });
+  const backConversation = await openVoicePage(context, "/session/conversation", { sessionState: inProgressConversation() });
+  diagnosticPage = backConversation.page;
+  await checkVoiceBehavior("Conversation: ‘go back’ asks, then goes Home instead of becoming the answer", async () => {
+    const answersBefore = understandingInputs.length;
+    await backConversation.stream.say("go back");
+    await tagBecomes(backConversation.page, "Confirm");
+    await backConversation.stream.say("yes");
+    await backConversation.page.waitForURL(/127\.0\.0\.1:\d+\/$/, { timeout: 3_000 });
+    assert.equal(understandingInputs.length, answersBefore, "neither ‘go back’ nor ‘yes’ was sent as an answer");
+  });
+  await backConversation.page.close();
+
+  // The goose takes a while to say its question: the voice loads, then
+  // talks. The confirm window used to start at the ask, so by the time
+  // the question had been said and answered the window was often gone,
+  // and the "yes" was typed as an answer. Here the question takes 6s to
+  // say and the answer comes 11s after the ask.
+  const slowVoice = await context.newPage();
+  await slowVoice.addInitScript(() => {
+    speechSynthesis.speak = (u) => {
+      setTimeout(() => u.onstart?.(), 0);
+      setTimeout(() => u.onend?.(), 6_000);
+    };
+    speechSynthesis.cancel = () => {};
+  });
+  await mockApi(slowVoice, { sessionState: inProgressConversation() });
+  const slowStream = await mockStreamingSocket(slowVoice);
+  await slowVoice.goto(BASE + "/session/conversation", { waitUntil: "networkidle" });
+  await unmute(slowVoice, slowStream);
+  diagnosticPage = slowVoice;
+  await checkVoiceBehavior("Conversation: a ‘yes’ after a slowly spoken ‘Start over?’ still starts over", async () => {
+    const slowProgress = slowVoice.getByRole("progressbar", { name: "Questions answered" });
+    await slowStream.say("ramen");
+    await waitForAttribute(slowProgress, "aria-valuenow", "1");
+    await slowStream.say("start over");
+    await tagBecomes(slowVoice, "Confirm");
+    await slowVoice.waitForTimeout(11_000);
+    await slowStream.say("yes", undefined, { startedAgoMs: 300 });
+    await waitForAttribute(slowProgress, "aria-valuenow", "0");
+  });
+  await slowVoice.close();
+
+  // The reader this machine actually runs: the answer model is out of
+  // reach (a free-tier key), so answers are read locally. "Megan" for the
+  // dietary question — "vegan", misheard — used to be taken as given.
+  const localReader = await openVoicePage(context, "/session/conversation", { sessionState: inProgressConversation() });
+  await localReader.page.route("**/api/understanding/read", (route) =>
+    route.fulfill({ status: 503, json: { error: "Your account does not have access to this LLM Gateway model" } }));
+  diagnosticPage = localReader.page;
+  await checkVoiceBehavior("Conversation: an answer that isn't one is asked about again, and ‘yes’ takes the offered reading", async () => {
+    const lr = localReader.page;
+    const lrProgress = lr.getByRole("progressbar", { name: "Questions answered" });
+    const lastGoose = () => lr.locator(".chat-agent .chat-bubble").last().textContent();
+    await localReader.stream.say("ramen");
+    await waitForAttribute(lrProgress, "aria-valuenow", "1");
+    await localReader.stream.say("two");
+    await waitForAttribute(lrProgress, "aria-valuenow", "2");
+    // Not about food, either time — the second used to be taken for its "not".
+    await localReader.stream.say("I'm a duck.");
+    await waitForPageCondition(lr, () => /didn't catch a dietary need/.test([...document.querySelectorAll(".chat-agent .chat-bubble")].at(-1)?.textContent || ""));
+    await localReader.stream.say("I'm not a duck.");
+    await waitForPageCondition(lr, () => /I still need a dietary need/.test([...document.querySelectorAll(".chat-agent .chat-bubble")].at(-1)?.textContent || ""));
+    assert.equal(await lrProgress.getAttribute("aria-valuenow"), "2", "still on the dietary question");
+    await localReader.stream.say("Megan.");
+    await waitForPageCondition(lr, () => /Did you mean “Vegan”\?/.test([...document.querySelectorAll(".chat-agent .chat-bubble")].at(-1)?.textContent || ""));
+    assert.equal(await lrProgress.getAttribute("aria-valuenow"), "2", "a non-answer does not move on");
+    await localReader.stream.say("yes");
+    await waitForAttribute(lrProgress, "aria-valuenow", "3");
+    await lr.locator(".us-card", { hasText: "Dietary" }).getByText("Vegan", { exact: true }).waitFor({ state: "visible" });
+    await localReader.stream.say("Megan");
+    await waitForPageCondition(lr, () => /Explain everything, normal detail, or just the essentials\?/.test([...document.querySelectorAll(".chat-agent .chat-bubble")].at(-1)?.textContent || ""));
+    assert.equal(await lrProgress.getAttribute("aria-valuenow"), "3");
+    await localReader.stream.say("normal detail");
+    await waitForAttribute(lrProgress, "aria-valuenow", "4");
+    assert.match(await lastGoose(), /target finish time/);
+    // "Ah, sure, sure" is not a length of time — not the first time, and
+    // not the second, when it used to be taken as an hour.
+    await localReader.stream.say("啊，可以，可以。");
+    await waitForPageCondition(lr, () => /How long, roughly\?/.test([...document.querySelectorAll(".chat-agent .chat-bubble")].at(-1)?.textContent || ""));
+    await localReader.stream.say("啊，可以，可以。");
+    await waitForPageCondition(lr, () => /I still need a length of time/.test([...document.querySelectorAll(".chat-agent .chat-bubble")].at(-1)?.textContent || ""));
+    assert.equal(await lrProgress.getAttribute("aria-valuenow"), "4", "still on the target time");
+    // A number, but of light years: not six minutes.
+    await localReader.stream.say("6 light year.");
+    await waitForPageCondition(lr, () => /isn't a cooking time/.test([...document.querySelectorAll(".chat-agent .chat-bubble")].at(-1)?.textContent || ""));
+    assert.equal(await lrProgress.getAttribute("aria-valuenow"), "4", "light years are not a target time");
+    await localReader.stream.say("四十分钟");
+    await waitForAttribute(lrProgress, "aria-valuenow", "5");
+    await lr.locator(".us-card", { hasText: "Target time" }).getByText("40 minutes", { exact: true }).waitFor({ state: "visible" });
+  });
+  await localReader.page.close();
+
+  // One reading still unsure, so the footer carries its longest line and
+  // has to wrap at this width.
+  const finishedFixture = clone(originalSession);
+  finishedFixture.conversation.understanding = {
+    dishIdea: { value: ["ramen"], display: "Ramen", status: "low-confidence", heard: "ramen" },
+  };
   const completedConversation = await openVoicePage(context, "/session/conversation", {
-    sessionState: clone(originalSession),
+    sessionState: finishedFixture,
+  });
+  diagnosticPage = completedConversation.page;
+  await checkVoiceBehavior("Conversation: the finished page keeps its buttons at the right edge", async () => {
+    for (const width of [1280, 1180]) {
+      await completedConversation.page.setViewportSize({ width, height: 800 });
+      await completedConversation.page.getByRole("button", { name: "Check the inventory" }).waitFor({ state: "visible" });
+      const edges = await completedConversation.page.evaluate(() => ({
+        footer: document.querySelector(".convo-footer").getBoundingClientRect().right,
+        actions: document.querySelector(".convo-done-actions").getBoundingClientRect().right,
+      }));
+      assert.ok(Math.abs(edges.footer - edges.actions) < 2, `at ${width}px the actions end at ${edges.actions}, the footer at ${edges.footer}`);
+    }
   });
   await checkVoiceBehavior("Conversation: ‘continue to inventory’ advances after the final answer", async () => {
     await completedConversation.stream.say("continue to inventory");
@@ -1173,7 +1326,10 @@ try {
     await homePage.waitForURL("**/session/conversation", { timeout: 3_000 });
   });
   await checkVoiceBehavior("Home: the exact abandon passphrase abandons the run", async () => {
+    // Resuming landed on the conversation, which asks before going home.
     await homeStream.say("go to home");
+    await tagBecomes(homePage, "Confirm");
+    await homeStream.say("yes");
     await homePage.waitForURL("**/", { timeout: 3_000 });
     await homeStream.say("abandon the run");
     await waitForPageCondition(homePage, () => document.querySelector(".goose-bubble-tab")?.textContent === "Confirm");

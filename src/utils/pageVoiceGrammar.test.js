@@ -54,6 +54,34 @@ test("Home and completed Conversation page commands match their advertised trans
   ]);
 });
 
+test("Conversation start over and go back match only as the whole utterance", () => {
+  assertMatches(CONVERSATION_VOICE.startOver, [
+    "start over", "start again", "let's start over", "lets start over", "can we start over",
+    "start from scratch", "start from the beginning", "begin again", "restart", "please start over",
+  ]);
+  assertMatches(CONVERSATION_VOICE.goHome, [
+    "go back", "take me back", "please go back", "go back home", "go home", "go to home", "take me home",
+    "take me back home", "back to home", "go back to the home page", "go to the start",
+  ]);
+  assertMatches(CONVERSATION_VOICE.previousQuestion, [
+    "go back to the last question", "go back to last question", "back to the previous question",
+    "can we go back to the last question", "go back a question", "go back one question", "last question",
+    "previous question", "redo the last answer", "change my last answer", "take me back to the previous one",
+  ]);
+  assert.equal(hear(CONVERSATION_VOICE.goHome, "go back to the last question"), null, "not home");
+  assert.equal(hear(CONVERSATION_VOICE.previousQuestion, "go back home"), null, "not the last question");
+  // Heard while the page takes dictation, so an answer that merely
+  // contains the words has to stay an answer.
+  for (const answer of [
+    "start over with pasta instead", "i want the restart soup", "go back to basics", "go back to my mum's recipe",
+    "the last question my mum asked was about noodles", "home made dumplings",
+  ]) {
+    assert.equal(hear(CONVERSATION_VOICE.startOver, answer), null, answer);
+    assert.equal(hear(CONVERSATION_VOICE.goHome, answer), null, answer);
+    assert.equal(hear(CONVERSATION_VOICE.previousQuestion, answer), null, answer);
+  }
+});
+
 test("Inventory ingredient, tab, zoom, pan, step, approval, and notice commands match", () => {
   const ingredients = ingredientVoicePhrases("spring onion");
   assertMatches(ingredients.out, [

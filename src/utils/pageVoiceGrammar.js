@@ -24,6 +24,28 @@ export const CONVERSATION_VOICE = {
     /\bcontinue to (?:the )?inventory\b/,
     /\bgo to (?:the )?inventory\b/,
   ],
+  // The three below are heard even while the page takes dictation, so they
+  // are anchored to the whole utterance: "start over" is never an answer
+  // to anything, "start over with pasta instead" might be.
+  startOver: [
+    /^(?:(?:can|could) we |let'?s |lets )?(?:start (?:over|again)|start from (?:the )?(?:scratch|beginning|top)|begin again|restart)$/,
+  ],
+  // "Go back" is not an answer either, and typing it stranded you on the
+  // page you asked to leave. It means Home here, the page before the
+  // questions, so it does what "go home" does — and both ask first.
+  goHome: [
+    /^(?:go back|take me back)$/,
+    /^(?:go|take me|head) (?:back )?(?:to )?(?:the )?(?:home|start)(?: page| screen)?$/,
+    /^back (?:to )?(?:the )?home(?: page| screen)?$/,
+  ],
+  // Stepping back one question, to answer it again. Said on its own, like
+  // the others: "go back to the last question my mum asked" is not it.
+  previousQuestion: [
+    /^(?:(?:can|could) we |let'?s |lets )?(?:go |take me )?back (?:to )?(?:the )?(?:last|previous) (?:question|one)$/,
+    /^(?:(?:can|could) we |let'?s |lets )?go back (?:a|one) question$/,
+    /^(?:the )?(?:last|previous) question$/,
+    /^(?:redo|change|fix) (?:the |my )?(?:last|previous) (?:question|answer)$/,
+  ],
 };
 
 export const INVENTORY_VOICE = {

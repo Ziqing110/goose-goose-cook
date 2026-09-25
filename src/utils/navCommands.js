@@ -118,6 +118,7 @@ const CONFIRM_CONFIDENCE = 0.4;
 const CONFIRM_COMMAND_WORDS = 8;
 
 const YES = /^(?:yes|yeah|yep|yup|sure|ok|okay|do it|go ahead|confirm|please)\b/;
+const LEADING_FILLER = /^(?:(?:um+|uh+|er+|erm|ah+|oh|hmm+|mm+|well|so)\s+)+/;
 const NO = /^(?:no|nope|nah|don't|do not|cancel|never ?mind|stop|wait)\b/;
 
 // Exported so a page that runs its own yes/no confirmation (rather than
@@ -145,7 +146,10 @@ function countUnits(said) {
  *          than as a "no" — the person moved on to something else.
  */
 export function matchConfirmation(text) {
-  const said = normalize(text);
+  // "Uh, yes" is a yes. Speech opens with a filler often enough, and
+  // missing the answer behind it closed the question and handed the
+  // "yes" to whatever came next — on the conversation page, as an answer.
+  const said = normalize(text).replace(LEADING_FILLER, "");
   if (!said) return null;
   // Answers are short. "no, the other one next to the stock" is someone
   // pointing at a jar, not declining a prompt.

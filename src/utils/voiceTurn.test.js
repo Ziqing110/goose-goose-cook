@@ -159,6 +159,73 @@ test("dictation: page commands stand down while the page is dictating", () => {
   assert.deepEqual(onConversation("check the inventory"), { type: "dictate" });
 });
 
+// The conversation page registers these for both of its states.
+const conversationCommands = () =>
+  registerVoiceCommands([
+    {
+      phrases: CONVERSATION_VOICE.startOver,
+      whileDictating: true,
+      allowSubject: true,
+      confirm: "Start over?",
+      run: noop,
+    },
+    { phrases: CONVERSATION_VOICE.goHome, whileDictating: true, confirm: "Go back home?", run: noop },
+    {
+      phrases: CONVERSATION_VOICE.previousQuestion,
+      whileDictating: true,
+      allowSubject: true,
+      confirm: "Go back to the last question?",
+      run: noop,
+    },
+  ]);
+
+test("dictation: 'start over' is heard mid-question, and asks first", () => {
+  conversationCommands();
+  for (const said of ["start over", "let's start over", "can we start over"]) {
+    const r = onConversation(said);
+    assert.equal(r.type, "confirm", said);
+    assert.equal(r.question, "Start over?");
+  }
+  const yes = onConversation("yes", { pending: { perform: noop } });
+  assert.equal(yes.type, "perform");
+});
+
+test("dictation: 'go back' and 'go home' ask before leaving, instead of typing or navigating", () => {
+  conversationCommands();
+  // "go home" is also a named destination; the page's own command, which
+  // asks first, is heard before navigation gets a look at it.
+  for (const said of ["go back", "go back home", "go home", "take me home"]) {
+    const r = onConversation(said);
+    assert.equal(r.type, "confirm", said);
+    assert.equal(r.question, "Go back home?", said);
+  }
+});
+
+test("dictation: 'go back to the last question' asks, and is not mistaken for home", () => {
+  conversationCommands();
+  for (const said of ["go back to the last question", "can we go back to the last question", "previous question"]) {
+    const r = onConversation(said);
+    assert.equal(r.type, "confirm", said);
+    assert.equal(r.question, "Go back to the last question?", said);
+  }
+});
+
+test("dictation: 'uh, yes' answers the question the page asked", () => {
+  assert.deepEqual(onConversation("Uh, yes.", { pending: {} }), { type: "perform", clearPending: true });
+});
+
+test("dictation: answers that contain the words are still typed", () => {
+  conversationCommands();
+  for (const said of ["go back to basics", "start over with pasta instead", "back", "previous"]) {
+    assert.deepEqual(onConversation(said), { type: "dictate" }, said);
+  }
+});
+
+test("dictation: a mumbled 'start over' is typed rather than acted on", () => {
+  conversationCommands();
+  assert.deepEqual(onConversation("start over", { confidence: 0.3 }), { type: "dictate" });
+});
+
 test("dictation: a finished conversation hears its own command before navigation", () => {
   registerVoiceCommands([{ phrases: CONVERSATION_VOICE.continueInventory, run: noop }]);
   const r = turn("go to the inventory", { route: ROUTES.conversation });

@@ -55,9 +55,13 @@ const liveLayers = () => {
  *   run      Function  what the button does
  *   label    string    optional confirmation shown after it runs
  *   confirm  string    optional question to ask FIRST. Use it for
- *                      anything irreversible: approving a recipe,
- *                      starting a cook. Mishearing those costs more
- *                      than one extra sentence.
+ *                      anything irreversible: starting a cook,
+ *                      throwing answers away. Mishearing those costs
+ *                      more than one extra sentence.
+ *   whileDictating  boolean  still heard while the page takes
+ *                      dictation. Only for words that are never an
+ *                      answer, and its phrases should be anchored to the
+ *                      whole utterance.
  * @returns {Function} unregister
  */
 export function registerVoiceCommands(commands, { priority = 0, exclusive = false } = {}) {
@@ -112,11 +116,15 @@ function rawMatch(phrase, transcript) {
  * phrase that would otherwise move you. They get the same normalized
  * text the navigation matcher works on; `transcript` is what was said
  * before normalization, so free-text captures keep their own spelling.
+ *
+ * `dictating` narrows the search to commands marked `whileDictating`,
+ * for a page that is otherwise typing every word it hears.
  */
-export function matchPageCommand(said, transcript) {
+export function matchPageCommand(said, transcript, { dictating = false } = {}) {
   if (!said) return null;
   const live = liveLayers();
   if (!live.length) return null;
+  const commands = live.flatMap((l) => l.commands).filter((c) => !dictating || c.whileDictating);
   // Tried in order — command grammar is closed and this only widens how
   // the same words can be padded, so the first hit either way is the
   // right one.
@@ -124,7 +132,7 @@ export function matchPageCommand(said, transcript) {
   const loosened = loosen(said);
   if (loosened && loosened !== said) candidates.push(loosened);
   for (const text of candidates) {
-    for (const c of live.flatMap((l) => l.commands)) {
+    for (const c of commands) {
       for (const p of c.phrases) {
         const match = p.exec(text);
         // The match comes back with the command so `run` can read what

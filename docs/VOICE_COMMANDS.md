@@ -85,12 +85,24 @@ A word shared by two kitchens picks neither.
 
 ## Conversation
 
-Every answer is dictated into the answer box, so commands stand down. Only navigation
-by name works while answering. When all questions are answered:
+Every answer is dictated into the answer box, so commands stand down. While answering,
+only navigation by name and the sentences below are heard — said on their own,
+never inside a longer answer. A note corrected in the sidebar is acknowledged in the
+chat, followed by the question still waiting on an answer.
 
-| Say | Does |
-|---|---|
-| "check the inventory", "continue to the inventory", "go to the inventory" | Goes to Inventory |
+An answer that isn't one is asked about again rather than taken, however often it is
+said: "okay" or "可以" to any question, a number that counts something else ("6 light
+years"), no number for servings or time, a sentence that isn't about food for the
+dietary question. Where a slip is likely, the goose offers its reading back ("Did you
+mean vegan?", "Did you mean 6 hours?", a clock time as minutes from now) and a yes takes
+it. Chinese answers are read too ("四十分钟", "四个人", "不吃辣").
+
+| When | Say | Does |
+|---|---|---|
+| any time | "start over", "start again", "let's start over", "restart" | *Asks*, then clears every answer and asks the first question again |
+| any time | "go back", "go back home", "go home", "take me home" | *Asks*, then goes Home (answers are kept) |
+| after the first answer | "go back to the last question", "previous question", "go back a question", "redo my last answer" | *Asks*, then asks the previous question again |
+| all answered | "check the inventory", "continue to the inventory", "go to the inventory" | Goes to Inventory |
 
 ## Inventory
 
