@@ -360,6 +360,9 @@
   transition: transform 120ms ease-out;
 }
 .inv-check:active { transform: scale(0.97); }
+/* Approved: the ticks still read, they just stop taking clicks. */
+.inv-check:disabled { cursor: default; transform: none; }
+.inv-check:disabled .inv-check-box { opacity: 0.55; }
 .inv-check-box {
   width: 28px;
   height: 28px;

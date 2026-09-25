@@ -3,6 +3,12 @@
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+// Where the Inventory tab commands start. "Back to the ingredients" is the
+// natural way to leave the graph, and without it the bare "back" in it
+// navigated off the page entirely; "go back to ingredients" named this
+// very route and answered "You're already here."
+const TAB_VERB = "(?:show (?:me )?|open |see |view |switch (?:back )?to |go (?:back )?to |back to |take me to |jump to )";
+
 export const HOME_VOICE = {
   addKitchen: [/\badd (?:a |another )?kitchen\b/, /\bnew kitchen\b/],
   resume: [/\bresume\b/, /\bcarry on with the run\b/],
@@ -21,22 +27,20 @@ export const CONVERSATION_VOICE = {
 };
 
 export const INVENTORY_VOICE = {
-  everythingOnHand: [
-    /\beverything(?:'s| is)? on hand\b/,
-    /\bmark everything on hand\b/,
-    /\ball on hand\b/,
-  ],
   addTask: [/\badd (?:a |another )?task\b(.*)$/, /\badd (?:a |another )?step\b(.*)$/],
   showIngredients: [
-    /\bshow (?:me )?(?:the )?ingredients\b/,
-    /\bingredients tab\b/,
-    /\bgo to (?:the )?ingredients\b/,
+    new RegExp(`\\b${TAB_VERB}(?:the )?(?:ingredients?|ingredient list|checklist)\\b`),
+    /\bingredients? (?:tab|list)\b/,
+    /^ingredients$/,
   ],
   showGraph: [
-    /\bshow (?:me )?(?:the )?(?:recipe graph|board)\b/,
+    new RegExp(`\\b${TAB_VERB}(?:the )?(?:recipe graph|recipe board|graph|board)\\b`),
     /\brecipe graph\b/,
-    /\bgo to (?:the )?(?:recipe graph|board)\b/,
+    /\bgraph tab\b/,
   ],
+  // "Put it back" right after "no ginger": the ingredient is the one just
+  // marked out, so the cook doesn't have to name it twice.
+  restoreLast: [/\b(?:put|bring|add|get) (?:it|that|them) back\b/, /\bundo that\b/, /\bi (?:do )?have (?:it|that)\b/],
   zoomIn: [/\bzoom in\b/, /\bzoom (?:in )?closer\b/],
   zoomOut: [/\bzoom out\b/],
   fit: [/\bfit (?:the )?(?:board|graph)\b/, /\breset zoom\b/, /\bzoom to fit\b/],
@@ -73,22 +77,37 @@ export const INVENTORY_VOICE = {
   ],
 };
 
+// Both lists are matched with the subject allowed ("I have ginger", "we're
+// out of ginger"): each phrase names the ingredient, so the subject is
+// part of saying it, not a sign of two people chatting. "Out" is tried
+// first, so "don't have ginger" never reads as "have ginger".
 export function ingredientVoicePhrases(name) {
   const escaped = escapeRe(name);
+  const some = "(?:the |some |any |more )?";
   return {
     out: [
       new RegExp(`\\bno (?:more )?${escaped}\\b`),
-      new RegExp(`\\bout of ${escaped}\\b`),
-      new RegExp(`\\b${escaped} is out\\b`),
-      new RegExp(`\\b(?:don't|dont) have (?:any )?${escaped}\\b`),
-      new RegExp(`\\bmark ${escaped} out\\b`),
+      new RegExp(`\\b(?<!not )out of ${some}${escaped}\\b`),
+      new RegExp(`\\b${escaped} is (?:out|gone|finished|used up)\\b`),
+      new RegExp(`\\b(?:don't|dont|do not|haven't|havent|have not) (?:have|got) ${some}${escaped}\\b`),
+      new RegExp(`\\bmark (?:the )?${escaped} (?:as )?out\\b`),
+      new RegExp(`\\buncheck (?:the )?${escaped}\\b`),
     ],
     onHand: [
-      new RegExp(`\\bgot (?:the |some )?${escaped}\\b`),
-      new RegExp(`\\bhave (?:the |some )?${escaped}\\b`),
-      new RegExp(`\\bfound (?:the |some )?${escaped}\\b`),
-      new RegExp(`\\b${escaped} is (?:back|on hand)\\b`),
-      new RegExp(`\\bmark ${escaped} on hand\\b`),
+      new RegExp(`\\bgot ${some}${escaped}\\b`),
+      new RegExp(`\\bhave ${some}${escaped}\\b`),
+      new RegExp(`\\bfound ${some}${escaped}\\b`),
+      new RegExp(`\\b${escaped} is (?:back|on hand|here|in stock|available)\\b`),
+      new RegExp(`\\bmark (?:the )?${escaped} (?:as )?(?:on hand|back|available)\\b`),
+      new RegExp(`\\bnot out of ${some}${escaped}\\b`),
+      // Adding it back, which is how people say undoing an "out" — and
+      // every one of these has a "back" in it that used to leave the page.
+      new RegExp(`\\badd (?:back )?${some}${escaped}(?: back)?\\b`),
+      // "Get ginger" alone is a shopping trip, not a restock: these need the back.
+      new RegExp(`\\b(?:put|bring|get) back ${some}${escaped}\\b`),
+      new RegExp(`\\b(?:put|bring|get) ${some}${escaped} back\\b`),
+      new RegExp(`\\b${escaped} back\\b`),
+      new RegExp(`\\b(?:re-?)?check (?:the )?${escaped}\\b`),
     ],
   };
 }

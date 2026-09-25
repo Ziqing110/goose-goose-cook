@@ -98,11 +98,11 @@ While the board is still being written nothing is live.
 
 | Say | Does |
 |---|---|
-| "no ginger", "no more ginger", "out of ginger", "ginger is out", "don't have any ginger", "mark ginger out" | Marks that ingredient out |
-| "got ginger", "have some ginger", "found ginger", "ginger is back / on hand", "mark ginger on hand" | Back on hand (does nothing if it already is) |
-| "everything's on hand", "mark everything on hand", "all on hand" | Clears every "out" |
-| "show ingredients", "ingredients tab", "go to ingredients" | Ingredients tab |
-| "show the recipe graph / board", "recipe graph", "go to the board" | Graph tab |
+| "no ginger", "we're out of ginger", "ginger is out / gone", "I don't have any ginger", "mark ginger out" | Marks that ingredient out (not once approved) |
+| "got ginger", "I have ginger", "found ginger", "add ginger back", "put the ginger back", "ginger is back / on hand", "mark ginger on hand" | Back on hand (says so if it already is) |
+| "put it back", "add it back", "undo that" | Puts the last ingredient marked out back on hand |
+| "show ingredients", "back to the ingredients", "go back to ingredients", "switch to ingredients", "ingredients tab", "ingredients" | Ingredients tab |
+| "show the recipe graph / board", "recipe graph", "back to the graph", "switch to the board", "graph tab" | Graph tab |
 | "zoom in", "zoom closer" · "zoom out" · "fit the board / graph", "reset zoom", "zoom to fit" | Zoom |
 | "scroll / pan left / right / up / down" | Pans the graph |
 | "scroll to step X", "find the step X", "show me the step X" | Scrolls to a step |
@@ -111,7 +111,7 @@ While the board is still being written nothing is live.
 | "add a task to toast the sesame", "…called / named / for X" | Pre-fills the name |
 | "add a task … before X" | Pre-fills "runs before X" |
 | "add a task … between X and Y" | Pre-fills both positions |
-| "approve" | *Asks*, then approves and locks the board (refused while a step is blocked) |
+| "approve", "approve the plan" | Approves and locks the board and the ingredient checklist, no yes/no (refused, with the reason, while a step is blocked) |
 | "revise", "unapprove", "go back to editing" | Unlocks (only after approval) |
 | "remove / drop the blocked steps" | *Asks*, then deletes them (only when steps are blocked) |
 | "edit the kitchen (profile)" | Opens the kitchen form (only when the kitchen falls short) |
@@ -225,7 +225,9 @@ to the plan"). Once a run exists the page takes every turn and navigation stands
 
 Say the agent's name first: **"Goose, I'm done with the onion"**. Turns without it
 are ignored, and for a few seconds after Goose asks a question a short answer
-("the garlic") needs no name. The words go to a model that picks the action and the
+("the garlic") needs no name. The other exception is a paused run: a short turn
+that is only a resume ("resume", "keep going", "继续") restarts it without the name,
+since the paused screen asks for exactly that; "we'll resume after the call" does not. The words go to a model that picks the action and the
 step, so you can talk naturally ("take the garlic and start the rice"), and every
 action runs through the same handler as its button. If the model is slow or
 unreachable the page falls back to the keyword grammar below. Typed commands in
@@ -248,7 +250,7 @@ plausibly act on.
 | "drop", "put it back", "someone else take it" | Gives it up |
 | "undo", "oops", "never mind", "wait no" | Undoes the last action |
 | "pause", "hold on", "take a break", "time out" | Pauses every clock |
-| "resume", "unpause", "back on", "keep going" | Resumes |
+| "resume", "unpause", "back on", "keep going" | Resumes (no name needed while paused) |
 | "status", "what's next", "where are we", "how long" | Reads status |
 | "score", "points", "leaderboard", "who's winning" | Reads scores |
 | "we're done", "all done", "finish the cook", "end the cook", "dinner's up" | Ends the run |

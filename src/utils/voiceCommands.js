@@ -40,6 +40,29 @@ function detectIntent(text) {
   return { intent: "unknown", matched: "" };
 }
 
+// "Resume" said about later rather than now.
+const NOT_NOW = /\b(?:don'?t|do not|not|later|yet|after|until|wait)\b|别|先不|等会|等下|待会|一会/;
+const MAX_BARE_RESUME_UNITS = 4;
+
+/**
+ * Is this turn nothing but "resume"?
+ *
+ * While a run is paused, resuming is the one thing anybody could mean,
+ * and the paused screen says to "say resume" — without the agent's
+ * name. Everything else in the live cook has to be addressed, and so
+ * did this, so doing what the screen said did nothing and only the
+ * button worked. A short turn that is only a resume counts, name or
+ * not; "we'll resume after the call" and "don't resume yet" do not.
+ * Length is in words for Latin and characters for CJK, as elsewhere.
+ */
+export function isBareResume(text) {
+  const said = normalizeLoose(text);
+  if (!said || detectIntent(said).intent !== "resume" || NOT_NOW.test(said)) return false;
+  const latin = said.replace(/[一-鿿]/g, " ").split(" ").filter(Boolean).length;
+  const cjk = (said.match(/[一-鿿]/g) || []).length;
+  return latin + cjk <= MAX_BARE_RESUME_UNITS;
+}
+
 /** Match the leftover words against a scoped candidate list. The
  *  similarity metric itself (Dice over content-word sets, three
  *  confidence tiers) lives in stepNameMatch.js, shared with the recipe

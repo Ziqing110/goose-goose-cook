@@ -92,6 +92,13 @@ test("nav: low confidence bare back is dropped or confirmable, not a silent goto
   assert.notEqual(r.action, "goto");
 });
 
+test("nav: putting something back is not going back", () => {
+  for (const said of ["put it back", "add the ginger back", "bring the soy sauce back", "give it back"]) {
+    assert.deepEqual(matchNavCommand(said, { route: "/session/inventory" }), { action: "none" }, said);
+  }
+  assert.equal(matchNavCommand("go back", { route: "/session/inventory" }).action, "back");
+});
+
 test("nav: confirmation yes/no", () => {
   assert.equal(matchConfirmation("yes"), "yes");
   assert.equal(matchConfirmation("nope"), "no");

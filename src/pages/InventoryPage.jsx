@@ -108,9 +108,18 @@ function ingredientVoiceCommands(items, { markOut, markOnHand }) {
     const name = normalizeUtterance(item.label);
     if (!name) return [];
     const phrases = ingredientVoicePhrases(name);
+    // allowSubject: every phrase names the ingredient, so "I have ginger"
+    // is the cook talking to the app. Without it the subject read as two
+    // people chatting, and the most natural ways of saying either — "I
+    // have ginger", "we're out of ginger" — did nothing.
     return [
-      { phrases: phrases.out, label: `${item.label} — marked out.`, run: () => markOut(item.id) },
-      { phrases: phrases.onHand, label: `${item.label} — back on hand.`, run: () => markOnHand(item.id) },
+      { phrases: phrases.out, allowSubject: true, label: `${item.label} — marked out.`, run: () => markOut(item.id) },
+      {
+        phrases: phrases.onHand,
+        allowSubject: true,
+        label: `${item.label} — back on hand.`,
+        run: () => markOnHand(item.id, item.label),
+      },
     ];
   });
 }
@@ -129,7 +138,7 @@ function Mono({ children }) {
   return <span className="mono">{children}</span>;
 }
 
-function Checkbox({ checked, label, onChange }) {
+function Checkbox({ checked, label, onChange, disabled = false }) {
   return (
     <button
       type="button"
@@ -137,6 +146,7 @@ function Checkbox({ checked, label, onChange }) {
       aria-checked={checked}
       aria-label={`${label} — ${checked ? "on hand" : "out"}`}
       className={`inv-check ${checked ? "is-on" : ""}`}
+      disabled={disabled}
       onClick={onChange}
     >
       <span className="inv-check-box" aria-hidden="true">
@@ -216,7 +226,7 @@ function CategoryMark({ category }) {
   );
 }
 
-function IngredientRow({ item, onToggle, statusLineFor, dishTitles, delay }) {
+function IngredientRow({ item, onToggle, statusLineFor, dishTitles, delay, locked = false }) {
   const onHand = !item.out;
   const [opened, setOpened] = useState(false);
   const expanded = !onHand || opened;
@@ -231,7 +241,7 @@ function IngredientRow({ item, onToggle, statusLineFor, dishTitles, delay }) {
   return (
     <li className={`inv-row ${onHand ? "" : "is-out"} ${expanded ? "is-open" : ""}`} style={{ animationDelay: `${delay}ms` }}>
       <div className="inv-row-head">
-        <Checkbox checked={onHand} label={item.label} onChange={onToggle} />
+        <Checkbox checked={onHand} label={item.label} onChange={onToggle} disabled={locked} />
         <span className="inv-row-main">
           <span className="inv-row-title-line" onClick={toggleOpen}>
             <span className="inv-row-title">{item.label}</span>
@@ -489,29 +499,30 @@ export default function InventoryPage() {
   };
 
   // The voice equivalent of the "Approve the plan" button, in the
-  // same words printed on it. Approving locks the graph, so it asks
-  // first — and it refuses while a step is blocked, exactly as the
-  // button does when disabled. A voice command that quietly does
-  // nothing because a button was greyed out is a bug report waiting to
-  // happen, so it says why.
+  // same words printed on it. It doesn't ask first: approving only
+  // locks the board, it doesn't leave the page, and "revise" undoes it
+  // in one word — a yes/no on top of that was a second approval. It
+  // refuses while a step is blocked, exactly as the button does when
+  // disabled, and says why rather than quietly doing nothing.
   useEffect(() => {
-    // Nothing to approve while the board is still being generated — a
-    // stray "approve" overheard during that wait would otherwise open a
-    // spoken confirm for a plan that doesn't exist yet.
+    // Nothing to approve while the board is still being generated.
     if (recipes.length === 0) return undefined;
     return registerVoiceCommands([
       {
         phrases: INVENTORY_VOICE.approve,
-        confirm: "Approve the board and move to scheduling? Say yes or no.",
-        label: "Approved.",
         run: () => {
-          if (dishIsUndoable) return;
+          if (approved) return "Already approved. Say “continue” to pick the cooks.";
+          if (dishIsUndoable) {
+            const n = blockedIds.length;
+            return `Can't approve yet — ${n} ${n === 1 ? "step is" : "steps are"} blocked. Put the missing ingredients back, or say “remove the blocked steps.”`;
+          }
           approve();
+          return "Approved. Say “continue” to pick the cooks, or “revise” to change it.";
         },
       },
     ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dishIsUndoable, recipes.length]);
+  }, [approved, dishIsUndoable, blockedIds, recipes.length]);
 
   const revise = () => {
     recipes.forEach((r) => dispatch({ type: "session/recipes/updateOne", payload: { recipeId: r.id, patch: { approved: null } } }));
@@ -543,7 +554,6 @@ export default function InventoryPage() {
   };
 
   const hasDishes = recipes.length > 0;
-  const hasOut = outMaterialIds.length > 0;
   const loading = hasDishes && !catalog && !catalogError;
 
   // The chef-at-work beat covers recipe generation, which is the one
@@ -572,17 +582,24 @@ export default function InventoryPage() {
     dispatch({
       type: "voice/setHint",
       payload: {
-        hint: {
-          line: "Tell me what you're out of — say “no ginger.”",
-          sub: "Everything's on hand until you say otherwise. You can also say “add a task.”",
-        },
+        hint: approved
+          ? { line: "Approved. Say “continue” to pick the cooks.", sub: "Or “revise” to change the plan." }
+          : {
+              line: "Tell me what you're out of — say “no ginger.”",
+              sub: "Changed your mind? Say “add ginger back.” You can also say “add a task.”",
+            },
       },
     });
     return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
-  }, [dispatch, hasDishes, loading]);
+  }, [dispatch, hasDishes, loading, approved]);
 
+  // What's on hand is part of the plan: once it's approved the checklist
+  // is as locked as the board, and revising unlocks both. Leaving it
+  // editable let an approved plan pick up blocked steps behind its back.
+  const APPROVED_LOCK = "The plan's approved — say “revise” to change what's on hand.";
   const setOut = (ids) => dispatch({ type: "session/update", payload: { outMaterialIds: ids } });
   const toggle = (id) => {
+    if (approved) return;
     const next = new Set(outMaterialIds);
     next.has(id) ? next.delete(id) : next.add(id);
     setOut([...next]);
@@ -591,12 +608,22 @@ export default function InventoryPage() {
   // "got ginger" while it's already on hand should do nothing, not put
   // it back out.
   const markOut = (id) => {
+    if (approved) return APPROVED_LOCK;
     if (!outMaterialIds.includes(id)) setOut([...outMaterialIds, id]);
+    return undefined;
   };
-  const markOnHand = (id) => {
-    if (outMaterialIds.includes(id)) setOut(outMaterialIds.filter((x) => x !== id));
+  const markOnHand = (id, label) => {
+    if (approved) return APPROVED_LOCK;
+    if (!outMaterialIds.includes(id)) return label ? `${label} is already on hand.` : undefined;
+    setOut(outMaterialIds.filter((x) => x !== id));
+    return undefined;
   };
-  const markAllOnHand = () => setOut([]);
+  // The ingredient most recently marked out that is still on the list:
+  // what "put it back" means. outMaterialIds is in the order they went out.
+  const lastOut = () => {
+    const listed = new Set(inv.ingredients.map((i) => i.id));
+    return [...outMaterialIds].reverse().find((id) => listed.has(id)) || null;
+  };
 
   // Mirrors the checkboxes and the "Add a task" button: everything voice
   // can do here is something a click already does, said in the words the
@@ -606,9 +633,15 @@ export default function InventoryPage() {
     return registerVoiceCommands([
       ...ingredientVoiceCommands(inv.ingredients, { markOut, markOnHand }),
       {
-        phrases: INVENTORY_VOICE.everythingOnHand,
-        label: "Everything's on hand.",
-        run: () => hasOut && markAllOnHand(),
+        phrases: INVENTORY_VOICE.restoreLast,
+        allowSubject: true,
+        run: () => {
+          if (approved) return APPROVED_LOCK;
+          const id = lastOut();
+          if (!id) return "Nothing's marked out.";
+          markOnHand(id);
+          return `${labelOfMaterial(id)} — back on hand.`;
+        },
       },
       {
         // The button only shows on the recipe graph tab, but the command
@@ -672,7 +705,7 @@ export default function InventoryPage() {
       },
     ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasDishes, catalog, inv.ingredients, outMaterialIds, hasOut, approved, boardNodes, nodeById]);
+  }, [hasDishes, catalog, inv.ingredients, outMaterialIds, approved, boardNodes, nodeById]);
 
   // Board-level commands: switching tabs, opening a step by name, the
   // kitchen-shortfall notice, dropping blocked steps, and un-approving.
@@ -824,8 +857,12 @@ export default function InventoryPage() {
     }
 
     return registerVoiceCommands(commands);
+    // fitScale as well as zoomPct: setZoomPct reads it, and at the fitted
+    // view zoomPct stays 0 while the fit itself changes, so a command
+    // registered before the board measured itself zoomed off the wrong
+    // scale — "zoom in" landed on 60% instead of 5%.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasDishes, catalog, approved, boardNodes, nodeById, dishIsUndoable, blockedIds, showEquipment, kitchenProfile, lackingKey, zoomPct, navigate]);
+  }, [hasDishes, catalog, approved, boardNodes, nodeById, dishIsUndoable, blockedIds, showEquipment, kitchenProfile, lackingKey, zoomPct, fitScale, navigate]);
 
   // A guessed step reference — an "open X" that came back close but not
   // exact, or a "before X"/"between X and Y" task position. Same
@@ -1074,7 +1111,9 @@ export default function InventoryPage() {
                 <div className="inv-tabrow-end">
                   <span className="inv-hint">
                     {tab === "ingredients"
-                      ? "Uncheck whatever you’re out of."
+                      ? approved
+                        ? "Approved — revise the plan to change what’s on hand."
+                        : "Uncheck whatever you’re out of."
                       : approved
                         ? "Approved — revise the plan to change a step."
                         : "Drag a card to move it. Click one to edit."}
@@ -1163,6 +1202,7 @@ export default function InventoryPage() {
                             <IngredientRow
                               key={item.id}
                               item={item}
+                              locked={Boolean(approved)}
                               onToggle={() => toggle(item.id)}
                               statusLineFor={statusLineFor}
                               dishTitles={inv.dishTitles}
@@ -1353,11 +1393,6 @@ export default function InventoryPage() {
               {inv.onHandCount} / {inv.ingredients.length} ingredients on hand
             </span>
             <div className="inv-footer-actions">
-              {hasOut && (
-                <button type="button" className="btn inv-footer-secondary" onClick={markAllOnHand}>
-                  Mark everything on hand
-                </button>
-              )}
               {!approved && dishIsUndoable && (
                 <button type="button" className="btn inv-footer-secondary inv-btn-remove" onClick={dropBlockedSteps}>
                   Remove the blocked {blockedIds.length === 1 ? "step" : "steps"}
