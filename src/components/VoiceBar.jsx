@@ -68,6 +68,16 @@ const PHRASE_WINDOW_MS = 25_000;
 // than the meter running. Everywhere else the mic only exists to take a
 // command, so a quiet page means nobody is there — and the socket bills
 // by the second it stays open.
+//
+// Except while a cook is actually running. Then there is no quiet budget
+// at all: somebody minding a pan or chopping for ten minutes without a
+// word is cooking, not gone, and a mic that switched itself off under
+// them was the goose walking out mid-service. It stays on until they
+// turn it off, pause, or finish. (The server's own inactivity timeout
+// cannot fire either -- it counts audio, and the mic sends it
+// continuously -- and should the session ever close anyway, the
+// transcriber reconnects.)
+const IDLE_MS_COOKING = Infinity;
 const IDLE_MS_LIVE_COOK = 120_000;
 const IDLE_MS_ELSEWHERE = 30_000;
 // A PAUSED run is the one state where the mic sleeping is worse than
@@ -291,7 +301,12 @@ export default function VoiceBar() {
   // Nobody has spoken for two minutes. Close the socket rather than keep
   // billing for a mic pointed at an empty kitchen, and say why — a mic
   // that switched itself off without explanation reads as a bug.
+  // Read at the moment it fires: the server's inactivity notice arrives
+  // on its own schedule, not the page's. Mid-cook it is ignored and the
+  // transcriber reconnects when the socket closes.
+  const cookingRef = useRef(false);
   const onIdle = useCallback(() => {
+    if (cookingRef.current) return;
     setIdled(true);
     dispatch({ type: "voice/setMuted", payload: { muted: true } });
   }, [dispatch]);
@@ -467,17 +482,22 @@ export default function VoiceBar() {
   // Not a dependency of the connect effect (the hook reads config through
   // a ref), so crossing into or out of the live cook changes the quiet
   // budget without dropping the socket.
-  const runPaused = pathname === ROUTES.liveCook && isPaused(state.session?.run);
+  const liveRun = pathname === ROUTES.liveCook ? state.session?.run : null;
+  const runPaused = Boolean(liveRun) && isPaused(liveRun);
+  const cooking = Boolean(liveRun) && !liveRun.endedAt && !runPaused;
+  cookingRef.current = cooking;
   const streamConfig = useMemo(
     () => ({
       ...STREAM_CONFIG,
-      idleMs: runPaused
-        ? IDLE_MS_PAUSED
-        : pathname === ROUTES.liveCook
-          ? IDLE_MS_LIVE_COOK
-          : IDLE_MS_ELSEWHERE,
+      idleMs: cooking
+        ? IDLE_MS_COOKING
+        : runPaused
+          ? IDLE_MS_PAUSED
+          : pathname === ROUTES.liveCook
+            ? IDLE_MS_LIVE_COOK
+            : IDLE_MS_ELSEWHERE,
     }),
-    [pathname, runPaused],
+    [pathname, runPaused, cooking],
   );
 
   const { status, partial, hearing, updateConfig, markActive } = useStreamingTranscript({
