@@ -117,6 +117,80 @@
 .ds-v4 .lc-btn-go:hover:not(:disabled) { background: var(--ds-accent-hover); }
 .ds-v4 .lc-btn-xl:disabled { background: var(--ds-chip); color: var(--ink-faint); box-shadow: none; }
 
+/* ---------------- demo notice ---------------- */
+/* Above the title row: says this is a demo and how to talk to the
+   goose so the limited voice path actually hears you. */
+.lc-demo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px 10px 16px;
+  border: 1px solid color-mix(in srgb, var(--warning-soft-ink) 18%, transparent);
+  border-radius: var(--radius-control);
+  background: var(--warning-soft);
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.lc-demo-tag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.lc-demo-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  text-wrap: pretty;
+}
+.lc-demo-say { font-size: 12.5px; color: var(--ink); }
+.lc-demo-sep { color: var(--ink-faint); }
+.lc-demo-link {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  color: var(--ds-honk);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.lc-demo-link:hover { background: color-mix(in srgb, var(--warning-soft-ink) 8%, transparent); color: var(--ink); text-decoration: none; }
+.lc-demo-close {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.lc-demo-close:hover { background: color-mix(in srgb, var(--warning-soft-ink) 8%, transparent); color: var(--ink); }
+@media (max-width: 720px) {
+  .lc-demo { flex-wrap: wrap; }
+  .lc-demo-body { flex-basis: 100%; order: 1; }
+  .lc-demo-link { margin-left: auto; }
+}
+
 /* ---------------- title row ---------------- */
 .lc-header {
   display: flex;

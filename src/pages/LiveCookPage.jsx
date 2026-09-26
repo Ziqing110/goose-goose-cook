@@ -392,6 +392,8 @@ export default function LiveCookPage() {
   const [confirm, setConfirm] = useState(null); // { kind: "finish" } | { kind: "skip", stepId, cookId }
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  // The "this is a demo" notice above the header; dismissed per visit.
+  const [demoOpen, setDemoOpen] = useState(true);
   // The score moment in flight: which card it left, how many points,
   // and a key so two quick Dones each get their own "+20".
   const [fly, setFly] = useState(null);
@@ -1449,6 +1451,23 @@ export default function LiveCookPage() {
 
   return (
     <section className={`page live-cook-page ${isVersus ? "is-versus" : "is-coop"} ${paused ? "is-paused" : ""} ${finished ? "is-finished" : ""}`}>
+      {demoOpen && (
+        <div className="lc-demo" role="note">
+          <span className="lc-demo-tag">Honk! This is a demo</span>
+          <span className="lc-demo-body">
+            <span>Voice is limited in this demo. Start with your name when you call {AGENT_NAME}:</span>
+            <Mono className="lc-demo-say">&ldquo;{AGENT_NAME}, {cooks[0]?.name || "Mia"} finished the garlic&rdquo;</Mono>
+            <span className="lc-demo-sep" aria-hidden="true">&middot;</span>
+            <Mono className="lc-demo-say">&ldquo;{AGENT_NAME}, {cooks[1]?.name || "Leo"} will take the rice&rdquo;</Mono>
+          </span>
+          <a className="lc-demo-link" href="https://github.com/Ziqing110/goose-goose-cook" target="_blank" rel="noopener noreferrer">
+            Full voice kit on GitHub
+          </a>
+          <button type="button" className="lc-demo-close" aria-label="Dismiss demo notice" onClick={() => setDemoOpen(false)}>
+            &times;
+          </button>
+        </div>
+      )}
       {/* The same header every stage has: the run eyebrow, the title
           with its crooked underline, the run's facts, and one line of
           the goose's own. His aside here is the standing rule of the
