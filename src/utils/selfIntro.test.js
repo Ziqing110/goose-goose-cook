@@ -93,3 +93,21 @@ test("an ordinary command is untouched", () => {
     assert.equal(findSelfIntro(said, cooks), null, said);
   }
 });
+
+const kitchen = [{ id: "L", name: "Lindy" }, { id: "Z", name: "Zeina" }];
+
+test("an introduction to the goose counts: its name may come first", () => {
+  // The screenshot: this went to Lindy, because "Goose," opened the
+  // sentence and "Zina" is not how Zeina is spelled.
+  assert.deepEqual(findSelfIntro("Goose, I'm Zina. I want to wash the tofu.", kitchen, { agentName: "Goose" }), {
+    cookId: "Z",
+    rest: "I want to wash the tofu.",
+  });
+  assert.equal(findSelfIntro("Hey goose, I'm Zeina, start the eggs", kitchen, { agentName: "Goose" })?.cookId, "Z");
+});
+
+test("a near-miss name is only taken where an introduction clearly is", () => {
+  assert.equal(findSelfIntro("Goose, I'm done with the tofu", kitchen, { agentName: "Goose" }), null);
+  assert.equal(findSelfIntro("Goose I'm ready", kitchen, { agentName: "Goose" }), null);
+  assert.equal(findSelfIntro("I'm Mallory, start the eggs", kitchen), null);
+});

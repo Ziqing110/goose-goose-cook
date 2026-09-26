@@ -68,3 +68,52 @@ export function cleanSpokenName(said) {
   const name = words.map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
   return name.slice(0, MAX_COOK_NAME_LENGTH).trim();
 }
+
+// A cook's name as the recogniser spelled it.
+//
+// "Zeina" comes back as "Zina", "Lindy" as "Lindi". resolveCookRef wants
+// the name exactly, which is right where a name is being SET (the
+// binding page stores what it hears), and wrong where one is only being
+// RECOGNISED: "I'm Zina" said by Zeina found nobody, so her turn stayed
+// credited to whoever the voiceprint or the toggle had guessed.
+//
+// So: the one cook whose name is within a letter (two, for a name of
+// six letters or more) of what was said, and closer than anyone else's.
+// A tie, or nobody close enough, is nobody -- a guess between two cooks
+// is exactly the wrong credit this exists to prevent.
+function editDistance(a, b) {
+  const row = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i += 1) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const cur = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = cur;
+    }
+  }
+  return row[b.length];
+}
+
+/**
+ * @param {string} said  one or two words that should be a cook's name
+ * @param {Array} cooks  [{ id, name }]
+ * @returns {object|null} the cook, or null when nobody is clearly meant
+ */
+export function nearestCook(said, cooks) {
+  const heard = String(said || "").toLowerCase().replace(/[^a-z' -]/g, "").trim();
+  if (heard.length < 3 || NOT_NAMES.has(heard)) return null;
+  const exact = resolveCookRef(heard, cooks);
+  if (exact) return exact;
+  const scored = (cooks || [])
+    .filter((c) => c.name.trim())
+    .map((c) => {
+      const name = c.name.trim().toLowerCase();
+      return { cook: c, d: editDistance(heard, name), allowed: name.length >= 6 ? 2 : 1 };
+    })
+    .sort((a, b) => a.d - b.d);
+  const [best, next] = scored;
+  if (!best || best.d > best.allowed) return null;
+  if (next && next.d === best.d) return null;
+  return best.cook;
+}

@@ -262,3 +262,13 @@ test("cook_name is not offered when nobody is listed", () => {
   );
   assert.equal(params.claim.cook_name, undefined);
 });
+
+test("a cook's name as the recogniser spelled it is that cook", () => {
+  // "I want to do the tofu step as Zina" -- the cook is Zeina.
+  const kitchen = { ...withCooks, cooks: [{ id: "L", name: "Lindy" }, { id: "Z", name: "Zeina" }] };
+  const result = parseChoice(
+    { message: { tool_calls: [call("start", { step_id: "s1", cook_name: "Zina" })], content: "" } },
+    kitchen,
+  );
+  assert.deepEqual(result.calls, [{ name: "start", stepId: "s1", cookName: "Zeina" }]);
+});

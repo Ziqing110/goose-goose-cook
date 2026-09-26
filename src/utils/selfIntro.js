@@ -16,7 +16,7 @@
 // the thing that is already going wrong to work first.
 //
 // Pure: no DOM, no React.
-import { resolveCookRef } from "./cookVoice.js";
+import { nearestCook, resolveCookRef } from "./cookVoice.js";
 
 // How an introduction opens. Anchored at the start, because "ask Toni"
 // and "that's Toni's step" are about somebody, not from them.
@@ -39,15 +39,24 @@ const JOINER = /^(?:cook|chef)?(?:\s*[,.;]+\s*)?(?:and\s+|then\s+|so\s+)?/i;
 
 const tidy = (rest) => rest.replace(JOINER, "").trim();
 
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 /**
  * @param {string} text  what was said
  * @param {Array}  cooks [{ id, name }]
+ * @param {{agentName?: string}} [options]  the agent's name, which may
+ *   come first: "Goose, I'm Zeina, ..." is an introduction too. It used
+ *   not to be, since the introduction had to open the sentence -- so the
+ *   most natural way of saying it, to the goose, never counted.
  * @returns {{cookId: string, rest: string}|null}
  *   null when nobody introduced themselves, or the name is not one of
  *   these cooks -- a stranger's name is not a reason to reassign work.
  */
-export function findSelfIntro(text, cooks) {
-  const said = String(text || "").trim();
+export function findSelfIntro(text, cooks, { agentName = "" } = {}) {
+  let said = String(text || "").trim();
+  if (agentName) {
+    said = said.replace(new RegExp(`^(?:(?:hey|ok|okay)\\s+)?${escapeRe(agentName)}[,.!:]*\\s+`, "i"), "");
+  }
   if (!said || !(cooks || []).length) return null;
 
   const lead = LEAD.exec(said);
@@ -60,12 +69,17 @@ export function findSelfIntro(text, cooks) {
       const cook = resolveCookRef(candidate, cooks);
       if (cook) return { cookId: cook.id, rest: tidy(words.slice(n).join(" ")) };
     }
+    // Nobody by that exact name: the recogniser may have spelled it its
+    // own way ("I'm Zina" for Zeina). One word only -- the name right
+    // after "I'm" -- and only a clear nearest match (see nearestCook).
+    const near = words.length ? nearestCook(words[0].replace(/[,.;!?]+$/, ""), cooks) : null;
+    if (near) return { cookId: near.id, rest: tidy(words.slice(1).join(" ")) };
     return null;
   }
 
   const trail = TRAIL.exec(said);
   if (trail) {
-    const cook = resolveCookRef(trail[1], cooks);
+    const cook = resolveCookRef(trail[1], cooks) ?? nearestCook(trail[1], cooks);
     if (cook) return { cookId: cook.id, rest: tidy(said.slice(trail[0].length)) };
   }
   return null;

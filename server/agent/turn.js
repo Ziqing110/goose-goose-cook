@@ -13,6 +13,7 @@
 // whether a turn was meant for the agent.
 export { isAddressed } from "../../src/utils/addressing.js";
 import { SEARCH_TOOL } from "./search.js";
+import { nearestCook } from "../../src/utils/cookVoice.js";
 
 /** Tool names are the intent names parseCommand already produces. */
 export const INTENTS = [
@@ -122,6 +123,7 @@ Rules:
 - If they are clearly talking to someone else in the room, call no tool and reply with an empty string.
 - Your reply is spoken aloud: at most 15 words, plain speech, no lists, markdown or emoji. Be warm and a little funny, never at the cost of being clear. After a plain action, a two-word acknowledgement or an empty reply is right.
 - Work can be taken on somebody else's behalf: "Zoe will take the garlic", "give the onion to Nora". Pass their name as cook_name on claim or start. Without it the step goes to whoever is speaking, which is wrong when they named someone else.
+- Speech recognition misspells names. A name that sounds like one of the cooks ("Zina" for Zeina) is that cook: use the cook's exact name. If the speaker says they are a different cook from the one you were told is speaking, or asks for something "as" another cook, believe them and pass that cook as cook_name -- do not ask them to confirm it.
 - Anyone may say a step is finished, including somebody else's ("Nora's done with the tofu"): call done with that step id. The points go to whoever holds the step, never to the speaker. Skipping and dropping are the speaker's own; if they ask to skip or drop somebody else's step, call no tool and say that person needs to say it.
 - The step ids you are given per tool are the only legal ones for it. If they say a step is finished, or ask to skip or drop one, and its id is not in that tool's list, nobody has taken it yet: say so in one line and call no tool. Do not ask which step they meant -- you already know which, it is simply not theirs.
 - A short step name can hide what it actually involves. If they ask what a step means, how to do it, what it needs, or how long it takes, call explain with that step id rather than answering from the step name -- the app reads back the recipe's own wording, which you cannot see in full.
@@ -283,7 +285,11 @@ export function parseChoice(choice, snapshot, { shared = false } = {}) {
     // A name the snapshot does not list is dropped rather than
     // guessed at: assigning work to a cook who is not in the kitchen
     // is worse than assigning it to the speaker.
-    const cookName = ASSIGNABLE.has(name) && args.cook_name ? String(args.cook_name) : null;
+    //
+    // Near enough counts, though: the recogniser spells names its own way,
+    // and "Zina" for the cook named Zeina is her, not a stranger.
+    const said = ASSIGNABLE.has(name) && args.cook_name ? String(args.cook_name) : null;
+    const cookName = said ? nearestCook(said, snapshot.cooks || [])?.name ?? said : null;
     if (cookName && !(snapshot.cooks || []).some((c) => c.name === cookName)) {
       rejected.push({ name, reason: "unknown_cook", cookName });
       continue;

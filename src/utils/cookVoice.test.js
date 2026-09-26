@@ -2,7 +2,7 @@
 // Run with: node --test src/utils/cookVoice.test.js
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ORDINAL, ordinalIndex, resolveCookRef, cleanSpokenName } from "./cookVoice.js";
+import { ORDINAL, ordinalIndex, resolveCookRef, cleanSpokenName, nearestCook } from "./cookVoice.js";
 import { MAX_COOK_NAME_LENGTH } from "./cooks.js";
 
 const two = [{ name: "Mia" }, { name: "" }];
@@ -175,4 +175,20 @@ test("cleanSpokenName: truncating right after a space leaves no trailing space",
   const cut = cleanSpokenName(`${"a".repeat(MAX_COOK_NAME_LENGTH - 1)} bc`);
   assert.equal(cut, cut.trim());
   assert.ok(cut.length <= MAX_COOK_NAME_LENGTH);
+});
+
+const pair = [{ id: "L", name: "Lindy" }, { id: "Z", name: "Zeina" }];
+
+test("nearestCook: the recogniser's spelling of a cook's name is that cook", () => {
+  assert.equal(nearestCook("Zina", pair)?.id, "Z");
+  assert.equal(nearestCook("zeena", pair)?.id, "Z");
+  assert.equal(nearestCook("Lindi", pair)?.id, "L");
+  assert.equal(nearestCook("Zeina", pair)?.id, "Z", "exact still wins");
+});
+
+test("nearestCook: nobody close, a tie, or a word that is not a name is nobody", () => {
+  assert.equal(nearestCook("Mallory", pair), null);
+  assert.equal(nearestCook("Mina", [{ id: 1, name: "Nina" }, { id: 2, name: "Tina" }]), null);
+  assert.equal(nearestCook("ready", pair), null);
+  assert.equal(nearestCook("Li", pair), null);
 });

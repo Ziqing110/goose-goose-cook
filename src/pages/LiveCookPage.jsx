@@ -1152,7 +1152,7 @@ export default function LiveCookPage() {
     // are is addressed to the app, and needing the agent's name first
     // would make the fix for a misattributed turn depend on the thing
     // that is already going wrong.
-    const intro = findSelfIntro(text, cooks);
+    const intro = findSelfIntro(text, cooks, { agentName: AGENT_NAME });
     let said = text;
     let saidBy = null;
     if (intro) {
@@ -1325,7 +1325,11 @@ export default function LiveCookPage() {
     // happened and asks which of them meant it.
     const shared = hasHandover(turn?.words);
     if (shared) console.info("[voice] two cooks in one turn:", routed.said);
-    askAgent(routed.said, routed.saidBy ?? speaker, { engaged, clip, shared, sttTurn: turn, saidBy: routed.saidBy });
+    // Saying who you are is talking to the app, whether or not the rest
+    // of the sentence names the goose: "Goose, I'm Zeina, I'll wash the
+    // tofu" reaches the model as "I'll wash the tofu", and the name gate
+    // would otherwise throw it away.
+    askAgent(routed.said, routed.saidBy ?? speaker, { engaged: engaged || Boolean(routed.saidBy), clip, shared, sttTurn: turn, saidBy: routed.saidBy });
   };
 
   const submitKeywordUtterance = (text, saidBy = null) => {
