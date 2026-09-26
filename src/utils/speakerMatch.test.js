@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decideSpeaker, hasHandover } from "./speakerMatch.js";
+import { decideSpeaker, hasHandover, shouldLearn } from "./speakerMatch.js";
 
 const good = { cook: "a", score: 0.85, margin: 0.4, seconds: 2.5 };
 
@@ -45,4 +45,25 @@ test("handover: no diarization, no opinion", () => {
   assert.equal(hasHandover([{ speaker_confidence: 1 }]), false);
   assert.equal(hasHandover([]), false);
   assert.equal(hasHandover(undefined), false);
+});
+
+test("learn: a cook who said who they are teaches their print, whatever the voiceprint thought", () => {
+  assert.equal(shouldLearn({ via: "said so", seconds: 2.4 }), true);
+});
+
+test("learn: only a match well clear of the thresholds teaches", () => {
+  assert.equal(shouldLearn({ via: "voiceprint", result: { score: 0.72, margin: 0.31 }, seconds: 2 }), true);
+  // Accepted for crediting, but not sure enough to learn from.
+  assert.equal(shouldLearn({ via: "voiceprint", result: { score: 0.58, margin: 0.31 }, seconds: 2 }), false);
+  assert.equal(shouldLearn({ via: "voiceprint", result: { score: 0.72, margin: 0.12 }, seconds: 2 }), false);
+  // One cook enrolled: no runner-up to be sure it is not.
+  assert.equal(shouldLearn({ via: "voiceprint", result: { score: 0.9, margin: null }, seconds: 2 }), false);
+});
+
+test("learn: never from two voices, a short scrap, a label or a toggle", () => {
+  assert.equal(shouldLearn({ via: "said so", seconds: 3, shared: true }), false);
+  assert.equal(shouldLearn({ via: "said so", seconds: 1.2 }), false);
+  assert.equal(shouldLearn({ via: "label", result: { score: 0.9, margin: 0.5 }, seconds: 3 }), false);
+  assert.equal(shouldLearn({ via: "toggle", seconds: 3 }), false);
+  assert.equal(shouldLearn({ via: "said so" }), false);
 });

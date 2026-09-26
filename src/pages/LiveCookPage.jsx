@@ -62,8 +62,8 @@ const ASIDE_CHECK_MS = 5000;
 import { AGENT_NAME, speak, takeInterrupted } from "../voice/agentVoice.js";
 import { explainStep } from "../utils/stepExplain.js";
 import { audioTap } from "../voice/audioTap.js";
-import { identifySpeaker } from "../api/speaker.js";
-import { decideSpeaker, hasHandover } from "../utils/speakerMatch.js";
+import { identifySpeaker, learnVoice } from "../api/speaker.js";
+import { decideSpeaker, hasHandover, shouldLearn } from "../utils/speakerMatch.js";
 import { cookFromTurn } from "../utils/speakerLabels.js";
 import { isNameOnlyTurn } from "../utils/addressing.js";
 import { buildSummary } from "../utils/summaryCard.js";
@@ -1035,7 +1035,7 @@ export default function LiveCookPage() {
       console.info(`[speaker] ${verdict.cookId ? name(verdict.cookId) : "unsure"} (${verdict.reason})`, named, `margin ${result.margin}`);
       // A voiceprint outranks a label: it was measured against this
       // cook's own voice, not inferred from who else is in the room.
-      if (verdict.cookId) return { cookId: verdict.cookId, via: "voiceprint" };
+      if (verdict.cookId) return { cookId: verdict.cookId, via: "voiceprint", result };
       const byLabel = cookFromTurn(turn, cooks).cookId;
       return byLabel ? { cookId: byLabel, via: "label" } : null;
     } catch (err) {
@@ -1056,6 +1056,14 @@ export default function LiveCookPage() {
       // Somebody who just said who they are outranks every guess about
       // it: not knowing their voice is precisely why they had to say so.
       const heard = saidBy ? { cookId: saidBy, via: "said so" } : await whoSpoke(clip, sttTurn);
+      // A turn we are sure about is another reading of that cook's
+      // voice, and a print built from more readings credits more turns
+      // (see shouldLearn). Not awaited: nobody waits on this.
+      if (clip && heard?.cookId && shouldLearn({ via: heard.via, result: heard.result, seconds: clip.pcm.length / clip.rate, shared })) {
+        learnVoice({ cookId: heard.cookId, pcm: clip.pcm, rate: clip.rate })
+          .then((r) => console.info(`[speaker] learned ${name(heard.cookId)} (${heard.via}), ${r.learned} turns so far`))
+          .catch(() => {});
+      }
       // Nothing recognised it, so the turn belongs to whoever the
       // toggle was left on. Worth recording as such: it is a guess
       // nobody made deliberately.

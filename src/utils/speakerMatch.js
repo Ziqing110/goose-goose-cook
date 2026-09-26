@@ -83,3 +83,45 @@ export function hasHandover(words, minDrop = MIN_HANDOVER_DROP) {
   if (confidences.length < 2) return false;
   return Math.max(...confidences) - Math.min(...confidences) >= minDrop;
 }
+
+// Learning from the cook as it goes.
+//
+// How much voice a print is built from decides how many turns can be
+// credited at all. On the kitchen takes, a print from one reading --
+// what the binding page records -- credited about 6 of 34 marked turns
+// at the thresholds above; from six readings, 16, with none wrong. Every
+// turn the app is SURE about is another reading for free, so those go
+// back into the print (the sidecar keeps them apart and capped).
+//
+// Sure means one of two things:
+//   - the cook said who they were ("I'm Zeina, and I'll take the eggs").
+//     Ground truth, whatever the voiceprint thought.
+//   - the voiceprint matched well clear of the thresholds. 0.65 and 0.2
+//     are where learning added right answers on the takes (16 -> 18 of
+//     34 from six readings, 11 -> 15 from three) without adding a wrong
+//     one. Learning from every accepted match did no better and risks
+//     teaching a cook somebody else's voice.
+// Never a turn with two voices in it, and never a scrap too short to
+// say much about anyone.
+export const LEARN_THRESHOLDS = {
+  minScore: 0.65,
+  minMargin: 0.2,
+  minSeconds: 1.5,
+};
+
+/**
+ * @param {object} p
+ * @param {"said so"|"voiceprint"|string} p.via how the speaker was decided
+ * @param {{score:number, margin:number|null}} [p.result] the sidecar's answer, for a voiceprint match
+ * @param {number} p.seconds length of the clip
+ * @param {boolean} [p.shared] the turn held two cooks
+ * @returns {boolean} whether this clip should be added to the cook's voiceprint
+ */
+export function shouldLearn({ via, result = null, seconds, shared = false }, thresholds = LEARN_THRESHOLDS) {
+  if (shared || !(seconds >= thresholds.minSeconds)) return false;
+  if (via === "said so") return true;
+  if (via !== "voiceprint" || !result) return false;
+  if (!(result.score >= thresholds.minScore)) return false;
+  // One enrolled cook has no runner-up, and nothing to be sure it is not.
+  return result.margin != null && result.margin >= thresholds.minMargin;
+}
