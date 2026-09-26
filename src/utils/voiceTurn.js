@@ -73,6 +73,15 @@ export function routeVoiceTurn(text, ctx) {
   // spoken, since the transcript lands after the agent is done.
   if (ctx.echo) return { type: "ignore", reason: "echo" };
 
+  // The app's own chrome answers on every page, including the ones that
+  // take every word as dictation or own every turn: "open the notes" in
+  // the middle of a cook is not a cooking command, and the page would
+  // otherwise never let it through. Whole-utterance phrases only.
+  if (ctx.dictation) {
+    const chrome = ctx.matchPage?.(normalizeUtterance(said), said, { everywhere: true });
+    if (chrome) return pageDecision(chrome);
+  }
+
   // A page with its own conversation gets every turn untouched, and
   // navigation stays out of it: leaving mid-cook by voice is exactly
   // what must not happen. Without a registered takeover the page is an

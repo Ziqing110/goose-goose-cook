@@ -1519,6 +1519,16 @@ try {
     await live.stream.say("Goose resume");
     await live.page.locator(".live-cook-page:not(.is-paused)").waitFor({ state: "visible" });
   });
+  // Goose's Notes open and close by voice even here, where the page owns
+  // every turn -- ahead of the cook's own handling, not through it.
+  await checkVoiceBehavior("Live Cook: ‘open the notes’ pulls out Goose's Notes and ‘close the notes’ tucks them away", async () => {
+    await live.stream.say("Goose, open the notes");
+    // The wrapper has no box of its own; the sheet inside it is what shows.
+    await live.page.locator(".gn.is-open .gn-sheet").waitFor({ state: "visible" });
+    await live.stream.say("close the notes");
+    await live.page.locator(".gn.is-tucked").waitFor({ state: "attached" });
+    assert.equal(await live.page.locator(".gn.is-open").count(), 0);
+  });
   // The shared mock fails every agent call, which sends even unnamed words
   // down the keyword path. The real server answers unnamed words with
   // addressed:false and the page ignores them — which is how "resume",

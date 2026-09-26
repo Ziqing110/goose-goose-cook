@@ -60,6 +60,11 @@ const liveLayers = () => {
  *                      anything irreversible: starting a cook,
  *                      throwing answers away. Mishearing those costs
  *                      more than one extra sentence.
+ *   everywhere  boolean  heard on every page, before a page that takes
+ *                      dictation or owns every turn (the live cook) gets
+ *                      the words. For the app's own chrome -- Goose's
+ *                      Notes -- and only with phrases anchored to the
+ *                      whole utterance.
  *   whileDictating  boolean  still heard while the page takes
  *                      dictation. Only for words that are never an
  *                      answer, and its phrases should be anchored to the
@@ -135,11 +140,13 @@ function rawMatch(phrase, transcript) {
  * `dictating` narrows the search to commands marked `whileDictating`,
  * for a page that is otherwise typing every word it hears.
  */
-export function matchPageCommand(said, transcript, { dictating = false } = {}) {
+export function matchPageCommand(said, transcript, { dictating = false, everywhere = false } = {}) {
   if (!said) return null;
   const live = liveLayers();
   if (!live.length) return null;
-  const commands = live.flatMap((l) => l.commands).filter((c) => !dictating || c.whileDictating);
+  const commands = live
+    .flatMap((l) => l.commands)
+    .filter((c) => (!dictating || c.whileDictating) && (!everywhere || c.everywhere));
   // Tried in order — command grammar is closed and this only widens how
   // the same words can be padded, so the first hit either way is the
   // right one.

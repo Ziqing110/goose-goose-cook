@@ -36,6 +36,9 @@ import { speakerSelection, resolveSpeaker } from "../voice/speakerSelection.js";
 import { playerKey } from "../utils/serviceResults.js";
 import { PlayerAvatar } from "./ServiceResults.jsx";
 import { clampHandleTop, DEFAULT_HANDLE_TOP, parseHandleTop } from "../utils/railPlacement.js";
+import { notesPanel } from "../voice/notesPanel.js";
+import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { NOTES_VOICE } from "../utils/pageVoiceGrammar.js";
 import "./ConversationRail.css";
 
 const TOP_KEY = "goosesNotes.handleTop";
@@ -167,6 +170,30 @@ export default function ConversationRail() {
   useEffect(() => {
     if (open) endRef.current?.scrollIntoView({ block: "end" });
   }, [feed.length, open]);
+
+  // "Open the notes" / "close the notes", on every page. Heard ahead of
+  // pages that take every word (the conversation's questions, the live
+  // cook), which is what `everywhere` is for; see voiceTurn.js.
+  useEffect(() => notesPanel.onRequest(setOpen), []);
+  useEffect(
+    () =>
+      registerVoiceCommands([
+        {
+          phrases: NOTES_VOICE.open,
+          everywhere: true,
+          whileDictating: true,
+          label: "Here's everything so far.",
+          run: () => notesPanel.request(true),
+        },
+        {
+          phrases: NOTES_VOICE.close,
+          everywhere: true,
+          whileDictating: true,
+          run: () => notesPanel.request(false),
+        },
+      ]),
+    [],
+  );
 
   useEffect(() => {
     if (!open) return undefined;

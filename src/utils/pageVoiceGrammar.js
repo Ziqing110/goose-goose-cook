@@ -298,6 +298,19 @@ export const AVATAR_PICKER_VOICE = {
   avatarName: (words) => [new RegExp(`\\b(${words.join("|")})\\b`)],
 };
 
+// Goose's Notes, the conversation rail on the side of every page.
+//
+// Anchored to the whole utterance, with the agent's name allowed in
+// front: these are heard on every page, including the ones that type
+// every word (the conversation's questions) or own every turn (the live
+// cook), so they must never match a sentence that merely mentions notes.
+const NOTES_WORDS = "(?:the |your |my |goose'?s |gooses )?(?:notes|conversation|transcript|chat|log)";
+const LEAD = "^(?:hey |ok |okay )?(?:goose )?";
+export const NOTES_VOICE = {
+  open: [new RegExp(`${LEAD}(?:open|show|pull out|bring up|see)(?: me)? ${NOTES_WORDS}$`)],
+  close: [new RegExp(`${LEAD}(?:close|hide|tuck(?: away)?|put away) ${NOTES_WORDS}(?: away)?$`)],
+};
+
 // --- help for everything above ------------------------------------------
 
 function describedToggle(thing, article, toggle) {
@@ -411,3 +424,6 @@ AVATAR_PICKER_VOICE.avatarName = described(AVATAR_PICKER_VOICE.avatarName, (word
   "Pick a chef by its name or colour",
   words.slice(0, 4),
 ]);
+
+help(NOTES_VOICE.open, "Open Goose's Notes, the record of everything said, on the side", ["open the notes"]);
+help(NOTES_VOICE.close, "Tuck Goose's Notes away", ["close the notes"]);

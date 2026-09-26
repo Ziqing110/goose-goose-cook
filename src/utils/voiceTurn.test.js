@@ -15,7 +15,7 @@ import {
   registerVoiceCommands,
   voiceCommandsAreExclusive,
 } from "./voicePageCommands.js";
-import { VOICE_BINDING_VOICE, AVATAR_PICKER_VOICE, CONVERSATION_VOICE, HOME_VOICE, INVENTORY_VOICE, SCHEDULE_VOICE, ingredientVoicePhrases } from "./pageVoiceGrammar.js";
+import { NOTES_VOICE, VOICE_BINDING_VOICE, AVATAR_PICKER_VOICE, CONVERSATION_VOICE, HOME_VOICE, INVENTORY_VOICE, SCHEDULE_VOICE, ingredientVoicePhrases } from "./pageVoiceGrammar.js";
 
 const ALL = Object.values(ROUTES);
 const UP_TO_INVENTORY = [ROUTES.home, ROUTES.conversation, ROUTES.inventory];
@@ -517,4 +517,40 @@ test("menu: a command with no help of its own is described by its grammar", () =
   assert.deepEqual(resume.patterns, []);
   // Nothing to go on but the pattern, so the pattern goes.
   assert.deepEqual(mystery, { description: "", examples: [], patterns: ["\\bmystery\\b"] });
+});
+
+// --- Goose's Notes, on every page -----------------------------------------
+
+const notesCommands = () =>
+  registerVoiceCommands([
+    { phrases: NOTES_VOICE.open, everywhere: true, whileDictating: true, run: noop, label: "open" },
+    { phrases: NOTES_VOICE.close, everywhere: true, whileDictating: true, run: noop, label: "close" },
+  ]);
+
+test("notes: opened by voice mid-cook, ahead of the page that owns every turn", () => {
+  notesCommands();
+  const d = turn("Goose, open the notes", { route: ROUTES.liveCook, dictation: { takeover: true } });
+  assert.equal(d.type, "page");
+  assert.equal(d.command.label, "open");
+  assert.equal(turn("Goose close the notes", { route: ROUTES.liveCook, dictation: { takeover: true } }).command.label, "close");
+});
+
+test("notes: everything else on the live cook still goes to the cook", () => {
+  notesCommands();
+  const cook = { route: ROUTES.liveCook, dictation: { takeover: true } };
+  assert.equal(turn("Goose, I'm done with the onions", cook).type, "takeover");
+  // Mentions notes; is not asking for them.
+  assert.equal(turn("I left my notes by the stove", cook).type, "takeover");
+});
+
+test("notes: heard mid-question, where everything else is typed as the answer", () => {
+  notesCommands();
+  const asking = { route: ROUTES.conversation, dictation: { onFinal: noop } };
+  assert.equal(turn("show me the notes", asking).type, "page");
+  assert.equal(turn("my notes say two eggs each", asking).type, "dictate");
+});
+
+test("notes: an ordinary page hears them like any other command", () => {
+  notesCommands();
+  assert.equal(turn("open your notes").type, "page");
 });
