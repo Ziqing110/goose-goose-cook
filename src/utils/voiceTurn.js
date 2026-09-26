@@ -18,6 +18,13 @@
 //   5. the page's own commands                         -> run, or asked first
 //   6. an open dialog                                  -> nothing else heard
 //   7. navigation
+//   8. none of it matched                              -> the goose is asked
+//                                                         what was meant
+//
+// Step 8 only runs when the caller says it can (`ctx.interpret`). What
+// comes back is a rewrite into one of the page's own commands, and it
+// re-enters here through routeInterpretedTurn -- never straight into
+// an action, and never without asking first.
 import { matchConfirmation, matchesConfirmationPhrase, matchNavCommand, navHelpLine, normalizeUtterance, pathLabel, isLikelyConversation, hasSubject } from "./navCommands.js";
 import { ROUTES } from "./routeGuards.js";
 
@@ -53,6 +60,8 @@ export function turnConfidence(words) {
  * @param {Function} [ctx.matchPage]  (said, text) => page command | null
  * @param {boolean}  [ctx.exclusive]  a dialog holds the microphone
  * @param {boolean}  [ctx.canGoBack]  going back stays inside the app
+ * @param {boolean}  [ctx.interpret]  the goose may be asked what an
+ *   unmatched turn meant; without it, those turns are ignored as before
  * @returns {object} a decision; `type` says which. Any decision may also
  *   carry `clearPending: true`, meaning the open question is closed
  *   whatever else happens.
@@ -154,7 +163,7 @@ function routeCommand(said, ctx) {
   // A dialog is open and the words were not one of its commands.
   // Navigating away would abandon a half-filled form, so the way out is
   // the dialog's own "cancel".
-  if (ctx.exclusive) return { type: "ignore", reason: "dialog-open" };
+  if (ctx.exclusive) return ctx.interpret ? { type: "interpret" } : { type: "ignore", reason: "dialog-open" };
 
   return navDecision(matchNavCommand(said, { route, confidence, reachable }), ctx);
 }
@@ -199,7 +208,7 @@ function navDecision(nav, ctx) {
     case "help":
       return { type: "say", line: navHelpLine(ctx.route, ctx.reachable) };
     default:
-      return { type: "ignore", reason: "not-a-command" };
+      return ctx.interpret ? { type: "interpret" } : { type: "ignore", reason: "not-a-command" };
   }
 }
 
@@ -210,4 +219,31 @@ function blockedLine(path, ctx) {
   if (!ctx.hasSession) return LINES.noSession;
   if (path === ROUTES.kitchenSetup) return LINES.kitchenPicked;
   return LINES.notYet;
+}
+
+/**
+ * The goose's rewrite of an unmatched turn, routed like a turn of its
+ * own -- but it is a guess about what somebody meant, so nothing it
+ * leads to happens without a yes. A command that already asks (or asks
+ * for a phrase) keeps its own question rather than stacking a second.
+ *
+ * Runs with interpretation off: a rewrite that matches nothing is
+ * dropped, not sent back to be rewritten again.
+ */
+export function routeInterpretedTurn(utterance, ctx) {
+  const said = (utterance || "").trim();
+  if (!said) return { type: "ignore", reason: "interpreted-empty" };
+  const decision = routeCommand(said, { ...ctx, confidence: 1, dictation: null, interpret: false });
+  switch (decision.type) {
+    case "page":
+      return { type: "confirm", question: `Did you mean “${said}”? Say yes or no.`, then: decision };
+    case "navigate":
+      return { type: "confirm", question: `Did you mean go to ${pathLabel(decision.path)}? Say yes or no.`, then: decision };
+    case "back":
+      return { type: "confirm", question: "Did you mean go back? Say yes or no.", then: decision };
+    case "ignore":
+      return { type: "ignore", reason: "interpreted-no-match" };
+    default:
+      return decision;
+  }
 }

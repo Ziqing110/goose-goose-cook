@@ -5,15 +5,17 @@
 // did not join up.
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { LINES, routeVoiceTurn, turnConfidence } from "./voiceTurn.js";
+import { LINES, routeInterpretedTurn, routeVoiceTurn, turnConfidence } from "./voiceTurn.js";
 import { ROUTES } from "./routeGuards.js";
 import {
+  askGoose,
   clearVoiceCommands,
+  interpretationMenu,
   matchPageCommand,
   registerVoiceCommands,
   voiceCommandsAreExclusive,
 } from "./voicePageCommands.js";
-import { AVATAR_PICKER_VOICE, CONVERSATION_VOICE, HOME_VOICE, INVENTORY_VOICE, SCHEDULE_VOICE, ingredientVoicePhrases } from "./pageVoiceGrammar.js";
+import { VOICE_BINDING_VOICE, AVATAR_PICKER_VOICE, CONVERSATION_VOICE, HOME_VOICE, INVENTORY_VOICE, SCHEDULE_VOICE, ingredientVoicePhrases } from "./pageVoiceGrammar.js";
 
 const ALL = Object.values(ROUTES);
 const UP_TO_INVENTORY = [ROUTES.home, ROUTES.conversation, ROUTES.inventory];
@@ -409,3 +411,91 @@ test("nav: help lists places you can go, and never a 'next' that doesn't exist",
   assert.match(r.line, /conversation/);
   assert.doesNotMatch(r.line, /schedule|live cook/);
 });
+
+// --- when nothing matched: asking the goose ---------------------------------
+
+test("interpret: an unmatched turn goes to the goose only when the bar says it can", () => {
+  const said = "no, it's Zeina, Z E I N A";
+  assert.deepEqual(turn(said), { type: "ignore", reason: "not-a-command" }, "unchanged without the flag");
+  assert.deepEqual(turn(said, { interpret: true }), { type: "interpret" });
+});
+
+test("interpret: a dialog's unmatched words go to the goose too, not past the dialog", () => {
+  registerVoiceCommands([{ phrases: [/\bsave\b/], run: noop }], { priority: 10, exclusive: true });
+  assert.deepEqual(turn("hmm keep that one", { interpret: true, exclusive: true }), { type: "interpret" });
+});
+
+test("interpret: things that were never commands still are not -- echo, dictation, chatter", () => {
+  assert.equal(turn("go to the schedule", { interpret: true, echo: true }).type, "ignore");
+  assert.equal(turn("whatever they say", { interpret: true, dictation: { onFinal: noop } }).type, "dictate");
+});
+
+const nameCook = () =>
+  registerVoiceCommands([
+    { phrases: VOICE_BINDING_VOICE.nameByOrdinal("first|second|1|2"), run: noop, examples: ["call the first cook Mia"] },
+    { phrases: [/\bremove (?:the )?cook (.+)$/], confirm: "Remove that cook and their voice?", run: noop },
+  ]);
+
+test("interpreted: a rewrite that matches a page command asks before it runs", () => {
+  nameCook();
+  const d = routeInterpretedTurn("call the first cook Zeina", { ...ctxFor(), interpret: true });
+  assert.equal(d.type, "confirm");
+  assert.equal(d.question, "Did you mean “call the first cook Zeina”? Say yes or no.");
+  assert.equal(d.then.type, "page");
+  assert.equal(d.then.command.match[2], "zeina");
+});
+
+test("interpreted: a command that already asks keeps its own question, not two", () => {
+  nameCook();
+  const d = routeInterpretedTurn("remove the cook zeina", ctxFor());
+  assert.equal(d.question, "Remove that cook and their voice?");
+});
+
+test("interpreted: navigation asks too, by the page's name", () => {
+  const d = routeInterpretedTurn("go to the schedule", ctxFor());
+  assert.equal(d.type, "confirm");
+  assert.equal(d.then.type, "navigate");
+  assert.match(d.question, /^Did you mean go to /);
+});
+
+test("interpreted: a rewrite the page does not accept is dropped, never re-asked", () => {
+  nameCook();
+  assert.deepEqual(routeInterpretedTurn("rename zina please", { ...ctxFor(), interpret: true }), {
+    type: "ignore",
+    reason: "interpreted-no-match",
+  });
+  assert.equal(routeInterpretedTurn("   ", ctxFor()).type, "ignore");
+});
+
+test("menu: what the goose is shown is the live layer's commands and state", () => {
+  registerVoiceCommands([{ phrases: [/\bhome\b/], run: noop }], { describe: () => ["under the dialog"] });
+  registerVoiceCommands(
+    [{ phrases: [/\bsave\b/], description: "Save it", examples: ["save"], run: noop }],
+    { priority: 10, exclusive: true, describe: () => ["Cook 1: named \"Zina\""] },
+  );
+  const menu = interpretationMenu();
+  assert.deepEqual(menu.context, ['Cook 1: named "Zina"']);
+  assert.deepEqual(menu.commands, [{ description: "Save it", examples: ["save"], patterns: ["\\bsave\\b"] }]);
+});
+
+test("menu: a page whose describe throws still offers its commands", () => {
+  registerVoiceCommands([{ phrases: [/\bsave\b/], run: noop }], { describe: () => { throw new Error("stale"); } });
+  assert.deepEqual(interpretationMenu().context, []);
+  assert.equal(interpretationMenu().commands.length, 1);
+});
+
+test("askGoose: carries the line to fall back on", () => {
+  assert.deepEqual(askGoose("Both cooks have names."), { askGoose: true, fallback: "Both cooks have names." });
+  assert.deepEqual(askGoose(), { askGoose: true, fallback: null });
+});
+
+function ctxFor() {
+  return {
+    route: ROUTES.inventory,
+    reachable: ALL,
+    hasSession: true,
+    matchPage: matchPageCommand,
+    exclusive: voiceCommandsAreExclusive(),
+    canGoBack: true,
+  };
+}

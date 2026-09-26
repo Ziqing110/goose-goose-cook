@@ -78,3 +78,20 @@ export function agentNarrate({ agentName, record }) {
     body: JSON.stringify({ agentName, record }),
   }).catch(() => ({ story: "" }));
 }
+
+/**
+ * What somebody meant, on a page whose own commands did not match.
+ * Resolves to a rewrite into one of `commands` (or a destination), or a
+ * short reply, or neither. The rewrite is a suggestion: the caller runs
+ * it back through the page's matcher and asks before acting.
+ *
+ * @returns {Promise<{utterance: string|null, reply: string, named: boolean}>}
+ */
+export function interpretUtterance({ text, agentName, route, context, commands, destinations }) {
+  return apiRequest("/api/agent", "/interpret", {
+    method: "POST",
+    // A little over the server's 5s, so its readable timeout wins.
+    signal: AbortSignal.timeout(7000),
+    body: JSON.stringify({ text, agentName, route, context, commands, destinations }),
+  });
+}

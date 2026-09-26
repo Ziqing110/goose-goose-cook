@@ -29,6 +29,7 @@ import { requestTurn, TurnError } from "../agent/gateway.js";
 import { collect, park } from "../agent/pending.js";
 import { requestAside } from "../agent/aside.js";
 import { requestNarration } from "../agent/narrate.js";
+import { requestInterpretation, InterpretError } from "../agent/interpret.js";
 
 export const agentRouter = Router();
 
@@ -94,6 +95,41 @@ agentRouter.post("/narrate", async (req, res) => {
   }
   const { story } = await requestNarration({ apiKey: API_KEY, model: NARRATE_MODEL, agentName, record });
   return res.json({ story });
+});
+
+/**
+ * What somebody meant, on a page whose commands did not match it. The
+ * reply is a rewrite into one of those commands, or nothing; the browser
+ * re-matches it and asks before acting. See agent/interpret.js.
+ */
+agentRouter.post("/interpret", async (req, res) => {
+  const { text, agentName, route, context, commands, destinations } = req.body || {};
+  const said = String(text ?? "").trim().slice(0, MAX_TEXT_CHARS);
+  if (!said || !agentName || !Array.isArray(commands)) {
+    return res.status(400).json({ error: "text, agentName and commands are required." });
+  }
+  const strings = (list, max) => (Array.isArray(list) ? list.slice(0, max).map((x) => String(x).slice(0, 300)) : []);
+  try {
+    return res.json(
+      await requestInterpretation({
+        apiKey: API_KEY,
+        model: MODEL,
+        agentName: String(agentName).slice(0, 40),
+        text: said,
+        route: String(route ?? "").slice(0, 100),
+        context: strings(context, 20),
+        commands: commands.slice(0, 40).map((c) => ({
+          description: String(c?.description ?? "").slice(0, 200),
+          examples: strings(c?.examples, 6),
+          patterns: strings(c?.patterns, 6),
+        })),
+        destinations: strings(destinations, 12),
+      }),
+    );
+  } catch (err) {
+    if (err instanceof InterpretError) return res.status(err.status).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 agentRouter.post("/turn", async (req, res) => {

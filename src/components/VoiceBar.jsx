@@ -25,19 +25,22 @@ import {
   stop as stopSpeaking,
   interrupt as interruptSpeaking,
   takeInterrupted,
+  AGENT_NAME,
 } from "../voice/agentVoice.js";
+import { interpretUtterance } from "../api/agent.js";
 import GooseVoiceAgent from "./GooseVoiceAgent.jsx";
 import { devGooseState } from "../dev/preview.js";
-import { navHintFor } from "../utils/navCommands.js";
+import { navHintFor, pathLabel } from "../utils/navCommands.js";
 import {
   getVoiceDictation,
+  interpretationMenu,
   matchPageCommand,
   subscribeVoiceRegistry,
   voiceCommandsAreExclusive,
 } from "../utils/voicePageCommands.js";
 import { ROUTES, voiceReachablePaths } from "../utils/routeGuards.js";
 import { isPaused } from "../utils/liveCook.js";
-import { routeVoiceTurn, turnConfidence } from "../utils/voiceTurn.js";
+import { routeInterpretedTurn, routeVoiceTurn, turnConfidence } from "../utils/voiceTurn.js";
 import { speakerLabelTap } from "../voice/speakerLabelTap.js";
 import { voiceLog } from "../voice/voiceLog.js";
 
@@ -148,6 +151,10 @@ export default function VoiceBar() {
   const [idled, setIdled] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [pending, setPending] = useState(null);
+  // The goose has been asked what an unmatched turn meant and has not
+  // answered yet. Shown as thinking, so a second or two of model time
+  // reads as the goose working it out rather than as not having heard.
+  const [interpreting, setInterpreting] = useState(false);
   const pendingRef = useRef(null);
   const pendingTimer = useRef(null);
   const navigate = useNavigate();
@@ -293,14 +300,110 @@ export default function VoiceBar() {
   // instead of the command's static label — "four burners" and "eight
   // burners, the most this allows" are the same command with different
   // outcomes, and the bar should say which one happened.
+  // Filled in below, once the decisions it feeds exist. A command can
+  // hand its sentence to the goose (see askGoose), and the goose's answer
+  // comes back through the same decisions as any turn.
+  const interpretRef = useRef(null);
+
   const runPageCommand = useCallback(
-    (command) => {
+    (command, { heard = null, interpreted = false } = {}) => {
       const spoken = command.run(command.match, command.spoken);
+      // Matched the words, but not the page's state: "I'm Zeina" when
+      // both cooks have names. Let the goose read the whole sentence,
+      // unless this already IS the goose's reading of it.
+      if (spoken?.askGoose) {
+        if (heard && !interpreted && interpretRef.current) return interpretRef.current(heard, spoken.fallback);
+        if (spoken.fallback) say(spoken.fallback);
+        return;
+      }
       const line = typeof spoken === "string" ? spoken : command.label;
       if (line) say(line);
     },
     [say],
   );
+
+  // One decision from voiceTurn.js, carried out. Shared by a heard turn
+  // and by the goose's reading of one, so the two cannot drift apart.
+  const carryOut = useCallback(
+    (decision, { text, dictation = null, answered = null, interpreted = false }) => {
+      switch (decision.type) {
+        case "dictate":
+          return dictation?.onFinal(text);
+        case "perform":
+          return answered?.perform();
+        case "say":
+          return say(decision.line);
+        case "navigate":
+        case "back":
+          return run(decision);
+        case "page":
+          return runPageCommand(decision.command, { heard: text, interpreted });
+        case "confirm": {
+          const { then } = decision;
+          const perform =
+            then.type === "page" ? () => runPageCommand(then.command, { heard: text, interpreted: true }) : () => run(then);
+          return askToConfirm(decision.question, perform, decision.phrase);
+        }
+        case "interpret":
+          return interpretRef.current?.(text);
+        default:
+          // Silence is the right response to ordinary conversation, and
+          // most of what gets said near this app is ordinary
+          // conversation. Logged, not announced.
+          if (text) console.info(`[voice] ignored (${decision.reason}):`, text);
+      }
+    },
+    [say, run, runPageCommand, askToConfirm],
+  );
+
+  // Nothing on the page matched: ask the goose what was meant. What it
+  // hands back is a rewrite into one of the page's own commands, which
+  // goes through the same matcher and is asked about before it runs. A
+  // turn older than the page it was said on is dropped -- the commands
+  // it was read against are gone.
+  //
+  // `fallback` is what to say if the goose has nothing either: the line
+  // a command would have said before it asked for help.
+  interpretRef.current = async (text, fallback = null) => {
+    const route = routeRef.current;
+    const { context, commands } = interpretationMenu();
+    const exclusive = voiceCommandsAreExclusive();
+    const destinations = exclusive
+      ? []
+      : reachableRef.current.filter((p) => p !== route && p !== ROUTES.liveCook).map(pathLabel);
+    if (!commands.length && !destinations.length) {
+      if (fallback) say(fallback);
+      return;
+    }
+    setInterpreting(true);
+    let answer = null;
+    try {
+      answer = await interpretUtterance({ text, agentName: AGENT_NAME, route, context, commands, destinations });
+    } catch (err) {
+      console.info("[voice] could not interpret:", text, err.message);
+    } finally {
+      setInterpreting(false);
+    }
+    if (routeRef.current !== route) return;
+    if (answer?.utterance) {
+      console.info("[voice] read as:", text, "->", answer.utterance);
+      const decision = routeInterpretedTurn(answer.utterance, {
+        route,
+        reachable: reachableRef.current,
+        hasSession: hasSessionRef.current,
+        matchPage: matchPageCommand,
+        exclusive,
+        canGoBack: (window.history.state?.idx ?? 0) > 0,
+      });
+      if (decision.type !== "ignore") return carryOut(decision, { text: answer.utterance, interpreted: true });
+      console.info("[voice] the rewrite matched nothing:", answer.utterance);
+    }
+    // A question back ("which cook?") is worth saying whether or not the
+    // goose was named: it is about the page, not the room. Anything else
+    // unprompted stays unsaid.
+    if (answer?.reply && (answer.named || answer.reply.trim().endsWith("?"))) return say(answer.reply);
+    if (fallback) say(fallback);
+  };
 
   // What to do is decided in voiceTurn.js, where it is unit tested; this
   // only gathers the state it needs and carries the answer out.
@@ -332,6 +435,7 @@ export default function VoiceBar() {
         // react-router numbers its own entries in history.state.idx, and
         // idx 0 is the first page this visit opened.
         canGoBack: (window.history.state?.idx ?? 0) > 0,
+        interpret: true,
       });
 
       // Read before clearing: "yes" performs the question being closed.
@@ -344,33 +448,7 @@ export default function VoiceBar() {
       if (decision.type === "takeover") return dictation.onFinal(text, turn);
 
       spokeRef.current = false;
-      // Wrapped so the cases can keep returning while the resume below
-      // still runs.
-      (() => {
-      switch (decision.type) {
-        case "dictate":
-          return dictation.onFinal(text);
-        case "perform":
-          return answered?.perform();
-        case "say":
-          return say(decision.line);
-        case "navigate":
-        case "back":
-          return run(decision);
-        case "page":
-          return runPageCommand(decision.command);
-        case "confirm": {
-          const { then } = decision;
-          const perform = then.type === "page" ? () => runPageCommand(then.command) : () => run(then);
-          return askToConfirm(decision.question, perform, decision.phrase);
-        }
-        default:
-          // Silence is the right response to ordinary conversation, and
-          // most of what gets said near this app is ordinary
-          // conversation. Logged, not announced.
-          if (text) console.info(`[voice] ignored (${decision.reason}):`, text);
-      }
-      })();
+      carryOut(decision, { text, dictation, answered });
 
       // Nothing was said back, so finish the sentence somebody talked
       // over. Taking it clears it: offered once, then forgotten, since a
@@ -382,7 +460,7 @@ export default function VoiceBar() {
     },
     // navigate is not listed: run() already closes over it, and
     // including it would rebuild this handler on every route change.
-    [say, run, runPageCommand, askToConfirm, clearPending],
+    [carryOut, clearPending],
   );
 
   // Not a dependency of the connect effect (the hook reads config through
@@ -471,7 +549,7 @@ export default function VoiceBar() {
   // the pill, the label and the body copy can never disagree.
   const view = describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname, reachable, idleMs: streamConfig.idleMs, runPaused });
 
-  const goose = describeGoose({ view, speaking, muted, status, partial, hearing, pending, feedback, error });
+  const goose = describeGoose({ view, speaking, muted, status, partial, hearing, pending, feedback, error, interpreting });
   // ?goose=<state> pins a pose for design review (dev only).
   const pinned = devGooseState();
   const shown = pinned ? { ...GOOSE_PREVIEW[pinned], state: pinned } : goose;
@@ -511,7 +589,7 @@ const GOOSE_PREVIEW = {
  * hearing, then the resting states. `view` has already collapsed the
  * connection into copy, so this only decides the pose and reuses it.
  */
-function describeGoose({ view, speaking, muted, status, partial, hearing, pending, feedback, error }) {
+function describeGoose({ view, speaking, muted, status, partial, hearing, pending, feedback, error, interpreting }) {
   if (error) return { state: "warning", tag: "Mic error", line: error, partial: false };
   // An open question outranks the fact that the goose is reading it out:
   // the answer is what the screen is waiting for, and the design files
@@ -534,6 +612,7 @@ function describeGoose({ view, speaking, muted, status, partial, hearing, pendin
   // model agrees someone is speaking — which is the whole difference
   // between a slow goose and a deaf one.
   if (hearing) return { state: "thinking", tag: "Hearing", line: "…", partial: true };
+  if (interpreting) return { state: "thinking", tag: "Thinking", line: "Working out what you meant…", partial: false };
   return { state: "listening", tag: "Listening", line: view.line, partial: false };
 }
 

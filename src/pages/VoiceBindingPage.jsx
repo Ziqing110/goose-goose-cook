@@ -15,7 +15,7 @@ import Icon from "../components/Icon.jsx";
 import { GoosePrint } from "../components/GooseMarks.jsx";
 import gooseChoir from "../assets/goose-choir.png";
 import "./VoiceBindingPage.css";
-import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { askGoose, registerVoiceCommands } from "../utils/voicePageCommands.js";
 import { audioTap } from "../voice/audioTap.js";
 import { speechActivity } from "../utils/speechActivity.js";
 import { enrollVoice, clearVoice, speakerHealth } from "../api/speaker.js";
@@ -453,15 +453,31 @@ export default function VoiceBindingPage() {
 
     const setName = (cook, spoken) => {
       const name = cleanSpokenName(spoken);
-      if (!name) return "I didn’t catch a name — try “call the first cook Mia”.";
+      // Nothing usable in the capture -- "call the first cook, uh" -- may
+      // still be a name the goose can read out of the whole sentence.
+      if (!name) return askGoose("I didn’t catch a name — try “call the first cook Mia”.");
       const taken = v().cooks.some((c) => c.id !== cook.id && c.name.trim().toLowerCase() === name.toLowerCase());
       v().renameCook(cook.id, name);
       return taken ? `${name} is already taken — pick a different name.` : `Cook ${v().cooks.indexOf(cook) + 1} is ${name}.`;
     };
 
+    // What the goose reads when nothing here matched -- without it, "no,
+    // it's Zeina" has nothing to be a correction of.
+    const describe = () => [
+      ...v().cooks.map((c, i) => {
+        const bits = [c.name.trim() ? `named "${c.name.trim()}"` : "no name yet"];
+        bits.push(c.avatar ? `chef ${CHEF_AVATARS.find((a) => a.id === c.avatar)?.name ?? c.avatar}` : "no chef yet");
+        bits.push(c.bound ? "voice recorded" : "voice not recorded");
+        return `Cook ${i + 1} (the ${i === 0 ? "first" : "second"} cook): ${bits.join(", ")}`;
+      }),
+      v().canAdd ? "There is room for one more cook." : "Both cook slots are taken.",
+    ];
+
     return registerVoiceCommands([
       {
         phrases: VOICE_BINDING_VOICE.continueSchedule,
+        description: "Move on to scheduling once every cook is set up",
+        examples: ["continue to scheduling"],
         run: () => {
           if (!v().ready) return "Not yet — every cook needs a chef, a name and a voice.";
           v().navigate("/session/schedule");
@@ -469,6 +485,8 @@ export default function VoiceBindingPage() {
       },
       {
         phrases: VOICE_BINDING_VOICE.nameByOrdinal(ORDINAL),
+        description: "Name or rename a cook, by position. Also how a misheard name is corrected.",
+        examples: ["call the first cook Zeina", "name the second cook Lindy"],
         run: ({ 1: slot, 2: spoken }) => {
           const cook = v().cooks[ordinalIndex(slot)];
           return cook ? setName(cook, spoken) : "There’s no second cook yet — say “add a second cook”.";
@@ -476,6 +494,8 @@ export default function VoiceBindingPage() {
       },
       {
         phrases: VOICE_BINDING_VOICE.nameCook(ORDINAL),
+        description: "Name or rename a cook, by position",
+        examples: ["cook 1 is Zeina"],
         run: ({ 1: slot, 2: spoken }) => {
           const cook = v().cooks[ordinalIndex(slot)];
           return cook ? setName(cook, spoken) : "There’s no second cook yet — say “add a second cook”.";
@@ -486,14 +506,20 @@ export default function VoiceBindingPage() {
         // otherwise take for conversation.
         allowSubject: true,
         phrases: VOICE_BINDING_VOICE.nameSelf,
+        description: "Give the next unnamed cook a name, said by that cook",
+        examples: ["I'm Zeina"],
         run: ({ 1: spoken }) => {
           const cook = v().cooks.find((c) => !c.name.trim());
-          if (!cook) return "Both cooks have names — say “call the first cook…” to change one.";
+          // Everyone has a name, so "I'm Zeina" is probably a correction
+          // of a name the recogniser got wrong. The goose can tell whose.
+          if (!cook) return askGoose("Both cooks have names — say “call the first cook…” to change one.");
           return setName(cook, spoken);
         },
       },
       {
         phrases: VOICE_BINDING_VOICE.chooseAvatar,
+        description: "Open the chef picker for a cook",
+        examples: ["pick a chef for Zeina", "choose the chef for the second cook"],
         run: ({ 1: who }) => {
           const cook = who ? ref(who) : v().cooks.find((c) => !c.avatar) ?? v().cooks[0];
           if (!cook) return which;
@@ -504,6 +530,8 @@ export default function VoiceBindingPage() {
         // The dice, without opening the drawer first — the card's own
         // avatar shuffles in place.
         phrases: VOICE_BINDING_VOICE.randomAvatar,
+        description: "Give a cook a random chef",
+        examples: ["surprise me"],
         run: ({ 1: who }) => {
           const cook = who ? ref(who) : v().cooks.find((c) => !c.avatar) ?? v().cooks[0];
           if (!cook) return which;
@@ -513,6 +541,8 @@ export default function VoiceBindingPage() {
       },
       {
         phrases: VOICE_BINDING_VOICE.record,
+        description: "Record a cook's voice so the goose can tell who is speaking",
+        examples: ["start recording for Zeina", "record again for the first cook"],
         run: ({ 1: who }) => {
           const isReady = (c) => c.name.trim() && c.avatar;
           const cook = who ? ref(who) : v().cooks.find((c) => isReady(c) && !c.bound) ?? v().cooks.find(isReady);
@@ -524,6 +554,8 @@ export default function VoiceBindingPage() {
       },
       {
         phrases: VOICE_BINDING_VOICE.addCook,
+        description: "Add a second cook",
+        examples: ["add a second cook"],
         run: () => {
           if (!v().canAdd) return "Two cooks is the most one kitchen takes.";
           v().addCook();
@@ -534,6 +566,8 @@ export default function VoiceBindingPage() {
         // Losing a name and a recorded voice is not undone by saying it
         // again, so it asks first.
         phrases: VOICE_BINDING_VOICE.removeCook,
+        description: "Remove a cook and their recorded voice",
+        examples: ["remove the second cook", "remove Zeina"],
         confirm: "Remove that cook and their voice?",
         run: ({ 1: who }) => {
           const cook = ref(who);
@@ -543,7 +577,7 @@ export default function VoiceBindingPage() {
           return `Removed ${label(cook)}.`;
         },
       },
-    ]);
+    ], { describe });
   }, [locked, navigate]);
 
   // Layer 10 while a voice is being taken. The line each cook reads out

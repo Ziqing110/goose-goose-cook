@@ -62,10 +62,20 @@ const liveLayers = () => {
  *                      dictation. Only for words that are never an
  *                      answer, and its phrases should be anchored to the
  *                      whole utterance.
+ *   description  string    optional, what the command does -- for the
+ *                      goose, when nothing matched and it is asked what
+ *                      was meant (see interpretationMenu).
+ *   examples     string[]  optional, ways to say it that match `phrases`.
+ *                      The model rewrites toward these.
+ * @param {object} [options]
+ *   describe  () => string[]  optional, the page's state in a few lines
+ *             ("Cook 1 is named Zina"), read when the goose is asked
+ *             what somebody meant. Without it "no, it's Zeina" has
+ *             nothing to be a correction OF.
  * @returns {Function} unregister
  */
-export function registerVoiceCommands(commands, { priority = 0, exclusive = false } = {}) {
-  const layer = { commands: commands || [], priority, exclusive };
+export function registerVoiceCommands(commands, { priority = 0, exclusive = false, describe = null } = {}) {
+  const layer = { commands: commands || [], priority, exclusive, describe };
   layers = [...layers, layer];
   return () => {
     // Remove this layer specifically, wherever it now sits. A late
@@ -156,6 +166,41 @@ export function matchPageCommand(said, transcript, { dictating = false } = {}) {
 export function voiceCommandsAreExclusive() {
   return liveLayers().some((l) => l.exclusive);
 }
+
+/**
+ * What the live layers accept, for asking the goose what somebody meant
+ * when none of it matched. Patterns go as their source so the model can
+ * aim at them; the matcher in the browser still decides.
+ *
+ * Commands that only exist to be said while dictating are left out --
+ * this runs on pages that take commands, not answers.
+ */
+export function interpretationMenu() {
+  const live = liveLayers();
+  const context = live.flatMap((l) => {
+    try {
+      return l.describe?.() || [];
+    } catch {
+      return [];
+    }
+  });
+  const commands = live
+    .flatMap((l) => l.commands)
+    .map((c) => ({
+      description: c.description || "",
+      examples: c.examples || [],
+      patterns: (c.phrases || []).map((p) => p.source),
+    }));
+  return { context, commands };
+}
+
+/**
+ * A command's `run` returns this when it matched the words but cannot
+ * make sense of them in the page's state -- "I'm Zeina" when both cooks
+ * already have names. The goose gets a look at the sentence before the
+ * fallback line is said.
+ */
+export const askGoose = (fallback) => ({ askGoose: true, fallback: fallback ?? null });
 
 /** For tests, and for making sure a stale page can't leave commands behind. */
 export function clearVoiceCommands() {
