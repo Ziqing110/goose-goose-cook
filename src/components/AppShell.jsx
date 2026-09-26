@@ -1,5 +1,6 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 import VoiceBar from "./VoiceBar.jsx";
+import ConversationRail from "./ConversationRail.jsx";
 import { useDesignV4 } from "../utils/designV4.js";
 import "./AppShell.css";
 import "../styles/design-v4.css";
@@ -43,6 +44,9 @@ export default function AppShell() {
       </main>
 
       {!isJournal && <VoiceBar />}
+      {/* One microphone, one conversation, one record of it. Beside
+          VoiceBar for the same reason it is. */}
+      {!isJournal && <ConversationRail />}
     </div>
   );
 }

@@ -23,6 +23,8 @@ import {
   setVoiceEnabled,
   speak,
   stop as stopSpeaking,
+  interrupt as interruptSpeaking,
+  takeInterrupted,
 } from "../voice/agentVoice.js";
 import GooseVoiceAgent from "./GooseVoiceAgent.jsx";
 import { devGooseState } from "../dev/preview.js";
@@ -34,7 +36,10 @@ import {
   voiceCommandsAreExclusive,
 } from "../utils/voicePageCommands.js";
 import { ROUTES, voiceReachablePaths } from "../utils/routeGuards.js";
+import { isPaused } from "../utils/liveCook.js";
 import { routeVoiceTurn, turnConfidence } from "../utils/voiceTurn.js";
+import { speakerLabelTap } from "../voice/speakerLabelTap.js";
+import { voiceLog } from "../voice/voiceLog.js";
 
 
 // Long enough to read, short enough that the bar goes back to being a
@@ -61,6 +66,16 @@ const PHRASE_WINDOW_MS = 25_000;
 // by the second it stays open.
 const IDLE_MS_LIVE_COOK = 120_000;
 const IDLE_MS_ELSEWHERE = 30_000;
+// A PAUSED run is the one state where the mic sleeping is worse than
+// the meter running: a pause is by definition a quiet stretch, and
+// "resume" is the only way out of it by voice. At two minutes the mic
+// was muting itself part-way through every pause, so resume was
+// physically never heard and the feature read as broken.
+//
+// Longer, not unlimited. A pause somebody walked away from should
+// still stop billing eventually, and the copy below says what
+// happened so the way back is obvious.
+const IDLE_MS_PAUSED = 600_000;
 
 // Turn detection for the pages that take commands rather than dictation.
 //
@@ -166,7 +181,14 @@ export default function VoiceBar() {
     [dispatch],
   );
 
+  // Whether this turn has already been answered out loud. An
+  // interrupted line is only worth finishing when nothing has
+  // superseded it.
+  const spokeRef = useRef(false);
+
   const say = useCallback((line) => {
+    spokeRef.current = true;
+    voiceLog.spoke(line);
     speak(line);
     clearTimeout(feedbackTimer.current);
     setFeedback(line);
@@ -229,6 +251,12 @@ export default function VoiceBar() {
   const askToConfirm = useCallback((question, perform, phrase) => {
     pendingRef.current = { perform, phrase };
     setPending(question);
+    // Recorded and counted as having spoken, like any other line. This
+    // went straight to speak(), so a question the goose asked out loud
+    // never reached the record -- leaving a log that showed somebody
+    // being asked nothing and then answering.
+    spokeRef.current = true;
+    voiceLog.spoke(question);
     speak(question);
     armPendingTimer();
   }, [armPendingTimer]);
@@ -279,6 +307,16 @@ export default function VoiceBar() {
   const onTurn = useCallback(
     (turn) => {
       const text = turn.transcript?.trim();
+      // Everything heard goes in the record, whatever becomes of it.
+      // A turn that was ignored is exactly the one somebody wants to
+      // look at afterwards. The live cook keeps its own transcript, so
+      // it would be a second copy there.
+      if (text && routeRef.current !== ROUTES.liveCook) voiceLog.heard(text);
+
+      // Diarization tells voices apart without knowing whose they are.
+      // Recorded on every page, because the page that needs it (voice
+      // binding) asks about turns that have already gone by.
+      speakerLabelTap.push(turn.speaker_label, turn.startedAt ?? Date.now());
       const route = routeRef.current;
       const dictation = getVoiceDictation(route);
       const decision = routeVoiceTurn(text, {
@@ -300,9 +338,16 @@ export default function VoiceBar() {
       const answered = pendingRef.current;
       if (decision.clearPending) clearPending();
 
+      // The live cook owns every turn on its page, and its own resume
+      // with it -- it knows whether applying the turn produced a reply,
+      // which this cannot see.
+      if (decision.type === "takeover") return dictation.onFinal(text, turn);
+
+      spokeRef.current = false;
+      // Wrapped so the cases can keep returning while the resume below
+      // still runs.
+      (() => {
       switch (decision.type) {
-        case "takeover":
-          return dictation.onFinal(text, turn);
         case "dictate":
           return dictation.onFinal(text);
         case "perform":
@@ -325,6 +370,15 @@ export default function VoiceBar() {
           // conversation. Logged, not announced.
           if (text) console.info(`[voice] ignored (${decision.reason}):`, text);
       }
+      })();
+
+      // Nothing was said back, so finish the sentence somebody talked
+      // over. Taking it clears it: offered once, then forgotten, since a
+      // line two turns stale is not worth hearing.
+      if (!spokeRef.current) {
+        const resumed = takeInterrupted();
+        if (resumed) speak(resumed);
+      }
     },
     // navigate is not listed: run() already closes over it, and
     // including it would rebuild this handler on every route change.
@@ -334,12 +388,17 @@ export default function VoiceBar() {
   // Not a dependency of the connect effect (the hook reads config through
   // a ref), so crossing into or out of the live cook changes the quiet
   // budget without dropping the socket.
+  const runPaused = pathname === ROUTES.liveCook && isPaused(state.session?.run);
   const streamConfig = useMemo(
     () => ({
       ...STREAM_CONFIG,
-      idleMs: pathname === ROUTES.liveCook ? IDLE_MS_LIVE_COOK : IDLE_MS_ELSEWHERE,
+      idleMs: runPaused
+        ? IDLE_MS_PAUSED
+        : pathname === ROUTES.liveCook
+          ? IDLE_MS_LIVE_COOK
+          : IDLE_MS_ELSEWHERE,
     }),
-    [pathname],
+    [pathname, runPaused],
   );
 
   const { status, partial, hearing, updateConfig } = useStreamingTranscript({
@@ -380,6 +439,22 @@ export default function VoiceBar() {
     updateConfig(patch);
   }, [status, registryVersion, pathname, updateConfig]);
 
+  // Somebody started talking while the goose was talking. Stop, and let
+  // them finish -- being talked over by a cheerful bird is the fastest
+  // way to make a voice interface feel like something to fight.
+  //
+  // SpeechStarted, not the first partial: it arrives in about 300ms
+  // rather than a second, and a second of the agent still going is
+  // long enough to read as not listening.
+  //
+  // The agent's own voice can trip this through the microphone, and
+  // that is an acceptable trade here: a false barge-in costs one
+  // stopped sentence, which the line below then says again. Never
+  // hearing a real one costs the conversation.
+  useEffect(() => {
+    if (hearing) interruptSpeaking();
+  }, [hearing]);
+
   // Forward partials to a page taking dictation, so its input fills as
   // you speak instead of jumping all at once when the turn ends.
   useEffect(() => {
@@ -394,7 +469,7 @@ export default function VoiceBar() {
 
   // One source of truth for the three places that describe state, so
   // the pill, the label and the body copy can never disagree.
-  const view = describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname, reachable, idleMs: streamConfig.idleMs });
+  const view = describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname, reachable, idleMs: streamConfig.idleMs, runPaused });
 
   const goose = describeGoose({ view, speaking, muted, status, partial, hearing, pending, feedback, error });
   // ?goose=<state> pins a pose for design review (dev only).
@@ -472,7 +547,7 @@ function quietFor(ms) {
   return minutes === 1 ? "a minute" : minutes === 2 ? "two minutes" : `${minutes} minutes`;
 }
 
-function describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname, reachable, idleMs }) {
+function describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname, reachable, idleMs, runPaused }) {
   if (error) {
     return {
       label: "MIC ERROR",
@@ -486,7 +561,12 @@ function describe({ muted, status, error, idled, pending, feedback, partial, hin
   if (muted && idled) {
     return {
       label: "MIC OFF",
-      line: `Muted after ${quietFor(idleMs)} of quiet, to stop the meter running.`,
+      // During a pause, "muted after ten minutes of quiet" is true and
+      // useless: what the cook needs to know is that the way to resume
+      // by voice is gone and the button is the way back.
+      line: runPaused
+        ? "The mic slept while you were paused — tap it to wake me, or hit Resume."
+        : `Muted after ${quietFor(idleMs)} of quiet, to stop the meter running.`,
       sub: "Unmute whenever you're ready.",
       pill: "Muted",
       pillClass: "is-muted",

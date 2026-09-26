@@ -4,7 +4,8 @@
 // scoping*: "take the garlic" is trivially unambiguous against the 3
 // steps you could actually claim, even though it'd be a coin-flip
 // against all 20.
-import { normalize, normalizeLoose, matchStepName } from "./stepNameMatch.js";
+import { normalize, normalizeLoose, matchStepName, contentTokens } from "./stepNameMatch.js";
+import { resolveCookRef } from "./cookVoice.js";
 
 // Order matters: "we're done" must not fire a step completion, and
 // "drop it" must not be read as "done".
@@ -19,7 +20,7 @@ const INTENTS = [
   { intent: "score", patterns: [/\bscores?\b/, /\bpoints?\b/, /leader ?board/, /who'?s winning/, /am i winning/] },
   { intent: "status", patterns: [/还要多久|还有多久|到哪了|接下来/, /\bstatus\b/, /what'?s next/, /what now/, /where are we/, /how (?:long|much)/] },
   { intent: "drop", patterns: [/\bdrop\b/, /put (?:it|this) back/, /someone else (?:can )?take/, /give (?:it|this) (?:back|up)/] },
-  { intent: "claim", patterns: [/我来|我做|给我/, /\bclaim\b/, /i'?ll take\b/, /i'?ll do\b/, /\btake\b/, /i'?ve got\b/, /give me\b/, /\bmine\b/] },
+  { intent: "claim", patterns: [/我来|我做|给我/, /\bclaim\b/, /i'?ll take\b/, /i'?ll do\b/, /\btakes?\b/, /i'?ve got\b/, /give me\b/, /\bmine\b/] },
   { intent: "skip", patterns: [/\bskip\b/, /forget (?:that|it)/, /not doing\b/, /cancel that/] },
   { intent: "done", patterns: [/好了|做好|完成|弄好/, /\bdone\b/, /\bfinish(?:ed)?\b/, /\bcomplete(?:d)?\b/, /got it\b/, /that'?s it\b/] },
   { intent: "start", patterns: [/开始|我上/, /\bstart(?:ing)?\b/, /\bbegin\b/, /let'?s go\b/, /\bon it\b/, /\bgo\b/] },
@@ -78,7 +79,11 @@ function resolveStepRef(text, matched, candidates, byId, agentName) {
     ? spoken.split(" ").filter((w) => w !== normalize(agentName)).join(" ")
     : spoken;
   const { stepId, candidates: alternates, confidence } = matchStepName(rest, candidates, (id) => byId[id]?.label);
-  return { stepId, candidates: alternates, confidence };
+  // Whether a step was NAMED at all, which is not the same as one being
+  // matched. "done" names nothing; "done with the ginger" names something
+  // that may simply not be in scope. Those two need opposite answers, so
+  // the fallbacks below have to tell them apart.
+  return { stepId, candidates: alternates, confidence, named: contentTokens(rest).length > 0 };
 }
 
 /**
@@ -87,11 +92,20 @@ function resolveStepRef(text, matched, candidates, byId, agentName) {
  *   `claimable` / `ownQueue` are the pre-scoped candidate lists — the
  *   caller knows the run state, this module deliberately doesn't.
  *   `agentName` is stripped before step matching; see resolveStepRef.
+ *   `cooks` lets a claim name whose it is -- "Zoe will take the
+ *   garlic". Only claim and start: saying somebody else is DONE is a
+ *   claim about them, not an instruction, and crediting it is how the
+ *   wrong cook gets the points.
  */
 export function parseCommand(text, ctx) {
-  const { byId, activeStepId, claimable = [], ownQueue = [], agentName = "" } = ctx;
+  const { byId, activeStepId, claimable = [], ownQueue = [], agentName = "", cooks = [] } = ctx;
   const { intent, matched } = detectIntent(text);
-  const base = { intent, raw: text, stepId: null, candidates: [], confidence: "none" };
+  // Whose task this is, when they said. The same rule as the model
+  // path: only for taking work on.
+  const forCook = ["claim", "start"].includes(intent) && cooks.length
+    ? resolveCookRef(text, cooks)?.id ?? null
+    : null;
+  const base = { intent, raw: text, stepId: null, candidates: [], confidence: "none", cookId: forCook };
   if (["status", "score", "help", "undo", "finish_run", "unknown"].includes(intent)) return base;
 
   // Each intent only ever looks at the steps it could plausibly mean.
@@ -104,14 +118,22 @@ export function parseCommand(text, ctx) {
       ? [activeStepId, ...ownQueue]
       : ownQueue;
 
-  const resolved = resolveStepRef(text, matched, [...new Set(scope)], byId, agentName);
+  const { named, ...resolved } = resolveStepRef(text, matched, [...new Set(scope)], byId, agentName);
   if (resolved.stepId) return { ...base, ...resolved };
 
   // No name given: done/skip/drop fall back to whatever they're holding.
-  if (!resolved.candidates.length && activeStepId && ["done", "skip", "drop"].includes(intent)) {
+  //
+  // Only when no name was given. A name that resolved to nothing means the
+  // cook asked about a step that is not theirs to act on, and falling back
+  // there acted on a DIFFERENT one: "done with the ginger", said while
+  // holding the onion, completed the onion and announced it. Leaving
+  // stepId null reaches needTarget in LiveCookPage, which asks "Which one
+  // did you finish?" instead of acting on a guess.
+  const unnamed = !named && !resolved.candidates.length;
+  if (unnamed && activeStepId && ["done", "skip", "drop"].includes(intent)) {
     return { ...base, stepId: activeStepId, confidence: "exact" };
   }
-  if (!resolved.candidates.length && intent === "start" && ownQueue.length === 1) {
+  if (unnamed && intent === "start" && ownQueue.length === 1) {
     return { ...base, stepId: ownQueue[0], confidence: "exact" };
   }
   return { ...base, ...resolved };

@@ -19,7 +19,8 @@
 
    Layout: title row → strip → two station tickets, one half each, four
    shared zones (head · the order · actions · on its own) → Versus: the
-   board of what's up for grabs → Toque as one line → footer.
+   board of what's up for grabs → footer. The conversation lives in
+   the shell's rail (components/ConversationRail).
 ----------------------------------------------------------------*/
 
 /* The page itself must not animate as one block (a transform on it
@@ -44,25 +45,11 @@
 @keyframes lc-goose-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 @keyframes lc-goose-honk { 0%, 100% { transform: rotate(0deg) translateY(0); } 30% { transform: rotate(-5deg) translateY(-3px); } 65% { transform: rotate(3deg) translateY(0); } }
 @keyframes lc-fly { 0% { opacity: 0; transform: translate(0, 0) scale(0.9); } 16% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1.1); } }
-@keyframes lc-drawer-in { from { transform: translateX(100%); } to { transform: none; } }
 
 /* ---------------- shared bits ---------------- */
 /* Section labels: UP FOR GRABS · NOT YET · SERVICE DONE. */
 .lc-eyebrow-label { margin: 0; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
 
-.lc-speaker-seg.is-selected .lc-avatar.has-chef { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85); }
-
-/* The agent — lavender, never a player color. */
-.lc-agent-avatar {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--ai) 14%, transparent);
-  color: var(--ai);
-}
-.lc-agent-avatar-20 { width: 20px; height: 20px; }
 .lc-offer-pulse { animation: lc-offer 4000ms ease-in-out infinite; }
 
 
@@ -559,108 +546,6 @@
 .lc-card.is-paused .lc-avatar, .lc-card.is-paused .lc-goose, .lc-card.is-paused .lc-moment, .lc-card.is-paused .lc-cooking { opacity: 0.6; }
 .lc-card.is-paused .lc-cooking-row, .lc-card.is-paused .lc-goose { animation: none; }
 
-/* ---------------- Toque (the agent) ---------------- */
-/* The panel fills the drawer's height: a titled head with a close
-   button, the log scrolling in the middle, the controls pinned under
-   a rule. */
-.lc-agent { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
-.lc-toque { flex: none; }
-.lc-agent-title { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.lc-agent-name { font-size: 18px; line-height: 24px; font-weight: 700; }
-.lc-agent-close {
-  flex: none;
-  width: 44px;
-  height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 8px;
-  background: var(--ds-chip);
-  color: var(--ink);
-  font-size: 19px;
-  cursor: pointer;
-}
-.lc-agent-close:hover { background: var(--line); }
-.lc-agent .lc-log { min-height: 0; gap: 14px; padding: 16px 18px 20px; }
-.lc-agent-controls { display: flex; flex-direction: column; gap: 10px; flex: none; padding: 12px 18px 16px; border-top: 1px solid var(--line); }
-.lc-agent-head { flex: none; display: flex; align-items: center; gap: 10px; padding: 18px 18px 12px; border-bottom: 1px solid var(--line); }
-.lc-agent-eyebrow { font-size: 13px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-soft); }
-.lc-agent-tag {
-  height: 22px;
-  padding: 0 8px;
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--ai) 14%, transparent);
-  color: var(--ai);
-  font-size: 13px;
-  font-weight: 500;
-}
-.lc-log {
-  flex: 1 1 auto;
-  min-height: 160px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  scroll-behavior: smooth;
-}
-/* Lines sit at the bottom while there are few, via the auto margin —
-   not justify-content: flex-end, which would push the overflow above
-   the top of a scroll box where no scrollbar can reach it. */
-.lc-log > :first-child { margin-top: auto; }
-.lc-line { display: flex; align-items: flex-start; gap: 10px; font-size: 15px; line-height: 22px; animation: lc-fade 200ms ease-out both; }
-.lc-line .lc-avatar, .lc-line .lc-agent-avatar { margin-top: 1px; }
-.lc-line.is-agent .lc-line-text { color: var(--ai); }
-.lc-line-text { min-width: 0; overflow-wrap: anywhere; }
-.lc-pending { display: flex; flex-direction: column; gap: 8px; padding-left: 30px; }
-.ds-v4 .lc-pending-option { justify-content: flex-start; text-align: left; background: var(--surface); }
-.ds-v4 .lc-pending-option:hover { background: var(--ds-chip-hover); }
-.lc-pending .lc-btn-accent { align-self: flex-start; }
-
-/* Speaker toggle — two segments, the selected one filled in its color.
-   Temporary until voice ID lands. */
-.lc-speaker { display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--ds-chip); }
-.lc-speaker-seg {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 12px 0 8px;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink-soft);
-  font: inherit;
-  font-size: 15px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 120ms ease-out, color 120ms ease-out;
-}
-.lc-speaker-seg.is-selected { color: #fff; }
-.lc-speaker-seg.is-selected.is-a { background: var(--cook-a); }
-.lc-speaker-seg.is-selected.is-b { background: var(--cook-b); }
-.lc-speaker-seg.is-selected .lc-avatar:not(.has-chef) { background: rgba(255, 255, 255, 0.25); }
-
-.lc-say { display: flex; gap: 8px; }
-.lc-say-input {
-  flex: 1;
-  min-width: 0;
-  min-height: 44px;
-  padding: 0 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  background: var(--surface);
-  color: var(--ink);
-  font: inherit;
-  font-size: 15px;
-}
-.lc-say-input::placeholder { color: var(--ink-faint); }
-.lc-say-input:focus { outline: 2px solid var(--ink); outline-offset: 1px; }
-
 /* ---------------- the board (Versus) ----------------
    Schedule's card-on-panel relationship: a bg-secondary panel, small
    paper tickets on it. Every tile has the same rows, the tool row
@@ -797,72 +682,6 @@
   96% { transform: translateX(-0.7px) rotate(var(--lc-locked-tilt, 0deg)); }
 }
 .lc-notyet-chip::before { content: ""; width: 3px; height: 10px; border-left: 2px solid var(--line-strong); border-right: 2px solid var(--line-strong); }
-
-/* ---------------- Toque's line ----------------
-   One line, the newest utterance only. Tap for the drawer. */
-/* A bg-secondary row, not a piece: it is one line of the conversation
-   and a way into the drawer, not a panel competing with the cards. */
-.lc-toque-line {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  height: 56px;
-  padding: 0 14px;
-  border: none;
-  border-radius: var(--radius-card);
-  background: var(--surface-sunken);
-  color: var(--ink);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: transform 120ms ease-out, background 120ms ease-out;
-  animation: lc-rise 240ms 140ms ease-out both;
-}
-.lc-toque-line:hover { background: var(--ds-chip-hover); }
-.lc-toque-line:active { transform: scale(0.99); }
-.lc-toque-line .goose-print { flex: none; }
-.lc-toque-line-text {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 15px;
-  line-height: 22px;
-  animation: lc-rise 240ms ease-out both;
-}
-.lc-toque-line-text.is-agent { color: var(--ai); }
-.lc-toque-line-count { flex: none; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--accent); }
-.lc-toque-line-chevron {
-  width: 26px;
-  height: 26px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: var(--accent-soft);
-  font-size: 17px;
-  line-height: 1;
-}
-
-/* The drawer: a scrim over the field and a 400px panel springing in
-   from the right, above the shell's VoiceBar so the whole run reads
-   back without the bar cutting it. */
-.lc-drawer { position: fixed; inset: 0; z-index: 70; }
-.lc-drawer-scrim { position: absolute; inset: 0; background: color-mix(in srgb, var(--ink) 28%, transparent); animation: lc-fade 200ms ease-out both; }
-.lc-drawer-panel {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(400px, 100%);
-  display: flex;
-  flex-direction: column;
-  background: var(--surface);
-  /* The modal shadow separates it; no border. */
-  box-shadow: var(--shadow-modal);
-  animation: lc-drawer-in 240ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
-}
 
 /* ---------------- footer band ----------------
    In flow, not sticky: the primaries live on the cards. Once everything
@@ -1031,8 +850,6 @@
 
   .lc-pool { padding: 12px 14px 14px; }
   .lc-pool-grid { grid-template-columns: 1fr; gap: 10px; }
-  .lc-toque-line { padding: 0 12px; gap: 10px; }
-  .lc-toque-line-count { font-size: 14px; }
 
   .lc-footer { gap: 12px; padding: 12px 0; }
   .lc-footer .btn-lg { flex: 1 1 auto; min-width: 0; }
@@ -1047,7 +864,7 @@
    Everything becomes a 200ms fade; the geese stand still, the offer
    doesn't pulse, due doesn't shake, and the bars jump to position. */
 @media (prefers-reduced-motion: reduce) {
-  .lc-header, .lc-strip, .lc-card, .lc-agent, .lc-pool, .lc-tile, .lc-service, .lc-roll, .lc-line, .lc-fly, .lc-toque-line, .lc-toque-line-text, .lc-drawer-panel, .lc-card-points, .lc-stamp, .lc-banner, .lc-step-title, .lc-wait, .lc-rest, .lc-moment { animation-name: lc-fade; }
+  .lc-header, .lc-strip, .lc-card, .lc-pool, .lc-tile, .lc-service, .lc-roll, .lc-fly, .lc-card-points, .lc-stamp, .lc-banner, .lc-step-title, .lc-wait, .lc-rest, .lc-moment { animation-name: lc-fade; }
   .lc-goose, .lc-offer-pulse, .lc-card-score, .lc-notyet-chip { animation: none; }
   .lc-card.is-state-due { animation: none; }
   .lc-tug-a, .lc-tug-b, .lc-step-rail-fill, .lc-receipt-stub { transition: none; }

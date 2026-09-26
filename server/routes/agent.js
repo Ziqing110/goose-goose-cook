@@ -27,12 +27,21 @@
 import { Router } from "express";
 import { requestTurn, TurnError } from "../agent/gateway.js";
 import { collect, park } from "../agent/pending.js";
+import { requestAside } from "../agent/aside.js";
+import { requestNarration } from "../agent/narrate.js";
 
 export const agentRouter = Router();
 
 const API_KEY = process.env.ASSEMBLYAI_API_KEY || "";
 const MODEL = process.env.AAI_AGENT_MODEL || "gpt-4.1";
 const MAX_TEXT_CHARS = 500;
+// A garnish must never compete with a cook who actually asked for
+// something, so it gets its own model knob and a cheap default.
+const ASIDE_MODEL = process.env.AAI_ASIDE_MODEL || "gemini-2.5-flash-lite";
+// The cook is over and nobody is waiting on a hot pan, which makes this
+// the one call in the app where a slower, better model is the right
+// trade. It runs once per run and the result is stored on the summary.
+const NARRATE_MODEL = process.env.AAI_NARRATE_MODEL || "claude-sonnet-4-6";
 
 /**
  * Collect a parked answer. Holds the request open until the lookup
@@ -50,6 +59,41 @@ agentRouter.get("/answer/:id", async (req, res) => {
     if (err instanceof TurnError) return res.status(err.status).json({ error: err.message });
     return res.status(500).json({ error: err.message });
   }
+});
+
+/**
+ * An unprompted remark into a quiet kitchen.
+ *
+ * Whether the silence has been earned is decided in the browser (see
+ * utils/commentary.js), which is the only place that knows who is busy
+ * and how long the room has been quiet. This just writes the line.
+ *
+ * Never fails: every problem comes back as an empty line, because the
+ * correct fallback for a remark nobody asked for is not making it.
+ */
+agentRouter.post("/aside", async (req, res) => {
+  const { agentName, snapshot } = req.body || {};
+  if (!agentName || !Array.isArray(snapshot?.steps)) {
+    return res.status(400).json({ error: "agentName and snapshot {steps} are required." });
+  }
+  const { line } = await requestAside({ apiKey: API_KEY, model: ASIDE_MODEL, agentName, snapshot });
+  return res.json({ line });
+});
+
+/**
+ * A few sentences about how a finished cook went.
+ *
+ * Never fails: an empty story means the card keeps the deterministic
+ * headline it has always had, which is a complete card, not a broken
+ * one.
+ */
+agentRouter.post("/narrate", async (req, res) => {
+  const { agentName, record } = req.body || {};
+  if (!agentName || !record || typeof record !== "object") {
+    return res.status(400).json({ error: "agentName and record are required." });
+  }
+  const { story } = await requestNarration({ apiKey: API_KEY, model: NARRATE_MODEL, agentName, record });
+  return res.json({ story });
 });
 
 agentRouter.post("/turn", async (req, res) => {

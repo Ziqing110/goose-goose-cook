@@ -965,7 +965,9 @@ try {
     const editor = inventoryPage.getByRole("dialog", { name: "Edit step" });
     await editor.waitFor({ state: "visible" });
     await inventoryStream.say("delete this step");
-    await inventoryPage.getByText(/Delete this step\?/).waitFor({ state: "visible", timeout: 1_500 });
+    // The rail logs every question the goose asks aloud, so these words
+    // are on the page twice. The assertion is that the question appeared.
+    await inventoryPage.getByText(/Delete this step\?/).first().waitFor({ state: "visible", timeout: 1_500 });
     await inventoryStream.say("yes");
     const deleteDialog = inventoryPage.getByRole("dialog", { name: "Remove step" });
     await deleteDialog.waitFor({ state: "visible" });
@@ -1082,7 +1084,7 @@ try {
   await understandingRequest;
   await waitForAttribute(progress, "aria-valuenow", "1");
   assert.deepEqual(understandingInputs, [spokenAnswer]);
-  assert.match(await conversationPage.getByRole("log").innerText(), /ramen/);
+  assert.match(await conversationPage.locator(".transcript").innerText(), /ramen/);
 
   await checkVoiceBehavior("Conversation: ‘start over’ mid-question asks, then clears the answers", async () => {
     await conversationStream.say("start over");
@@ -1140,7 +1142,9 @@ try {
     await backConversation.stream.say("go back");
     await tagBecomes(backConversation.page, "Confirm");
     await backConversation.stream.say("yes");
-    await backConversation.page.waitForURL(/127\.0\.0\.1:\d+\/$/, { timeout: 3_000 });
+    // The path, not the host: the suite runs against localhost as well as
+    // 127.0.0.1 (VOICE_E2E_BASE), and Home is Home on either.
+    await backConversation.page.waitForURL((url) => url.pathname === "/", { timeout: 3_000 });
     assert.equal(understandingInputs.length, answersBefore, "neither ‘go back’ nor ‘yes’ was sent as an answer");
   });
   await backConversation.page.close();
@@ -1530,18 +1534,33 @@ try {
     await live.stream.say("Goose skip");
     await live.page.locator(".lc-pip.is-skipped").waitFor({ state: "visible" });
   });
-  await checkVoiceBehavior("Live Cook: status and help voice commands appear in Toque's run log", async () => {
+  await checkVoiceBehavior("Live Cook: status and help voice commands appear in the conversation rail", async () => {
     await live.stream.say("Goose status");
     await live.stream.say("Goose score");
     await live.stream.say("Goose help");
-    await live.page.getByRole("button", { name: /Open Toque/ }).click({ force: true });
-    const log = live.page.getByRole("log");
+    // Goose's Notes starts tucked; pull the sheet out to read it.
+    await live.page.locator(".gn-handle").click();
+    const log = live.page.locator(".gn-sheet").getByRole("log");
     await log.waitFor({ state: "visible" });
     const text = await log.innerText();
     assert.match(text, /Goose status/);
     assert.match(text, /Goose score/);
     assert.match(text, /No score in co-op/);
     assert.match(text, /Say “done”|Say "done"/);
+  });
+  await checkVoiceBehavior("Live Cook: the rail's speaker toggle decides who a turn is, and 'done' holding nothing asks which one", async () => {
+    // Leo has held nothing all run. With him selected, a bare "done"
+    // names no step and he has none in hand, so the goose asks.
+    const rail = live.page.locator(".gn-sheet");
+    if (await live.page.locator(".gn.is-tucked").count()) await live.page.locator(".gn-handle").click();
+    await rail.getByRole("radio", { name: /Leo/ }).click();
+    const piecesBefore = await live.page.locator(".lc-pip.is-done").count();
+    await live.stream.say("Goose done");
+    await waitForPageCondition(live.page, () => /Which one did you finish\?/.test(document.querySelector(".gn-list")?.textContent || ""), 5_000);
+    const said = rail.locator(".gn-row.is-said").last();
+    assert.match(await said.locator(".gn-who").innerText(), /Leo/, "the turn is credited to the selected cook");
+    assert.equal(await live.page.locator(".lc-pip.is-done").count(), piecesBefore, "nothing was finished on a guess");
+    await rail.getByRole("radio", { name: /Mia/ }).click();
   });
   await checkVoiceBehavior("Live Cook: finishing the last step ends the run", async () => {
     await live.stream.say("Goose finish the cook");
@@ -1593,6 +1612,28 @@ try {
     await contest.page.locator(".lc-tile.is-claimable").filter({ hasText: stepName }).waitFor({ state: "hidden" });
     await contest.stream.say("Goose undo");
     await contest.page.locator(".lc-tile.is-claimable").filter({ hasText: stepName }).waitFor({ state: "visible" });
+  });
+  await checkVoiceBehavior("Live Cook (Versus): ending early is confirmed by voice, and a bare 'yes' is not enough", async () => {
+    // Goose's Notes starts tucked on a fresh page; pull it out.
+    await contest.page.locator(".gn-handle").click();
+    const dialog = contest.page.getByRole("dialog", { name: "Call it early?" });
+    const railText = () => contest.page.locator(".gn-list").innerText();
+    await contest.stream.say("Goose finish the cook");
+    await dialog.waitFor({ state: "visible" });
+    await waitForPageCondition(contest.page, () => /say “call it early”/i.test(document.querySelector(".gn-list")?.textContent || ""), 5_000);
+    // A stray yes must not end the cook: the goose asks again.
+    await contest.stream.say("yes");
+    await waitForPageCondition(contest.page, () => /To end the cook now/.test(document.querySelector(".gn-list")?.textContent || ""), 5_000);
+    assert.ok(await dialog.isVisible(), "still asking after a bare yes");
+    await contest.stream.say("keep cooking");
+    await dialog.waitFor({ state: "hidden" });
+    assert.match(await railText(), /still cooking/i);
+    assert.equal(await contest.page.locator(".live-cook-page.is-finished").count(), 0, "the run carries on");
+    // And the phrase, with no hands, ends it.
+    await contest.stream.say("Goose finish the cook");
+    await dialog.waitFor({ state: "visible" });
+    await contest.stream.say("call it early");
+    await contest.page.locator(".live-cook-page.is-finished").waitFor({ state: "visible" });
   });
   await contest.page.close();
 

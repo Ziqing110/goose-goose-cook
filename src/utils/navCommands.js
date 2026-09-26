@@ -384,6 +384,18 @@ export function normalizeUtterance(text) {
  * "we should resume later" — registered by Home — fired immediately,
  * which is the exact bug the guards exist to prevent.
  */
+/**
+ * Is there a subject pronoun in here? "We should resume later" is a
+ * sentence about resuming, not a request to resume.
+ *
+ * Split out from isLikelyConversation because callers need to tell this
+ * apart from a poorly-heard command: one is somebody talking near the
+ * microphone, the other is somebody talking into it.
+ */
+export function hasSubject(said) {
+  return HAS_SUBJECT.test(said);
+}
+
 export function isLikelyConversation(said, confidence, { allowSubject = false } = {}) {
   // "I'm Mia" is a command whose first word is a subject. A command
   // opts in; the confidence floor still applies to it.

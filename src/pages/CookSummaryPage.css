@@ -154,3 +154,102 @@
   .cc-receipt-cell .lc-receipt-roll { position: relative; inset: auto; }
   .cc-receipt-cell .lc-receipt { max-height: none; }
 }
+
+/* ---- What each of you did -----------------------------------------
+   The receipt above is by STEP; this is by PERSON. Both read the same
+   run, and people want the second one afterwards: the order they worked
+   in, and what each thing cost them. */
+.cc-did {
+  margin: 0 0 24px;
+  padding: 20px 24px;
+  border: 1px solid var(--kp-divider);
+  border-radius: var(--radius-card);
+  background: var(--kp-bg);
+}
+
+.cc-did-title {
+  margin: 0 0 16px;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.cc-did-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 20px;
+}
+
+.cc-did-head h3 {
+  margin: 0 0 4px;
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.cc-did-tally {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0 0 10px;
+  font-size: 0.8125rem;
+  color: var(--kp-text-secondary);
+}
+
+.cc-did-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--kp-divider);
+}
+
+.cc-did-item {
+  display: grid;
+  /* The verb column is fixed so the step names line up down the list
+     rather than stepping in and out with the length of each verb. */
+  /* Wide enough for HANDED BACK on one line; narrower and the longest
+     verb wraps to two rows and breaks the rhythm of the list. */
+  grid-template-columns: 7rem 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--kp-divider);
+  font-size: 0.875rem;
+}
+
+.cc-did-verb {
+  color: var(--kp-text-tertiary);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.cc-did-item.is-done .cc-did-verb {
+  color: var(--kp-status-done);
+}
+
+.cc-did-time {
+  color: var(--kp-text-secondary);
+  font-size: 0.8125rem;
+}
+
+/* Undone, not deleted: the record says they took it back, which is the
+   honest version of what happened. */
+.cc-did-item.is-undone {
+  opacity: 0.55;
+}
+
+.cc-did-item.is-undone .cc-did-step {
+  text-decoration: line-through;
+}
+
+/* The written-up version of the evening, beside the deterministic
+   headline rather than instead of it. Present only when the model
+   answered; the card is complete without it. */
+.cc-story {
+  margin: 0 0 12px;
+  max-width: 44rem;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--kp-text-secondary);
+  text-wrap: pretty;
+}

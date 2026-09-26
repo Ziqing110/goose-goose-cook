@@ -9,9 +9,11 @@
 // structural, not a discipline.
 //
 // The shell's VoiceBar stays the shared one (it only carries the hint
-// line); the transcript, speaker toggle and typed fallback live in the
-// agent column beside the cards, because on a 1280 counter screen the
-// cards must not scroll away behind a tall bar.
+// line); the record of what was said and done, and the speaker toggle,
+// live in the shell's conversation rail, floating beside the page, so
+// on a 1280 counter screen the cards never scroll away behind either.
+// There is no typed box: a cook whose voice is not getting through uses
+// the cards' buttons, which do everything a spoken command does.
 //
 // The look (design: "Kitchen Path Live Cook v7 — the hand, played"):
 // the Schedule's Versus opening-hand tickets scaled up into live
@@ -24,7 +26,7 @@
 //
 // Sub-components live in this file rather than their own (same pattern
 // as Schedule) since none of them is used elsewhere.
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { mergeRecipesForDisplay, formatDuration } from "../utils/graphLayout.js";
@@ -35,18 +37,34 @@ import {
   runProgress, isRunComplete, scoreboard, runOutcome, resolveAssignments, replan,
   arbitrateClaim, claimSuggestions, applyStart, applyDone, applySkip, applyDrop, passiveStepsFor,
   selfFinishingIds,
-  applyUndo, canUndo, endRun, appendTranscript, scoreStep, DIFFICULTY_POINTS,
+  applyUndo, canUndo, endRun, versusWaiting, appendTranscript, scoreStep, DIFFICULTY_POINTS,
   isPaused, applyPause, applyResume,
 } from "../utils/liveCook.js";
-import { parseCommand, HELP_TEXT, isBareResume } from "../utils/voiceCommands.js";
-import { matchConfirmation } from "../utils/navCommands.js";
+import { parseCommand, HELP_TEXT } from "../utils/voiceCommands.js";
+import { matchConfirmation, hasSubject, normalizeUtterance } from "../utils/navCommands.js";
+import { routeConfirmReply } from "../utils/confirmReply.js";
+import { routeModalReply, FINISH_PHRASE } from "../utils/modalReply.js";
+import { findSelfIntro } from "../utils/selfIntro.js";
+import { opensFollowUp } from "../utils/followUp.js";
+import { rejectionLines } from "../utils/agentRejection.js";
+import { voiceLog } from "../voice/voiceLog.js";
+import { speakerSelection, resolveSpeaker } from "../voice/speakerSelection.js";
 import { registerVoiceDictation } from "../utils/voicePageCommands.js";
 import { buildAgentSnapshot } from "../utils/agentSnapshot.js";
-import { agentTurn, collectAnswer } from "../api/agent.js";
-import { AGENT_NAME, speak } from "../voice/agentVoice.js";
+import { agentTurn, agentAside, collectAnswer } from "../api/agent.js";
+import { shouldCommentate } from "../utils/commentary.js";
+
+// Often enough that a lull is noticed while it is still a lull, rarely
+// enough to be free -- the decision it drives is pure and local. Module
+// scope because the interval is set up before this component's early
+// return, and a const declared after that would be in its TDZ.
+const ASIDE_CHECK_MS = 5000;
+import { AGENT_NAME, speak, takeInterrupted } from "../voice/agentVoice.js";
+import { explainStep } from "../utils/stepExplain.js";
 import { audioTap } from "../voice/audioTap.js";
 import { identifySpeaker } from "../api/speaker.js";
 import { decideSpeaker, hasHandover } from "../utils/speakerMatch.js";
+import { cookFromTurn } from "../utils/speakerLabels.js";
 import { isNameOnlyTurn } from "../utils/addressing.js";
 import { buildSummary } from "../utils/summaryCard.js";
 import { clock, playerKey, resultPlayers } from "../utils/serviceResults.js";
@@ -136,8 +154,14 @@ const NAME_CARRY_MS = 5_000;
 // eslint-disable-next-line no-unused-vars
 function onMomentDue(stepId, phase, index) {}
 
+// How to say a step verb with the step in it, for when the goose cannot
+// tell which step was meant. Said as a whole command, name included, so
+// the answer is heard like any other turn and nothing has to be held
+// open waiting for it.
+const NAMED_FORM = { done: "done with", start: "start", claim: "I'll take", skip: "skip", drop: "put back" };
+const sayWithName = (intent) => `Say “${AGENT_NAME}, ${NAMED_FORM[intent] || intent}” and the step.`;
+
 const capitalize = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
-const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** One clock for the page — not one per card. */
 function useNow(paused) {
@@ -215,10 +239,6 @@ const GOOSE = {
   onTheMove: "g10-walking",
   handoff: "g11-handoff",
   behind: "g12-behind-plan",
-  toque: "g8-toque-neutral",
-  listening: "g13-listening",
-  toqueLeft: "g8x-toque-speaking-left",
-  toqueRight: "g8y-toque-calling-right",
 };
 
 // The strip's one sentence about the score: "Mia leads by 20", or
@@ -276,14 +296,6 @@ function ScoreFly({ fly, fromEl, toEls, onDone }) {
   return (
     <span ref={ref} className={`mono lc-fly is-${fly.player}`} aria-hidden="true">
       +{fly.pts}
-    </span>
-  );
-}
-
-function AgentAvatar({ size = 20 }) {
-  return (
-    <span className={`lc-agent-avatar lc-agent-avatar-${size}`} aria-hidden="true">
-      <KpIcon glyph="mic" size={Math.round(size * 0.6)} />
     </span>
   );
 }
@@ -361,13 +373,16 @@ export default function LiveCookPage() {
   const finished = Boolean(run?.endedAt);
   const paused = isPaused(run);
   const now = useNow(finished || paused);
-  const [speakerId, setSpeakerId] = useState(cooks[0]?.id);
-  // Seeded once, so it can end up pointing at nobody if the line-up
-  // changed since. Fall back rather than attributing speech to a ghost.
-  const speaker = cooks.some((c) => c.id === speakerId) ? speakerId : cooks[0]?.id;
+  // The speaker toggle lives in the conversation rail, which the shell
+  // mounts, so the choice is kept where both can read it.
+  const speakerId = useSyncExternalStore(speakerSelection.subscribe, speakerSelection.get);
+  const setSpeakerId = speakerSelection.set;
+  const speaker = resolveSpeaker(speakerId, cooks);
   const speakerCook = cooks.find((c) => c.id === speaker);
-  const [input, setInput] = useState("");
-  const [pending, setPending] = useState(null); // inline disambiguation buttons
+  // A dialog opened by voice asks its question aloud. The agent path
+  // reads this after the turn so the question is not talked over by the
+  // model's own reply about a call that is now waiting on an answer.
+  const askedRef = useRef([]);
   // A guessed step whose name came back close but not exact — "Cut the
   // onion" against both "Cut the yellow onion" and "Cut the red onion",
   // say. Firing on that guess is how a mishearing finishes the wrong
@@ -382,10 +397,6 @@ export default function LiveCookPage() {
   const cardRefs = useRef([]);
   const pillRefs = useRef([]);
   const cardScoreRefs = useRef([]);
-  // Versus: Toque is one line under the board; the whole run reads
-  // back in a drawer. Opens itself when the agent needs an answer.
-  const [logOpen, setLogOpen] = useState(false);
-  const closeLog = useCallback(() => setLogOpen(false), []);
   // "Pass to X": the receiving card's goose takes the handoff (G11)
   // for a beat before settling in at the pot.
   const [handoff, setHandoff] = useState(null); // cookId
@@ -395,36 +406,35 @@ export default function LiveCookPage() {
     return () => clearTimeout(t);
   }, [handoff]);
   // A refused claim answers on the tile (or the card's offer) that was
-  // tapped, not only in Toque's line — on a 1280×800 counter screen
-  // that line is below the fold, and a tap with no visible answer reads
-  // as a dead button.
+  // tapped, not only in the conversation rail — on a 1280×800 counter
+  // screen the rail may be collapsed, and a tap with no visible answer
+  // reads as a dead button.
   const [claimNote, setClaimNote] = useState(null); // { stepId, cookId, text, key }
   useEffect(() => {
     if (!claimNote) return undefined;
     const t = setTimeout(() => setClaimNote(null), CLAIM_NOTE_MS);
     return () => clearTimeout(t);
   }, [claimNote]);
-  const listening = !state.voice.muted;
 
   // The shared VoiceBar only carries the hint; who is speaking is the
-  // agent column's business (see the speaker toggle there).
+  // conversation rail's business (see the speaker toggle there).
   useEffect(() => {
     if (!run) return undefined;
     const hint = finished
       ? { line: "Service done — see the cook card when you're ready.", sub: null }
       : paused
-        ? { line: "Paused — say “resume” to pick it back up.", sub: "Every clock is stopped; nothing else lands until then." }
+        ? { line: "Paused — say “resume” to pick it back up.", sub: "No need for my name while we're paused. Every clock is stopped." }
         : {
             line: `Say “${AGENT_NAME}” first — “${AGENT_NAME}, I'm done with the onion.”`,
-            sub: pendingConfirm
-              ? `${speakerCook?.name || "Someone"} is speaking — waiting on “yes” or “no”.`
-              : pending
-                ? `${speakerCook?.name || "Someone"} is speaking — waiting on which step they mean.`
+            sub: confirm?.kind === "finish"
+              ? `Say “${FINISH_PHRASE}” to end now, or “keep cooking”.`
+              : confirm?.kind === "skip" || pendingConfirm
+                ? `${speakerCook?.name || "Someone"} is speaking — waiting on “yes” or “no”.`
                 : `${speakerCook?.name || "Someone"} is speaking — everything said is logged under that name.`,
           };
     dispatch({ type: "voice/setHint", payload: { hint } });
     return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
-  }, [dispatch, run, finished, paused, speakerCook?.name, pending, pendingConfirm]);
+  }, [dispatch, run, finished, paused, speakerCook?.name, confirm?.kind, pendingConfirm]);
 
   // The microphone. VoiceBar owns the one connection; this page asks for
   // every turn (takeover) plus the words it would otherwise mishear: the
@@ -520,6 +530,31 @@ export default function LiveCookPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now, paused, finished]);
 
+  // --- an unprompted remark into a quiet kitchen ---------------------
+  //
+  // Long silences are where a live cook stops feeling live. When it is
+  // welcome is decided in utils/commentary.js, and deliberately meanly;
+  // this supplies the clock and the state.
+  //
+  // Barge-in applies as to everything else: the line goes out through
+  // the same speak(), so a cook talking over it stops it dead. That is
+  // the backstop rather than the plan.
+  //
+  // Split in two because the hooks must run before this component's
+  // early return, while the work needs commit() and say(), which are
+  // declared after it. Same shape as voiceHandlerRef below.
+
+
+  const lastVoiceAtRef = useRef(Date.now());
+  const lastAsideAtRef = useRef(0);
+  const asideBusyRef = useRef(false);
+  const asideRunnerRef = useRef(null);
+
+  useEffect(() => {
+    const id = setInterval(() => asideRunnerRef.current?.(), ASIDE_CHECK_MS);
+    return () => clearInterval(id);
+  }, []);
+
   if (!run) {
     return (
       <section className="page live-cook-page">
@@ -537,6 +572,7 @@ export default function LiveCookPage() {
   // Frozen at the moment of the pause, so a reload mid-break shows the
   // same numbers as the tab that paused rather than counting the break.
   const clockNow = paused ? Date.parse(run.pausedAt) : now;
+
   const progress = runProgress(run, nodes, clockNow);
   const board = scoreboard(run, nodes, cooks);
   const ready = readyStepIds(nodes, run);
@@ -551,6 +587,14 @@ export default function LiveCookPage() {
   const commit = (nextRun) => {
     latestRunRef.current = nextRun;
     saveRunNow(nextRun);
+  };
+
+  // A question for somebody whose hands are busy: on the record, said
+  // aloud, and noted so the agent path does not talk over it.
+  const askAloud = (base, line) => {
+    commit(say(base, line));
+    askedRef.current.push(line);
+    speak(line);
   };
 
 
@@ -569,11 +613,14 @@ export default function LiveCookPage() {
     commit(next);
   };
 
-  const doDone = (stepId, cookId, source = "tap", base = run) => {
+  // `reporter` is whoever said or tapped it. The points are the
+  // holder's, whoever reports it -- see the credit rule at applyDone.
+  const doDone = (stepId, reporter, source = "tap", base = run) => {
     if (paused || !stepId || base.steps[stepId]?.status !== "active") return;
+    const cookId = base.steps[stepId].cookId ?? reporter;
     const at = new Date().toISOString();
     const v = stepVariance(byId[stepId], { ...base.steps[stepId], endedAt: at });
-    let next = applyDone({ run: base, stepId, cookId, at, source });
+    let next = applyDone({ run: base, stepId, cookId: reporter, at, source });
     // Recompile the rest of the plan on every completion — real times
     // diverge from estimates, so what's left genuinely changes shape.
     if (!isVersus) next = replan({ nodes, run: next, cooks, kitchenProfile });
@@ -603,7 +650,10 @@ export default function LiveCookPage() {
     const dependents = nodes.filter((n) => (n.depends_on || []).includes(stepId));
     if (dependents.length) {
       // The utterance is logged now; the modal decides the rest.
-      if (base !== run) commit(base);
+      if (source === "voice") {
+        const names = dependents.map((d) => d.label).join(", ");
+        askAloud(base, `${names} ${dependents.length === 1 ? "needs" : "need"} ${byId[stepId].label}. Skip it anyway? Say yes or no.`);
+      } else if (base !== run) commit(base);
       setConfirm({ kind: "skip", stepId, cookId, source, dependents });
       return;
     }
@@ -680,7 +730,11 @@ export default function LiveCookPage() {
 
   const togglePause = (base = run) => {
     const at = new Date().toISOString();
-    if (paused) {
+    // Read the run being acted on, not the render's `paused`. Voice
+    // reaches this after an await, by which time the flag captured at
+    // render can be a pause older than the one on screen -- and getting
+    // it wrong here pauses a run somebody just asked to resume.
+    if (isPaused(base)) {
       commit(say(applyResume({ run: base, at }), "Back on. Clock's running again."));
     } else {
       commit(say(applyPause({ run: base, at }), "Paused. Nothing's being timed until you say go."));
@@ -697,7 +751,8 @@ export default function LiveCookPage() {
 
   const doFinish = (base = run) => {
     if (!complete) {
-      if (base !== run) commit(base);
+      // A voice turn arrives with its utterance already on the run.
+      if (base !== run) askAloud(base, `${stepsLeft} ${stepsLeft === 1 ? "step isn't" : "steps aren't"} done. To end now, say “${FINISH_PHRASE}”. Or say “keep cooking”.`);
       setConfirm({ kind: "finish" });
       return;
     }
@@ -736,7 +791,7 @@ export default function LiveCookPage() {
   // --- voice: parse, then call the exact same handlers ---
 
   // The five intents "which one" and "did you mean" both eventually
-  // resolve to — factored out so a tap (runPending), a spoken "yes"
+  // resolve to — factored out so a spoken step name, a spoken "yes"
   // (pendingConfirm below) and a clean first-try match all funnel
   // through the exact same call.
   const runIntentAction = (intent, stepId, cookId, base = run) => {
@@ -748,16 +803,16 @@ export default function LiveCookPage() {
     return commit(base);
   };
 
-  // Both a tap on Yes/No and a spoken "yes"/"no" answer the same
-  // question the same way — one path, so the two can't drift apart.
+  // A spoken "yes"/"no" answers the question. There are no buttons for
+  // it: every question comes from speech, and a cook whose voice is not
+  // getting through has the cards' own buttons instead.
   const resolvePendingConfirm = (answer, base = run) => {
     if (!pendingConfirm) return undefined;
     const { intent, stepId, cookId, label, candidates } = pendingConfirm;
     setPendingConfirm(null);
     if (answer === "yes") return runIntentAction(intent, stepId, cookId, base);
-    const options = (candidates.length ? candidates : claimSuggestions({ nodes, run, cookId })).slice(0, 3);
-    setPending({ intent, options, cookId });
-    return commit(say(base, `Not “${label}” — which one did you mean?`));
+    const others = candidates.filter((id) => id !== stepId).map((id) => byId[id]?.label).filter(Boolean).slice(0, 2);
+    return commit(say(base, `Not “${label}”. ${others.length ? `Maybe ${others.join(" or ")}? ` : ""}${sayWithName(intent)}`));
   };
 
   // Co-op keeps no score — the honest answer is the progress.
@@ -779,11 +834,21 @@ export default function LiveCookPage() {
   // The model only proposes. Each call goes through the same handler a tap
   // uses, on the newest run, so every rule (busy, not ready, equipment,
   // paused) is still enforced by the code that owns it.
-  const PAUSED_OK = new Set(["resume", "status", "score", "help"]);
-  const applyAgentTurn = (turn, text, cookId) => {
+  // Three actions in one breath is already an unusual turn; reading back
+  // more than that stops being a confirmation and becomes a recital.
+  const MAX_SPOKEN_LINES = 3;
+  const PAUSED_OK = new Set(["resume", "status", "score", "help", "explain"]);
+  const applyAgentTurn = (turn, text, cookId, via = null) => {
     const at = () => new Date().toISOString();
-    commit(appendTranscript(latestRunRef.current, { at: at(), speaker: cookId, text }));
+    commit(appendTranscript(latestRunRef.current, { at: at(), speaker: cookId, text, via }));
     const spoken = [];
+    // Where the run log stands before any of this turn's actions. Each
+    // handler already writes the right sentence for what it did -- and,
+    // just as importantly, for what it refused -- so the confirmation
+    // below is a diff of the log rather than a second account that could
+    // disagree with it.
+    const logBefore = (latestRunRef.current.transcript || []).length;
+    askedRef.current = [];
 
     turn.calls.forEach((call) => {
       const cur = latestRunRef.current;
@@ -792,26 +857,37 @@ export default function LiveCookPage() {
         commit(say(cur, "We're paused — say \"resume\" when you're ready."));
         return;
       }
+      // "Zoe will take the garlic." The server only allows a name on
+      // claim and start, and only one of the cooks present, so this is
+      // a lookup rather than a decision.
+      //
+      // It matters most where speaker recognition is absent -- the
+      // deployed build has no sidecar, so every turn is credited to
+      // whoever the toggle was left on, and saying whose it is was the
+      // only way to give the other cook anything.
+      const named = call.cookName ? cooks.find((c) => c.name === call.cookName)?.id : null;
+      const actor = named ?? cookId;
+
       // done, skip and drop without a name mean "the one I'm on".
       const own = ["done", "skip", "drop"].includes(call.name) ? activeStepFor(cookId, cur, nodes) : null;
       const stepId = call.stepId ?? own;
       if (["done", "skip", "drop"].includes(call.name) && !stepId) {
-        // Holding nothing and not naming anything: ask which one, with the
-        // same tappable options the keyword path offers, instead of just
-        // saying no. The pending state is what draws those buttons.
-        const question = {
+        // Holding nothing and not naming anything: say how to name it,
+        // rather than asking a question and waiting on an answer. A held
+        // question needed a tap to answer or dismiss; a whole command
+        // with the step in it needs nothing held at all.
+        const question = `${{
           done: "Which one did you finish?",
           skip: "Which one should I skip?",
           drop: "Which one are you putting back?",
-        }[call.name];
-        setPending({ intent: call.name, options: claimSuggestions({ nodes, run: cur, cookId }).slice(0, 3), cookId });
+        }[call.name]} ${sayWithName(call.name)}`;
         commit(say(cur, question));
         spoken.push(question);
         return;
       }
       switch (call.name) {
-        case "claim": return doClaim(stepId, cookId, "voice", cur);
-        case "start": return doStart(stepId, cookId, "voice", cur);
+        case "claim": return doClaim(stepId, actor, "voice", cur);
+        case "start": return doStart(stepId, actor, "voice", cur);
         case "done": return doDone(stepId, cookId, "voice", cur);
         case "skip": return doSkip(stepId, cookId, "voice", cur);
         case "drop": return doDrop(stepId, cookId, "voice", cur);
@@ -823,6 +899,19 @@ export default function LiveCookPage() {
         case "finish_run": return doFinish(cur);
         case "status": {
           const line = statusLine(cur);
+          spoken.push(line);
+          return commit(say(cur, line));
+        }
+        case "explain": {
+          // The recipe's own words, not the model's recollection of them:
+          // the snapshot only carries the first 120 characters of a
+          // description, and a cook who asks what a step means should get
+          // what the plan actually says.
+          const line = explainStep(byId[stepId], {
+            skill: state.session.conversation?.answers?.skill,
+            equipmentLabel: (type) => EQUIPMENT_LABELS[type] || type,
+          });
+          if (!line) return undefined;
           spoken.push(line);
           return commit(say(cur, line));
         }
@@ -842,16 +931,81 @@ export default function LiveCookPage() {
     // to someone, would be answered out loud, and each answer would open
     // the window for the next.
     const chatter = !turn.named && !turn.calls.length;
-    if (turn.reply && !chatter) {
+
+    // The app refused something the model asked for, and the model
+    // cannot see refusals -- so its reply is written around a call that
+    // did not happen. Saying what actually stopped it OUTRANKS that.
+    //
+    // This is the "I'm done with the onion" case in competition mode:
+    // the step was never claimed, so it was never in the done enum, so
+    // the call was dropped and the model asked a confused question
+    // about dicing other things. The app knew the answer all along.
+    const refusals = rejectionLines(turn.rejected, byId);
+    // A call opened a dialog, and the dialog has already asked its
+    // question aloud. The model's reply was written as if the call went
+    // through, and the log diff below would repeat the question -- both
+    // would talk over the one thing the cook needs to answer.
+    if (askedRef.current.length) {
+      if (turn.reply) console.info("[voice] waiting on a confirmation, so not saying:", turn.reply);
+      if (!chatter) engagedUntilRef.current = Date.now() + ENGAGED_MS;
+      return;
+    }
+    if (refusals.length) {
+      refusals.forEach((line) => {
+        spoken.push(line);
+        commit(say(latestRunRef.current, line));
+      });
+      if (turn.reply) console.info("[voice] refused, so not saying:", turn.reply);
+    } else if (turn.reply && !chatter) {
       spoken.unshift(turn.reply);
       commit(say(latestRunRef.current, turn.reply));
     } else if (turn.reply) {
       console.info("[voice] not answering unaddressed talk:", text, "->", turn.reply);
     }
-    if (spoken.length) speak(spoken.join(" "));
-    // Only a question leaves the door open for an unnamed answer, and only
-    // briefly. Statements and refusals don't.
-    if (turn.reply && !chatter && /\?\s*$/.test(turn.reply)) engagedUntilRef.current = Date.now() + ENGAGED_MS;
+    // Say what changed.
+    //
+    // The model is told to keep replies to fifteen words and that an
+    // empty one is right after a plain action. In a quiet room that is
+    // good manners; over an extractor fan it leaves a cook who asked for
+    // two things unable to tell whether one, both or neither landed,
+    // short of looking at the screen -- the thing the voice interface
+    // exists to avoid.
+    //
+    // These lines are the handlers' own, so a refusal speaks as a
+    // refusal: "You're still on Cut tofu. Finish it first." A
+    // confirmation built from the model's tool calls would have
+    // announced that claim as granted.
+    //
+    // Only when the model said nothing itself -- two accounts of one
+    // action is worse than none.
+    if (!spoken.length) {
+      const added = (latestRunRef.current.transcript || [])
+        .slice(logBefore)
+        .filter((entry) => entry.speaker === "agent" && entry.text)
+        .map((entry) => entry.text)
+        .slice(0, MAX_SPOKEN_LINES);
+      spoken.push(...added);
+    }
+
+    if (spoken.length) {
+      lastVoiceAtRef.current = Date.now();
+      speak(spoken.join(" "));
+    } else {
+      // Nothing to say, so finish the sentence somebody talked over.
+      // Taking it clears it: offered once, then forgotten, because a
+      // line two turns stale is not worth saying.
+      const resumed = takeInterrupted();
+      if (resumed) speak(resumed);
+    }
+    // Answering opens the door for an unnamed follow-up; acting does not.
+    // See utils/followUp.js -- demanding the name again for the obvious
+    // next question is what made this a command line you speak at rather
+    // than something you talk to.
+    //
+    // Still never for unaddressed chatter: a turn only let through
+    // because the door was already open must not hold it open for the
+    // rest of the room.
+    if (!chatter && opensFollowUp(turn)) engagedUntilRef.current = Date.now() + ENGAGED_MS;
   };
 
   // Who was that? Asks the local speaker service, which compares the turn's
@@ -859,58 +1013,90 @@ export default function LiveCookPage() {
   // match is clear, otherwise null and the speaker toggle stands: a wrong
   // credit is worse than no answer. Never throws; the service being off is
   // an ordinary state.
-  const whoSpoke = async (clip) => {
-    if (!clip || cooks.length < 2) return null;
+  //
+  // Below it sits AssemblyAI's own diarization, bound to a cook on the
+  // voice-binding page. It cannot name a voice by itself, but the label
+  // was tied to a cook there, and it is the only attribution the
+  // deployed app has -- the sidecar does not run there.
+  //
+  // Returns how it decided as well as who. A claim that went to the
+  // wrong cook is almost impossible to unpick without knowing whether
+  // the voice was matched or the toggle was simply left where it was.
+  const whoSpoke = async (clip, turn) => {
+    if (cooks.length < 2) return null;
+    if (!clip) {
+      const byLabel = cookFromTurn(turn, cooks).cookId;
+      return byLabel ? { cookId: byLabel, via: "label" } : null;
+    }
     try {
       const result = await identifySpeaker({ pcm: clip.pcm, rate: clip.rate, candidates: cooks.map((c) => c.id) });
       const verdict = decideSpeaker(result);
       const named = Object.fromEntries(Object.entries(result.scores || {}).map(([id, v]) => [name(id), v]));
       console.info(`[speaker] ${verdict.cookId ? name(verdict.cookId) : "unsure"} (${verdict.reason})`, named, `margin ${result.margin}`);
-      return verdict.cookId;
+      // A voiceprint outranks a label: it was measured against this
+      // cook's own voice, not inferred from who else is in the room.
+      if (verdict.cookId) return { cookId: verdict.cookId, via: "voiceprint" };
+      const byLabel = cookFromTurn(turn, cooks).cookId;
+      return byLabel ? { cookId: byLabel, via: "label" } : null;
     } catch (err) {
-      console.info("[speaker] unavailable, using the speaker toggle:", err.message);
-      return null;
+      console.info("[speaker] unavailable, trying the diarization label:", err.message);
+      const byLabel = cookFromTurn(turn, cooks).cookId;
+      return byLabel ? { cookId: byLabel, via: "label" } : null;
     }
   };
 
-  const askAgent = (text, cookId, { engaged = true, clip = null, shared = false } = {}) => {
+  // `sttTurn` is the recogniser's turn, not the agent's reply -- the
+  // inner scope already calls that one `turn`, and shadowing it here put
+  // the read before the declaration.
+  const askAgent = (text, cookId, { engaged = false, clip = null, shared = false, sttTurn = null, saidBy = null } = {}) => {
     agentQueueRef.current = agentQueueRef.current.then(async () => {
-      const heardAs = await whoSpoke(clip);
-      if (heardAs && heardAs !== cookId) {
-        cookId = heardAs;
-        setSpeakerId(heardAs); // so the toggle shows who was heard
+      // Cleared at every exit below -- answered, refused, unaddressed or
+      // thrown. A thinking row that never clears is worse than none.
+      voiceLog.setThinking(Date.now());
+      // Somebody who just said who they are outranks every guess about
+      // it: not knowing their voice is precisely why they had to say so.
+      const heard = saidBy ? { cookId: saidBy, via: "said so" } : await whoSpoke(clip, sttTurn);
+      // Nothing recognised it, so the turn belongs to whoever the
+      // toggle was left on. Worth recording as such: it is a guess
+      // nobody made deliberately.
+      const via = heard?.via ?? "toggle";
+      if (heard?.cookId && heard.cookId !== cookId) {
+        cookId = heard.cookId;
+        setSpeakerId(heard.cookId); // so the toggle shows who was heard
       }
       let turn;
       try {
         turn = await agentTurn({
           text,
           agentName: AGENT_NAME,
-          // Typed text is aimed at the agent by definition. Spoken words
-          // must say its name (checked on the server) unless it just
-          // asked a question.
+          // Spoken words must say its name (checked on the server)
+          // unless it just asked a question.
           engaged,
           // Two voices ended up in this one turn, so the words cannot be
           // trusted to belong to one person asking for one thing.
           shared,
-          snapshot: buildAgentSnapshot({ run: latestRunRef.current, nodes, cooks, speakerId: cookId, paused: isPaused(latestRunRef.current) }),
+          snapshot: buildAgentSnapshot({ run: latestRunRef.current, nodes, cooks, speakerId: cookId, paused: isPaused(latestRunRef.current), conversation: state.session.conversation }),
         });
       } catch (err) {
         // Slow, down or unreachable: the keyword grammar still works.
         console.warn("Agent unavailable, using the keyword grammar:", err.message);
-        submitKeywordUtterance(text);
+        voiceLog.setThinking(null);
+        submitKeywordUtterance(text, saidBy);
         return;
       }
       if (!turn.addressed) {
         // Shows what the recogniser heard instead of the name, which is
         // how a chronically misheard agent name gets caught.
         console.info("[voice] not addressed:", text);
+        voiceLog.setThinking(null);
         return;
       }
-      applyAgentTurn(turn, text, cookId);
+      applyAgentTurn(turn, text, cookId, via);
       // The agent is reading something up. Collect it OUTSIDE this
       // queue: the whole point is that the next command does not wait
       // behind a question. Deliberately not awaited here.
       if (turn.pendingId) awaitAnswer(turn.pendingId, cookId);
+      voiceLog.setThinking(null);
     });
   };
 
@@ -943,34 +1129,180 @@ export default function LiveCookPage() {
 
   // An open question ("did you mean…?") is answered by the keyword path,
   // which owns that state; everything else goes to the agent.
-  const submitUtterance = (text) => {
-    if (!text) return;
-    if (pendingConfirm) return submitKeywordUtterance(text);
-    askAgent(text, speaker);
+  // Everything decided before addressing, ownership or the model get a
+  // look in.
+  //
+  // Returns null when the utterance is already dealt with; otherwise
+  // what is left of it and who said it.
+  const preRoute = (text) => {
+    // "I'm Toni, and I'll start the bay leaf." Who is talking and what
+    // they want, in one breath. Taking only the second is how a step
+    // ended up with whoever the toggle was last left on -- which, with
+    // no voiceprint sidecar deployed, is every turn.
+    //
+    // Ahead of the addressing gate on purpose: telling the app who you
+    // are is addressed to the app, and needing the agent's name first
+    // would make the fix for a misattributed turn depend on the thing
+    // that is already going wrong.
+    const intro = findSelfIntro(text, cooks);
+    let said = text;
+    let saidBy = null;
+    if (intro) {
+      setSpeakerId(intro.cookId);
+      saidBy = intro.cookId;
+      said = intro.rest;
+      commit(appendTranscript(latestRunRef.current, {
+        at: new Date().toISOString(),
+        speaker: intro.cookId,
+        text,
+        via: "said so",
+      }));
+      // Nothing but the introduction: say hello and stop. Anything more
+      // is now theirs, and carries on as them.
+      if (!said) {
+        const line = `Got it, ${name(intro.cookId)}. You're the one I'm hearing now.`;
+        commit(say(latestRunRef.current, line));
+        speak(line);
+        return null;
+      }
+    }
+
+    // Resuming is heard here, by the app, before anything else looks at
+    // the words. The hint says to say "resume" and does not ask for the
+    // agent's name -- correctly, since a paused kitchen has nothing else
+    // going on -- but the addressing gate lives on the server and threw
+    // the turn away for want of one. Locally it also survives having no
+    // network, no key and no model, which is when you need it most.
+    // parseCommand covers the Mandarin forms too.
+    if (isPaused(latestRunRef.current)) {
+      const { intent } = parseCommand(said, {
+        byId,
+        activeStepId: null,
+        claimable: [],
+        ownQueue: [],
+        agentName: AGENT_NAME,
+      });
+      // Only the bare word. "We'll resume after the call" is two cooks
+      // talking about resuming, and with no name needed here it would
+      // otherwise restart every clock mid-conversation. A sentence with a
+      // subject in it goes on to the addressing gate like anything else,
+      // so "Goose, let's resume" still does it.
+      if (intent === "resume" && !hasSubject(normalizeUtterance(said))) {
+        togglePause(appendTranscript(latestRunRef.current, {
+          at: new Date().toISOString(),
+          speaker: saidBy ?? speaker,
+          text: said,
+        }));
+        return null;
+      }
+    }
+
+    // A confirm dialog is up. Answered here, before the addressing gate,
+    // like "Did you mean X?": the goose just asked, so the reply needs no
+    // name. How much must be said depends on what is lost -- see
+    // utils/modalReply.js.
+    if (confirm) {
+      const reply = routeModalReply(said, confirm.kind, AGENT_NAME);
+      if (reply.type !== "moved-on") {
+        const heard = appendTranscript(latestRunRef.current, { at: new Date().toISOString(), speaker: saidBy ?? speaker, text: said });
+        if (reply.type === "confirm" && confirm.kind === "finish") {
+          finishNow(heard);
+        } else if (reply.type === "confirm") {
+          applySkipNow(confirm.stepId, confirm.cookId, "voice", heard);
+          speak(`Skipped ${byId[confirm.stepId]?.label}.`);
+        } else if (reply.type === "cancel") {
+          setConfirm(null);
+          const line = confirm.kind === "finish" ? "Okay, still cooking." : `Okay, keeping ${byId[confirm.stepId]?.label}.`;
+          commit(say(heard, line));
+          speak(line);
+        } else {
+          const line = `To end the cook now, say “${FINISH_PHRASE}”. Or say “keep cooking”.`;
+          commit(say(heard, line));
+          speak(line);
+        }
+        return null;
+      }
+      // Not an answer: they moved on, and the dialog goes. What they said
+      // is handled below as if it had never been asked.
+      setConfirm(null);
+    }
+
+    if (pendingConfirm) {
+      // An answer is an answer, and the keyword path owns resolving it.
+      if (routeConfirmReply(said).type === "resolve") {
+        submitKeywordUtterance(said, saidBy);
+        return null;
+      }
+      // Anything else means they moved on. The question goes and what
+      // they said instead is handled on its own merits -- by the model,
+      // as it would have been had the question never been asked.
+      // Sending it to the keyword grammar answered a fair question with
+      // "I didn't catch that". voiceTurn.js has always done this on
+      // every other page; the live cook's confirmation predated the rule.
+      setPendingConfirm(null);
+    }
+
+    return { said, saidBy };
   };
 
   // What the microphone hears. The name check happens on the server, so
   // ordinary kitchen talk never reaches a model. Attribution is still the
   // speaker toggle until speaker identification exists.
+  asideRunnerRef.current = async () => {
+    const current = latestRunRef.current;
+    if (!current || asideBusyRef.current || finished || !cooks.length) return;
+    const now = Date.now();
+    const verdict = shouldCommentate({
+      busyCooks: cooks.filter((c) => activeStepFor(c.id, current, nodes, now)).length,
+      cookCount: cooks.length,
+      paused: isPaused(current),
+      ended: Boolean(current.endedAt),
+      msSinceVoice: now - lastVoiceAtRef.current,
+      msSinceComment: lastAsideAtRef.current ? now - lastAsideAtRef.current : Infinity,
+    });
+    if (!verdict.ok) return;
+
+    // Marked before the request, not after: the call takes seconds and a
+    // second tick inside that window would ask twice.
+    asideBusyRef.current = true;
+    lastAsideAtRef.current = now;
+    try {
+      const { line } = await agentAside({
+        agentName: AGENT_NAME,
+        snapshot: buildAgentSnapshot({ run: latestRunRef.current, nodes, cooks, speakerId: null, paused: false }),
+      });
+      // The kitchen may have started talking while this was in flight.
+      // Speaking now would be exactly the interruption the feature is
+      // trying not to be.
+      if (!line || Date.now() - lastVoiceAtRef.current < ASIDE_CHECK_MS) return;
+      lastVoiceAtRef.current = Date.now();
+      commit(say(latestRunRef.current, line));
+      speak(line);
+    } finally {
+      asideBusyRef.current = false;
+    }
+  };
+
   voiceHandlerRef.current = (text, turn) => {
+    // Somebody spoke. Whatever comes of it, the room is not quiet.
+    lastVoiceAtRef.current = Date.now();
     const confidence = (turn?.words || []).reduce((lowest, w) => Math.min(lowest, w.confidence ?? 1), 1);
     if (confidence < MIN_VOICE_CONFIDENCE) {
       console.info("[voice] too unclear to act on:", text);
       return;
     }
-    if (pendingConfirm) return submitKeywordUtterance(text);
-    // Paused, and all they said was "resume" — exactly what the paused
-    // screen tells them to say. It needs no name and no model round trip:
-    // it is the only thing that does anything until the clock is back on.
-    if (paused && isBareResume(text)) return submitKeywordUtterance(text);
+    // Introductions, resuming and open questions, before anything else.
+    const routed = preRoute(text);
+    if (!routed) return;
+
     // "Goose." on its own is somebody getting the agent's attention before
     // saying the thing. The recogniser ends the turn in that pause, so the
     // instruction lands in the NEXT turn with no name on it — and would be
     // thrown away as kitchen chatter. Hold the door open instead of acting
     // on a turn that asked for nothing.
-    if (isNameOnlyTurn(text, AGENT_NAME)) {
+    if (isNameOnlyTurn(routed.said, AGENT_NAME)) {
       engagedUntilRef.current = Date.now() + NAME_CARRY_MS;
-      console.info("[voice] name only, waiting for the rest:", text);
+      console.info("[voice] name only, waiting for the rest:", routed.said);
       return;
     }
     // This turn's audio, cut out by its word timestamps with a little
@@ -984,13 +1316,16 @@ export default function LiveCookPage() {
     // it is wrong, so nothing is acted on: the agent is told what
     // happened and asks which of them meant it.
     const shared = hasHandover(turn?.words);
-    if (shared) console.info("[voice] two cooks in one turn:", text);
-    askAgent(text, speaker, { engaged, clip, shared });
+    if (shared) console.info("[voice] two cooks in one turn:", routed.said);
+    askAgent(routed.said, routed.saidBy ?? speaker, { engaged, clip, shared, sttTurn: turn, saidBy: routed.saidBy });
   };
 
-  const submitKeywordUtterance = (text) => {
+  const submitKeywordUtterance = (text, saidBy = null) => {
     if (!text) return;
-    const cookId = speaker;
+    // setSpeakerId has not reached `speaker` yet when somebody has just
+    // introduced themselves -- it is state, and this runs in the same
+    // turn -- so who they are is passed in rather than read back.
+    const cookId = saidBy ?? speaker;
 
     // A question is pending: this utterance is the answer, not a new
     // command. Anything that isn't clearly yes or no abandons the
@@ -1007,12 +1342,14 @@ export default function LiveCookPage() {
       // other utterance.
     }
 
-    setPending(null);
     const activeStepId = activeStepFor(cookId, run, nodes);
     const ownQueue = isVersus
       ? claimSuggestions({ nodes, run, cookId })
       : [assignments?.byCook[cookId]?.stepId].filter(Boolean);
-    const result = parseCommand(text, { byId, activeStepId, claimable: ready, ownQueue, agentName: AGENT_NAME });
+    const result = parseCommand(text, { byId, activeStepId, claimable: ready, ownQueue, agentName: AGENT_NAME, cooks });
+    // "Zoe will take the garlic", with no model in the loop. Same rule
+    // as the agent path: a name only ever redirects taking work on.
+    const actor = result.cookId ?? cookId;
 
     const heard = appendTranscript(run, { at: new Date().toISOString(), speaker: cookId, text });
 
@@ -1023,17 +1360,16 @@ export default function LiveCookPage() {
       return commit(say(heard, "We're paused — say \"resume\" when you're ready."));
     }
 
-    const needTarget = (message) => {
-      const options = (result.candidates.length ? result.candidates : claimSuggestions({ nodes, run, cookId })).slice(0, 3);
-      setPending({ intent: result.intent, options, cookId });
-      commit(say(heard, message));
-    };
+    const needTarget = (message) => commit(say(heard, `${message} ${sayWithName(result.intent)}`));
 
     // A close-but-not-exact name match — a word dropped or swapped among
     // steps that read alike — gets checked before it fires, instead of
     // guessing which "cut the onion" was meant.
     if (result.stepId && result.confidence === "confirm" && ["done", "start", "claim", "skip", "drop"].includes(result.intent)) {
-      setPendingConfirm({ intent: result.intent, stepId: result.stepId, cookId, label: byId[result.stepId]?.label, candidates: result.candidates });
+      // `actor`, not the speaker: "Mia will take the tofu" that has to
+      // be confirmed is still Mia’s when the yes arrives. Storing the
+      // speaker here quietly handed the step back to whoever was talking.
+      setPendingConfirm({ intent: result.intent, stepId: result.stepId, cookId: actor, label: byId[result.stepId]?.label, candidates: result.candidates });
       return commit(say(heard, `Did you mean “${byId[result.stepId]?.label}”? Say yes or no.`));
     }
 
@@ -1043,10 +1379,10 @@ export default function LiveCookPage() {
         return doDone(result.stepId, cookId, "voice", heard);
       case "start":
         if (!result.stepId) return needTarget("Which one are you starting?");
-        return doStart(result.stepId, cookId, "voice", heard);
+        return doStart(result.stepId, actor, "voice", heard);
       case "claim":
         if (!result.stepId) return needTarget("Which one? Tap it or say the name.");
-        return doClaim(result.stepId, cookId, "voice", heard);
+        return doClaim(result.stepId, actor, "voice", heard);
       case "skip":
         if (!result.stepId) return needTarget("Which one should I skip?");
         return doSkip(result.stepId, cookId, "voice", heard);
@@ -1068,12 +1404,6 @@ export default function LiveCookPage() {
       default:
         return commit(say(heard, `I didn't catch that. ${HELP_TEXT}`));
     }
-  };
-
-  const runPending = (stepId) => {
-    const { intent, cookId } = pending;
-    setPending(null);
-    runIntentAction(intent, stepId, cookId);
   };
 
   const stepsLeft = progress.pending + progress.active;
@@ -1254,8 +1584,9 @@ export default function LiveCookPage() {
           )}
 
           {/* The arena: one column in both modes — the two cards, one
-              half each, then (Versus) the board of what's up for grabs,
-              then Toque as a single line that opens the drawer. */}
+              half each, then (Versus) the board of what's up for grabs.
+              What was said and done lives in the shell's conversation
+              rail, beside the page rather than in it. */}
           <div className="lc-arena">
             <div className="lc-main">
               <div className="lc-cards">
@@ -1311,36 +1642,8 @@ export default function LiveCookPage() {
                   onClaim={(stepId, cookId) => doClaim(stepId, cookId)}
                 />
               )}
-
-              <ToqueLine cooks={cooks} transcript={run.transcript} paused={paused} listening={listening} onOpen={() => setLogOpen(true)} />
             </div>
           </div>
-
-          <ToqueDrawer open={logOpen || Boolean(pending || pendingConfirm)} onClose={closeLog}>
-            <AgentPanel
-              onClose={closeLog}
-              cooks={cooks}
-              transcript={run.transcript}
-              speaker={speaker}
-              onSpeaker={setSpeakerId}
-              pending={pending}
-              pendingConfirm={pendingConfirm}
-              byId={byId}
-              paused={paused}
-              listening={listening}
-              onPick={runPending}
-              onCancel={() => setPending(null)}
-              onConfirmYes={() => resolvePendingConfirm("yes")}
-              onConfirmNo={() => resolvePendingConfirm("no")}
-              input={input}
-              onInput={setInput}
-              onSubmit={() => {
-                const text = input.trim();
-                setInput("");
-                submitUtterance(text);
-              }}
-            />
-            </ToqueDrawer>
 
           <footer className={`lc-footer ${complete ? "is-final" : ""}`}>
             {complete ? (
@@ -1401,6 +1704,7 @@ export default function LiveCookPage() {
           </div>
         </Modal>
       )}
+
     </section>
   );
 }
@@ -1473,15 +1777,19 @@ function PlayerFocusCard({ cardRef, scoreRef, cook, index, cooks, run, nodes, by
     setWaved(suggestions.every((id) => next.has(id)) ? new Set([suggestion]) : next);
   };
   const otherBusy = other ? Boolean(activeStepFor(other.id, run, byId, now)) : true;
-  const reason = activeId ? "active" : isVersus ? (suggestion ? "grabs" : "finished") : assignment?.reason || "waiting";
+  // Versus: nothing to grab is waiting, not finished, while anything is
+  // still open -- "Done for the night" mid-run read as being sent home.
+  const versusWait = isVersus && !activeId && !suggestion ? versusWaiting(run, nodes, now) : null;
+  const reason = activeId ? "active" : isVersus ? (suggestion ? "grabs" : versusWait ? "waiting" : "finished") : assignment?.reason || "waiting";
+  const waitInfo = isVersus ? versusWait : assignment;
   const offeredId = reason === "grabs" ? suggestion : reason === "assigned" || reason === "idle_fill" ? assignment?.stepId : null;
   const offered = offeredId ? byId[offeredId] : null;
   // Versus: the offer greys out for the same reasons a board tile would.
   const offerBlock = reason === "grabs" && offeredId && claimBlock ? claimBlock(offeredId, cook.id) : null;
   const undoable = !paused && canUndo({ run, nodes, cookId: cook.id, at: new Date(now).toISOString() });
 
-  const waitingOn = assignment?.waitingOnStepId ? byId[assignment.waitingOnStepId] : null;
-  const waitingCookIndex = assignment?.waitingOnCookId ? cooks.findIndex((c) => c.id === assignment.waitingOnCookId) : -1;
+  const waitingOn = waitInfo?.waitingOnStepId ? byId[waitInfo.waitingOnStepId] : null;
+  const waitingCookIndex = waitInfo?.waitingOnCookId ? cooks.findIndex((c) => c.id === waitInfo.waitingOnCookId) : -1;
 
   // Due: a check or the finish is open on something this cook has going
   // — the card's own focus or a pot in the row below. The card shakes
@@ -1624,9 +1932,9 @@ function PlayerFocusCard({ cardRef, scoreRef, cook, index, cooks, run, nodes, by
             <div className="lc-order-brow">
               <span className="lc-order-dish">Hands free</span>
             </div>
-            {assignment?.etaSec != null ? (
+            {waitInfo?.etaSec != null ? (
               <div className="lc-wait">
-                <span className="lc-wait-num">{clock(assignment.etaSec)}</span>
+                <span className="lc-wait-num">{clock(waitInfo.etaSec)}</span>
                 <span className="lc-wait-unit">left</span>
               </div>
             ) : (
@@ -1636,7 +1944,10 @@ function PlayerFocusCard({ cardRef, scoreRef, cook, index, cooks, run, nodes, by
               {waitingOn ? (
                 <>
                   Waiting on &ldquo;{waitingOn.label}&rdquo;
-                  {waitingCookIndex >= 0 && (
+                  {waitingCookIndex === index ? (
+                    // Your own pot is what everything waits on.
+                    <>{" "}&mdash; yours, cooking on its own</>
+                  ) : waitingCookIndex >= 0 && (
                     <>
                       {" "}&mdash; {cooks[waitingCookIndex].name} has it
                       <PlayerAvatar cook={cooks[waitingCookIndex]} index={waitingCookIndex} size={20} />
@@ -1645,7 +1956,7 @@ function PlayerFocusCard({ cardRef, scoreRef, cook, index, cooks, run, nodes, by
                   .
                 </>
               ) : (
-                "Waiting on the other player."
+                isVersus ? "Nothing open to grab yet." : "Waiting on the other player."
               )}
             </p>
             <GooseTracks variant="up" />
@@ -1665,7 +1976,7 @@ function PlayerFocusCard({ cardRef, scoreRef, cook, index, cooks, run, nodes, by
                   </>
                 )}
               </span>
-              <span className="lc-meta">{isVersus && !isRunComplete(run, nodes) ? "Nothing to grab right now." : "Nothing left for you."}</span>
+              <span className="lc-meta">Nothing left for you.</span>
             </span>
           </div>
         )}
@@ -1992,214 +2303,6 @@ function TaskPoolBoard({ ready, blocked, run, byId, cooks, now, paused, dishOf, 
         </div>
       )}
     </section>
-  );
-}
-
-// Versus: Toque is a single line — the newest utterance only — and a
-// tap opens the drawer with the whole run read back. It never steals
-// the field.
-function ToqueLine({ cooks, transcript, paused, listening, onOpen }) {
-  const last = transcript[transcript.length - 1];
-  const isAgent = !last || last.speaker === "agent";
-  const who = !isAgent ? cooks.find((c) => c.id === last.speaker)?.name : null;
-  return (
-    <button type="button" className="lc-toque-line" onClick={onOpen} aria-label="Open Toque's log" aria-haspopup="dialog">
-      <BabyGoose pose={listening ? GOOSE.listening : GOOSE.toque} size={44} paused={paused} className="lc-toque" decorative />
-      <GoosePrint />
-      <span key={last?.id || "none"} className={`lc-toque-line-text ${isAgent ? "is-agent" : ""}`}>
-        {!last ? "Listening." : isAgent ? last.text : `${who ? `${who}: ` : ""}“${last.text}”`}
-      </span>
-      <span className="lc-toque-line-count">
-        {plural(transcript.length, "line")}
-        <span className="lc-toque-line-chevron" aria-hidden="true">
-          ›
-        </span>
-      </span>
-    </button>
-  );
-}
-
-// The drawer: a scrim over the field and a 400px panel from the right
-// (mobile: the whole width), springing in. Escape or the scrim closes
-// it; a pending question keeps it open until it's answered.
-function ToqueDrawer({ open, onClose, children }) {
-  const panelRef = useRef(null);
-  useEffect(() => {
-    if (!open) return undefined;
-    // aria-modal promises the focus stays in here; Tab has to be told.
-    const focusables = () =>
-      [...(panelRef.current?.querySelectorAll('button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])') || [])];
-    const previous = document.activeElement;
-    focusables()[0]?.focus();
-    const onKey = (e) => {
-      if (e.key === "Escape") return onClose();
-      if (e.key !== "Tab") return undefined;
-      const items = focusables();
-      if (!items.length) return undefined;
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (e.shiftKey && (document.activeElement === first || !panelRef.current.contains(document.activeElement))) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && (document.activeElement === last || !panelRef.current.contains(document.activeElement))) {
-        e.preventDefault();
-        first.focus();
-      }
-      return undefined;
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      previous?.focus?.();
-    };
-  }, [open, onClose]);
-  if (!open) return null;
-  return (
-    <div className="lc-drawer" role="dialog" aria-modal="true" aria-label="Toque, everything said this run">
-      <div className="lc-drawer-scrim" onClick={onClose} />
-      <div className="lc-drawer-panel" ref={panelRef}>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-// The agent panel, filling the drawer: who's talking, what's been said,
-// and the typed fallback that drives the demo today. The mic itself is
-// the shell's VoiceBar; this panel is the record of the conversation.
-function AgentPanel({
-  onClose,
-  cooks,
-  transcript,
-  speaker,
-  onSpeaker,
-  pending,
-  pendingConfirm,
-  byId,
-  paused,
-  listening,
-  onPick,
-  onCancel,
-  onConfirmYes,
-  onConfirmNo,
-  input,
-  onInput,
-  onSubmit,
-}) {
-  const logRef = useRef(null);
-  useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
-  }, [transcript.length, pending, pendingConfirm]);
-
-  const speakerCook = cooks.find((c) => c.id === speaker);
-
-  // Toque: neutral (G8) with the mic off, listening (G13) with it on.
-  // When a new line addresses a player by name the neck extends toward
-  // their card (left for player 1, right for player 2) and comes back.
-  // Never on the lines already on screen at mount.
-  const last = transcript[transcript.length - 1];
-  const lastId = last?.id;
-  const [facing, setFacing] = useState(null);
-  const seenRef = useRef(lastId);
-  useEffect(() => {
-    if (!last || last.speaker !== "agent" || seenRef.current === lastId) return undefined;
-    seenRef.current = lastId;
-    const text = last.text.toLowerCase();
-    const idx = cooks.findIndex((c) => c.name && text.includes(c.name.toLowerCase()));
-    if (idx < 0) return undefined;
-    setFacing(idx === 0 ? "left" : "right");
-    const t = setTimeout(() => setFacing(null), 1400);
-    return () => clearTimeout(t);
-  }, [lastId, last, cooks]);
-  const toquePose = facing === "left" ? GOOSE.toqueLeft : facing === "right" ? GOOSE.toqueRight : listening ? GOOSE.listening : GOOSE.toque;
-
-  return (
-    <aside className="lc-agent" aria-label="Toque, the agent">
-      <header className="lc-agent-head">
-        <BabyGoose pose={toquePose} size={48} paused={paused} label="Toque" className="lc-toque" />
-        <span className="lc-agent-title">
-          <span className="lc-agent-name">Toque</span>
-          <Mono className="lc-meta">everything said this run</Mono>
-        </span>
-        <button type="button" className="lc-agent-close" onClick={onClose} aria-label="Close">
-          ✕
-        </button>
-      </header>
-
-      <div className="lc-log" ref={logRef} role="log" aria-live="polite">
-        {transcript.map((entry) => {
-          const i = cooks.findIndex((c) => c.id === entry.speaker);
-          const isAgent = entry.speaker === "agent";
-          return (
-            <div key={entry.id} className={`lc-line ${isAgent ? "is-agent" : "is-player"}`}>
-              {isAgent ? <AgentAvatar size={20} /> : <PlayerAvatar cook={cooks[i]} index={Math.max(0, i)} size={20} />}
-              <span className="lc-line-text">{isAgent ? entry.text : `“${entry.text}”`}</span>
-            </div>
-          );
-        })}
-        {pendingConfirm && (
-          <div className="lc-pending">
-            <button type="button" className="btn lc-pending-option" onClick={onConfirmYes}>
-              Yes, {byId[pendingConfirm.stepId]?.label}
-            </button>
-            <button type="button" className="btn btn-ghost lc-btn-accent" onClick={onConfirmNo}>
-              No, someone else
-            </button>
-          </div>
-        )}
-        {pending && (
-          <div className="lc-pending">
-            {pending.options.map((id) => (
-              <button key={id} type="button" className="btn lc-pending-option" onClick={() => onPick(id)}>
-                {byId[id]?.label}
-              </button>
-            ))}
-            <button type="button" className="btn btn-ghost lc-btn-accent" onClick={onCancel}>
-              Cancel
-            </button>
-          </div>
-        )}
-      </div>
-      <div className="lc-agent-controls">
-      {/* Temporary until voice ID lands: the backend can't tell voices
-          apart, so whoever is selected here owns everything said. */}
-      <div className="lc-speaker" role="radiogroup" aria-label="Who is speaking">
-        {cooks.map((cook, i) => (
-          <button
-            key={cook.id}
-            type="button"
-            role="radio"
-            aria-checked={speaker === cook.id}
-            className={`lc-speaker-seg is-${playerKey(i)} ${speaker === cook.id ? "is-selected" : ""}`}
-            onClick={() => onSpeaker(cook.id)}
-          >
-            <PlayerAvatar cook={cook} index={i} size={24} />
-            <span>{cook.name}</span>
-          </button>
-        ))}
-      </div>
-
-      <form
-        className="lc-say"
-        onSubmit={(e) => {
-          e.preventDefault();
-          onSubmit();
-        }}
-      >
-        <input
-          type="text"
-          className="lc-say-input"
-          value={input}
-          onChange={(e) => onInput(e.target.value)}
-          placeholder="Type it instead…"
-          aria-label={`Say something as ${speakerCook?.name || "a player"}`}
-        />
-        <button type="submit" className="btn" disabled={!input.trim()}>
-          Say it
-        </button>
-      </form>
-      </div>
-    </aside>
   );
 }
 

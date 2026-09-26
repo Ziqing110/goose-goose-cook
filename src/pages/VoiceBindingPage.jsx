@@ -19,6 +19,8 @@ import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 import { audioTap } from "../voice/audioTap.js";
 import { speechActivity } from "../utils/speechActivity.js";
 import { enrollVoice, clearVoice, speakerHealth } from "../api/speaker.js";
+import { speakerLabelTap } from "../voice/speakerLabelTap.js";
+import { dominantLabel, withLabelBound } from "../utils/speakerLabels.js";
 import { ORDINAL, ordinalIndex, resolveCookRef, cleanSpokenName } from "../utils/cookVoice.js";
 import { VOICE_BINDING_VOICE, RECORDING_VOICE, AVATAR_PICKER_VOICE } from "../utils/pageVoiceGrammar.js";
 
@@ -199,8 +201,12 @@ export default function VoiceBindingPage() {
 
   // Bind from the newest cooks, not the closure's: this runs after an
   // await, by which time the list may have changed under it.
-  const bindCook = (id) =>
-    setCooks(voiceRef.current.cooks.map((c) => (c.id === id ? { ...c, bound: true } : c)));
+  const bindCook = (id, speakerLabel = null) => {
+    const bound = voiceRef.current.cooks.map((c) => (c.id === id ? { ...c, bound: true } : c));
+    // Both in one update. bindCook runs after an await and re-reads the
+    // ref, so writing the label separately beforehand could be undone.
+    setCooks(speakerLabel ? withLabelBound(bound, id, speakerLabel) : bound);
+  };
 
   // What has been said since recording began, and where it sits in time.
   const heardSoFar = () => {
@@ -230,6 +236,18 @@ export default function VoiceBindingPage() {
       setEnrollNote({ cookId: id, text: "I lost the recording. Try again.", tone: "is-accent" });
       return;
     }
+    // Which diarization label this cook was speaking under.
+    //
+    // Free, and it is the only attribution the DEPLOYED app has: the
+    // TitaNet sidecar does not run there, so without this the live cook
+    // falls back to whoever the speaker toggle was last left on. Bound
+    // from the same clip the voiceprint uses, because reading a line
+    // aloud on purpose is the cleanest sample the session will get.
+    const heard = dominantLabel(
+      speakerLabelTap.all(),
+      activity.startWall,
+      activity.startWall + (activity.lastVoiced + 1) * 50 + SPEECH_MARGIN_MS,
+    );
     try {
       // Re-recording replaces the old voiceprint rather than adding to it.
       await clearVoice(id).catch(() => {});
@@ -247,7 +265,7 @@ export default function VoiceBindingPage() {
       });
       refreshService();
     }
-    bindCook(id);
+    bindCook(id, heard.label);
   };
 
   const startRecording = (id) => {

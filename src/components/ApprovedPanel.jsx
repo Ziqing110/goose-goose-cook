@@ -4,6 +4,7 @@
 import { useNavigate } from "react-router-dom";
 import { diffGraphs } from "../utils/graphLayout.js";
 import Icon from "./Icon.jsx";
+import { GoosePrint } from "./GooseMarks.jsx";
 import "./ApprovedPanel.css";
 
 export default function ApprovedPanel({ draft, approved, onRevise }) {
@@ -34,9 +35,15 @@ export default function ApprovedPanel({ draft, approved, onRevise }) {
             schedule" while going to the cooks, which is the step before
             scheduling — so the button described a page it does not open,
             and saying its own words out loud sent the voice agent at the
-            schedule route, which the session guards refuse. */}
-        <button type="button" className="btn btn-primary" onClick={() => navigate("/session/voice-binding")}>
-          Continue to the cooks &rarr;
+            schedule route, which the session guards refuse.
+            Styled as every other page's way on: the large key button,
+            with the goose's tracks walking toward it. */}
+        <span className="ds-tracks" aria-hidden="true">
+          <GoosePrint depth="pale" size={16} rotate={78} style={{ position: "absolute", left: 4, bottom: 4 }} />
+          <GoosePrint depth="deep" size={19} rotate={98} style={{ position: "absolute", left: 34, bottom: 16 }} />
+        </span>
+        <button type="button" className="btn btn-primary btn-lg btn-key" onClick={() => navigate("/session/voice-binding")}>
+          Continue to the cooks
         </button>
       </div>
     </section>

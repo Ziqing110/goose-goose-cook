@@ -37,3 +37,37 @@ test("snapshot carries the recipe's own instruction, when there is one", () => {
   // conclude the recipe said nothing worth saying.
   assert.equal("how" in snap.steps[1], false);
 });
+
+test("snapshot carries recently finished steps, by name only", () => {
+  // So "what was that garlic step?" can be answered after the fact. The
+  // open list still drops them: nothing can be DONE to a finished step,
+  // and its description, holder and readiness would be tokens for
+  // nothing on every turn.
+  let run = createRun({ nodes, mode: "cooperation", schedule: null });
+  run = applyStart({ run, stepId: "a", cookId: "k1", at });
+  run = applyDone({ run, stepId: "a", cookId: "k1", at });
+
+  const snap = buildAgentSnapshot({ run, nodes, cooks, speakerId: "k1" });
+  assert.deepEqual(snap.finished, [{ id: "a", label: "Chop garlic" }]);
+  assert.ok(!snap.steps.some((s) => s.id === "a"), "still not an open step");
+});
+
+test("snapshot leaves `finished` off entirely when nothing is finished", () => {
+  // An empty array would be a shape the model has to read past on every
+  // turn of the first ten minutes.
+  const run = createRun({ nodes, mode: "cooperation", schedule: null });
+  assert.equal(buildAgentSnapshot({ run, nodes, cooks, speakerId: "k1" }).finished, undefined);
+});
+
+test("snapshot puts the most recently finished step first", () => {
+  // A cook asking about something they finished means a recent one, and
+  // only the most recent handful are carried.
+  let run = createRun({ nodes, mode: "cooperation", schedule: null });
+  run = applyStart({ run, stepId: "a", cookId: "k1", at: "2026-09-19T10:00:00.000Z" });
+  run = applyDone({ run, stepId: "a", cookId: "k1", at: "2026-09-19T10:01:00.000Z" });
+  run = applyStart({ run, stepId: "c", cookId: "k2", at: "2026-09-19T10:02:00.000Z" });
+  run = applyDone({ run, stepId: "c", cookId: "k2", at: "2026-09-19T10:03:00.000Z" });
+
+  const snap = buildAgentSnapshot({ run, nodes, cooks, speakerId: "k1" });
+  assert.deepEqual(snap.finished.map((s) => s.id), ["c", "a"]);
+});
