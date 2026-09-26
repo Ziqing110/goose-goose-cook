@@ -609,11 +609,14 @@ export default function LiveCookPage() {
     commit(next);
   };
 
-  const doDone = (stepId, cookId, source = "tap", base = run) => {
+  // `reporter` is whoever said or tapped it. The points are the
+  // holder's, whoever reports it -- see the credit rule at applyDone.
+  const doDone = (stepId, reporter, source = "tap", base = run) => {
     if (paused || !stepId || base.steps[stepId]?.status !== "active") return;
+    const cookId = base.steps[stepId].cookId ?? reporter;
     const at = new Date().toISOString();
     const v = stepVariance(byId[stepId], { ...base.steps[stepId], endedAt: at });
-    let next = applyDone({ run: base, stepId, cookId, at, source });
+    let next = applyDone({ run: base, stepId, cookId: reporter, at, source });
     // Recompile the rest of the plan on every completion — real times
     // diverge from estimates, so what's left genuinely changes shape.
     if (!isVersus) next = replan({ nodes, run: next, cooks, kitchenProfile });

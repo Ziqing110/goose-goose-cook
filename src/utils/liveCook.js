@@ -120,7 +120,7 @@ export function scoreStep(node, ctx = {}) {
   const difficulty = effectiveDifficulty(node);
   const full = DIFFICULTY_POINTS[difficulty] ?? DIFFICULTY_POINTS.low;
   // An unattended step already paid its starter; this is the rest of it,
-  // and it goes to whoever actually came back and dealt with the pot.
+  // and like every step's points it goes to the holder.
   const unattended = !isAttended(node);
   // Rice was paid for in full when it went on. Coming back to lift the
   // lid is not work, and paying for it invents an achievement — the step
@@ -480,32 +480,24 @@ export function runProgress(run, nodes, now = Date.now()) {
 }
 
 /**
- * Who first started each unattended step, and is therefore owed the
- * starting award.
+ * The starting award for every unattended step that is on or finished,
+ * paid to its holder — who is the cook whose start stuck, since only a
+ * start sets the holder and only a drop clears it (see the credit rule
+ * at applyDone).
  *
- * Read from the event log, not from run.steps, because applyDone
- * OVERWRITES cookId with whoever finished — so by the time a simmer is
- * done the record no longer remembers who put it on. The log does.
- *
- * Only steps that are still active or finished count. Otherwise start,
- * drop, start, drop would pay every time, which is the farming this
- * split exists to stop.
+ * Only steps that are still active or finished count, and a drop wipes
+ * the holder, so start, drop, start, drop pays once at most — the
+ * farming this split exists to stop.
  */
 export function startAwards(run, nodes) {
-  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
   const shares = tailShares(nodes);
-  const firstStarter = new Map();
-  (run.events || []).forEach((e) => {
-    if (e.type !== "start" || !e.stepId || !e.cookId) return;
-    if (isAttended(byId[e.stepId])) return;
-    if (!firstStarter.has(e.stepId)) firstStarter.set(e.stepId, e.cookId);
-  });
   const byCook = {};
-  firstStarter.forEach((cookId, stepId) => {
-    const status = run.steps[stepId]?.status;
-    if (status !== "active" && status !== "done") return;
-    byCook[cookId] =
-      (byCook[cookId] || 0) + unattendedStartPoints(byId[stepId], { tailShare: shares.get(stepId) });
+  nodes.forEach((n) => {
+    if (isAttended(n)) return;
+    const record = run.steps[n.id];
+    if (!record?.cookId || (record.status !== "active" && record.status !== "done")) return;
+    byCook[record.cookId] =
+      (byCook[record.cookId] || 0) + unattendedStartPoints(n, { tailShare: shares.get(n.id) });
   });
   return byCook;
 }
@@ -570,12 +562,12 @@ export function runOutcome(run, nodes, cooks) {
             points: scoreStep(n, { record, run, nodes, cooks }).points,
             // An unattended step paid twice, and the summary has to account
             // for both halves or the start awards appear in the totals from
-            // nowhere. startedByCookId is read from the event log because
-            // applyDone overwrites cookId with whoever finished.
+            // nowhere. Both halves go to the holder, so this is the same
+            // cook as cookId; it stays a field of its own for the summary.
             ...(unattended
               ? {
                   startPoints: unattendedStartPoints(n, { tailShare: shares.get(n.id) }),
-                  startedByCookId: (run.events || []).find((e) => e.type === "start" && e.stepId === n.id)?.cookId ?? null,
+                  startedByCookId: record.cookId,
                 }
               : {}),
             _startedAt: record.startedAt ? Date.parse(record.startedAt) : Infinity,
@@ -832,14 +824,35 @@ export function applyStart({ run, stepId, cookId, at, source = "tap" }) {
   return pushEvent(next, { at, type: "start", cookId, stepId, source });
 }
 
+/**
+ * CREDIT RULE — a step's points belong to whoever holds it.
+ *
+ * Holding is decided by starting or claiming, both arbitrated, and
+ * changes hands only by a drop, which is also explicit. Closing a step
+ * says nothing about who did it: "Nora's finished the tofu" is a report,
+ * and anybody may make it, but it is Nora's tofu. So done and skip never
+ * move record.cookId. The one who reported it is kept apart as
+ * `reportedBy`, for the log and for undo, and is never read for points.
+ *
+ * This used to be the other way round. applyDone overwrote cookId with
+ * the caller, and the caller on the voice path is a guess: without the
+ * speaker sidecar it is whoever the toggle was last left on. One cook
+ * saying another's step was done moved the other's points to themselves.
+ *
+ * `cookId` here is therefore the reporter. It only becomes the holder
+ * when nobody holds the step, which for done cannot happen (only an
+ * active step can be finished) and for skip means a pending step.
+ */
 export function applyDone({ run, stepId, cookId, at, source = "tap" }) {
-  const next = patchStep(run, stepId, { status: "done", cookId, endedAt: at });
-  return pushEvent(next, { at, type: "done", cookId, stepId, source });
+  const holder = run.steps[stepId]?.cookId ?? cookId;
+  const next = patchStep(run, stepId, { status: "done", cookId: holder, endedAt: at });
+  return pushEvent(next, { at, type: "done", cookId: holder, reportedBy: cookId, stepId, source });
 }
 
 export function applySkip({ run, stepId, cookId, at, source = "tap", reason = "manual" }) {
-  const next = patchStep(run, stepId, { status: "skipped", cookId, endedAt: at, skipReason: reason });
-  return pushEvent(next, { at, type: "skip", cookId, stepId, source, meta: { reason } });
+  const holder = run.steps[stepId]?.cookId ?? cookId;
+  const next = patchStep(run, stepId, { status: "skipped", cookId: holder, endedAt: at, skipReason: reason });
+  return pushEvent(next, { at, type: "skip", cookId: holder, reportedBy: cookId, stepId, source, meta: { reason } });
 }
 
 /** Put an active step back in the pool — no points, no penalty. */
@@ -852,7 +865,12 @@ export function applyDrop({ run, stepId, cookId, at, source = "tap" }) {
  *  nothing downstream has started on the back of it. */
 export function applyUndo({ run, nodes, cookId, at }) {
   const undoable = ["start", "done", "skip"];
-  const last = [...run.events].reverse().find((e) => e.cookId === cookId && undoable.includes(e.type));
+  // Yours to undo if it was your step or you were the one who said it:
+  // somebody who wrongly reported another cook's step done has to be
+  // able to take it back.
+  const last = [...run.events]
+    .reverse()
+    .find((e) => (e.cookId === cookId || e.reportedBy === cookId) && undoable.includes(e.type));
   if (!last) return { run, rejected: "nothing" };
   if (Date.parse(at) - Date.parse(last.at) > UNDO_WINDOW_MS) return { run, rejected: "too_late" };
 

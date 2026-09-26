@@ -228,3 +228,53 @@ test("voice: pause / resume / finish are their own intents and win over 'start' 
   assert.equal(parseCommand("we're done", ctx).intent, "finish_run");
   assert.equal(parseCommand("dinner's up", ctx).intent, "finish_run");
 });
+
+test("points go to the holder, not to whoever reports the step finished", () => {
+  // Mia is on the onion, Leo on the tofu. The voice path credits the
+  // speaker toggle, which was left on Mia -- and she (or the mic, thinking
+  // it heard her) reports Leo's tofu done. It is still Leo's tofu.
+  let run = versusRun();
+  run = applyStart({ run, stepId: "dice", cookId: "c1", at: at(0) });
+  run = applyStart({ run, stepId: "tofu", cookId: "c2", at: at(0) });
+  run = applyDone({ run, stepId: "tofu", cookId: "c1", at: at(100), source: "voice" });
+
+  assert.equal(run.steps.tofu.cookId, "c2", "finishing never moves the step");
+  const done = run.events.at(-1);
+  assert.equal(done.cookId, "c2");
+  assert.equal(done.reportedBy, "c1", "who said it is kept, apart from the credit");
+
+  const board = scoreboard(run, nodes, cooks);
+  assert.equal(board.find((b) => b.cookId === "c2").points, DIFFICULTY_POINTS.medium);
+  assert.equal(board.find((b) => b.cookId === "c1").points, 0);
+  assert.equal(activeStepFor("c1", run, nodes), "dice", "Mia is still on her own step");
+
+  // The one who misreported it can take it back.
+  const undone = applyUndo({ run, nodes, cookId: "c1", at: at(110) });
+  assert.equal(undone.rejected, undefined);
+  assert.equal(undone.run.steps.tofu.status, "active");
+  assert.equal(undone.run.steps.tofu.cookId, "c2");
+});
+
+test("an unattended step pays both halves to its holder, whoever lifts the lid", () => {
+  const simmer = [
+    { id: "stock", label: "Simmer the stock", difficulty: "medium", estimated_duration_sec: 1200, depends_on: [], required_equipment: [], attended: false },
+  ];
+  let run = createRun({ nodes: simmer, mode: "competition", schedule: null, opening: null, now: new Date(T0) });
+  run = applyStart({ run, stepId: "stock", cookId: "c2", at: at(0) });
+  run = applyDone({ run, stepId: "stock", cookId: "c1", at: at(1200) });
+  const board = scoreboard(run, simmer, cooks);
+  assert.equal(board.find((b) => b.cookId === "c1").points, 0);
+  assert.ok(board.find((b) => b.cookId === "c2").points >= DIFFICULTY_POINTS.medium, "start award plus the finish");
+  const step = runOutcome(run, simmer, cooks).perStep[0];
+  assert.equal(step.cookId, "c2");
+  assert.equal(step.startedByCookId, "c2");
+});
+
+test("skipping somebody's step leaves it theirs; a pending skip belongs to the skipper", () => {
+  let run = versusRun();
+  run = applyStart({ run, stepId: "tofu", cookId: "c2", at: at(0) });
+  run = applySkip({ run, stepId: "tofu", cookId: "c1", at: at(50) });
+  assert.equal(run.steps.tofu.cookId, "c2");
+  run = applySkip({ run, stepId: "dice", cookId: "c1", at: at(60) });
+  assert.equal(run.steps.dice.cookId, "c1");
+});
