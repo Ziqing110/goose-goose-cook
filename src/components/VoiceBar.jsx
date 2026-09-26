@@ -480,13 +480,27 @@ export default function VoiceBar() {
     [pathname, runPaused],
   );
 
-  const { status, partial, hearing, updateConfig } = useStreamingTranscript({
+  const { status, partial, hearing, updateConfig, markActive } = useStreamingTranscript({
     enabled: !muted,
     config: streamConfig,
     onTurn,
     onError,
     onIdle,
   });
+
+  // Back on the air: whatever went wrong on the way has been dealt with,
+  // and a warning left on screen would read as the mic being broken.
+  useEffect(() => {
+    if (status === "live") setError(null);
+  }, [status]);
+
+  // Moving to another page is somebody being here. Without this, a
+  // minute spent reading the schedule in silence was counted against the
+  // live cook's quiet budget, and the mic switched itself off as the cook
+  // arrived.
+  useEffect(() => {
+    markActive();
+  }, [pathname, markActive]);
 
   // A page can ask for different turn detection while it listens — the
   // conversation page wants long thinking pauses, the live cook will
@@ -591,6 +605,9 @@ const GOOSE_PREVIEW = {
  * connection into copy, so this only decides the pose and reuses it.
  */
 function describeGoose({ view, speaking, muted, status, partial, hearing, pending, feedback, error, interpreting }) {
+  // Reconnecting outranks the error that caused it: the app is already
+  // doing the thing "tap the mic to try again" would ask for.
+  if (status === "reconnecting") return { state: "thinking", tag: "Reconnecting", line: view.line, partial: false };
   if (error) return { state: "warning", tag: "Mic error", line: error, partial: false };
   // An open question outranks the fact that the goose is reading it out:
   // the answer is what the screen is waiting for, and the design files
@@ -628,7 +645,7 @@ function quietFor(ms) {
 }
 
 function describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname, reachable, idleMs, runPaused }) {
-  if (error) {
+  if (error && status !== "reconnecting") {
     return {
       label: "MIC ERROR",
       line: error,

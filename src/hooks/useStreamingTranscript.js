@@ -46,9 +46,23 @@ const IDLE_CHECK_MS = 5_000;
 //
 // Each attempt is a FULL reconnect, token fetch included, because
 // AssemblyAI tokens are single-use: reusing one is an instant reject.
-const MAX_RETRIES = 5;
+//
+// The mic goes off for exactly two reasons: the user turned it off, or
+// nobody spoke for too long (onIdle). Anything else -- a dropped socket,
+// a token request that failed, a server Error, a worklet that would not
+// load -- is retried, for as long as the user has it on. It used to give
+// up after five attempts or on the first server Error and mute itself,
+// which is how the goose went quiet in the middle of a cook with nobody
+// having asked it to. The backoff grows to a ceiling rather than
+// stopping, so a problem that persists costs one attempt every half
+// minute, not a loop.
+//
+// The one exception is the browser refusing the microphone outright
+// (permission denied, no device): no number of retries fixes that, and
+// only the user can.
 const RETRY_BASE_MS = 500;
-const RETRY_CAP_MS = 8_000;
+const RETRY_CAP_MS = 30_000;
+const MIC_REFUSED = new Set(["NotAllowedError", "SecurityError", "NotFoundError", "OverconstrainedError"]);
 // Below this, a connection counts as flapping rather than working, so
 // its attempt budget is NOT refilled. Without this an open/close loop
 // would retry forever, opening a billable session each time.
@@ -71,8 +85,8 @@ const EMPTY_TURN_MS = 9_000;
  * @param {function} options.onTurn       (turn) => void, on each finalized turn
  * @param {object}   options.config       connection params (see buildParams)
  * @param {function} options.onError      (message, {fatal}) => void. fatal
- *   means listening has stopped for good and only the user can restart it;
- *   otherwise the hook is still trying and the socket may yet recover.
+ *   means the browser refused the microphone and only the user can fix
+ *   it; anything else, the hook is already reconnecting.
  * @param {function} options.onIdle       () => void, after config.idleMs of no speech
  *
  * `config.idleMs` overrides how long "no words heard" runs before onIdle.
@@ -103,6 +117,7 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
   // (bad token, bad config). Network drops and session expiry are not
   // this, and are exactly what the retry is for.
   const fatalRef = useRef(false);
+  const lastErrorRef = useRef("");
   // Which connect run is the live one. A muted run keeps its socket open
   // for a few seconds to hear the last turn out, and a new run can start
   // inside that window; the old one must then leave the shared state —
@@ -144,6 +159,16 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
     setLevel(0);
     setPartial("");
     setHearing(false);
+  }, []);
+
+  /**
+   * Someone is here, whether or not they have said anything: they moved
+   * to another page. The quiet clock runs from now rather than from the
+   * last words, so arriving somewhere does not inherit the silence of
+   * reading the page before it.
+   */
+  const markActive = useCallback(() => {
+    if (lastVoiceRef.current) lastVoiceRef.current = Date.now();
   }, []);
 
   /** Push keyterms / turn settings without reconnecting. */
@@ -214,6 +239,18 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
       ctx?.close().catch(() => {});
     };
 
+    // Try again shortly, however this attempt failed. Only for the run
+    // that is still current and still wanted.
+    const retryLater = (message) => {
+      if (cancelled || !isCurrent()) return;
+      console.warn("[mic] reconnecting after:", message);
+      onErrorRef.current?.(message, { fatal: false });
+      const wait = Math.min(RETRY_BASE_MS * 2 ** retriesRef.current, RETRY_CAP_MS);
+      retriesRef.current += 1;
+      setStatus("reconnecting");
+      retryTimerRef.current = setTimeout(() => setRetryTick((t) => t + 1), wait);
+    };
+
     (async () => {
       setStatus((s) => (s === "reconnecting" ? s : "connecting"));
 
@@ -230,10 +267,17 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
           },
         });
       } catch (err) {
-        if (!cancelled) {
+        if (cancelled) return;
+        // Refused by the browser: retrying only asks again, and the user
+        // has to change the permission or plug something in first.
+        if (MIC_REFUSED.has(err.name)) {
           setStatus("error");
           onErrorRef.current?.(`Microphone unavailable: ${err.message}`, { fatal: true });
+          return;
         }
+        // Busy, or momentarily unavailable -- another tab, a device
+        // switch. Worth another go.
+        retryLater(`Microphone unavailable: ${err.message}`);
         return;
       }
       if (cancelled) {
@@ -250,10 +294,8 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
         // pipeline dies with nothing but this console error.
         await ctx.audioWorklet.addModule(`${import.meta.env.BASE_URL}pcm-processor.js`);
       } catch (err) {
-        if (!cancelled) {
-          setStatus("error");
-          onErrorRef.current?.(`Audio worklet failed to load: ${err.message}`, { fatal: true });
-        }
+        releaseAudio();
+        retryLater(`Audio worklet failed to load: ${err.message}`);
         return;
       }
 
@@ -264,10 +306,9 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
         if (!res.ok) throw new Error(body.error || `Token request failed (${res.status})`);
         token = body.token;
       } catch (err) {
-        if (!cancelled) {
-          setStatus("error");
-          onErrorRef.current?.(err.message, { fatal: true });
-        }
+        // Our server blinked, or the network did. Not the user's doing.
+        releaseAudio();
+        retryLater(err.message);
         return;
       }
       if (cancelled) return;
@@ -334,6 +375,8 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
 
           case "SpeechStarted":
             setHearing(true);
+            // Somebody is talking, even before a word resolves.
+            lastVoiceRef.current = Date.now();
             break;
 
           case "Turn": {
@@ -382,11 +425,13 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
               onIdleRef.current?.();
               break;
             }
-            // Whatever this is, reopening would hit it again — a retry
-            // loop here just bills sessions to fail the same way.
+            // Anything else: say what it was, and let the close that
+            // follows reconnect. Some of these will fail again (a bad
+            // config), which the backoff ceiling keeps cheap; many won't
+            // (3005, 3009 while the last session winds down, 1011).
             fatalRef.current = true;
-            setStatus("error");
-            onErrorRef.current?.(`${msg.error_code}: ${msg.error}`, { fatal: true });
+            lastErrorRef.current = `${msg.error_code}: ${msg.error}`;
+            console.warn("[mic] server error:", lastErrorRef.current);
             break;
 
           default:
@@ -425,21 +470,9 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
         }
         openedAtRef.current = 0;
 
-        // Already reported (the Error branch set this and said why).
-        if (fatalRef.current) {
-          setStatus("error");
-          return;
-        }
-        if (retriesRef.current >= MAX_RETRIES) {
-          setStatus("error");
-          onErrorRef.current?.("Lost the connection to the transcriber.", { fatal: true });
-          return;
-        }
-
-        const wait = Math.min(RETRY_BASE_MS * 2 ** retriesRef.current, RETRY_CAP_MS);
-        retriesRef.current += 1;
-        setStatus("reconnecting");
-        retryTimerRef.current = setTimeout(() => setRetryTick((t) => t + 1), wait);
+        const why = fatalRef.current ? lastErrorRef.current : "Lost the connection to the transcriber.";
+        fatalRef.current = false;
+        retryLater(why);
       };
     })();
 
@@ -462,7 +495,7 @@ export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, 
     };
   }, [enabled, teardownAudio, retryTick]);
 
-  return { status, partial, level, hearing, updateConfig };
+  return { status, partial, level, hearing, updateConfig, markActive };
 }
 
 /**
