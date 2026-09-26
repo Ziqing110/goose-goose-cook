@@ -111,3 +111,11 @@ test("a near-miss name is only taken where an introduction clearly is", () => {
   assert.equal(findSelfIntro("Goose I'm ready", kitchen, { agentName: "Goose" }), null);
   assert.equal(findSelfIntro("I'm Mallory, start the eggs", kitchen), null);
 });
+
+test("a name spelled out letter by letter introduces that cook", () => {
+  assert.deepEqual(findSelfIntro("Goose, I'm Z-E-I-N-A, I'll wash the tofu", kitchen, { agentName: "Goose" }), {
+    cookId: "Z",
+    rest: "I'll wash the tofu",
+  });
+  assert.equal(findSelfIntro("I'm Z E I N A", kitchen)?.cookId, "Z");
+});

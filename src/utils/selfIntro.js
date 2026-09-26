@@ -16,7 +16,7 @@
 // the thing that is already going wrong to work first.
 //
 // Pure: no DOM, no React.
-import { nearestCook, resolveCookRef } from "./cookVoice.js";
+import { joinSpelledLetters, nearestCook, resolveCookRef } from "./cookVoice.js";
 
 // How an introduction opens. Anchored at the start, because "ask Toni"
 // and "that's Toni's step" are about somebody, not from them.
@@ -53,7 +53,8 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  *   these cooks -- a stranger's name is not a reason to reassign work.
  */
 export function findSelfIntro(text, cooks, { agentName = "" } = {}) {
-  let said = String(text || "").trim();
+  // "I'm Z-E-I-N-A": the name spelled out, because saying it did not work.
+  let said = joinSpelledLetters(String(text || "").trim());
   if (agentName) {
     said = said.replace(new RegExp(`^(?:(?:hey|ok|okay)\\s+)?${escapeRe(agentName)}[,.!:]*\\s+`, "i"), "");
   }

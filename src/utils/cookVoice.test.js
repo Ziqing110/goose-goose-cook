@@ -2,7 +2,7 @@
 // Run with: node --test src/utils/cookVoice.test.js
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ORDINAL, ordinalIndex, resolveCookRef, cleanSpokenName, nearestCook } from "./cookVoice.js";
+import { ORDINAL, ordinalIndex, resolveCookRef, cleanSpokenName, nearestCook, joinSpelledLetters } from "./cookVoice.js";
 import { MAX_COOK_NAME_LENGTH } from "./cooks.js";
 
 const two = [{ name: "Mia" }, { name: "" }];
@@ -191,4 +191,15 @@ test("nearestCook: nobody close, a tie, or a word that is not a name is nobody",
   assert.equal(nearestCook("Mina", [{ id: 1, name: "Nina" }, { id: 2, name: "Tina" }]), null);
   assert.equal(nearestCook("ready", pair), null);
   assert.equal(nearestCook("Li", pair), null);
+});
+
+test("spelled names: however the recogniser writes the letters, they join back", () => {
+  assert.equal(joinSpelledLetters("I'm Z-E-I-N-A, start the eggs"), "I'm Zeina, start the eggs");
+  assert.equal(joinSpelledLetters("it's Z E I N A"), "it's Zeina");
+  assert.equal(joinSpelledLetters("z. e. i. n. a."), "Zeina");
+});
+
+test("spelled names: ordinary words and short letter runs are left alone", () => {
+  assert.equal(joinSpelledLetters("I want a tofu"), "I want a tofu");
+  assert.equal(joinSpelledLetters("plan B or C"), "plan B or C");
 });

@@ -45,6 +45,7 @@ import { matchConfirmation, hasSubject, normalizeUtterance } from "../utils/navC
 import { routeConfirmReply } from "../utils/confirmReply.js";
 import { routeModalReply, FINISH_PHRASE } from "../utils/modalReply.js";
 import { findSelfIntro } from "../utils/selfIntro.js";
+import { joinSpelledLetters } from "../utils/cookVoice.js";
 import { opensFollowUp } from "../utils/followUp.js";
 import { rejectionLines } from "../utils/agentRejection.js";
 import { voiceLog } from "../voice/voiceLog.js";
@@ -1153,7 +1154,8 @@ export default function LiveCookPage() {
     // would make the fix for a misattributed turn depend on the thing
     // that is already going wrong.
     const intro = findSelfIntro(text, cooks, { agentName: AGENT_NAME });
-    let said = text;
+    // A name spelled out ("as Z-E-I-N-A") reaches the model as the name.
+    let said = joinSpelledLetters(text);
     let saidBy = null;
     if (intro) {
       setSpeakerId(intro.cookId);

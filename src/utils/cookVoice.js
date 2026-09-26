@@ -117,3 +117,17 @@ export function nearestCook(said, cooks) {
   if (next && next.d === best.d) return null;
   return best.cook;
 }
+
+// A name spelled out letter by letter, as the recogniser writes it:
+// "Z-E-I-N-A", "Z E I N A", "z. e. i. n. a." -- joined back into the
+// word, so an uncommon name can be spelled when saying it did not work.
+// Three letters or more, so "a" and "I" in ordinary speech are left
+// alone.
+const SPELLED = /(?<![\w'])[a-z](?![\w'])(?:[\s.-]+[a-z](?![\w'])){2,}\.?/gi;
+
+export function joinSpelledLetters(text) {
+  return String(text || "").replace(SPELLED, (run) => {
+    const letters = run.replace(/[^a-z]/gi, "");
+    return letters[0].toUpperCase() + letters.slice(1).toLowerCase();
+  });
+}

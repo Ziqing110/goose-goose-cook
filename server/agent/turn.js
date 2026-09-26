@@ -13,7 +13,7 @@
 // whether a turn was meant for the agent.
 export { isAddressed } from "../../src/utils/addressing.js";
 import { SEARCH_TOOL } from "./search.js";
-import { nearestCook } from "../../src/utils/cookVoice.js";
+import { joinSpelledLetters, nearestCook } from "../../src/utils/cookVoice.js";
 
 /** Tool names are the intent names parseCommand already produces. */
 export const INTENTS = [
@@ -289,7 +289,7 @@ export function parseChoice(choice, snapshot, { shared = false } = {}) {
     // Near enough counts, though: the recogniser spells names its own way,
     // and "Zina" for the cook named Zeina is her, not a stranger.
     const said = ASSIGNABLE.has(name) && args.cook_name ? String(args.cook_name) : null;
-    const cookName = said ? nearestCook(said, snapshot.cooks || [])?.name ?? said : null;
+    const cookName = said ? nearestCook(joinSpelledLetters(said), snapshot.cooks || [])?.name ?? said : null;
     if (cookName && !(snapshot.cooks || []).some((c) => c.name === cookName)) {
       rejected.push({ name, reason: "unknown_cook", cookName });
       continue;
