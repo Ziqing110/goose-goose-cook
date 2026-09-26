@@ -32,19 +32,45 @@ export function areCooksBound(cooks) {
   return cooks.length > 0 && cooks.every((c) => c.name.trim() && c.bound) && duplicateCookNames(cooks).size === 0;
 }
 
-// Each cook reads a fixed line rather than saying anything they like:
+// Each cook reads fixed lines rather than saying anything they like:
 // a known script gives voice recognition the same words to compare
-// against across cooks, and the lines are deliberately different from
+// against across cooks, and the scripts are deliberately different from
 // each other (and phonetically varied) so two voices reading them are
 // easier to tell apart than two people ad-libbing "hello".
-const VOICE_PHRASES = [
-  "I'm {name}, and I solemnly swear I will not burn the garlic tonight.",
-  "I'm {name}, and yes, I already ate half the ingredients.",
-  "I'm {name}, and the smoke alarm is basically my kitchen timer.",
+//
+// Three lines, not one. How much voice a print is built from decides how
+// many turns the live cook can credit by voice: on the kitchen takes, a
+// print from one reading credited about 6 of 34 turns, from three about
+// 11 (15 with the live cook learning as it goes), from six 16. Three is
+// where that pays for itself without making setup a chore.
+//
+// After the first, the lines are things actually said to the goose
+// mid-cook, so the voice on file sounds like the voice it has to match.
+// None of them may contain what the recording listens for to stop
+// ("stop", "save", "cancel", "never mind", "that's it", "discard").
+export const VOICE_LINES_PER_COOK = 3;
+
+const VOICE_SCRIPTS = [
+  [
+    "I'm {name}, and I solemnly swear I will not burn the garlic tonight.",
+    "Goose, I'll take the onions, then the ginger, then whatever's left.",
+    "Done with the tofu. What's next, and how long has the rice got?",
+  ],
+  [
+    "I'm {name}, and yes, I already ate half the ingredients.",
+    "Goose, start the broth, and shout when it's properly boiling.",
+    "Skip the scallions for now, the eggs come first. Back in a minute.",
+  ],
+  [
+    "I'm {name}, and the smoke alarm is basically my kitchen timer.",
+    "Goose, pause everything, the pan is far too hot.",
+    "Finished the sauce. Give me something with a knife, please.",
+  ],
 ];
 
-export function voicePhraseFor(index, name) {
-  return VOICE_PHRASES[index % VOICE_PHRASES.length].replace("{name}", name);
+/** The lines a cook reads to enroll, in order. */
+export function voiceLinesFor(index, name) {
+  return VOICE_SCRIPTS[index % VOICE_SCRIPTS.length].map((line) => line.replace("{name}", name));
 }
 
 // Files in public/ are copied verbatim, so Vite does NOT rewrite a path

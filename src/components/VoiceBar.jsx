@@ -37,6 +37,7 @@ import {
   matchPageCommand,
   subscribeVoiceRegistry,
   voiceCommandsAreExclusive,
+  voiceCommandsInterpretable,
 } from "../utils/voicePageCommands.js";
 import { ROUTES, voiceReachablePaths } from "../utils/routeGuards.js";
 import { isPaused } from "../utils/liveCook.js";
@@ -435,7 +436,7 @@ export default function VoiceBar() {
         // react-router numbers its own entries in history.state.idx, and
         // idx 0 is the first page this visit opened.
         canGoBack: (window.history.state?.idx ?? 0) > 0,
-        interpret: true,
+        interpret: voiceCommandsInterpretable(),
       });
 
       // Read before clearing: "yes" performs the question being closed.

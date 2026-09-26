@@ -72,10 +72,13 @@ const liveLayers = () => {
  *             ("Cook 1 is named Zina"), read when the goose is asked
  *             what somebody meant. Without it "no, it's Zeina" has
  *             nothing to be a correction OF.
+ *   interpret  false while the words are not meant for the goose at all
+ *             -- a cook reading their enrollment lines -- so nothing
+ *             unmatched is sent off to be interpreted.
  * @returns {Function} unregister
  */
-export function registerVoiceCommands(commands, { priority = 0, exclusive = false, describe = null } = {}) {
-  const layer = { commands: commands || [], priority, exclusive, describe };
+export function registerVoiceCommands(commands, { priority = 0, exclusive = false, describe = null, interpret = true } = {}) {
+  const layer = { commands: commands || [], priority, exclusive, describe, interpret };
   layers = [...layers, layer];
   return () => {
     // Remove this layer specifically, wherever it now sits. A late
@@ -192,6 +195,11 @@ export function interpretationMenu() {
       patterns: (c.phrases || []).map((p) => p.source),
     }));
   return { context, commands };
+}
+
+/** May an unmatched turn be sent to the goose to interpret right now? */
+export function voiceCommandsInterpretable() {
+  return liveLayers().every((l) => l.interpret !== false);
 }
 
 /**

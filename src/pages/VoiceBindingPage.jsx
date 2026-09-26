@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import {
   areCooksBound,
-  voicePhraseFor,
+  voiceLinesFor,
+  VOICE_LINES_PER_COOK,
   duplicateCookNames,
   chefAvatar,
   stepChefAvatar,
@@ -34,7 +35,14 @@ import { VOICE_BINDING_VOICE, RECORDING_VOICE, AVATAR_PICKER_VOICE } from "../ut
 // which is counted from the click and cut off anyone who started late or
 // read slowly. Only the speech itself, with a little room either side, is
 // kept for the voiceprint.
-const MIN_SPEECH_MS = 2000; // pressing Stop with less than this leaves too little to go on
+// Per line, now that each cook reads three short ones rather than one
+// long one. 1.5s is also the shortest turn the live cook learns a voice
+// from, so a line that passes here is a sample worth having.
+const MIN_SPEECH_MS = 1500; // pressing Stop with less than this leaves too little to go on
+// Voiced time before a pause can end a line by itself. The shortest line
+// runs about two seconds of actual voice; at the old 3s it never ended on
+// its own and the cook sat waiting for the 25s cap.
+const LINE_VOICED_MS = 1800;
 const SPEECH_MARGIN_MS = 300;
 const MAX_RECORDING_MS = 25_000; // stop waiting for a pause after this
 const MIC_WAIT_MS = 15_000; // give up if the mic never comes on
@@ -76,6 +84,13 @@ export default function VoiceBindingPage() {
   const locked = Boolean(state.session.run);
   const [recordingCookId, setRecordingCookId] = useState(null);
   const [recordingProgress, setRecordingProgress] = useState(0);
+  // Which of the cook's lines is being read, and how many each cook has
+  // saved so far -- a cook who stopped after two carries on at the third.
+  const [recordingLine, setRecordingLine] = useState(0);
+  const [linesSaved, setLinesSaved] = useState({});
+  const recordingLineRef = useRef(0);
+  // The diarization label heard on each saved line, per cook.
+  const lineLabelsRef = useRef({});
   // { cookId, phase } while a chef drawer is unfolded in a card. Only
   // one is ever open — two open drawers would let both cooks reach for
   // the same bird at once.
@@ -193,6 +208,7 @@ export default function VoiceBindingPage() {
     clearInterval(intervalRef.current);
     setRecordingCookId(null);
     setRecordingProgress(0);
+    setRecordingLine(0);
     if (micWasMutedRef.current) {
       micWasMutedRef.current = false;
       dispatch({ type: "voice/setMuted", payload: { muted: true } });
@@ -211,13 +227,22 @@ export default function VoiceBindingPage() {
   // What has been said since recording began, and where it sits in time.
   const heardSoFar = () => {
     const { levels, startWall } = audioTap.levelsSince(recordStartRef.current);
-    return { ...speechActivity(levels), startWall };
+    return { ...speechActivity(levels, 50, { minVoicedMs: LINE_VOICED_MS }), startWall };
   };
 
+  // One label for all of a cook's lines, by the same rule as within one:
+  // lines that disagree bind nothing, since the room was talking over them.
+  const agreedLabel = (labels) => dominantLabel(labels.map((label, at) => ({ label, at })), 0, Infinity).label;
+
+  // Saves the line being read. Between lines the mic stays as it is and
+  // the next line starts at once; only the last line, a failure, or the
+  // speaker service being off ends the reading.
   const completeRecording = async (id) => {
     const activity = heardSoFar();
-    stopRecording();
+    const line = recordingLineRef.current;
+    clearInterval(intervalRef.current);
     if (activity.voicedMs < MIN_SPEECH_MS) {
+      stopRecording();
       setEnrollNote({
         cookId: id,
         text: activity.voicedMs
@@ -233,6 +258,7 @@ export default function VoiceBindingPage() {
       activity.startWall + (activity.lastVoiced + 1) * 50 + SPEECH_MARGIN_MS,
     );
     if (!clip) {
+      stopRecording();
       setEnrollNote({ cookId: id, text: "I lost the recording. Try again.", tone: "is-accent" });
       return;
     }
@@ -248,44 +274,70 @@ export default function VoiceBindingPage() {
       activity.startWall,
       activity.startWall + (activity.lastVoiced + 1) * 50 + SPEECH_MARGIN_MS,
     );
+    const labels = (lineLabelsRef.current[id] = line === 0 ? [] : lineLabelsRef.current[id] || []);
+    if (heard.label) labels.push(heard.label);
     try {
-      // Re-recording replaces the old voiceprint rather than adding to it.
-      await clearVoice(id).catch(() => {});
+      // The first line of a reading replaces the old voiceprint; the
+      // rest add to it, each its own sample.
+      if (line === 0) await clearVoice(id).catch(() => {});
       await enrollVoice({ cookId: id, pcm: clip.pcm, rate: clip.rate });
-      setEnrollNote({ cookId: id, text: "Got your voice", tone: "is-done" });
-      refreshService();
     } catch (err) {
       // The speaker service isn't running. Binding still completes: the
-      // live cook falls back to its speaker toggle, so nobody is stuck.
+      // live cook falls back to its speaker toggle, so nobody is stuck,
+      // and there is no point reading more lines into nothing.
       console.info("[speaker] not enrolled:", err.message);
+      stopRecording();
       setEnrollNote({
         cookId: id,
         text: "Got your line, but the speaker service is off, so I can't learn your voice yet",
         tone: "is-accent",
       });
       refreshService();
+      bindCook(id, agreedLabel(labels));
+      return;
     }
-    bindCook(id, heard.label);
+    const saved = line + 1;
+    setLinesSaved((all) => ({ ...all, [id]: saved }));
+    if (saved < VOICE_LINES_PER_COOK) {
+      captureLine(id, saved);
+      return;
+    }
+    stopRecording();
+    setEnrollNote({ cookId: id, text: "Got your voice", tone: "is-done" });
+    refreshService();
+    bindCook(id, agreedLabel(labels));
   };
 
+  // Start reading, or carry on: a cook who stopped part-way picks up at
+  // the next unsaved line, and one already bound starts over, since
+  // "Record again" means a new voiceprint.
   const startRecording = (id) => {
     clearInterval(intervalRef.current);
     setEnrollNote(null);
     // Reading and choosing are mutually exclusive: the card only has
     // room for one of them, and the line has to be on screen to be read.
     if (drawer) setDrawer(null);
-    setRecordingCookId(id);
-    setRecordingProgress(0);
+    const cook = voiceRef.current.cooks.find((c) => c.id === id);
+    const saved = cook?.bound ? 0 : Math.min(linesSaved[id] || 0, VOICE_LINES_PER_COOK - 1);
     if (state.voice.muted) {
       micWasMutedRef.current = true;
       dispatch({ type: "voice/setMuted", payload: { muted: false } });
     }
+    captureLine(id, saved);
+  };
+
+  const captureLine = (id, line) => {
+    clearInterval(intervalRef.current);
+    recordingLineRef.current = line;
+    setRecordingLine(line);
+    setRecordingCookId(id);
+    setRecordingProgress(0);
     recordStartRef.current = Date.now();
     const startedAt = Date.now();
     intervalRef.current = setInterval(() => {
       const activity = heardSoFar();
       // Filled by speech, not by the clock; 99 until it is actually saved.
-      setRecordingProgress(Math.min(99, (activity.voicedMs / 3000) * 100));
+      setRecordingProgress(Math.min(99, (activity.voicedMs / LINE_VOICED_MS) * 100));
       const elapsed = Date.now() - startedAt;
       if (activity.done || (elapsed > MAX_RECORDING_MS && activity.voicedMs >= MIN_SPEECH_MS)) {
         completeRecording(id);
@@ -549,7 +601,9 @@ export default function VoiceBindingPage() {
           if (!cook) return who ? which : "Give a cook a name and a chef first.";
           if (!isReady(cook)) return `${label(cook)} needs a name and a chef first.`;
           v().startRecording(cook.id);
-          return `Listening to ${label(cook)} — read the line, then say “stop and save”.`;
+          // Nothing said out loud: the goose talking over the first line
+          // would be recorded as part of it. The card shows the line.
+          return null;
         },
       },
       {
@@ -598,7 +652,10 @@ export default function VoiceBindingPage() {
           run: () => voiceRef.current.stopRecording(),
         },
       ],
-      { priority: 10, exclusive: true },
+      // Every line read here misses every command, and none of it is for
+      // the goose -- sending it off to be interpreted would have the
+      // goose answer somebody's enrollment script.
+      { priority: 10, exclusive: true, interpret: false },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordingCookId]);
@@ -765,17 +822,28 @@ export default function VoiceBindingPage() {
               const isBound = Boolean(name) && cook.bound;
               const avatar = chefAvatar(cook.avatar);
               const canStart = Boolean(name) && Boolean(cook.avatar);
-              const phrase = voicePhraseFor(index, name);
+              const lines = voiceLinesFor(index, name);
+              const saved = cook.bound ? 0 : linesSaved[cook.id] || 0;
+              // The line to show: the one being read, the next one owed, or
+              // (once bound) the first, quietly.
+              const lineIndex = isRecording ? recordingLine : Math.min(saved, VOICE_LINES_PER_COOK - 1);
+              const phrase = lines[lineIndex];
+              const partway = !isRecording && !cook.bound && saved > 0;
               const cookFx = fxOf(cook.id);
               const isDrawerOpen = drawer?.cookId === cook.id;
               const lockBird = !canChangeBird(cook);
 
-              let status = `${name}. Whole line, normal voice.`;
+              let status = `${name}. ${VOICE_LINES_PER_COOK} short lines, normal voice.`;
               let statusClass = "is-accent";
-              if (isRecording) [status, statusClass] = [`Listening. ${Math.min(99, Math.round(recordingProgress))}%.`, "is-accent"];
+              if (isRecording) [status, statusClass] = [`Line ${recordingLine + 1} of ${VOICE_LINES_PER_COOK}. Listening. ${Math.min(99, Math.round(recordingProgress))}%.`, "is-accent"];
+              else if (partway) [status, statusClass] = [`${saved} of ${VOICE_LINES_PER_COOK} lines saved.`, "is-accent"];
               else if (!cook.avatar) [status, statusClass] = ["Tap the bird to pick your chef", "is-accent"];
               else if (!name) [status, statusClass] = ["No name, no line.", ""];
               else if (isBound && service?.up && !service.enrolled[cook.id]) [status, statusClass] = ["Line recorded, but I haven't learned your voice. Record again", "is-accent"];
+              // Bound from before there were three lines: it works, but a
+              // print from one reading credits a fraction of what three do.
+              else if (isBound && service?.up && service.enrolled[cook.id] < VOICE_LINES_PER_COOK)
+                [status, statusClass] = ["Only one line on file. Record again so I can tell you apart", "is-accent"];
               else if (isBound) [status, statusClass] = [`Got it. That’s ${name}.`, "is-done"];
               if (enrollNote?.cookId === cook.id && !isRecording) [status, statusClass] = [enrollNote.text, enrollNote.tone];
 
@@ -911,7 +979,9 @@ export default function VoiceBindingPage() {
                           <div className="cook-phrase is-empty">Name first. Then I&rsquo;ll write you a line.</div>
                         ) : (
                           <div className={`cook-phrase ${isBound && !isRecording ? "is-quiet" : "is-active"}`}>
-                            <span className="vb-eyebrow mono">{isBound && !isRecording ? "Your line" : "Read this aloud"}</span>
+                            <span className="vb-eyebrow mono">
+                              {isBound && !isRecording ? "Your first line" : `Read this aloud · ${lineIndex + 1} of ${VOICE_LINES_PER_COOK}`}
+                            </span>
                             <p className="cook-phrase-text">&ldquo;{phrase}&rdquo;</p>
                           </div>
                         )}
@@ -933,7 +1003,7 @@ export default function VoiceBindingPage() {
                             <span className="btn-mic-disc">
                               <span className="btn-mic-square" />
                             </span>
-                            Stop and save
+                            {recordingLine < VOICE_LINES_PER_COOK - 1 ? "Next line" : "Stop and save"}
                           </button>
                         ) : (
                           <button
@@ -945,7 +1015,7 @@ export default function VoiceBindingPage() {
                             <span className="btn-mic-disc">
                               <MicGlyph />
                             </span>
-                            {isBound ? "Record again" : "Start reading"}
+                            {isBound ? "Record again" : partway ? "Keep reading" : "Start reading"}
                           </button>
                         )}
                       </div>
