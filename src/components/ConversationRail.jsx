@@ -24,6 +24,11 @@
 // that can be dragged up or down and pings when a note lands; opened, a
 // sheet that slides over the page from that edge. History only -- the
 // voice controls stay on the goose.
+//
+// Unlike the design, nothing dims or covers the rest of the page while
+// the sheet is out: a scrim reads as "everything else is off", and the
+// cards have to stay tappable while somebody reads back what happened.
+// The grip on the sheet's edge and Escape tuck it away.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { buildConversationFeed, feedKey } from "../utils/conversationFeed.js";
 import { useLocation } from "react-router-dom";
@@ -245,8 +250,6 @@ export default function ConversationRail() {
 
   return (
     <div className={`gn ${open ? "is-open" : "is-tucked"}`}>
-      <div className="gn-scrim" onClick={close} aria-hidden="true" />
-
       <aside className="gn-sheet" aria-label="Goose's Notes" aria-hidden={!open} inert={open ? undefined : ""}>
         <button type="button" className="gn-grip" onClick={close} title="Tap to tuck away" aria-label="Tuck Goose's Notes away">
           <span className="gn-grip-line" />
