@@ -5,6 +5,7 @@ import BoardPanel, { ChoiceChip, LinkPicker, LinkRow, MaterialsField, PanelField
 import { childrenOf, eligibleParents, eligibleChildren } from "../utils/boardLinks.js";
 import { stepMaterialAmount } from "../utils/materialAmounts.js";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { useVoicePageState } from "../hooks/useVoicePageState.js";
 import { spokenNumber, NUMBER_TOKEN } from "../utils/understanding.js";
 import { matchStepName } from "../utils/stepNameMatch.js";
 import { EDIT_STEP_VOICE } from "../utils/pageVoiceGrammar.js";
@@ -35,6 +36,12 @@ export default function NodeEditorPanel({
 }) {
   const { dispatch } = useAppState();
   const [draft, setDraft] = useState(node);
+  useVoicePageState(
+    [
+      `Editing the step "${draft.label}": ${Math.round((draft.estimated_duration_sec || 0) / 60)} min, ${draft.difficulty} difficulty, ${draft.phase || "prep"} phase.`,
+    ],
+    { priority: 10 },
+  );
   // The steps that wait on this one. Held apart from the draft because
   // it is not a property of this step — saving it rewrites THEIR
   // depends_on. Seeded from the graph when the panel opens.

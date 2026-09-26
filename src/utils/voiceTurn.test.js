@@ -475,7 +475,8 @@ test("menu: what the goose is shown is the live layer's commands and state", () 
   );
   const menu = interpretationMenu();
   assert.deepEqual(menu.context, ['Cook 1: named "Zina"']);
-  assert.deepEqual(menu.commands, [{ description: "Save it", examples: ["save"], patterns: ["\\bsave\\b"] }]);
+  // Examples stand in for the pattern; the matcher still checks the rewrite.
+  assert.deepEqual(menu.commands, [{ description: "Save it", examples: ["save"], patterns: [] }]);
 });
 
 test("menu: a page whose describe throws still offers its commands", () => {
@@ -499,3 +500,21 @@ function ctxFor() {
     canGoBack: true,
   };
 }
+
+test("interpret: a sentence with a subject goes to the goose instead of the bin", () => {
+  registerVoiceCommands([{ phrases: ingredientVoicePhrases("ginger").out, run: noop }]);
+  assert.deepEqual(turn("i think we're out of ginger", { interpret: true }), { type: "interpret" });
+  assert.deepEqual(turn("i think we're out of ginger"), { type: "ignore", reason: "conversation" });
+});
+
+test("menu: a command with no help of its own is described by its grammar", () => {
+  registerVoiceCommands([
+    { phrases: HOME_VOICE.resume, run: noop },
+    { phrases: [/\bmystery\b/], run: noop },
+  ]);
+  const [resume, mystery] = interpretationMenu().commands;
+  assert.equal(resume.description, "Resume the cooking run in progress");
+  assert.deepEqual(resume.patterns, []);
+  // Nothing to go on but the pattern, so the pattern goes.
+  assert.deepEqual(mystery, { description: "", examples: [], patterns: ["\\bmystery\\b"] });
+});

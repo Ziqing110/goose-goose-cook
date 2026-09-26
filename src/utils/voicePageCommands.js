@@ -25,6 +25,8 @@
 // its command set when the hero state changes — and a later push from
 // the page must not end up shadowing the dialog sitting above it.
 // Layers register at a depth rather than in arrival order.
+import { voiceHelp } from "./pageVoiceGrammar.js";
+
 let layers = [];
 
 // Every layer at the highest priority is live, not just the last one
@@ -187,13 +189,22 @@ export function interpretationMenu() {
       return [];
     }
   });
-  const commands = live
-    .flatMap((l) => l.commands)
-    .map((c) => ({
-      description: c.description || "",
-      examples: c.examples || [],
-      patterns: (c.phrases || []).map((p) => p.source),
-    }));
+  // Described by the command, or by the grammar it was built from (see
+  // voiceHelp). With examples the patterns are left out: the examples
+  // are what the model aims at, the matcher still checks the result, and
+  // Inventory alone registers two commands per ingredient.
+  const seen = new Set();
+  const commands = [];
+  for (const c of live.flatMap((l) => l.commands)) {
+    const known = voiceHelp(c.phrases);
+    const description = c.description || known?.description || "";
+    const examples = c.examples || known?.examples || [];
+    const entry = { description, examples, patterns: examples.length ? [] : (c.phrases || []).map((p) => p.source) };
+    const key = JSON.stringify(entry);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    commands.push(entry);
+  }
   return { context, commands };
 }
 

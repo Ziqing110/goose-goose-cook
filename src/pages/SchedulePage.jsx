@@ -23,6 +23,7 @@ import {
   EQUIPMENT_LABELS,
 } from "../utils/scheduleLayout.js";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { useVoicePageState } from "../hooks/useVoicePageState.js";
 import { CONFIRM_YES_PATTERN, CONFIRM_NO_PATTERN } from "../utils/navCommands.js";
 import { matchStepName } from "../utils/stepNameMatch.js";
 import { SCHEDULE_VOICE } from "../utils/pageVoiceGrammar.js";
@@ -214,6 +215,12 @@ export default function SchedulePage() {
 
   const byId = useMemo(() => Object.fromEntries(nodes.map((n) => [n.id, n])), [nodes]);
   const stepById = useMemo(() => Object.fromEntries(schedule.steps.map((s) => [s.id, s])), [schedule]);
+  useVoicePageState([
+    `Mode: ${mode === "competition" ? "versus" : mode === "cooperation" ? "co-op" : "not picked yet"}.`,
+    `Cooks: ${(cooks || []).map((c) => c.name).join(", ") || "none"}.`,
+    run ? "A live cook is already running." : null,
+    nodes.length ? `Steps: ${nodes.slice(0, 40).map((n) => n.label).join("; ")}` : null,
+  ]);
   const cookById = Object.fromEntries(cooks.map((c) => [c.id, c]));
   const cookIndexById = Object.fromEntries(cooks.map((c, i) => [c.id, i]));
   const dishOf = (nodeId) => {

@@ -3,6 +3,29 @@
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+// What each command is for, in words, for the goose.
+//
+// When nothing on a page matches what was said, the page's live commands
+// go to the model with a description and a few ways of saying each (see
+// voicePageCommands.interpretationMenu). Kept here, beside the phrases
+// they describe, so every page that registers a command gets its help
+// without writing it again -- and a phrase that changes has its example
+// right next to it.
+//
+// Keyed by the phrase array itself: pages register `phrases:
+// HOME_VOICE.resume`, the very array described below. The generators
+// (one array per ingredient, per kitchen field) describe what they make.
+const HELP = new WeakMap();
+const help = (phrases, description, examples) => {
+  HELP.set(phrases, { description, examples });
+  return phrases;
+};
+
+/** The description and example wordings for a phrase array, or null. */
+export function voiceHelp(phrases) {
+  return (phrases && HELP.get(phrases)) || null;
+}
+
 // Where the Inventory tab commands start. "Back to the ingredients" is the
 // natural way to leave the graph, and without it the bare "back" in it
 // navigated off the page entirely; "go back to ingredients" named this
@@ -104,6 +127,13 @@ export const INVENTORY_VOICE = {
 // part of saying it, not a sign of two people chatting. "Out" is tried
 // first, so "don't have ginger" never reads as "have ginger".
 export function ingredientVoicePhrases(name) {
+  const phrases = ingredientPhrases(name);
+  help(phrases.out, `Mark ${name} as out (they do not have it)`, [`no more ${name}`, `out of ${name}`]);
+  help(phrases.onHand, `Mark ${name} as on hand again`, [`got ${name}`, `${name} is back`]);
+  return phrases;
+}
+
+function ingredientPhrases(name) {
   const escaped = escapeRe(name);
   const some = "(?:the |some |any |more )?";
   return {
@@ -176,7 +206,7 @@ export const KITCHEN_PROFILE_VOICE = {
   cancel: [/\bcancel\b/, /\bclose (?:this|the) form\b/, /\bnever ?mind\b/, /\bdiscard this\b/],
 };
 
-const equipmentToggle = (thing, article) => ({
+const equipmentToggle = (thing, article) => describedToggle(thing, article, {
   on: [new RegExp(`\\b(?:add|with) (?:${article} |the )?${thing}\\b`), new RegExp(`\\b${thing} on\\b`)],
   off: [new RegExp(`\\b(?:remove|drop|without) (?:${article} |the )?${thing}\\b`), new RegExp(`\\b${thing} off\\b`)],
 });
@@ -267,3 +297,117 @@ export const AVATAR_PICKER_VOICE = {
   cancel: [/\bcancel\b/, /\bnever ?mind\b/, /\bgo back\b/],
   avatarName: (words) => [new RegExp(`\\b(${words.join("|")})\\b`)],
 };
+
+// --- help for everything above ------------------------------------------
+
+function describedToggle(thing, article, toggle) {
+  help(toggle.on, `This step needs ${article} ${thing}`, [`add ${article} ${thing}`, `with the ${thing}`]);
+  help(toggle.off, `This step does not need ${article} ${thing}`, [`remove the ${thing}`, `without the ${thing}`]);
+  return toggle;
+}
+
+// A generator's output gets described each time it is called.
+const described = (make, say) => (...args) => {
+  const phrases = make(...args);
+  const [description, examples] = say(...args);
+  return help(phrases, description, examples);
+};
+
+help(HOME_VOICE.addKitchen, "Add a kitchen profile", ["add a kitchen"]);
+help(HOME_VOICE.resume, "Resume the cooking run in progress", ["resume"]);
+help(HOME_VOICE.abandon, "Abandon the run in progress (asks for a spoken confirmation)", ["abandon the run"]);
+help(HOME_VOICE.cancelPicker, "Close the kitchen picker", ["cancel"]);
+help(HOME_VOICE.start, "Start a new cooking run", ["start the run"]);
+
+help(CONVERSATION_VOICE.continueInventory, "Continue to the inventory", ["check the inventory"]);
+help(CONVERSATION_VOICE.startOver, "Start the questions over, clearing every answer", ["start over"]);
+help(CONVERSATION_VOICE.goHome, "Go back to the home page", ["go home"]);
+help(CONVERSATION_VOICE.previousQuestion, "Go back to the previous question", ["go back to the last question"]);
+
+help(INVENTORY_VOICE.addTask, "Add a task to the recipe board, optionally named and placed", ["add a task called rinse the rice before cook the rice"]);
+help(INVENTORY_VOICE.showIngredients, "Show the ingredient checklist", ["show the ingredients"]);
+help(INVENTORY_VOICE.showGraph, "Show the recipe graph", ["show the recipe graph"]);
+help(INVENTORY_VOICE.restoreLast, "Put back the ingredient just marked out", ["put it back"]);
+help(INVENTORY_VOICE.zoomIn, "Zoom the board in", ["zoom in"]);
+help(INVENTORY_VOICE.zoomOut, "Zoom the board out", ["zoom out"]);
+help(INVENTORY_VOICE.fit, "Fit the whole board on screen", ["fit the board"]);
+help(INVENTORY_VOICE.panRight, "Scroll the board right", ["scroll right"]);
+help(INVENTORY_VOICE.panLeft, "Scroll the board left", ["scroll left"]);
+help(INVENTORY_VOICE.panVertical, "Scroll the board up or down", ["scroll down", "scroll up"]);
+help(INVENTORY_VOICE.findStep, "Scroll to a step on the board, by its name", ["find the step boil the noodles"]);
+help(INVENTORY_VOICE.editStep, "Open a step to edit it, by its name", ["edit the step boil the noodles"]);
+help(INVENTORY_VOICE.removeBlocked, "Remove the steps blocked by missing ingredients", ["remove the blocked steps"]);
+help(INVENTORY_VOICE.editKitchen, "Edit the kitchen profile", ["edit the kitchen"]);
+help(INVENTORY_VOICE.cookAnyway, "Cook even though some ingredients are missing", ["cook it anyway"]);
+help(INVENTORY_VOICE.revise, "Unlock the approved board to edit it again", ["revise"]);
+help(INVENTORY_VOICE.approve, "Approve the board", ["approve"]);
+help(INVENTORY_VOICE.continueOn, "Continue to the next stage", ["continue"]);
+
+KITCHEN_PROFILE_VOICE.count = described(KITCHEN_PROFILE_VOICE.count, (field) => [`Set how many ${field} the kitchen has`, [`set ${field} to 4`]]);
+KITCHEN_PROFILE_VOICE.increase = described(KITCHEN_PROFILE_VOICE.increase, (one) => [`One more ${one}`, [`add a ${one}`]]);
+KITCHEN_PROFILE_VOICE.decrease = described(KITCHEN_PROFILE_VOICE.decrease, (one) => [`One fewer ${one}`, [`remove a ${one}`]]);
+KITCHEN_PROFILE_VOICE.toggleOn = described(KITCHEN_PROFILE_VOICE.toggleOn, (thing) => [`The kitchen has a ${thing}`, [`${thing} on`]]);
+KITCHEN_PROFILE_VOICE.toggleOff = described(KITCHEN_PROFILE_VOICE.toggleOff, (thing) => [`The kitchen has no ${thing}`, [`no ${thing}`]]);
+help(KITCHEN_PROFILE_VOICE.name, "Name or rename the kitchen", ["call it flat 3 galley"]);
+help(KITCHEN_PROFILE_VOICE.save, "Save the kitchen", ["save the kitchen"]);
+help(KITCHEN_PROFILE_VOICE.cancel, "Close the form without saving", ["cancel"]);
+
+ADD_STEP_VOICE.duration = described(ADD_STEP_VOICE.duration, () => ["Set how long the step takes, in minutes", ["make it 5 minutes"]]);
+help(ADD_STEP_VOICE.name, "Name the new task", ["call it rinse the rice"]);
+help(ADD_STEP_VOICE.difficulty, "Set the task's difficulty", ["difficulty medium"]);
+help(ADD_STEP_VOICE.phase, "Set the task's phase", ["phase prep"]);
+help(ADD_STEP_VOICE.after, "The task runs after another step, by name", ["runs after boil the noodles"]);
+help(ADD_STEP_VOICE.before, "The task runs before another step, by name", ["runs before plate the bowls"]);
+help(ADD_STEP_VOICE.submit, "Add the task to the board", ["add it to the board"]);
+help(ADD_STEP_VOICE.cancel, "Close the form without adding", ["cancel"]);
+
+help(EDIT_STEP_VOICE.name, "Rename the step", ["rename it rinse the rice"]);
+help(EDIT_STEP_VOICE.stopWaiting, "The step no longer waits on another step, by name", ["stop waiting on boil the noodles"]);
+help(EDIT_STEP_VOICE.delete, "Delete this step", ["delete this step"]);
+help(EDIT_STEP_VOICE.save, "Save the step", ["save the step"]);
+help(EDIT_STEP_VOICE.cancel, "Close the editor without saving", ["cancel"]);
+
+help(DELETE_STEP_VOICE.inherit, "Steps that waited on it wait on what it waited on instead", ["inherit"]);
+help(DELETE_STEP_VOICE.choose, "Choose for each waiting step", ["let me choose"]);
+help(DELETE_STEP_VOICE.drop, "Just drop the links", ["drop the links"]);
+help(DELETE_STEP_VOICE.confirm, "Remove the step", ["remove the step"]);
+help(DELETE_STEP_VOICE.cancel, "Keep the step", ["keep it"]);
+
+help(SCHEDULE_VOICE.cooperation, "Cook together, co-op mode", ["co-op"]);
+help(SCHEDULE_VOICE.competition, "Cook against each other, versus mode", ["versus"]);
+help(SCHEDULE_VOICE.live, "Start the live cook (asks first)", ["go live"]);
+help(SCHEDULE_VOICE.backToCook, "Back to the cook in progress", ["back to the cook"]);
+help(SCHEDULE_VOICE.abandon, "Abandon the cook (asks for a spoken confirmation)", ["abandon the cook"]);
+help(SCHEDULE_VOICE.recipeGraph, "Back to the recipe graph", ["back to the recipe graph"]);
+help(SCHEDULE_VOICE.editKitchen, "Edit the kitchen profile", ["edit the kitchen"]);
+help(SCHEDULE_VOICE.fit, "Fit the whole timeline on screen", ["zoom to fit"]);
+help(SCHEDULE_VOICE.zoomIn, "Zoom the timeline in", ["zoom in"]);
+help(SCHEDULE_VOICE.zoomOut, "Zoom the timeline out", ["zoom out"]);
+help(SCHEDULE_VOICE.closeDetails, "Close the step details", ["close the details"]);
+help(SCHEDULE_VOICE.showDetails, "Show one step's details, by its name", ["show details for boil the noodles"]);
+help(SCHEDULE_VOICE.freeTime, "When does each cook get a break", ["who's free"]);
+
+help(VOICE_BINDING_VOICE.continueSchedule, "Move on to scheduling once every cook is set up", ["continue to scheduling"]);
+VOICE_BINDING_VOICE.nameByOrdinal = described(VOICE_BINDING_VOICE.nameByOrdinal, () => [
+  "Name or rename a cook, by position. Also how a misheard name is corrected.",
+  ["call the first cook Zeina", "name the second cook Lindy"],
+]);
+VOICE_BINDING_VOICE.nameCook = described(VOICE_BINDING_VOICE.nameCook, () => ["Name or rename a cook, by position", ["cook 1 is Zeina"]]);
+help(VOICE_BINDING_VOICE.nameSelf, "Give the next unnamed cook a name, said by that cook", ["I'm Zeina"]);
+help(VOICE_BINDING_VOICE.chooseAvatar, "Open the chef picker for a cook", ["pick a chef for Zeina"]);
+help(VOICE_BINDING_VOICE.randomAvatar, "Give a cook a random chef", ["surprise me"]);
+help(VOICE_BINDING_VOICE.record, "Record a cook's voice so the goose can tell who is speaking", ["start recording for Zeina"]);
+help(VOICE_BINDING_VOICE.addCook, "Add a second cook", ["add a second cook"]);
+help(VOICE_BINDING_VOICE.removeCook, "Remove a cook and their recorded voice", ["remove the second cook"]);
+help(VOICE_BINDING_VOICE.lockedBack, "Back to the cook in progress", ["back to the cook"]);
+
+help(RECORDING_VOICE.save, "Save the line being read", ["stop and save"]);
+help(RECORDING_VOICE.cancel, "Stop recording without saving", ["cancel"]);
+
+help(AVATAR_PICKER_VOICE.confirm, "Keep the chef shown and close the picker", ["that's me"]);
+help(AVATAR_PICKER_VOICE.random, "Pick a random chef", ["surprise me"]);
+help(AVATAR_PICKER_VOICE.cancel, "Close the picker", ["cancel"]);
+AVATAR_PICKER_VOICE.avatarName = described(AVATAR_PICKER_VOICE.avatarName, (words) => [
+  "Pick a chef by its name or colour",
+  words.slice(0, 4),
+]);

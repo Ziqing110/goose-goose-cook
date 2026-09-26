@@ -35,6 +35,8 @@ export function kitchenPickCommands(profiles, start, label = (p) => `Starting in
       .forEach((w) => phrases.push(new RegExp(`\\b${escapeRe(w)}\\b`)));
     return {
       phrases,
+      description: `Use the kitchen "${p.name}"`,
+      examples: [p.name],
       label: label(p),
       run: () => start(p.id),
     };

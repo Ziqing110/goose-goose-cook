@@ -147,8 +147,12 @@ function routeCommand(said, ctx) {
     // is somebody talking TO us, badly heard -- and the honest answer
     // to that is to ask, which is exactly what navigation already does
     // with a plausible-but-not-solid match.
+    // With the goose to ask, a sentence with a subject goes to it rather
+    // than straight in the bin: "I'm out of ginger" matched the ginger
+    // command and was dropped as chat. The goose can tell a request from
+    // two people talking, and nothing it suggests runs without a yes.
     if (hasSubject(normalized) && !command.allowSubject) {
-      return { type: "ignore", reason: "conversation" };
+      return ctx.interpret ? { type: "interpret" } : { type: "ignore", reason: "conversation" };
     }
     if (isLikelyConversation(normalized, confidence, { allowSubject: true })) {
       return {

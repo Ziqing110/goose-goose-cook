@@ -118,7 +118,8 @@ agentRouter.post("/interpret", async (req, res) => {
         text: said,
         route: String(route ?? "").slice(0, 100),
         context: strings(context, 20),
-        commands: commands.slice(0, 40).map((c) => ({
+        // Inventory registers two commands per ingredient.
+        commands: commands.slice(0, 100).map((c) => ({
           description: String(c?.description ?? "").slice(0, 200),
           examples: strings(c?.examples, 6),
           patterns: strings(c?.patterns, 6),
