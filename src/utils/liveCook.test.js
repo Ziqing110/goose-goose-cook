@@ -9,7 +9,7 @@ import {
   createRun, isReady, readyStepIds, blockedStepIds, activeStepFor, stepVariance, runProgress,
   isRunComplete, scoreboard, runOutcome, resolveAssignments, arbitrateClaim, claimSuggestions,
   applyStart, applyDone, applySkip, applyDrop, applyUndo, canUndo, applyPause, applyResume,
-  isPaused, endRun, DIFFICULTY_POINTS,
+  isPaused, endRun, DIFFICULTY_POINTS, versusWaiting,
 } from "./liveCook.js";
 import { parseCommand } from "./voiceCommands.js";
 
@@ -277,4 +277,22 @@ test("skipping somebody's step leaves it theirs; a pending skip belongs to the s
   assert.equal(run.steps.tofu.cookId, "c2");
   run = applySkip({ run, stepId: "dice", cookId: "c1", at: at(60) });
   assert.equal(run.steps.dice.cookId, "c1");
+});
+
+test("versus: nothing to grab mid-run is waiting on the next unlock, not done for the night", () => {
+  // Mia finished the onion; Leo is on the tofu, and fry needs both. Mia
+  // has nothing to grab, but the night is not over for her.
+  let run = versusRun();
+  run = applyDone({ run: applyStart({ run, stepId: "dice", cookId: "c1", at: at(0) }), stepId: "dice", cookId: "c1", at: at(100) });
+  run = applyStart({ run, stepId: "tofu", cookId: "c2", at: at(100) });
+  assert.deepEqual(claimSuggestions({ nodes, run, cookId: "c1" }), []);
+  const wait = versusWaiting(run, nodes, T0 + 160_000);
+  assert.equal(wait.reason, "waiting");
+  assert.equal(wait.waitingOnStepId, "tofu");
+  assert.equal(wait.waitingOnCookId, "c2");
+  assert.equal(wait.etaSec, 120, "tofu is 180s, 60s in");
+
+  // Everything closed: now, and only now, is anyone done for the night.
+  const ended = endRun({ run, nodes, at: at(200) });
+  assert.equal(versusWaiting(ended, nodes, T0 + 200_000), null);
 });

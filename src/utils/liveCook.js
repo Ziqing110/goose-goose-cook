@@ -664,6 +664,41 @@ export function resolveAssignments({ nodes, run, cooks, now = Date.now() }) {
 }
 
 /**
+ * Versus has no plan, so a cook with nothing to grab is waiting on
+ * whatever will open the board up next: the running step, of those that
+ * block something still pending, closest to its estimate. Same shape as
+ * a co-op "waiting" assignment, so the card renders both the same way.
+ *
+ * Null once nothing is pending or active -- that, and only that, is a
+ * cook being done for the night. Having nothing to grab right now is
+ * not: it read as the goose sending somebody home mid-run.
+ */
+export function versusWaiting(run, nodes, now = Date.now()) {
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const open = nodes.filter((n) => ["pending", "active"].includes(run.steps[n.id]?.status));
+  if (!open.length) return null;
+  const blockers = new Set(
+    open
+      .filter((n) => run.steps[n.id].status === "pending")
+      .flatMap((n) => n.depends_on || [])
+      .filter((d) => run.steps[d]?.status === "active"),
+  );
+  const [soonest] = [...blockers]
+    .map((id) => {
+      const v = stepVariance(byId[id], run.steps[id], now);
+      return { id, etaSec: Math.max(0, v.estSec - v.actualSec) };
+    })
+    .sort((a, b) => a.etaSec - b.etaSec);
+  return {
+    stepId: null,
+    reason: "waiting",
+    waitingOnStepId: soonest?.id ?? null,
+    waitingOnCookId: soonest ? run.steps[soonest.id].cookId : null,
+    etaSec: soonest?.etaSec ?? null,
+  };
+}
+
+/**
  * Recompute the plan for everything still pending. Runs after every
  * completion (and every skip/drop) — real times diverge from estimates,
  * so the remaining plan genuinely changes shape as the cook progresses.
