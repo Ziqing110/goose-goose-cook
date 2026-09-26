@@ -64,6 +64,21 @@ export function agentAside({ agentName, snapshot }) {
 }
 
 /**
+ * Ask for one line of banter on what the cooks just said to each other.
+ *
+ * Whether it may be asked is decided first (see utils/banter.js). An
+ * empty line, on any failure too, means stay quiet.
+ *
+ * @returns {Promise<{line: string}>}
+ */
+export function agentBanter({ agentName, lines }) {
+  return apiRequest("/api/agent", "/banter", {
+    method: "POST",
+    body: JSON.stringify({ agentName, lines }),
+  }).catch(() => ({ line: "" }));
+}
+
+/**
  * A few sentences about how a finished cook went.
  *
  * Resolves to an empty story rather than throwing: the summary card is

@@ -28,6 +28,7 @@ import { Router } from "express";
 import { requestTurn, TurnError } from "../agent/gateway.js";
 import { collect, park } from "../agent/pending.js";
 import { requestAside } from "../agent/aside.js";
+import { requestBanter } from "../agent/banter.js";
 import { requestNarration } from "../agent/narrate.js";
 import { requestInterpretation, InterpretError } from "../agent/interpret.js";
 
@@ -78,6 +79,25 @@ agentRouter.post("/aside", async (req, res) => {
     return res.status(400).json({ error: "agentName and snapshot {steps} are required." });
   }
   const { line } = await requestAside({ apiKey: API_KEY, model: ASIDE_MODEL, agentName, snapshot });
+  return res.json({ line });
+});
+
+/**
+ * One line of banter on the cooks' own conversation, or nothing.
+ *
+ * The browser decides when this may be asked (src/utils/banter.js).
+ * Never fails: every problem is an empty line.
+ */
+agentRouter.post("/banter", async (req, res) => {
+  const { agentName, lines } = req.body || {};
+  if (!agentName || !Array.isArray(lines)) {
+    return res.status(400).json({ error: "agentName and lines are required." });
+  }
+  const said = lines.slice(-6).map((l) => ({
+    speaker: String(l?.speaker ?? "").slice(0, 40),
+    text: String(l?.text ?? "").slice(0, MAX_TEXT_CHARS),
+  }));
+  const { line } = await requestBanter({ apiKey: API_KEY, model: ASIDE_MODEL, agentName, lines: said });
   return res.json({ line });
 });
 

@@ -11,7 +11,7 @@
 // The addressing rule is shared with the client, which uses it to decide
 // what is worth sending at all. One copy, so the two can't disagree about
 // whether a turn was meant for the agent.
-export { isAddressed } from "../../src/utils/addressing.js";
+export { isAddressed, isUrgent } from "../../src/utils/addressing.js";
 import { SEARCH_TOOL } from "./search.js";
 import { joinSpelledLetters, nearestCook } from "../../src/utils/cookVoice.js";
 
@@ -128,13 +128,14 @@ Rules:
 - The step ids you are given per tool are the only legal ones for it. If they say a step is finished, or ask to skip or drop one, and its id is not in that tool's list, nobody has taken it yet: say so in one line and call no tool. Do not ask which step they meant -- you already know which, it is simply not theirs.
 - A short step name can hide what it actually involves. If they ask what a step means, how to do it, what it needs, or how long it takes, call explain with that step id rather than answering from the step name -- the app reads back the recipe's own wording, which you cannot see in full.
 - A Brief line, when present, is what they asked for before any of this was planned. Honour it without being asked: never suggest something their diet rules out, and let their stated skill level set how much you explain.
-- Anything unrelated to this cook (weather, trivia, chit-chat): call no tool, and decline in one short, friendly sentence. Do not call help for it.
+- Chit-chat, jokes and teasing aimed at you: call no tool and play along in one short, goofy line. You are a goose; lean into it. Do not call help for it.
+- Things you cannot know from here (weather, news, facts beyond cooking): ${search ? "look them up with search_web" : "call no tool, and say so in one short, friendly line. Never guess"}.
 - Never claim to have done something you did not call a tool for.${search ? `
-- You can call search_web for a cooking question the recipe does not answer. It makes ${speakerName} wait several seconds, so use it only when you genuinely do not know, never for anything about this run.` : ""}`;
+- You can call search_web for a question the recipe does not answer, cooking or not: weather, news, a fact. It makes ${speakerName} wait several seconds, so use it only when you genuinely do not know, never for anything about this run, and answer from what it returns.` : ""}`;
 }
 
 /** The user message: state of the kitchen, recent talk, then the words. */
-export function buildUserMessage(snapshot, text, { shared = false } = {}) {
+export function buildUserMessage(snapshot, text, { shared = false, urgent = false } = {}) {
   const open = (snapshot.steps || []).map((s) => ({
     id: s.id,
     label: s.label,
@@ -172,6 +173,14 @@ export function buildUserMessage(snapshot, text, { shared = false } = {}) {
       `TWO COOKS SPOKE AT ONCE and this is both of them in one transcript, so it may be two half-sentences and the speaker above may be the wrong one. Take no action. Ask, in one short question, which of them meant it and what they wanted: "${text}"`,
     );
     return lines.join("\n");
+  }
+  if (urgent) {
+    // Nobody said the name. This got through only because it sounded
+    // like trouble, so the model must know that and be allowed to be
+    // wrong about it quietly.
+    lines.push(
+      `Nobody said your name. This was let through because it sounds like trouble in the kitchen or someone asking the room for help. If it is, reply first with the one thing to do right now ("Turn the heat down, lift the lid."), under 12 words, and call a tool only if they also asked for one. Trouble means something is going wrong NOW (boiling over, burning, smoke, a spill) or they are stuck and asking. A warning or tip to someone else ("don't let the garlic burn") is not trouble. If it is not trouble, call no tool and reply with an empty string.`,
+    );
   }
   lines.push(`${snapshot.speakerName} said: "${text}"`);
   return lines.join("\n");

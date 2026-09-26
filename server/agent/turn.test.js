@@ -272,3 +272,10 @@ test("a cook's name as the recogniser spelled it is that cook", () => {
   );
   assert.deepEqual(result.calls, [{ name: "start", stepId: "s1", cookName: "Zeina" }]);
 });
+
+test("user message: an unnamed cry for help says why it got through", () => {
+  const urgent = buildUserMessage(snapshot, "the water's boiling over, what do I do?", { urgent: true });
+  assert.match(urgent, /Nobody said your name/);
+  assert.match(urgent, /empty string/);
+  assert.ok(!/Nobody said your name/.test(buildUserMessage(snapshot, "Goose, status")));
+});

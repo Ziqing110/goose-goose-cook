@@ -52,8 +52,9 @@ import { voiceLog } from "../voice/voiceLog.js";
 import { speakerSelection, resolveSpeaker } from "../voice/speakerSelection.js";
 import { registerVoiceDictation } from "../utils/voicePageCommands.js";
 import { buildAgentSnapshot } from "../utils/agentSnapshot.js";
-import { agentTurn, agentAside, collectAnswer } from "../api/agent.js";
+import { agentTurn, agentAside, agentBanter, collectAnswer } from "../api/agent.js";
 import { shouldCommentate } from "../utils/commentary.js";
+import { recentRoomTalk, shouldBanter } from "../utils/banter.js";
 
 // Often enough that a lull is noticed while it is still a lull, rarely
 // enough to be free -- the decision it drives is pure and local. Module
@@ -552,6 +553,11 @@ export default function LiveCookPage() {
   const lastAsideAtRef = useRef(0);
   const asideBusyRef = useRef(false);
   const asideRunnerRef = useRef(null);
+  // The cooks' own talk, not meant for the goose, kept briefly so it can
+  // occasionally join in (see utils/banter.js).
+  const roomTalkRef = useRef([]);
+  const lastBanterAtRef = useRef(0);
+  const banterBusyRef = useRef(false);
 
   useEffect(() => {
     const id = setInterval(() => asideRunnerRef.current?.(), ASIDE_CHECK_MS);
@@ -933,7 +939,11 @@ export default function LiveCookPage() {
     // an action. Otherwise the room's chatter, or the other cook talking
     // to someone, would be answered out loud, and each answer would open
     // the window for the next.
-    const chatter = !turn.named && !turn.calls.length;
+    //
+    // Trouble is the exception: "the water's boiling over, what do I
+    // do?" was let through without the name precisely so it gets an
+    // answer, and the model was told to reply empty if it misheard.
+    const chatter = !turn.named && !turn.urgent && !turn.calls.length;
 
     // The app refused something the model asked for, and the model
     // cannot see refusals -- so its reply is written around a call that
@@ -1100,6 +1110,8 @@ export default function LiveCookPage() {
         // how a chronically misheard agent name gets caught.
         console.info("[voice] not addressed:", text);
         voiceLog.setThinking(null);
+        // Not awaited: the queue must not wait on a joke.
+        overheard(text, cookId);
         return;
       }
       applyAgentTurn(turn, text, cookId, via);
@@ -1292,6 +1304,48 @@ export default function LiveCookPage() {
       speak(line);
     } finally {
       asideBusyRef.current = false;
+    }
+  };
+
+  // Talk that wasn't for the goose. Mostly it stays out of it; now and
+  // then, when the cooks are joking with each other, it chimes in.
+  const overheard = async (text, cookId) => {
+    const now = Date.now();
+    roomTalkRef.current = recentRoomTalk([...roomTalkRef.current, { speaker: name(cookId), text, at: now }], now);
+    const current = latestRunRef.current;
+    const lastAgent = [...(current?.transcript || [])].reverse().find((e) => e.speaker === "agent");
+    const verdict = shouldBanter({
+      roomLines: roomTalkRef.current,
+      paused: isPaused(current),
+      ended: Boolean(current?.endedAt) || finished,
+      busy: banterBusyRef.current,
+      msSinceBanter: lastBanterAtRef.current ? now - lastBanterAtRef.current : Infinity,
+      msSinceAgent: lastAgent ? now - Date.parse(lastAgent.at) : Infinity,
+    });
+    if (!verdict.ok) return;
+
+    // Marked before the request, as with asides: a second line inside
+    // the call's window would ask twice.
+    banterBusyRef.current = true;
+    lastBanterAtRef.current = now;
+    const heardAt = lastVoiceAtRef.current;
+    try {
+      const { line } = await agentBanter({
+        agentName: AGENT_NAME,
+        lines: roomTalkRef.current.map(({ speaker, text: said }) => ({ speaker, text: said })),
+      });
+      // Somebody has spoken since: the moment has passed, and a joke
+      // about the line before last lands on the wrong thing.
+      if (!line || lastVoiceAtRef.current !== heardAt) {
+        if (line) console.info("[voice] banter too late, dropped:", line);
+        return;
+      }
+      console.info("[voice] chiming in:", line);
+      lastVoiceAtRef.current = Date.now();
+      commit(say(latestRunRef.current, line));
+      speak(line);
+    } finally {
+      banterBusyRef.current = false;
     }
   };
 
