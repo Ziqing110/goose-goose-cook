@@ -1,11 +1,13 @@
 // Drives the real Live cook page in a headless browser and asserts what
 // the design brief promises: the two cards' action blocks line up, the
 // pool's claim buttons line up, Versus is the arena (cards full-width,
-// agent beneath), the primaries sit above the shell's fixed VoiceBar on
-// a 1280×800 counter screen, a claim the kitchen can't honour is greyed
-// and a refused one answers on its tile, a pause freezes every clock
-// and disables every action, "done" with nothing held asks which one,
-// and Call it early lands on Service done. Requires `npm run dev:full`
+// the board beneath), the primaries sit above the shell's fixed VoiceBar
+// on a 1280×800 counter screen, a claim the kitchen can't honour is
+// greyed, Goose's Notes starts tucked as a handle clear of the page's
+// buttons, pulls out to read the run back and say who the goose is
+// listening to, and its handle can be dragged, a pause freezes every clock and disables every action,
+// and Call it early lands on Service done. Spoken commands are the voice
+// e2e's job (scripts/voice-commands-e2e.mjs). Requires `npm run dev:full`
 // to be running. Setup seeds a session through the API (see below); it
 // does not click through.
 //
@@ -152,18 +154,16 @@ await goLive();
 
 await check("versus: at 1280×800 both primaries are on screen and clear of the goose", primariesOnScreen);
 
-await check("versus: one column — strip, cards 50/50 with a score each, the board beneath, Toque as one line", async () => {
+await check("versus: one column — strip, cards 50/50 with a score each, the board beneath", async () => {
   const strip = await box(page.locator(".lc-strip"));
   const a = await box(cards.nth(0));
   const b = await box(cards.nth(1));
   const pool = await box(page.locator(".lc-pool"));
-  const toque = await box(page.locator(".lc-toque-line"));
   assert.ok(strip.y + strip.height <= a.y, "the strip is above the cards");
   sameY(a, b, "cards");
   assert.ok(Math.abs(a.width - b.width) <= 1, "equal card widths");
   assert.ok(Math.abs(a.x + a.width + (b.x - (a.x + a.width)) + b.width - (pool.x + pool.width)) <= 2, "the cards span the same width as the board");
   assert.ok(pool.y >= a.y + a.height - 1, "the board is under the cards");
-  assert.ok(toque.y >= pool.y + pool.height - 1, "Toque's line is under the board");
   assert.equal(await page.locator(".lc-race").count(), 0, "no race widget");
   assert.equal(await cards.locator(".lc-card-points").count(), 2, "a score on each card");
   assert.ok(await page.locator(".lc-lead-line").isVisible(), "the strip carries the lead line");
@@ -216,7 +216,7 @@ await check("versus: a claim moves the tile to Taken, and the busy player's butt
   assert.ok((await leoButtons.count()) >= 1, "Leo is free");
 });
 
-await check("versus: a claim the kitchen can't honour is greyed, and a refused one answers on the tile", async () => {
+await check("versus: a claim the kitchen can't honour is greyed, with the reason as its tooltip", async () => {
   // Mia holds a board step; every other tile that needs the one board
   // greys out for Leo with the reason as its tooltip.
   const boardTiles = page.locator(".lc-tile.is-claimable", { has: page.locator(".lc-chip", { hasText: /Cutting board/ }) });
@@ -225,18 +225,6 @@ await check("versus: a claim the kitchen can't honour is greyed, and a refused o
   const leo = boardTiles.first().locator(".lc-claim.is-b");
   assert.equal(await leo.isEnabled(), false, "Leo can't take a board step while the board is busy");
   assert.match((await leo.getAttribute("title")) || "", /No cutting board free/);
-  // The tile says why instead of Toque's line alone: force a refusal
-  // through the drawer (the same handler) and read it on the tile.
-  const label = await boardTiles.first().locator(".lc-tile-label").innerText();
-  await page.getByRole("button", { name: /Open Toque/ }).click();
-  await page.getByRole("radio", { name: /Leo/ }).click();
-  await page.locator(".lc-say-input").fill(`take ${label}`);
-  await click(/Say it/);
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(300);
-  const note = page.locator(".lc-tile", { hasText: label }).locator(".lc-claim-note");
-  assert.equal(await note.count(), 1, "the refusal is on the tile");
-  assert.match(await note.innerText(), /cutting board/i);
 });
 
 await check("versus: Done on a card scores it — the card's counter rolls and the strip says who leads", async () => {
@@ -248,34 +236,75 @@ await check("versus: Done on a card scores it — the card's counter rolls and t
   assert.match(await page.locator(".lc-lead-line").innerText(), /^Mia leads by \d+$/);
 });
 
-await check("versus: Toque's line opens the drawer with the whole run, Escape closes it", async () => {
-  await page.locator(".lc-toque-line").click();
-  await page.waitForTimeout(400);
-  const drawer = page.locator(".lc-drawer");
-  assert.equal(await drawer.count(), 1, "drawer open");
-  assert.ok((await drawer.locator(".lc-line").count()) >= 2, "the run reads back");
-  assert.ok(await drawer.locator(".lc-speaker").isVisible(), "the speaker toggle lives in the drawer");
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(300);
-  assert.equal(await page.locator(".lc-drawer").count(), 0, "drawer closed");
+await check("versus: Goose's Notes starts tucked as a handle on the right edge, clear of the page's buttons", async () => {
+  const handle = page.locator(".gn-handle");
+  assert.ok(await handle.isVisible(), "the handle is up");
+  const h = await box(handle);
+  assert.ok(h.x + h.width >= 1279 && h.width <= 31, `hugs the right edge: ${JSON.stringify(h)}`);
+  const sheet = await box(page.locator(".gn-sheet"));
+  assert.ok(sheet.x >= 1280, "the sheet is off screen while tucked");
+  for (const name of [/^Pause$/, /View plan/, /Exit to Home/]) {
+    const b = await box(page.getByRole("button", { name }).first());
+    const overlaps = h.x < b.x + b.width && h.x + h.width > b.x && h.y < b.y + b.height && h.y + h.height > b.y;
+    assert.ok(!overlaps, `the handle covers ${name}`);
+  }
 });
 
-await check("versus: typing in Toque's drawer keeps focus in the input across live rerenders", async () => {
-  await page.locator(".lc-toque-line").click();
-  const input = page.locator(".lc-say-input");
-  await input.waitFor({ state: "visible", timeout: 3000 });
-  await input.click();
-  await page.keyboard.type("focus stays in this field");
-  assert.equal(await input.inputValue(), "focus stays in this field", "all typed characters reach the input");
-  assert.equal(await input.evaluate((el) => el === document.activeElement), true, "typing leaves the input focused");
-
-  // Live Cook's clock rerenders the page once a second. The drawer must
-  // retain input focus through those updates too, not only input changes.
-  await page.waitForTimeout(1200);
-  assert.equal(await input.evaluate((el) => el === document.activeElement), true, "clock updates do not refocus Close");
+await check("versus: tapping the handle pulls the sheet out; it reads the run back and says who the goose is listening to", async () => {
+  await page.locator(".gn-handle").click();
+  const sheet = page.locator(".gn-sheet");
+  await page.waitForTimeout(500);
+  const s = await box(sheet);
+  assert.ok(s.x + s.width <= 1280 && s.x > 900, `slid in from the right: ${JSON.stringify(s)}`);
+  assert.ok((await sheet.locator(".gn-row.is-action").count()) >= 1, "taps read back as actions");
+  assert.equal(await sheet.getByRole("log").count(), 1, "new rows are announced");
+  const leo = sheet.getByRole("radio", { name: /Leo/ });
+  await leo.click();
+  assert.equal(await leo.getAttribute("aria-checked"), "true", "choosing Leo selects Leo");
+  assert.match(await sheet.locator(".gn-listening").innerText(), /listening to Leo/);
+  await sheet.getByRole("radio", { name: /Mia/ }).click();
+  // The faint scrim closes it; so does Escape.
+  await page.mouse.click(200, 400);
+  await page.waitForTimeout(500);
+  assert.ok((await box(sheet)).x >= 1280, "a tap on the page tucks it away");
+  await page.locator(".gn-handle").click();
   await page.keyboard.press("Escape");
-  await page.waitForTimeout(300);
-  assert.equal(await page.locator(".lc-drawer").count(), 0, "Escape still closes the drawer");
+  await page.waitForTimeout(500);
+  assert.ok((await box(sheet)).x >= 1280, "Escape tucks it away");
+  assert.equal(await page.locator(".lc-drawer, .lc-toque-line").count(), 0, "no Toque left on the page");
+});
+
+await check("versus: the handle drags up and down the edge, and remembers where it was left", async () => {
+  const handle = page.locator(".gn-handle");
+  const before = await box(handle);
+  await page.mouse.move(before.x + before.width / 2, before.y + 60);
+  await page.mouse.down();
+  await page.mouse.move(before.x + before.width / 2 - 40, before.y + 160, { steps: 8 });
+  await page.mouse.up();
+  const after = await box(handle);
+  assert.ok(Math.abs(after.y - (before.y + 100)) <= 2, `moved ${before.y} → ${after.y}`);
+  assert.ok(after.x + after.width >= 1279, "still on the edge: only the height moves");
+  assert.ok((await box(page.locator(".gn-sheet"))).x >= 1280, "a drag does not open it");
+  await page.reload({ waitUntil: "networkidle" });
+  await cards.first().waitFor({ state: "visible", timeout: 30000 });
+  assert.ok(Math.abs((await box(handle)).y - after.y) <= 2, "the spot survives a reload");
+  // Back to the default spot for the checks below.
+  await page.evaluate(() => localStorage.removeItem("goosesNotes.handleTop"));
+  await page.reload({ waitUntil: "networkidle" });
+  await cards.first().waitFor({ state: "visible", timeout: 30000 });
+});
+
+await check("versus: the handle's dot pings for a note that lands while tucked, not for history", async () => {
+  await page.waitForTimeout(600);
+  assert.equal(await page.locator(".gn-dot").count(), 0, "a fresh page with a run's history is not news");
+  // Pause and resume: two notes, and the board is left as it was.
+  await click(/^Pause$/);
+  await click(/^Resume$/);
+  await page.locator(".gn-dot").waitFor({ state: "visible", timeout: 3000 });
+  await page.locator(".gn-handle").click();
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(400);
+  assert.equal(await page.locator(".gn-dot").count(), 0, "opening it catches up");
 });
 
 await check("versus: Done and Take it sit on one line with both secondary slots present", async () => {
@@ -315,7 +344,13 @@ await check("versus: a pot 'cooking on its own' grows the card instead of squeez
 });
 
 // Mobile: single column, fixed order, primaries stay 56 and full width.
+// Phones are turned away at the door (components/DesktopOnly); the
+// layout is still built, and ?anyway=1 is the way through, which sticks
+// for the tab. It is read once at load, hence the reload.
 await page.setViewportSize({ width: 390, height: 844 });
+await page.evaluate(() => sessionStorage.setItem("kitchen-path.small-screen-ok", "1"));
+await page.reload({ waitUntil: "networkidle" });
+await cards.first().waitFor({ state: "visible", timeout: 30000 });
 await page.waitForTimeout(500);
 await check("mobile 390: cards stack in player order, primaries 56px full-width, no horizontal scroll", async () => {
   const a = await box(cards.nth(0));
@@ -329,9 +364,8 @@ await check("mobile 390: cards stack in player order, primaries 56px full-width,
   assert.ok(xb.width >= a.width - 40 - 88, "full width inside the card");
   const scrollW = await page.evaluate(() => document.documentElement.scrollWidth);
   assert.ok(scrollW <= 390, `page scrollWidth ${scrollW}`);
-  // The scores come back up to the strip; Toque stays one line.
+  // The scores come back up to the strip.
   assert.equal(await page.locator(".lc-strip .lc-score-pill").count(), 2, "score pills in the strip");
-  assert.ok(await page.locator(".lc-toque-line").isVisible(), "Toque's line");
 });
 
 // ---------------------------------------------------------------------
@@ -357,12 +391,13 @@ await check("co-op: at 1280×800 the muted goose sits in the gutter, clear of th
   assert.equal(await page.locator(".goose-bubble-tab").textContent(), "Mic off", "the mic starts muted");
   // The goose floats over the page rather than sitting in fixed chrome
   // beside it, so it may share the content column's x range. What has to
-  // hold is that it does not cover anything: no 2D overlap with the run.
+  // hold is that it covers nothing you act on: the primaries (checked
+  // above) and the notes handle, which shares its edge.
   const mic = await box(goose);
-  const shell = await box(page.locator(".lc-toque-line"));
-  const overlaps = mic.x < shell.x + shell.width && mic.x + mic.width > shell.x
-    && mic.y < shell.y + shell.height && mic.y + mic.height > shell.y;
-  assert.ok(!overlaps, `goose ${JSON.stringify(mic)} covers the toque line ${JSON.stringify(shell)}`);
+  const rail = await box(page.locator(".gn-handle"));
+  const overlaps = mic.x < rail.x + rail.width && mic.x + mic.width > rail.x
+    && mic.y < rail.y + rail.height && mic.y + mic.height > rail.y;
+  assert.ok(!overlaps, `goose ${JSON.stringify(mic)} covers the notes handle ${JSON.stringify(rail)}`);
   // The mic egg only fans out on hover, but it carries its own AT name.
   await page.locator(".goose-figure").hover();
   await page.locator(".goose-eggs.is-open").waitFor({ state: "visible" });
@@ -379,13 +414,6 @@ await check("co-op: 768 wide — the strip's note shrinks instead of widening th
 });
 
 const primaries = page.locator(".lc-card .lc-card-actions .lc-btn-xl");
-// Toque's panel is in the drawer in both modes; open it if it isn't.
-const openToque = async () => {
-  if ((await page.locator(".lc-agent .lc-say-input").count()) === 0) {
-    await page.locator(".lc-toque-line").click();
-    await page.locator(".lc-agent .lc-say-input").waitFor({ state: "visible", timeout: 3000 });
-  }
-};
 
 await check("co-op: exactly two player cards, in player order", async () => {
   assert.equal(await cards.count(), 2);
@@ -393,21 +421,11 @@ await check("co-op: exactly two player cards, in player order", async () => {
   assert.equal(await cards.nth(1).locator(".lc-card-name").innerText(), "Leo");
 });
 
-await check("co-op: the same one-column arena as Versus — cards 50/50, Toque one line beneath, the panel in the drawer", async () => {
+await check("co-op: the same one-column arena as Versus — cards 50/50", async () => {
   const a = await box(cards.nth(0));
   const b = await box(cards.nth(1));
-  const toque = await box(page.locator(".lc-toque-line"));
   sameY(a, b, "cards");
   assert.ok(Math.abs(a.width - b.width) <= 1, "equal card widths");
-  assert.ok(toque.y >= a.y + a.height - 1, "Toque's line is under the cards");
-  // The tickets tilt ±0.4°, so their boxes overhang the row by a few px.
-  assert.ok(Math.abs(toque.width - (b.x + b.width - a.x)) <= 6, "Toque's line spans the cards");
-  assert.equal(await page.locator(".lc-agent").count(), 0, "no agent panel on the page until the drawer opens");
-  await page.locator(".lc-toque-line").click();
-  await page.locator(".lc-agent .lc-say-input").waitFor({ state: "visible", timeout: 3000 });
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(300);
-  assert.equal(await page.locator(".lc-agent").count(), 0, "Escape closes the drawer");
 });
 
 await check("co-op: both cards start with a 56px primary on the same line", async () => {
@@ -474,38 +492,7 @@ await check("co-op: pause freezes both clocks and disables every action; Resume 
   assert.equal(await page.locator(".lc-paused").count(), 0);
 });
 
-await check("co-op: 'done' from a player holding nothing asks which one, with ≤3 options + Cancel", async () => {
-  // Leo is the speaker, holding nothing. The typed box is in the drawer.
-  await openToque();
-  await page.getByRole("radio", { name: /Leo/ }).click();
-  await page.locator(".lc-say-input").fill("done");
-  await click(/Say it/);
-  await page.waitForTimeout(400);
-  const pendingOpts = page.locator(".lc-pending .lc-pending-option");
-  const n = await pendingOpts.count();
-  assert.ok(n >= 1 && n <= 3, `${n} options`);
-  assert.ok(await page.locator(".lc-pending").getByRole("button", { name: "Cancel" }).isVisible());
-  await page.locator(".lc-pending").getByRole("button", { name: "Cancel" }).click();
-  await page.waitForTimeout(200);
-  assert.equal(await page.locator(".lc-pending").count(), 0);
-});
-
-await check("co-op: 'done' from the player holding a step finishes it via the same handler as the button", async () => {
-  await openToque();
-  await page.getByRole("radio", { name: /Mia/ }).click();
-  const before = await page.locator(".lc-count-big").innerText();
-  await page.locator(".lc-say-input").fill("done");
-  await click(/Say it/);
-  await page.waitForTimeout(1200);
-  const after = await page.locator(".lc-count-big").innerText();
-  assert.notEqual(before, after, `count ${before} → ${after}`);
-  assert.ok(await page.locator(".lc-line.is-agent").last().innerText().then((t) => /done in/.test(t)), "agent confirms");
-});
-
 await check("co-op: Call it early is a Modal, and confirming lands on Service done", async () => {
-  // The drawer from the typed "done" above is still open; it's a modal.
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(300);
   const dialogsBefore = dialogs;
   await click(/Call it early/);
   assert.equal(dialogs, dialogsBefore, "no browser dialog on the play surface");
