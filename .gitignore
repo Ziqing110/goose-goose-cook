@@ -27,3 +27,22 @@ design/*-chatgpt-prompt.md
 
 # Vite writes these next to the config when it loads an ESM config file.
 vite.config.js.timestamp-*
+
+# Design explorations, AI prompts and exports stay local. Only the brand
+# sources the app builds from (BrandGoose.jsx, scripts/render-og.mjs) are
+# committed.
+design/ICON_SPEC.md
+design/goose-goose-cook-logo-options/
+design/kitchen-path-logo*
+design/logo-options/
+design/posters/
+design/brand/*
+!design/brand/geometry.mjs
+!design/brand/build-masters.mjs
+!design/brand/goose-mark.svg
+exports/*/
+src/assets/goose-referee-v1/*
+!src/assets/goose-referee-v1/*-cut.png
+src/assets/*prompts.md
+src/assets/schedule-*.png
+src/assets/summary-*.png
