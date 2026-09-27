@@ -125,3 +125,23 @@ test("scheduleSteps: never plans more simultaneous must-be-there moments than th
     assert.ok(open <= cooks.length, `${open} cooks needed at once, kitchen has ${cooks.length}`);
   });
 });
+
+test("scheduleSteps: never reorders the cooks it was given", () => {
+  // The live cook's replan passes the session's own array. When no cook
+  // was free for a step, the fallback sorted that array in place and
+  // swapped player A and B mid-cook, colours and all. This is the
+  // remaining board after the first Done of the seeded Mapo Tofu +
+  // noodle soup run, cut down to what still reaches that fallback.
+  const board = (id, dur, depends_on = []) => ({ id, tending: "hands_on", estimated_duration_sec: dur, required_equipment: ["cutting_board"], depends_on });
+  const nodes = [
+    { ...simmer, id: "boil_water", required_equipment: ["stove_burner", "pot"], unattended: { initial: { duration_sec: 45, difficulty: "low" }, checkpoints: null, ending: { duration_sec: 15, difficulty: "low" } } },
+    board("chicken_trim", 120),
+    board("veg_chop", 240),
+    board("mince_garlic", 120),
+    { id: "saute_veg", tending: "hands_on", estimated_duration_sec: 300, required_equipment: ["stove_burner", "pot"], depends_on: ["veg_chop", "mince_garlic"] },
+  ];
+  const kitchen = { burners: 2, pots: 2, cuttingBoards: 1, hasWok: true, hasOven: true };
+  const given = Object.freeze([...cooks]);
+  assert.doesNotThrow(() => scheduleSteps(nodes, given, kitchen));
+  assert.deepEqual(given.map((c) => c.id), ["c1", "c2"]);
+});

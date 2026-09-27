@@ -205,7 +205,13 @@ export default function GooseVoiceAgent({
   // is worse than one that occasionally hides something useful. What the
   // goose is doing still reads from its pose, and the line is still
   // announced below for anyone not looking at it.
-  const showBubble = !dragging && Boolean(line) && subtitlesOn;
+  //
+  // Idle is the exception in the other direction: "hover me and tap the
+  // mic" only means something to someone already pointing at the goose,
+  // and parked in the corner it sat over whatever the page had there —
+  // the right card's Start button, a voice line, the score totals. The
+  // pose says the mic is off; the line waits for the hover.
+  const showBubble = !dragging && Boolean(line) && subtitlesOn && (state !== "idle" || engaged);
 
   return (
     <div

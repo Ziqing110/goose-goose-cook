@@ -29,6 +29,7 @@ import { SCHEDULE_VOICE } from "../utils/pageVoiceGrammar.js";
 import { tendingOf, TENDING } from "../utils/tending.js";
 import { formatClock } from "../utils/inventory.js";
 import { chefAvatar } from "../utils/cooks.js";
+import { playerRing } from "../utils/playerColors.js";
 import KpIcon from "../components/KpIcon.jsx";
 import Modal from "../components/Modal.jsx";
 import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
@@ -163,15 +164,15 @@ function TendingChip({ node, className = "" }) {
 }
 
 // Same identity contract as Cooks / Live Cook: the bird the player
-// picked on the Cooks page carries their identity, ringed in their
-// player colour on the schedule. Initial-in-a-circle is the fallback for
-// runs that predate avatars.
+// picked on the Cooks page carries their identity, ringed in that bird's
+// own colour (--ring, utils/playerColors.js). Initial-in-a-circle is the
+// fallback for runs that predate avatars.
 function PlayerAvatar({ cook, index, size = 32 }) {
   const chef = cook?.avatar ? chefAvatar(cook.avatar) : null;
   return (
     <span
       className={`sch-avatar is-${playerKey(index)} sch-avatar-${size}${chef ? " has-chef" : ""}`}
-      style={chef ? { backgroundColor: chef.bg, backgroundImage: `url(${chef.src})` } : undefined}
+      style={chef ? { backgroundColor: chef.bg, backgroundImage: `url(${chef.src})`, "--ring": playerRing(cook, index) } : undefined}
       aria-hidden="true"
     >
       {!chef && (cook?.name?.[0]?.toUpperCase() || "?")}
@@ -231,6 +232,14 @@ export default function SchedulePage() {
   const canStart = Boolean(mode) && !hasLoop;
 
   const grabsCount = opening.poolIds.length + opening.lockedIds.length;
+  const dealtCount = opening.bundles.reduce((sum, b) => sum + b.stepIds.length, 0);
+  // The night's first pot — who puts it on and when — for the footer, and
+  // whether there is a pot at all, for the legend's "Hands on the pot".
+  const firstPot = useMemo(
+    () => schedule.steps.filter((s) => byId[s.id] && !isAttended(byId[s.id])).sort((a, b) => a.startSec - b.startSec)[0] || null,
+    [schedule, byId],
+  );
+  const hasPots = nodes.some((n) => !isAttended(n));
 
   useEffect(() => {
     if (!approved) return undefined;
@@ -786,6 +795,7 @@ export default function SchedulePage() {
           {isCoop ? (
             <Timeline
               lanes={lanes}
+              hasPots={hasPots}
               gearLanes={gearLanes}
               cookIndexById={cookIndexById}
               makespanSec={schedule.makespanSec}
@@ -842,7 +852,13 @@ export default function SchedulePage() {
                   : `Versus · ${opening.poolIds.length + opening.lockedIds.length} steps to claim`}
               </span>
               <Mono className="sch-footer-sub">
-                {isCoop ? "Lindy fills the pot first. I'll call it out." : "Four dealt, the rest go to whoever says it first."}
+                {isCoop
+                  ? firstPot
+                    ? `${cookById[firstPot.cookId]?.name || "Someone"} puts “${byId[firstPot.id].label}” on at ${formatClock(firstPot.startSec)}. I'll call it out.`
+                    : "Say “done” and I'll deal you the next one."
+                  : dealtCount
+                    ? `${dealtCount} dealt, the rest go to whoever says it first.`
+                    : "Nothing dealt — every step goes to whoever says it first."}
               </Mono>
             </>
           ) : (
@@ -971,7 +987,7 @@ function pickTickStepMinutes(pxPerMin) {
   return TICK_STEPS_MIN.find((s) => s * pxPerMin >= TICK_MIN_PX) || TICK_STEPS_MIN[TICK_STEPS_MIN.length - 1];
 }
 
-function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepIds, zoom, onZoom, selectedStepId, onSelect, selected, onClose, headerTiles }) {
+function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepIds, zoom, onZoom, selectedStepId, onSelect, selected, onClose, headerTiles, hasPots }) {
   const scrollRef = useRef(null);
   const [fitPxPerMin, setFitPxPerMin] = useState(FIT_FALLBACK_PX_PER_MIN);
   // The gear lanes duplicate the same steps against equipment rather
@@ -1027,9 +1043,11 @@ function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepId
               </svg>
               Free to wander
             </span>
-            <span className="sch-legend-item">
-              <span className="sch-legend-swatch is-hands" /> Hands on the pot
-            </span>
+            {hasPots && (
+              <span className="sch-legend-item">
+                <span className="sch-legend-swatch is-hands" /> Hands on the pot
+              </span>
+            )}
           </span>
           <span className="sch-zoom">
             {/* Fit is off the bar because its density is whatever the

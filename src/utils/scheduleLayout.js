@@ -523,7 +523,9 @@ function assignCooks(placed, cooks, byId) {
       (byId[task.id].depends_on || []).map((d) => assignment.get(d)).filter(Boolean)
     );
     const candidates = cooks.filter((c) => freeFor(c.id, task));
-    const pool = candidates.length ? candidates : cooks;
+    // A copy either way: sorted in place below, and `cooks` is the
+    // session's own array — sorting it would swap who is player A.
+    const pool = candidates.length ? candidates : [...cooks];
     pool.sort((a, b) => {
       const byBusy = busy.get(a.id) - busy.get(b.id);
       if (byBusy !== 0) return byBusy;

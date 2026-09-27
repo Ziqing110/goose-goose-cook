@@ -40,10 +40,12 @@
 .lc-avatar-32 { width: 32px; height: 32px; font-size: 14px; }
 .lc-avatar-40 { width: 40px; height: 40px; font-size: 17px; }
 .lc-avatar-44 { width: 44px; height: 44px; font-size: 18px; }
-.lc-avatar.has-chef { background-size: cover; background-position: center; box-shadow: 0 0 0 2px var(--cook-a); }
-.lc-avatar.has-chef.is-b { box-shadow: 0 0 0 2px var(--cook-b); }
-.lc-avatar-20.has-chef { box-shadow: 0 0 0 1.5px var(--cook-a); }
-.lc-avatar-20.has-chef.is-b { box-shadow: 0 0 0 1.5px var(--cook-b); }
+/* The ring follows the bird (--ring, set inline by PlayerAvatar); the
+   player colour is only the fallback. */
+.lc-avatar.has-chef { background-size: cover; background-position: center; box-shadow: 0 0 0 2px var(--ring, var(--cook-a)); }
+.lc-avatar.has-chef.is-b { box-shadow: 0 0 0 2px var(--ring, var(--cook-b)); }
+.lc-avatar-20.has-chef { box-shadow: 0 0 0 1.5px var(--ring, var(--cook-a)); }
+.lc-avatar-20.has-chef.is-b { box-shadow: 0 0 0 1.5px var(--ring, var(--cook-b)); }
 
 /* The goose's stamp: an outlined mono pill, tilted — Schedule's
    APPROVED badge, in the ink of whoever it is about. */
@@ -129,8 +131,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.lc-result-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.lc-result-stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* Columns sized to their content, not equal thirds: a three-digit score
+   is wider than a third of the ticket and ran into "skipped" beside it. */
+.lc-result-stats { display: flex; justify-content: space-between; gap: 12px; }
+.lc-result-stat { display: flex; flex-direction: column; gap: 2px; }
 .lc-result-num { font-family: var(--font-play); font-size: 32px; line-height: 36px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .lc-result-num.is-points { color: var(--pc-ink); }
 .lc-result-fact { display: flex; flex-direction: column; gap: 2px; padding-top: 10px; border-top: 1px solid var(--paper-edge); }
@@ -224,7 +228,19 @@
 /* The window takes whatever height the receipt has; the list inside is
    cut to whole rows by useWholeRows (ServiceResults.jsx), and scrolling
    snaps a row at a time so the top edge never slices one either. */
-.lc-step-window { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 8px 0; }
+.lc-step-window { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 8px 0; }
+/* More rows below the fold: the last whole row fades into the paper, so
+   the list reads as one you can scroll. Gone once you reach the end. */
+.lc-step-window[data-more="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8px;
+  height: 32px;
+  background: linear-gradient(to bottom, transparent, var(--paper));
+  pointer-events: none;
+}
 /* No vertical padding on the scroller itself — rows scroll through its
    padding, so any would show a sliver of the next row. The air lives on
    the window instead. */

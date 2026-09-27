@@ -1810,16 +1810,18 @@ function PlayerFocusCard({ cardRef, scoreRef, cook, index, cooks, run, nodes, by
   // The rail fills to est, then turns amber (the "is-over" tint).
   const heatPct = variance ? Math.min(100, variance.estSec > 0 ? (variance.actualSec / variance.estSec) * 100 : 100) : 0;
   const bodyNode = node || offered;
-  // The ticket number: where this step sits in the night, like the
-  // numbered tickets on Schedule's timeline.
-  const ticketNo = bodyNode ? `#${String(nodes.indexOf(bodyNode) + 1).padStart(2, "0")} / ${nodes.length}` : `${doneCount} done`;
+  // The ticket number: this cook's how-many-th ticket tonight. It used to
+  // be the step's index in the recipe data over the step count, which
+  // read as progress — and put "#13 / 20" on the first card of the night.
+  const ticketNo = bodyNode ? `Ticket ${String(doneCount + 1).padStart(2, "0")}` : `${doneCount} done`;
 
   const secondary = (
     <>
       {focusMoment && !inFinish && (
-        // Mid-moment the banner holds the slot; Done here ends the step early.
+        // Mid-moment the banner holds the slot; this ends the whole step,
+        // not just the moment, so it says so.
         <button type="button" className="btn btn-ghost" disabled={paused} onClick={() => onDone(activeId)}>
-          Done
+          Done early
         </button>
       )}
       <button type="button" className="btn btn-ghost" disabled={paused} onClick={() => onSkip(activeId)}>
@@ -2096,9 +2098,9 @@ function MomentInstruction({ state }) {
   return (
     <div className="lc-moment" role="timer">
       <KpIcon glyph="timer" size={22} />
-      <span className="lc-moment-instruction">
-        {verb} — {current.kind === "ending" ? "now." : <><Mono>{clock(current.endSec - current.atSec)}</Mono>.</>}
-      </span>
+      {/* The countdown beside it is the time; repeating the moment's
+          length here made three clocks on one card. */}
+      <span className="lc-moment-instruction">{verb}{current.kind === "ending" ? " — now." : "."}</span>
       {current.kind !== "ending" && <Mono className="lc-moment-countdown">{clock(countdownSec)}</Mono>}
     </div>
   );

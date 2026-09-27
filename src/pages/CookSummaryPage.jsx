@@ -11,8 +11,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { getSession, updateSession } from "../api/sessions.js";
 import { stylePhoto } from "../api/photo.js";
-import { fileToDataUrl, applyLocalStyle, renderShareCard, downloadDataUrl } from "../utils/summaryCard.js";
-import { clock, planDelta, resultPlayers, summaryOutcome } from "../utils/serviceResults.js";
+import { fileToDataUrl, applyLocalStyle, downloadDataUrl } from "../utils/summaryCard.js";
+import { renderShareCard } from "../utils/shareCard.js";
+import { clock, isOnPlan, planDelta, resultPlayers, summaryOutcome } from "../utils/serviceResults.js";
 import { runTimeline } from "../utils/cookTimeline.js";
 import { agentNarrate } from "../api/agent.js";
 import { AGENT_NAME } from "../voice/agentVoice.js";
@@ -243,7 +244,7 @@ export default function CookSummaryPage() {
     setBusy("saving");
     setError(null);
     try {
-      downloadDataUrl(await renderShareCard(summary), `${(summary.dish || "cook").replace(/\W+/g, "-").toLowerCase()}.png`);
+      downloadDataUrl(await renderShareCard({ summary, outcome, players }), `${(summary.dish || "cook").replace(/\W+/g, "-").toLowerCase()}.png`);
     } catch {
       setError("Couldn't build the image — try again.");
     } finally { setBusy(null); }
@@ -302,7 +303,13 @@ export default function CookSummaryPage() {
           </span>
           {!versus && showDelta && (
             <span className={`cc-plan ${deltaSec <= 0 ? "is-under" : "is-over"}`}>
-              <span className="mono">{clock(Math.abs(deltaSec))}</span> {deltaSec <= 0 ? "under plan" : "over plan"}
+              {isOnPlan(deltaSec) ? (
+                "Right on plan"
+              ) : (
+                <>
+                  <span className="mono">{clock(Math.abs(deltaSec))}</span> {deltaSec < 0 ? "under plan" : "over plan"}
+                </>
+              )}
             </span>
           )}
         </p>

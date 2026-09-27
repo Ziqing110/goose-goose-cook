@@ -7,7 +7,8 @@
 // summaryOutcome() — plus the players from resultPlayers().
 import { useLayoutEffect, useRef } from "react";
 import { chefAvatar } from "../utils/cooks.js";
-import { clock, longestStep, planDelta, playerKey } from "../utils/serviceResults.js";
+import { playerRing } from "../utils/playerColors.js";
+import { clock, isOnPlan, longestStep, planDelta, playerKey } from "../utils/serviceResults.js";
 import { GoosePrint } from "./GooseMarks.jsx";
 import "./ServiceResults.css";
 
@@ -15,15 +16,16 @@ function Mono({ children, className = "" }) {
   return <span className={`mono ${className}`}>{children}</span>;
 }
 
-// The chef bird the player picked on the Cooks page, ringed in their
-// player color; the initial is the fallback for a cook who predates
-// avatars. Same identity system either way — the color is the key.
+// The chef bird the player picked on the Cooks page, ringed in that
+// bird's own colour (--ring, utils/playerColors.js) rather than the fixed
+// player colour, so the ring and the bird never disagree. The initial is
+// the fallback for a cook who predates avatars, on the player colour.
 export function PlayerAvatar({ cook, index, size = 32 }) {
   const chef = cook?.avatar ? chefAvatar(cook.avatar) : null;
   return (
     <span
       className={`lc-avatar is-${playerKey(index)} lc-avatar-${size} ${chef ? "has-chef" : ""}`}
-      style={chef ? { backgroundColor: chef.bg, backgroundImage: `url(${chef.src})` } : undefined}
+      style={chef ? { backgroundColor: chef.bg, backgroundImage: `url(${chef.src})`, "--ring": playerRing(cook, index) } : undefined}
       aria-hidden="true"
     >
       {!chef && (cook?.name?.[0]?.toUpperCase() || "?")}
@@ -129,7 +131,7 @@ export function CoopResult({ outcome, players }) {
       {showDelta && (
         <div className="lc-coop-delta">
           <span className={`lc-coop-delta-num ${deltaSec <= 0 ? "is-under" : "is-over"}`}>
-            {clock(Math.abs(deltaSec))} {deltaSec <= 0 ? "under plan" : "over plan"}
+            {isOnPlan(deltaSec) ? "Right on plan" : `${clock(Math.abs(deltaSec))} ${deltaSec < 0 ? "under plan" : "over plan"}`}
           </span>
           <span className="lc-coop-times">
             <span>
@@ -175,25 +177,36 @@ export function CoopResult({ outcome, players }) {
 // space the receipt has, and the list inside is cut to as many full rows
 // as fit, so a row is never sliced in half at the bottom edge. The
 // leftover sliver becomes air above the totals. Nothing to do when every
-// row fits.
+// row fits. Whole rows also mean nothing on screen says there is more:
+// `data-more` marks the window while rows sit below the fold, for the
+// fade along its bottom edge.
 function useWholeRows(windowRef, listRef, count) {
   useLayoutEffect(() => {
     const win = windowRef.current;
     const list = listRef.current;
     if (!win || !list || typeof ResizeObserver === "undefined") return undefined;
+    const mark = () => {
+      win.dataset.more = String(list.scrollTop + list.clientHeight < list.scrollHeight - 1);
+    };
     const fit = () => {
       list.style.height = "";
       const row = list.querySelector("li");
       const ws = getComputedStyle(win);
       const avail = win.clientHeight - parseFloat(ws.paddingTop) - parseFloat(ws.paddingBottom);
-      if (!row || list.scrollHeight <= avail) return;
-      const rowH = row.getBoundingClientRect().height;
-      list.style.height = `${Math.max(1, Math.floor(avail / rowH)) * rowH}px`;
+      if (row && list.scrollHeight > avail) {
+        const rowH = row.getBoundingClientRect().height;
+        list.style.height = `${Math.max(1, Math.floor(avail / rowH)) * rowH}px`;
+      }
+      mark();
     };
     fit();
     const observer = new ResizeObserver(fit);
     observer.observe(win);
-    return () => observer.disconnect();
+    list.addEventListener("scroll", mark, { passive: true });
+    return () => {
+      observer.disconnect();
+      list.removeEventListener("scroll", mark);
+    };
   }, [windowRef, listRef, count]);
 }
 

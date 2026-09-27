@@ -15,8 +15,8 @@ export default function AppShell() {
   const isDesignV4 = useDesignV4();
   const { pathname } = useLocation();
   // A cook journal is a frozen page, not a session step: it keeps the
-  // same chrome as Home so it reads as part of the app, but swaps the
-  // voice bar for a way back.
+  // same chrome as Home so it reads as part of the app — goose included —
+  // plus a way back.
   const isJournal = pathname.startsWith("/cook/");
 
   return (
@@ -41,10 +41,10 @@ export default function AppShell() {
         <Outlet />
       </main>
 
-      {!isJournal && <VoiceBar />}
+      <VoiceBar />
       {/* One microphone, one conversation, one record of it. Beside
           VoiceBar for the same reason it is. */}
-      {!isJournal && <ConversationRail />}
+      <ConversationRail />
     </div>
   );
 }

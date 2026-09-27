@@ -37,6 +37,3 @@
   text-decoration: none;
 }
 .topbar-link:hover { color: var(--ink, inherit); background: var(--surface-sunken, transparent); text-decoration: none; }
-
-/* No voice bar on the journal, so no room reserved for it. */
-.app-shell.is-journal { padding-bottom: 48px; }

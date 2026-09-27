@@ -702,7 +702,7 @@ export default function VoiceBindingPage() {
                     <span className="vb-locked-name">{cook.name}</span>
                     {avatar.hue && (
                       <span className="vb-lane mono" style={{ color: avatar.ink }}>
-                        {avatar.hue} on the schedule
+                        Chef {avatar.name}
                       </span>
                     )}
                   </div>
@@ -721,7 +721,7 @@ export default function VoiceBindingPage() {
         <div className="vb-panel">
           <div className="vb-panel-head">
             <span className="vb-panel-title">The line-up</span>
-            <span className="vb-panel-note">Your bird&rsquo;s colour is your lane on the schedule.</span>
+            <span className="vb-panel-note">Your bird marks you on every screen.</span>
           </div>
 
           <div className="cooks-grid">
@@ -754,7 +754,7 @@ export default function VoiceBindingPage() {
                         <div className="cook-drawer-who">
                           <span className="cook-drawer-name">Chef {avatar.name}</span>
                           <span className="vb-lane mono" style={{ color: avatar.ink }}>
-                            {avatar.hue ? `${avatar.hue} lane` : "No lane yet"}
+                            {avatar.hue ? `${avatar.hue} bird` : "No bird yet"}
                           </span>
                         </div>
                         <button type="button" className="btn cook-dice-btn" onClick={() => rollBird(cook)} disabled={lockBird}>
@@ -847,7 +847,7 @@ export default function VoiceBindingPage() {
 
                         <div className="cook-lane-row">
                           <button type="button" className="cook-lane-chip mono" style={{ color: avatar.ink }} onClick={() => openDrawer(cook)}>
-                            {cook.avatar ? `Chef ${avatar.name} · ${avatar.hue.toLowerCase()} lane` : "Pick your chef"}
+                            {cook.avatar ? `Chef ${avatar.name}` : "Pick your chef"}
                           </button>
                           <button type="button" className="cook-dice" onClick={() => rollBird(cook)} disabled={lockBird} aria-label="Surprise me">
                             <DiceGlyph spinning={cookFx.rolling} />

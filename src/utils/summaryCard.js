@@ -1,8 +1,7 @@
 // Building the frozen summary record, plus the image work behind the
-// photo and the downloadable share card.
+// photo and the download. The share card itself is drawn in shareCard.js.
 import { cookColorKey } from "./cooks.js";
 import { buildRunContext, cookQuipStats, pickQuips, headlineFor } from "./cookQuips.js";
-import { wordmarkGeometry } from "./wordmark.js";
 
 const MAX_PHOTO_PX = 1200;
 
@@ -130,120 +129,6 @@ export function applyLocalStyle(dataUrl) {
     };
     img.src = dataUrl;
   });
-}
-
-const CARD_W = 1080;
-const CARD_H = 1350;
-
-/** Draws the shareable card by hand — designed rather than a screenshot,
- *  and needs no DOM-capture dependency. */
-export async function renderShareCard(summary) {
-  const canvas = document.createElement("canvas");
-  canvas.width = CARD_W;
-  canvas.height = CARD_H;
-  const ctx = canvas.getContext("2d");
-
-  ctx.fillStyle = "#fbf6ec";
-  ctx.fillRect(0, 0, CARD_W, CARD_H);
-
-  const image = summary.styledPhoto || summary.photo;
-  const photoH = image ? 620 : 0;
-  if (image) {
-    await new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const scale = Math.max(CARD_W / img.width, photoH / img.height);
-        const w = img.width * scale;
-        const h = img.height * scale;
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, 0, CARD_W, photoH);
-        ctx.clip();
-        ctx.drawImage(img, (CARD_W - w) / 2, (photoH - h) / 2, w, h);
-        ctx.restore();
-        resolve();
-      };
-      img.onerror = resolve;
-      img.src = image;
-    });
-  }
-
-  let y = photoH + 78;
-  drawWordmark(ctx, 64, y, 24, "#201e1d");
-
-  y += 62;
-  ctx.fillStyle = "#201e1d";
-  ctx.font = "700 54px system-ui, sans-serif";
-  wrapText(ctx, summary.dish || "Dinner", 64, y, CARD_W - 128, 60);
-
-  y += summary.dish && summary.dish.length > 28 ? 128 : 66;
-  ctx.fillStyle = "#5c554c";
-  ctx.font = "400 30px system-ui, sans-serif";
-  ctx.fillText(`${Math.round(summary.totalSec / 60)} min · ${summary.mode}`, 64, y);
-
-  y += 58;
-  ctx.fillStyle = "#564a80";
-  ctx.font = "italic 400 30px system-ui, sans-serif";
-  wrapText(ctx, summary.headline, 64, y, CARD_W - 128, 40);
-
-  y += 110;
-  summary.cooks.forEach((cook) => {
-    const color = { mia: "#3f77b5", leo: "#d67f48", sage: "#6b9080" }[cook.colorKey] || "#5c554c";
-    ctx.fillStyle = color;
-    ctx.fillRect(64, y - 34, 10, 46);
-    ctx.fillStyle = "#201e1d";
-    ctx.font = "700 40px system-ui, sans-serif";
-    ctx.fillText(cook.name, 92, y);
-    ctx.fillStyle = color;
-    ctx.font = "700 46px ui-monospace, Menlo, monospace";
-    ctx.textAlign = "right";
-    ctx.fillText(String(cook.points), CARD_W - 64, y);
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#8d8477";
-    ctx.font = "400 26px system-ui, sans-serif";
-    ctx.fillText(`${cook.doneCount} steps${cook.isWinner ? " · winner" : ""}`, 92, y + 34);
-    y += 96;
-  });
-
-  return canvas.toDataURL("image/png");
-}
-
-// The drawn wordmark (brand pass A) with its baseline at y, from the
-// same path data as the in-app SVG, so the card needs no font load.
-function drawWordmark(ctx, x, y, cap, color) {
-  const { glyphs, stroke } = wordmarkGeometry("hand");
-  const scale = cap / 100;
-  ctx.save();
-  ctx.translate(x, y - cap);
-  ctx.scale(scale, scale);
-  ctx.strokeStyle = color;
-  ctx.lineWidth = stroke;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  for (const glyph of glyphs) {
-    ctx.save();
-    ctx.translate(glyph.x, 0);
-    ctx.stroke(new Path2D(glyph.d));
-    ctx.restore();
-  }
-  ctx.restore();
-}
-
-function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
-  const words = String(text || "").split(" ");
-  let line = "";
-  let cursor = y;
-  words.forEach((word) => {
-    const test = line ? `${line} ${word}` : word;
-    if (ctx.measureText(test).width > maxWidth && line) {
-      ctx.fillText(line, x, cursor);
-      line = word;
-      cursor += lineHeight;
-    } else {
-      line = test;
-    }
-  });
-  if (line) ctx.fillText(line, x, cursor);
 }
 
 export function downloadDataUrl(dataUrl, filename) {

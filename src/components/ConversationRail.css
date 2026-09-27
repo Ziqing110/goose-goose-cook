@@ -167,11 +167,11 @@
 }
 
 .gn-switch-seg.is-a .lc-avatar {
-  box-shadow: 0 0 0 1.5px var(--kp-cook-a);
+  box-shadow: 0 0 0 1.5px var(--ring, var(--kp-cook-a));
 }
 
 .gn-switch-seg.is-b .lc-avatar {
-  box-shadow: 0 0 0 1.5px var(--kp-cook-b);
+  box-shadow: 0 0 0 1.5px var(--ring, var(--kp-cook-b));
 }
 
 .gn-list {

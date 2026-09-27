@@ -84,3 +84,6 @@ export function planDelta(outcome) {
   const show = outcome.estimatedSec != null && outcome.skippedCount === 0 && outcome.doneCount > 0;
   return { show, deltaSec: show ? outcome.totalSec - outcome.estimatedSec : 0 };
 }
+
+/** Level with the plan to the second: "0:00 under plan" is a sentence nobody says. */
+export const isOnPlan = (deltaSec) => Math.round(deltaSec) === 0;
