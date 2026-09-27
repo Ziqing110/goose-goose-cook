@@ -32,25 +32,22 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: 40px;
   padding: 24px 0 20px;
   animation: ds-reveal 240ms ease-out both;
 }
-.inv-title { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+/* The title copy never gets narrower than its one-line meta, so when the
+   row runs short it's the banner that gives way, not the text running
+   under it. */
+.inv-title { display: flex; flex-direction: column; gap: 6px; flex: 1 0 auto; }
 .inv-title h1 { font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.01em; }
-/* Each fact holds together; the line breaks at the separators between
-   them rather than inside "58:00 hands-on". */
-.inv-meta > span { white-space: nowrap; }
-.inv-meta { font-size: 13px; line-height: 18px; color: var(--ink-soft); }
+/* One line, always: the facts read as a single strip under the title. */
+.inv-meta { font-size: 13px; line-height: 18px; color: var(--ink-soft); white-space: nowrap; }
 .inv-meta.is-tertiary { color: var(--ink-faint); }
-/* The banner sits in the same scenery frame the conversation and cooks
-   pages use (.ds-scene in design-v4.css), and keeps their 40px of white
-   to its right, so the art lands in the same place on every page of the
-   run. */
-.inventory-page .ds-scene { flex: 0 1 auto; min-width: 0; padding-right: 40px; }
+/* The banner takes the shared scenery frame as is (.ds-scene in
+   design-v4.css: 380px frame, art at 80% from its leading edge, 240px
+   floor), so it sits at the same size and place as on the other pages. */
 .inventory-page .ds-scene-art {
-  width: 400px;
-  max-width: 100%;
   animation: ds-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
   animation-delay: 120ms;
 }

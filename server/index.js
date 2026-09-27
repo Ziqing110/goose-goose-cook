@@ -43,5 +43,5 @@ app.use("/api/recipes", recipesRouter);
 app.use("/api/agent", agentRouter);
 
 app.listen(PORT, () => {
-  console.log(`Kitchen Path API listening on http://localhost:${PORT}`);
+  console.log(`Goose! Goose! Cook! API listening on http://localhost:${PORT}`);
 });

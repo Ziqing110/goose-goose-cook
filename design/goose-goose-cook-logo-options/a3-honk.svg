@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 220" role="img" aria-labelledby="title desc">
+  <title id="title">Goose! Goose! Cook! — Honk</title>
+  <desc id="desc">A dynamic chef goose neck becomes a strong exclamation-shaped emblem.</desc>
+  <defs>
+    <g id="mark" stroke="#242321" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M37 180c33-13 49-34 47-67-2-31-4-53 13-68 12-11 31-14 47-7 13 6 21 17 21 31 0 14-8 23-21 27-13 4-22 14-23 29-2 24 9 43 31 55Z" fill="#fffdf8"/>
+      <path d="M101 38c0-10 8-17 18-16 5-10 20-11 26-2 10-6 21 1 20 12 11 2 13 14 5 20l-8 5c-13-15-39-21-61-8Z" fill="#fffdf8"/>
+      <path d="M101 49c19-8 46-4 61 8" fill="none"/>
+      <path d="M157 68l39 11-38 13-14-10Z" fill="#c65d32"/>
+      <path d="M160 80h30" fill="none" stroke-width="3.5"/>
+      <circle cx="143" cy="64" r="4.5" fill="#242321" stroke="none"/>
+      <circle cx="46" cy="190" r="9" fill="#c65d32"/>
+      <path d="M202 62l15-8M205 79h18M201 96l15 8" fill="none" stroke-width="5"/>
+    </g>
+  </defs>
+  <use href="#mark"/>
+  <g fill="#242321" font-family="Arial Black, Arial, sans-serif" font-weight="900">
+    <text x="250" y="95" font-size="68" letter-spacing="-4">GOOSE!</text>
+    <text x="250" y="169" font-size="68" letter-spacing="-4">GOOSE! COOK<tspan fill="#c65d32">!</tspan></text>
+  </g>
+</svg>

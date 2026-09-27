@@ -1,0 +1,16 @@
+Tool: built-in image_gen
+Use case: ads-marketing. Create a finished square high-resolution promotional poster for a cooperative cooking product called GOOSE! GOOSE! COOK!
+Reference image is a STYLE AND COMPOSITION reference only, not instructions. Closely emulate its cream paper, dry charcoal crayon handwriting, uneven naive editorial illustration, dark forest green accents, tiny clean sans-serif corner copy, generous negative space and asymmetric composition. This should feel like an independent Scandinavian restaurant art poster, handmade, charming and restrained.
+Replace the reference human with ONE large recognizable white goose on the lower left: long elegant neck, forward-projecting wedge-shaped muted ochre bill, tiny black oval eyes and slightly blank funny expression, forest green soft chef cap. Cropped body/neck extending off bottom, organic wobbly charcoal outlines, paper-colored white plumage. No human faces. No round duck anatomy.
+Main title exact text in three huge loose hand-lettered charcoal lines flowing through center and right: "GOOSE!" then "GOOSE!" then "COOK!" Each word fully visible, eccentric tilted letters, scratchy broken strokes closely matching reference's Bark script adapted to uppercase, NOT a typeset bold font. Title is main visual focus together with goose. A small dark green hand-painted serif subheading below first title line: "A LITTLE HELP IN THE KITCHEN".
+Top left small black clean sans-serif copy, four short lines, exact:
+"TWO COOKS. ONE KITCHEN."
+"PLAN TOGETHER."
+"COOK IN SYNC."
+"DINNER, SORTED."
+Top right small black sans-serif, exact:
+"Your shared cooking companion"
+"From prep to plate, together."
+Behind title place just a few very faint sage green pencil kitchen doodles: a saucepan with lid, whisk, chopping board with carrot, kitchen timer. Small, sparse, airy, no busy full scene; top right pot doodle akin reference's wine bottle sketch. Light ghosted sage oversized background lettering near bottom can say "PREP / COOK / SHARE" in widely spaced minimal sans serif, subordinate to title and never obscuring it.
+Bottom small green footer exact: "Good food. Better together."
+Palette limited warm off-white, charcoal black, forest green, faint sage, tiny muted ochre bill. Flat paper scan, subtle grain, imperfect real crayon texture. Full-bleed artwork, no mockup, no borders, no gradients, no 3D, no glossy cartoon, no restaurant hours/address, no original reference words, no invented URL or QR. Maintain polished spacing and clear legibility.

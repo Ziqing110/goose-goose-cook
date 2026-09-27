@@ -1,6 +1,8 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 import VoiceBar from "./VoiceBar.jsx";
 import ConversationRail from "./ConversationRail.jsx";
+import BrandGoose from "./BrandGoose.jsx";
+import Wordmark from "./Wordmark.jsx";
 import { useDesignV4 } from "../utils/designV4.js";
 import "./AppShell.css";
 import "../styles/design-v4.css";
@@ -22,15 +24,11 @@ export default function AppShell() {
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 32 32" width="22" height="22">
-              <circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" strokeWidth="2" />
-              <circle cx="10" cy="12" r="2.1" fill="currentColor" />
-              <circle cx="22" cy="11" r="2.1" fill="currentColor" />
-              <circle cx="21" cy="21" r="2.1" fill="currentColor" />
-              <path d="M10 12 L21 21 M22 11 L21 21" stroke="currentColor" strokeWidth="1.6" fill="none" />
-            </svg>
+            <BrandGoose />
           </span>
-          <span className="brand-name">Kitchen Path</span>
+          {/* Brand pass, direction A: S-28 head + drawn wordmark at a
+              14.4px cap (size 20). The wordmark carries the name. */}
+          <Wordmark cap={14.4} className="brand-name" />
         </div>
         {isJournal && (
           <nav className="topbar-nav" aria-label="Journal">

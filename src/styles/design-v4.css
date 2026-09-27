@@ -167,7 +167,6 @@ body:has(.app-shell.ds-v4) { background: var(--kp-bg); }
 
 /* ---------------- topbar ---------------- */
 .ds-v4 .topbar { padding: 20px 0 16px; gap: 10px; }
-.ds-v4 .brand-name { font-size: 16px; font-weight: 500; }
 
 /* ---------------- buttons ----------------
    default = secondary (chip grey), .btn-primary = accent,

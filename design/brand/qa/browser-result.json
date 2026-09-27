@@ -1,0 +1,15 @@
+{
+  "passed": true,
+  "viewports": [
+    1920,
+    1280,
+    375
+  ],
+  "mobile": "existing desktop-only size guard preserved; brand shell not rendered",
+  "topbarHeight": 28,
+  "journalMarkHeight": 96,
+  "loadingMarkHeight": 120,
+  "backend": "intercepted fixture; no writes",
+  "pageErrors": [],
+  "buildPrefix": "/goose-goose-cook/"
+}

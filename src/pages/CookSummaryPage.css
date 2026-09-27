@@ -159,8 +159,11 @@
    The receipt above is by STEP; this is by PERSON. Both read the same
    run, and people want the second one afterwards: the order they worked
    in, and what each thing cost them. */
+/* The page has no flex gap (above), so the card brings its own top
+   margin: without it the card's border sat on the last ledger rule and
+   on the receipt's torn edge. 36px, the same beat as .cc-actions. */
 .cc-did {
-  margin: 0 0 24px;
+  margin: 36px 0 24px;
   padding: 20px 24px;
   border: 1px solid var(--kp-divider);
   border-radius: var(--radius-card);

@@ -2,6 +2,7 @@
 // photo and the downloadable share card.
 import { cookColorKey } from "./cooks.js";
 import { buildRunContext, cookQuipStats, pickQuips, headlineFor } from "./cookQuips.js";
+import { wordmarkGeometry } from "./wordmark.js";
 
 const MAX_PHOTO_PX = 1200;
 
@@ -168,9 +169,7 @@ export async function renderShareCard(summary) {
   }
 
   let y = photoH + 78;
-  ctx.fillStyle = "#8d8477";
-  ctx.font = "500 26px ui-monospace, Menlo, monospace";
-  ctx.fillText("KITCHEN PATH", 64, y);
+  drawWordmark(ctx, 64, y, 24, "#201e1d");
 
   y += 62;
   ctx.fillStyle = "#201e1d";
@@ -207,6 +206,27 @@ export async function renderShareCard(summary) {
   });
 
   return canvas.toDataURL("image/png");
+}
+
+// The drawn wordmark (brand pass A) with its baseline at y, from the
+// same path data as the in-app SVG, so the card needs no font load.
+function drawWordmark(ctx, x, y, cap, color) {
+  const { glyphs, stroke } = wordmarkGeometry("hand");
+  const scale = cap / 100;
+  ctx.save();
+  ctx.translate(x, y - cap);
+  ctx.scale(scale, scale);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = stroke;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const glyph of glyphs) {
+    ctx.save();
+    ctx.translate(glyph.x, 0);
+    ctx.stroke(new Path2D(glyph.d));
+    ctx.restore();
+  }
+  ctx.restore();
 }
 
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {

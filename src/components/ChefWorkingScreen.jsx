@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import chefGooseSheet from "../assets/chef-goose-schedule-loading-v1.png";
+import Wordmark from "./Wordmark.jsx";
 import "./ChefWorkingScreen.css";
 
 // Full-page beat while the chef is doing real work off screen — today
@@ -113,7 +114,10 @@ export default function ChefWorkingScreen({
 
         <div className="chef-working-ticket">
           <div className="chef-working-ticket-head">
-            <span className="chef-working-ticket-brand">KITCHEN PATH</span>
+            {/* The one brand element allowed onto paper, drawn as the
+                design has it: monoline caps (direction B), ink only,
+                because the ticket's accent belongs to the quantities. */}
+            <Wordmark variant="mono" cap={12} />
             {ticket && <span className="chef-working-ticket-meta">{ticket}</span>}
           </div>
 

@@ -1,9 +1,10 @@
-# Kitchen Path
+# Goose! Goose! Cook!
 
-React + Vite frontend, Node/Express + SQLite backend, for the Kitchen
-Path Agent hackathon build. Home is a real entry point (start/resume a
-cooking session, manage kitchens, see recent sessions) rather than
-step 0 of a wizard; a "session" then walks through conversational
+React + Vite frontend, Node/Express + SQLite backend, for the
+Goose! Goose! Cook! hackathon build (formerly Kitchen Path). Home is a
+real entry point (start/resume a cooking session, manage kitchens, see
+recent sessions) rather than step 0 of a wizard; a "session" then walks
+through conversational
 elicitation → recipe graph draft/review → cook voice binding →
 schedule preview + mode select, with live cook / diary stubbed as
 future stages.

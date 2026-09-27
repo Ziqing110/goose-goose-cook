@@ -38,7 +38,7 @@ export default function SessionKitchenSetupPage() {
       <div className="band-header">
         <div className="band-header-left">
           <div>
-            <p className="band-eyebrow">Kitchen Path Agent</p>
+            <p className="band-eyebrow">Toque</p>
             <h1>Pick a kitchen</h1>
           </div>
         </div>

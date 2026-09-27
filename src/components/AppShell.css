@@ -18,9 +18,8 @@
   border-bottom: 1px solid var(--line);
 }
 
-.brand { display: flex; align-items: center; gap: 10px; }
-.brand-mark { color: var(--accent); display: inline-flex; }
-.brand-name { font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--kp-text, var(--ink)); }
+.brand-mark { display: inline-flex; flex: 0 0 28px; }
 
 .stage-root { flex: 1; }
 
