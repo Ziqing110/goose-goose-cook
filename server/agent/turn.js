@@ -136,7 +136,7 @@ Rules:
 }
 
 /** The user message: state of the kitchen, recent talk, then the words. */
-export function buildUserMessage(snapshot, text, { shared = false, urgent = false } = {}) {
+export function buildUserMessage(snapshot, text, { shared = false, urgent = false, unnamed = false } = {}) {
   const open = (snapshot.steps || []).map((s) => ({
     id: s.id,
     label: s.label,
@@ -181,6 +181,14 @@ export function buildUserMessage(snapshot, text, { shared = false, urgent = fals
     // wrong about it quietly.
     lines.push(
       `Nobody said your name. This was let through because it sounds like trouble in the kitchen or someone asking the room for help. If it is, reply first with the one thing to do right now ("Turn the heat down, lift the lid."), under 12 words, and call a tool only if they also asked for one. Trouble means something is going wrong NOW (boiling over, burning, smoke, a spill) or they are stuck and asking. A warning or tip to someone else ("don't let the garlic burn") is not trouble. If it is not trouble, call no tool and reply with an empty string.`,
+    );
+  }
+  if (unnamed) {
+    // No name matched, but speech recognition mangles it often enough
+    // that this may still be for the goose. The model is the judge; the
+    // bar is "plainly for the assistant", and silence is the default.
+    lines.push(
+      `Nobody clearly said your name -- but speech recognition often mishears it, so this may still be meant for you. Act only if it is plainly an instruction or question for the cooking assistant: about the steps, the recipe, timing, who is doing what, or the score. Cooks talking to each other, thinking aloud, chit-chat, jokes, or anything off the cook is not for you, even if it could be read as a question -- the chit-chat rule above does not apply here. Call no tool and reply with an empty string. When in doubt, stay quiet.`,
     );
   }
   lines.push(`${snapshot.speakerName} said: "${text}"`);

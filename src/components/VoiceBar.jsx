@@ -50,6 +50,13 @@ import { voiceLog } from "../voice/voiceLog.js";
 // hint rather than a log of what you just did.
 const FEEDBACK_MS = 3500;
 
+// A nudge for pronouns and follow-ups ("did you mean co-op?" / "yes" is
+// answered client-side and never reaches this, but "no, the other one"
+// right after does) -- not a transcript. Kept small on purpose: this call
+// is billed on every unmatched utterance on every page, not once per
+// cook the way the live-cook agent's history is.
+const RECENT_HISTORY_LIMIT = 4;
+
 // How long an unanswered question stays open. Long enough to think,
 // short enough that a later "next" isn't read as an answer to something
 // asked a minute ago.
@@ -393,8 +400,15 @@ export default function VoiceBar() {
     }
     setInterpreting(true);
     let answer = null;
+    // Said and heard only -- "run" rows ("Opened the notes") are what the
+    // app did, not part of the back-and-forth this is meant to resolve.
+    const history = voiceLog
+      .all()
+      .filter((r) => r.kind === "said" || r.kind === "agent")
+      .slice(-RECENT_HISTORY_LIMIT)
+      .map((r) => ({ speaker: r.kind === "agent" ? "agent" : "them", text: r.text }));
     try {
-      answer = await interpretUtterance({ text, agentName: AGENT_NAME, route, context, commands, destinations });
+      answer = await interpretUtterance({ text, agentName: AGENT_NAME, route, context, commands, destinations, history });
     } catch (err) {
       console.info("[voice] could not interpret:", text, err.message);
     } finally {

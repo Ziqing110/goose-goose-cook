@@ -100,13 +100,18 @@ export function agentNarrate({ agentName, record }) {
  * short reply, or neither. The rewrite is a suggestion: the caller runs
  * it back through the page's matcher and asks before acting.
  *
+ * `history`, when given, is a few of the most recent lines said and
+ * heard on this page (see VoiceBar's RECENT_HISTORY_LIMIT) — kept short
+ * on purpose, since this call is billed on every unmatched utterance on
+ * every page, not once per cook.
+ *
  * @returns {Promise<{utterance: string|null, reply: string, named: boolean}>}
  */
-export function interpretUtterance({ text, agentName, route, context, commands, destinations }) {
+export function interpretUtterance({ text, agentName, route, context, commands, destinations, history }) {
   return apiRequest("/api/agent", "/interpret", {
     method: "POST",
     // A little over the server's 5s, so its readable timeout wins.
     signal: AbortSignal.timeout(7000),
-    body: JSON.stringify({ text, agentName, route, context, commands, destinations }),
+    body: JSON.stringify({ text, agentName, route, context, commands, destinations, history }),
   });
 }

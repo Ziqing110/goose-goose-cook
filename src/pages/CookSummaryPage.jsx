@@ -10,8 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { getSession, updateSession } from "../api/sessions.js";
-import { stylePhoto } from "../api/photo.js";
-import { fileToDataUrl, applyPixelArt, downloadDataUrl } from "../utils/summaryCard.js";
+import { fileToDataUrl, downloadDataUrl } from "../utils/summaryCard.js";
 import { renderShareCard } from "../utils/shareCard.js";
 import { clock, isOnPlan, planDelta, resultPlayers, summaryOutcome } from "../utils/serviceResults.js";
 import { runTimeline } from "../utils/cookTimeline.js";
@@ -236,18 +235,12 @@ export default function CookSummaryPage() {
     try {
       const photo = await fileToDataUrl(file);
       setPendingPhoto(photo);
-      setBusy("styling");
-      try {
-        // The server cuts the background out when a key is configured
-        // (see server/routes/photo.js); either way, pixelate what comes
-        // back so there's always a fun hero shot, cutout or not.
-        const result = await stylePhoto(photo, `A styled hero shot of ${summary.dish}`);
-        const styledPhoto = await applyPixelArt(result.dataUrl);
-        await saveSummary({ ...summary, photo, styledPhoto, photoSource: result.source });
-      } catch {
-        await saveSummary({ ...summary, photo, styledPhoto: null, photoSource: null });
-        setError("Styling didn't work — kept your photo as is.");
-      }
+      setBusy("photo");
+      // Shown as taken. Styling it (pixel art, then a background cutout)
+      // was tried and read worse than the photo; server/routes/photo.js
+      // is still the seam if a real image model is wired in later. Any
+      // styledPhoto an older card saved is cleared with it.
+      await saveSummary({ ...summary, photo, styledPhoto: null, photoSource: null });
     } catch (photoError) {
       setError(photoError.message || "Couldn't read that photo.");
     } finally {
@@ -294,7 +287,9 @@ export default function CookSummaryPage() {
     );
   }
 
-  const hero = pendingPhoto || summary.styledPhoto || summary.photo;
+  // The photo as taken. A styledPhoto saved by an older card (pixel art,
+  // a sticker cutout) is ignored rather than shown.
+  const hero = pendingPhoto || summary.photo;
   const versus = summary.mode === "competition";
   const date = formatDate(summary.createdAt);
   const { show: showDelta, deltaSec } = planDelta(outcome);

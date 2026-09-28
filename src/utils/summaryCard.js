@@ -97,55 +97,6 @@ export function fileToDataUrl(file, maxPx = MAX_PHOTO_PX) {
   });
 }
 
-// Bigger blocks read as chunkier, more deliberate pixel art; smaller
-// ones start to look like ordinary downscaling. 10px is a sprite you
-// can tell is a sprite on a photo this size.
-const PIXEL_BLOCK = 10;
-
-/**
- * A blocky, retro pixel-art pass over an image, alpha preserved. Runs
- * entirely on canvas — no model, no network — so it always has
- * something to apply, whether `dataUrl` is a real cutout from the
- * background-removal model or (no key configured, or the model refused)
- * the original photo untouched. See server/routes/photo.js for the
- * seam that does the cutting-out.
- */
-export function applyPixelArt(dataUrl, blockSize = PIXEL_BLOCK) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onerror = () => reject(new Error("Could not pixelate that image"));
-    img.onload = () => {
-      const w = img.width;
-      const h = img.height;
-      const cols = Math.max(1, Math.round(w / blockSize));
-      const rows = Math.max(1, Math.round(h / blockSize));
-
-      // Shrink WITH smoothing, so each tiny pixel is an honest average
-      // of the block it stands for rather than a lucky sample of it.
-      const small = document.createElement("canvas");
-      small.width = cols;
-      small.height = rows;
-      const sctx = small.getContext("2d");
-      sctx.imageSmoothingEnabled = true;
-      sctx.drawImage(img, 0, 0, cols, rows);
-
-      // Blow it back up WITHOUT smoothing, so each average lands as one
-      // crisp square instead of a blur back to where it started.
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(small, 0, 0, w, h);
-
-      // PNG, not JPEG: a background-removed cutout is transparent, and
-      // JPEG has no alpha channel to hold that.
-      resolve(canvas.toDataURL("image/png"));
-    };
-    img.src = dataUrl;
-  });
-}
-
 export function downloadDataUrl(dataUrl, filename) {
   const a = document.createElement("a");
   a.href = dataUrl;

@@ -1305,9 +1305,12 @@
   justify-content: space-between;
   gap: 24px;
   margin-top: 4px;
-  /* Right padding keeps "Start cooking" out from under the floating
-     goose, which parks in this same corner. */
-  padding: 16px var(--goose-agent-inset) 16px 22px;
+  /* "Start cooking" sits flush right, keeping clear of the floating
+     goose only by as much as the goose actually reaches in. The page is
+     capped at 1180px (plus the shell's 20px gutter), so on a wide screen
+     the goose parks in the margin outside it and needs no room here at
+     all; on a narrow one the full inset comes back. */
+  padding: 16px max(22px, calc(var(--goose-agent-inset) - (100vw - 1180px) / 2 - 20px)) 16px 22px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 14px;

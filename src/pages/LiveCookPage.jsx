@@ -964,7 +964,11 @@ export default function LiveCookPage() {
     // Trouble is the exception: "the water's boiling over, what do I
     // do?" was let through without the name precisely so it gets an
     // answer, and the model was told to reply empty if it misheard.
-    const chatter = !turn.named && !turn.urgent && !turn.calls.length;
+    //
+    // `inferred`: no name was heard, but the model read the turn and
+    // judged it was for the goose anyway (see requestTurn) -- a mangled
+    // wake word, not room talk, so its reply is said like any other.
+    const chatter = !turn.named && !turn.urgent && !turn.inferred && !turn.calls.length;
 
     // The app refused something the model asked for, and the model
     // cannot see refusals -- so its reply is written around a call that

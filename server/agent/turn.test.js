@@ -279,3 +279,13 @@ test("user message: an unnamed cry for help says why it got through", () => {
   assert.match(urgent, /empty string/);
   assert.ok(!/Nobody said your name/.test(buildUserMessage(snapshot, "Goose, status")));
 });
+
+test("user message: an unnamed turn tells the model it may be a misheard name, and to stay quiet if not", () => {
+  const msg = buildUserMessage(snapshot, "Boost, I'm done with the tofu", { unnamed: true });
+  assert.match(msg, /Nobody clearly said your name/);
+  assert.match(msg, /mishears/);
+  assert.match(msg, /empty string/);
+  // Before the words, so it frames them rather than trailing after.
+  assert.ok(msg.indexOf("Nobody clearly said") < msg.indexOf('said: "Boost'));
+  assert.ok(!/Nobody clearly said/.test(buildUserMessage(snapshot, "Goose, status")));
+});

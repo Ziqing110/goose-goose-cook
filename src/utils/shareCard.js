@@ -78,7 +78,8 @@ export async function renderShareCard({ summary, outcome, players: seats }) {
   await Promise.all(FONTS.map((f) => document.fonts.load(f).catch(() => null)));
 
   const versus = summary.mode === "competition";
-  const photoUrl = summary.styledPhoto || summary.photo;
+  // The photo as taken, same as the journal page shows it.
+  const photoUrl = summary.photo;
   const avatarUrls = seats.map((p) => (p.cook?.avatar ? chefAvatar(p.cook.avatar).src : null));
   const [photo, head, ...avatars] = await Promise.all([loadImage(photoUrl), loadImage(sHead), ...avatarUrls.map(loadImage)]);
   const players = seats.map((p, i) => ({

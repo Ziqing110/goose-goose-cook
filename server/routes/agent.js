@@ -123,12 +123,22 @@ agentRouter.post("/narrate", async (req, res) => {
  * re-matches it and asks before acting. See agent/interpret.js.
  */
 agentRouter.post("/interpret", async (req, res) => {
-  const { text, agentName, route, context, commands, destinations } = req.body || {};
+  const { text, agentName, route, context, commands, destinations, history } = req.body || {};
   const said = String(text ?? "").trim().slice(0, MAX_TEXT_CHARS);
   if (!said || !agentName || !Array.isArray(commands)) {
     return res.status(400).json({ error: "text, agentName and commands are required." });
   }
   const strings = (list, max) => (Array.isArray(list) ? list.slice(0, max).map((x) => String(x).slice(0, 300)) : []);
+  // Capped short here too, not just on the client: this is a nudge for
+  // pronouns and follow-ups, not a transcript, and the client's own cap
+  // is not something the server should have to trust.
+  const MAX_HISTORY = 4;
+  const cleanHistory = Array.isArray(history)
+    ? history.slice(-MAX_HISTORY).map((h) => ({
+        speaker: String(h?.speaker ?? "them").slice(0, 20),
+        text: String(h?.text ?? "").slice(0, 200),
+      })).filter((h) => h.text)
+    : [];
   try {
     return res.json(
       await requestInterpretation({
@@ -145,6 +155,7 @@ agentRouter.post("/interpret", async (req, res) => {
           patterns: strings(c?.patterns, 6),
         })),
         destinations: strings(destinations, 12),
+        history: cleanHistory,
       }),
     );
   } catch (err) {
