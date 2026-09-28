@@ -19,7 +19,7 @@ import "./VoiceBindingPage.css";
 import { askGoose, registerVoiceCommands } from "../utils/voicePageCommands.js";
 import { audioTap } from "../voice/audioTap.js";
 import { speechActivity } from "../utils/speechActivity.js";
-import { enrollVoice, clearVoice, speakerHealth } from "../api/speaker.js";
+import { enrollVoice, clearVoice, speakerHealth, SPEAKER_SERVICE } from "../api/speaker.js";
 import { speakerLabelTap } from "../voice/speakerLabelTap.js";
 import { dominantLabel, withLabelBound } from "../utils/speakerLabels.js";
 import { ORDINAL, ordinalIndex, resolveCookRef, cleanSpokenName } from "../utils/cookVoice.js";
@@ -117,7 +117,7 @@ export default function VoiceBindingPage() {
       .then((h) => setService({ up: true, enrolled: h.enrolled || {} }))
       .catch(() => setService({ up: false, enrolled: {} }));
   useEffect(() => {
-    refreshService();
+    if (SPEAKER_SERVICE) refreshService();
   }, []);
 
   const later = (fn, ms) => {
@@ -278,9 +278,12 @@ export default function VoiceBindingPage() {
     if (heard.label) labels.push(heard.label);
     try {
       // The first line of a reading replaces the old voiceprint; the
-      // rest add to it, each its own sample.
-      if (line === 0) await clearVoice(id).catch(() => {});
-      await enrollVoice({ cookId: id, pcm: clip.pcm, rate: clip.rate });
+      // rest add to it, each its own sample. With the service disabled
+      // there is no voiceprint to keep: the lines still bind the label.
+      if (SPEAKER_SERVICE) {
+        if (line === 0) await clearVoice(id).catch(() => {});
+        await enrollVoice({ cookId: id, pcm: clip.pcm, rate: clip.rate });
+      }
     } catch (err) {
       // The speaker service isn't running. Binding still completes: the
       // live cook falls back to its speaker toggle, so nobody is stuck,
@@ -304,7 +307,7 @@ export default function VoiceBindingPage() {
     }
     stopRecording();
     setEnrollNote({ cookId: id, text: "Got your voice", tone: "is-done" });
-    refreshService();
+    if (SPEAKER_SERVICE) refreshService();
     bindCook(id, agreedLabel(labels));
   };
 
@@ -749,6 +752,11 @@ export default function VoiceBindingPage() {
             <BoundStamp bound={boundCount} total={cooks.length} nonce={stampNonce} />
           </div>
           <p className="vb-sub">Two cooks max · different names · voices stay on this device</p>
+          {!SPEAKER_SERVICE && (
+            <p className="vb-demo-banner mono" role="note">
+              Demo build: voiceprint matching is off. I tell cooks apart by the mic&rsquo;s speaker labels from your reading, or when you say who you are (&ldquo;Goose, I&rsquo;m Mia&rdquo;).
+            </p>
+          )}
           <span className="ds-aside">
             <GoosePrint />
             <span className="mono">A bird, a name, one line read out loud. That&rsquo;s how I know who&rsquo;s shouting &ldquo;done&rdquo;.</span>

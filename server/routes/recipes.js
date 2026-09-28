@@ -234,7 +234,7 @@ Rules:
 - None of the unattended kinds mean "easy". They mean the cook STARTS it and walks away. Rinsing rice is two minutes of standing at a sink, so it is hands_on even though it is easy; soaking the rinsed rice for thirty minutes is set_and_forget. If the person has to be there while it happens, it is hands_on however little skill it takes.
 - Separate "does it need watching" from "does the end moment matter". A congee needs both, so it is tended. An ice bath needs nothing in between but has to come out at eight minutes, so it is timed. Rice soaking needs neither, so it is set_and_forget and is treated as a single task done the moment it is started.
 - If the cook cannot walk away at all — a risotto that wants constant stirring, a custard that splits the moment you stop — that is hands_on for its whole duration, however long. It is not a wait that needs a lot of checking. Getting this wrong tells the plan somebody is free when they are standing at the stove.
-- Scale every material_usage amount to ${servings} servings.
+- Scale every material_usage amount to ${servings} servings, using about 500g per person as the reference portion for a dish's main ingredient (so a chicken-wing main is roughly 500g for one person, 2500g for five) — adjust for the dish, but do not drift far from that anchor without reason.
 - Respect the dietary constraint in ingredient choice. Do not add a note about it; just design around it.
 ${dishes.length > 1
   ? `- These dishes share a kitchen. Where two dishes need the IDENTICAL prep (same ingredient, same cut), mark both steps is_shareable true with the same share_key, so the work can be done once. Every other step has is_shareable false and share_key "".`
@@ -415,7 +415,7 @@ Rules:
 - Separate "does it need watching" from "does it matter when it ends". A congee needs both, so it is tended. An ice bath needs nothing in between but has to come out at eight minutes, so it is timed. Rice soaking needs neither, so it is set_and_forget.
 - If the cook cannot walk away at all — a risotto that wants constant stirring, a custard that splits the moment you stop — that is hands_on for its whole duration, however long. Getting this wrong tells the plan somebody is free when they are standing at the stove.
 - estimated_duration_sec is the step's WHOLE wall-clock length, from start to done, whatever its tending — the moments a cook actually spends on it come in the next pass and must fit inside this number.
-- Scale every material_usage amount to ${servings} servings.
+- Scale every material_usage amount to ${servings} servings, using about 500g per person as the reference portion for a dish's main ingredient (so a chicken-wing main is roughly 500g for one person, 2500g for five) — adjust for the dish, but do not drift far from that anchor without reason.
 - Respect the dietary constraint in ingredient choice. Do not add a note about it; just design around it.
 - Every material id used by any step must appear exactly once in the top-level materials list, and nothing else should appear there.`;
 }
@@ -824,7 +824,11 @@ being ten minutes late (soaking, proving, resting).
 
 Every field is required on every node. depends_on holds ids of steps in
 this dish. Every material id used by a step must also appear once in the
-top-level materials list — and nothing else should appear there.`;
+top-level materials list — and nothing else should appear there.
+
+Quantities: about 500g per person is the reference portion for a dish's
+main ingredient (400g tofu above is for 4 servings, so 100g/person —
+scale that way, not by guessing a bigger number as servings goes up).`;
 
 /** Pull a JSON object out of a reply that was not schema-constrained. */
 function extractJson(raw) {

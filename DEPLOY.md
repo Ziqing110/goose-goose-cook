@@ -98,6 +98,7 @@ the AssemblyAI dashboard afterwards.
 ## What does not ship
 
 The speaker-identification sidecar (`speaker-sidecar/`) stays local — it
-wants torch and a GPU. `src/api/speaker.js` treats every failure as "carry
-on without it", so voiceprint matching is simply absent in the deployed
-build and nothing errors.
+wants torch and a GPU. The client is gated on `VITE_SPEAKER_SERVICE=on`,
+which the deployed build never sets, so it makes no `/speaker` calls at
+all; the voice-binding page shows a banner saying voiceprints are off and
+turns are attributed by diarization label, "I'm <name>", or the toggle.

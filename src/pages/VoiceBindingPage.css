@@ -50,6 +50,18 @@
 .vb-title-line { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
 .vb-title-row h1 { margin: 0; font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.01em; }
 .vb-sub { margin: 0; max-width: 62ch; font-size: 13px; line-height: 18px; color: var(--ink-soft); text-wrap: pretty; }
+/* Shown when the speaker sidecar is disabled (the deployed demo). */
+.vb-demo-banner {
+  margin: 6px 0 0;
+  max-width: 62ch;
+  padding: 6px 10px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--ink);
+  text-wrap: pretty;
+}
 
 /* The tally, stamped on at a slant. `.anim` is only added once the
    count has actually moved, so it does not replay on first paint. */
