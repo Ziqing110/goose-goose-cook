@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { matchStepName } from "./stepNameMatch.js";
+import { matchStepName, guessIfNone, stepByNumber, bareStepRef, BARE_STEP_REF_PATTERNS, stepRetryRef, STEP_RETRY_PATTERNS } from "./stepNameMatch.js";
 import { parseCommand } from "./voiceCommands.js";
 
 // The seeded Mapo Tofu board. Two steps mention tofu and two start with
@@ -46,6 +46,76 @@ test("a shared first word is not enough to pick one", () => {
 test("nothing said, nothing matched", () => {
   assert.equal(match("").stepId, null);
   assert.equal(match("the").confidence, "none");
+});
+
+// --- guessIfNone: a friendlier fallback for a form field --------------
+
+test("guessIfNone leaves an exact match alone", () => {
+  assert.deepEqual(guessIfNone(match("mince garlic"), (id) => BOARD[id]), match("mince garlic"));
+});
+
+test("guessIfNone leaves an already-confirming match alone", () => {
+  // Coverage of everything said, but not the whole label -- matchStepName
+  // already asks about this one; guessIfNone has nothing to add.
+  const confirm = match("mince garlic please open it");
+  assert.equal(confirm.confidence, "confirm");
+  assert.deepEqual(guessIfNone(confirm, (id) => BOARD[id]), confirm);
+});
+
+test("guessIfNone turns a weak or ambiguous none into its own best guess", () => {
+  const labelOf = (id) => BOARD[id];
+  // Two steps tie on "the tofu" -- a wrong guess here costs a "no", not
+  // a mis-credited task, so it takes the first rather than giving up.
+  const tofu = guessIfNone(match("the tofu"), labelOf);
+  assert.equal(tofu.confidence, "confirm");
+  assert.ok(["tofu_cut", "tofu_blanch"].includes(tofu.stepId));
+  assert.equal(tofu.label, labelOf(tofu.stepId));
+});
+
+test("guessIfNone still gives up on a word nothing shares", () => {
+  const r = guessIfNone(match("xyzzy"), (id) => BOARD[id]);
+  assert.equal(r.confidence, "none");
+  assert.equal(r.stepId, null);
+});
+
+// --- stepByNumber: naming a candidate by its on-screen number ---------
+
+test("stepByNumber resolves 'step N' / 'step number N' / 'number N', digits or words", () => {
+  const numberOf = (id) => String(IDS.indexOf(id) + 1).padStart(2, "0"); // 01, 02, ...
+  const labelOf = (id) => BOARD[id];
+  for (const said of ["step 2", "step 02", "step number 2", "number 2", "step two"]) {
+    const r = stepByNumber(said, IDS, labelOf, numberOf);
+    assert.equal(r?.confidence, "exact", said);
+    assert.equal(r?.stepId, IDS[1], said);
+  }
+});
+
+test("stepByNumber resolves an ordinal before 'step' -- 'the second step', not 'step two'", () => {
+  const numberOf = (id) => String(IDS.indexOf(id) + 1).padStart(2, "0");
+  const labelOf = (id) => BOARD[id];
+  for (const said of ["the second step", "second step", "the 2nd step", "2nd step"]) {
+    const r = stepByNumber(said, IDS, labelOf, numberOf);
+    assert.equal(r?.confidence, "exact", said);
+    assert.equal(r?.stepId, IDS[1], said);
+  }
+  // Past twelve, where NUMBER_WORDS (cardinals) stops but a recipe
+  // doesn't -- the board fixture has six steps, so "sixth" is its last.
+  const r = stepByNumber("the sixth step", IDS, labelOf, numberOf);
+  assert.equal(r.confidence, "exact");
+  assert.equal(r.stepId, IDS[5]);
+});
+
+test("stepByNumber is null (not none) for anything that isn't a number reference", () => {
+  const numberOf = (id) => String(IDS.indexOf(id) + 1).padStart(2, "0");
+  assert.equal(stepByNumber("mince garlic", IDS, (id) => BOARD[id], numberOf), null);
+  assert.equal(stepByNumber("", IDS, (id) => BOARD[id], numberOf), null);
+});
+
+test("stepByNumber reports none for a number off the board, not a guess", () => {
+  const numberOf = (id) => String(IDS.indexOf(id) + 1).padStart(2, "0");
+  const r = stepByNumber("step 99", IDS, (id) => BOARD[id], numberOf);
+  assert.equal(r.confidence, "none");
+  assert.equal(r.stepId, null);
 });
 
 // Straight from the recordings: every one of these is a real transcript.
@@ -112,4 +182,48 @@ test("Chinese does not dilute an English step match", () => {
   // match under the floor — the same way the agent's name used to.
   const r = parseCommand("Goose, 蒜蓉 done with the garlic", ctx);
   assert.equal(r.stepId, "mince_garlic");
+});
+
+// --- bareStepRef: answering a failed "which step?" with just the number ---
+
+test("bareStepRef resolves a number or ordinal with no framing at all", () => {
+  const numberOf = (id) => String(IDS.indexOf(id) + 1).padStart(2, "0");
+  const labelOf = (id) => BOARD[id];
+  for (const said of ["2", "two", "second", "the second", "2nd", "the 2nd"]) {
+    const r = bareStepRef(said, IDS, labelOf, numberOf);
+    assert.equal(r?.confidence, "exact", said);
+    assert.equal(r?.stepId, IDS[1], said);
+  }
+});
+
+test("bareStepRef is null for ordinary words, so it never swallows an unrelated command", () => {
+  const numberOf = (id) => String(IDS.indexOf(id) + 1).padStart(2, "0");
+  const labelOf = (id) => BOARD[id];
+  for (const said of ["cancel", "mince garlic", "the tofu one", ""]) {
+    assert.equal(bareStepRef(said, IDS, labelOf, numberOf), null, said);
+  }
+});
+
+test("BARE_STEP_REF_PATTERNS match exactly what bareStepRef resolves, whole-utterance only", () => {
+  const hear = (text) => BARE_STEP_REF_PATTERNS.some((p) => p.test(text));
+  assert.ok(hear("second"));
+  assert.ok(hear("2"));
+  assert.ok(!hear("cancel"));
+  // Whole-utterance, not a fragment: "second" inside a real sentence
+  // isn't this pattern's job -- stepByNumber/matchStepName own that.
+  assert.ok(!hear("runs after the second step"));
+});
+
+test("stepRetryRef and STEP_RETRY_PATTERNS answer a follow-up either framed or bare", () => {
+  const numberOf = (id) => String(IDS.indexOf(id) + 1).padStart(2, "0");
+  const labelOf = (id) => BOARD[id];
+  const hear = (text) => STEP_RETRY_PATTERNS.some((p) => p.test(text));
+  for (const said of ["step 2", "the second step", "2", "second"]) {
+    assert.ok(hear(said), said);
+    const r = stepRetryRef(said, IDS, labelOf, numberOf);
+    assert.equal(r?.confidence, "exact", said);
+    assert.equal(r?.stepId, IDS[1], said);
+  }
+  assert.ok(!hear("cancel"));
+  assert.equal(stepRetryRef("cancel", IDS, labelOf, numberOf), null);
 });

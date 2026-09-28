@@ -201,15 +201,24 @@ test("Add Task dialog matches task fields, equipment, dependencies, submit, and 
   assertMatches(ADD_STEP_VOICE.name, ["call it Toast seeds", "name it Toast seeds", "for Toast seeds"]);
   assertMatches(ADD_STEP_VOICE.duration(NUMBER_TOKEN), [
     "set duration to four minutes", "set the time to four minute", "make it four minutes", "four minutes",
+    "set duration to 30 seconds", "make it 30 seconds", "30 seconds", "one second",
   ]);
   assertMatches(ADD_STEP_VOICE.difficulty, [
     "difficulty low", "set difficulty to medium", "make it high", "make it low difficulty",
   ]);
-  assertMatches(ADD_STEP_VOICE.phase, ["phase prep", "set phase to cook", "mark it plate", "mark it as prep"]);
+  assertMatches(ADD_STEP_VOICE.phase, [
+    "phase prep", "set phase to cook", "mark it plate", "mark it as prep",
+    "make it cook", "make it as plate", "prep phase", "cook phase", "plate phase",
+    // "mark it X" heard by the recogniser as "market X" -- confirmed live.
+    "market cook", "market it cook", "market as prep",
+  ]);
   for (const [word, article] of [["cutting board", "a"], ["stove burner", "a"], ["wok", "a"], ["pot", "a"], ["oven", "an"]]) {
     const { on, off } = ADD_STEP_VOICE.equipment(word, article);
-    assertMatches(on, [`add ${article} ${word}`, `with the ${word}`, `${word} on`]);
-    assertMatches(off, [`remove ${article} ${word}`, `drop the ${word}`, `without ${article} ${word}`, `${word} off`]);
+    assertMatches(on, [`add ${article} ${word}`, `with the ${word}`, `${word} on`, `I need ${article} ${word}`, `we need the ${word}`, `needs ${article} ${word}`]);
+    assertMatches(off, [
+      `remove ${article} ${word}`, `drop the ${word}`, `without ${article} ${word}`, `${word} off`,
+      `I don't need ${article} ${word}`, `we dont need the ${word}`, `doesn't need ${article} ${word}`,
+    ]);
   }
   assertCapture(ADD_STEP_VOICE.after, "runs after Dice onion", "dice onion");
   assertCapture(ADD_STEP_VOICE.after, "run after Dice onion", "dice onion");
@@ -217,6 +226,18 @@ test("Add Task dialog matches task fields, equipment, dependencies, submit, and 
   assertCapture(ADD_STEP_VOICE.after, "waiting on Dice onion", "dice onion");
   assertCapture(ADD_STEP_VOICE.before, "runs before Dice onion", "dice onion");
   assertCapture(ADD_STEP_VOICE.before, "run before Dice onion", "dice onion");
+  // "Unlocks next" is the field's actual on-screen label -- said from
+  // reading the screen, not the old "runs before" wording underneath it.
+  assertCapture(ADD_STEP_VOICE.before, "unlock Dice onion next", "dice onion");
+  assertCapture(ADD_STEP_VOICE.before, "unlocks Dice onion", "dice onion");
+  // The picker button's own label under each field, read verbatim.
+  assertCapture(ADD_STEP_VOICE.after, "add a step that comes before Dice onion", "dice onion");
+  assertCapture(ADD_STEP_VOICE.after, "add a task that comes before Dice onion", "dice onion");
+  assertCapture(ADD_STEP_VOICE.before, "add a step that comes after Dice onion", "dice onion");
+  assertCapture(ADD_STEP_VOICE.before, "add the second step that comes after Dice onion", "dice onion");
+  assertCapture(ADD_STEP_VOICE.material, "add material soy sauce", "soy sauce");
+  assertCapture(ADD_STEP_VOICE.material, "add a material soy sauce", "soy sauce");
+  assertCapture(ADD_STEP_VOICE.material, "add soy sauce as a material", "soy sauce");
   assertMatches(ADD_STEP_VOICE.submit, [
     "add it to the board", "add this to the board", "add the task to the board", "add the task", "create the step", "that's it",
   ]);
@@ -225,13 +246,13 @@ test("Add Task dialog matches task fields, equipment, dependencies, submit, and 
 
 test("Edit Step dialog matches rename, shared fields, dependency removal, delete, save, and cancel", () => {
   assertMatches(EDIT_STEP_VOICE.name, ["call it Dice onion", "rename it Dice onion", "name it Dice onion"]);
-  assertMatches(EDIT_STEP_VOICE.duration(NUMBER_TOKEN), ["set duration to four minutes", "make it four minutes", "four minutes"]);
+  assertMatches(EDIT_STEP_VOICE.duration(NUMBER_TOKEN), ["set duration to four minutes", "make it four minutes", "four minutes", "45 seconds"]);
   assertMatches(EDIT_STEP_VOICE.difficulty, ["set difficulty high", "make it low"]);
-  assertMatches(EDIT_STEP_VOICE.phase, ["set phase cook", "mark it as plate"]);
+  assertMatches(EDIT_STEP_VOICE.phase, ["set phase cook", "mark it as plate", "make it prep", "cook phase", "market cook"]);
   for (const [word, article] of [["cutting board", "a"], ["stove burner", "a"], ["wok", "a"], ["pot", "a"], ["oven", "an"]]) {
     const { on, off } = EDIT_STEP_VOICE.equipment(word, article);
-    assertMatches(on, [`add ${article} ${word}`, `${word} on`]);
-    assertMatches(off, [`remove ${article} ${word}`, `without ${article} ${word}`, `${word} off`]);
+    assertMatches(on, [`add ${article} ${word}`, `${word} on`, `I need ${article} ${word}`]);
+    assertMatches(off, [`remove ${article} ${word}`, `without ${article} ${word}`, `${word} off`, `I don't need ${article} ${word}`]);
   }
   assertCapture(EDIT_STEP_VOICE.after, "runs after Dice onion", "dice onion");
   assertCapture(EDIT_STEP_VOICE.after, "waiting on Dice onion", "dice onion");
@@ -239,6 +260,8 @@ test("Edit Step dialog matches rename, shared fields, dependency removal, delete
   assertCapture(EDIT_STEP_VOICE.stopWaiting, "remove Dice onion from runs after", "dice onion");
   assertCapture(EDIT_STEP_VOICE.stopWaiting, "don't wait on Dice onion", "dice onion");
   assertCapture(EDIT_STEP_VOICE.stopWaiting, "dont wait on Dice onion", "dice onion");
+  assertCapture(EDIT_STEP_VOICE.before, "unlock Dice onion next", "dice onion");
+  assertCapture(EDIT_STEP_VOICE.material, "add material soy sauce", "soy sauce");
   assertMatches(EDIT_STEP_VOICE.delete, ["delete this step", "delete it", "remove this step"]);
   assertMatches(EDIT_STEP_VOICE.save, ["save the step", "save it", "that's it"]);
   assertMatches(EDIT_STEP_VOICE.cancel, ["cancel", "close this step", "close the editor", "never mind"]);

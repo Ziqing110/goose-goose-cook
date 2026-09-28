@@ -43,6 +43,20 @@ export function spokenNumber(token) {
 /** The number-word alternation, for building command patterns. */
 export const NUMBER_TOKEN = NUMBER_PATTERN;
 
+/**
+ * A spoken amount and unit ("30", "seconds") as minutes, decimal, or
+ * null if the amount didn't parse. A duration field is minutes only —
+ * there's no separate seconds input to hold the unit itself — so
+ * "seconds" is converted down to fit that one field rather than kept as
+ * its own unit any further than this. `unit` defaults to minutes so a
+ * caller whose grammar doesn't capture a unit at all still works.
+ */
+export function spokenMinutes(amountToken, unit = "minutes") {
+  const n = spokenNumber(amountToken);
+  if (n === null) return null;
+  return /^s/i.test(unit) ? n / 60 : n;
+}
+
 const confirmed = (value, display) => ({ value, display, status: "confirmed" });
 const unsure = (value, display, heard) => ({ value, display, status: "low-confidence", heard });
 
