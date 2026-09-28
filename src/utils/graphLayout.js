@@ -332,14 +332,21 @@ export function extractSharedSteps(recipeGraphs) {
   return { recipes, sharedSteps: remappedSharedSteps };
 }
 
-export function diffGraphs(draft, approved) {
-  const draftById = Object.fromEntries(draft.nodes.map((n) => [n.id, n]));
-  const approvedById = Object.fromEntries(approved.nodes.map((n) => [n.id, n]));
+/**
+ * What changed between two node-graphs, by id: present in `b` but not
+ * `a` is added, present in `a` but not `b` is removed, present in both
+ * but not byte-identical is edited. Generic on purpose — Inventory
+ * calls it with (draft, working) for a live summary; nothing here
+ * assumes either side is a frozen snapshot.
+ */
+export function diffGraphs(a, b) {
+  const aById = Object.fromEntries(a.nodes.map((n) => [n.id, n]));
+  const bById = Object.fromEntries(b.nodes.map((n) => [n.id, n]));
 
-  const added = approved.nodes.filter((n) => !draftById[n.id]).map((n) => n.label);
-  const removed = draft.nodes.filter((n) => !approvedById[n.id]).map((n) => n.label);
-  const edited = approved.nodes
-    .filter((n) => draftById[n.id] && JSON.stringify(draftById[n.id]) !== JSON.stringify(n))
+  const added = b.nodes.filter((n) => !aById[n.id]).map((n) => n.label);
+  const removed = a.nodes.filter((n) => !bById[n.id]).map((n) => n.label);
+  const edited = b.nodes
+    .filter((n) => aById[n.id] && JSON.stringify(aById[n.id]) !== JSON.stringify(n))
     .map((n) => n.label);
 
   return { added, removed, edited };

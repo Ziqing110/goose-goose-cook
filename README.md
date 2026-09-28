@@ -128,8 +128,10 @@ speaking, not after a fixed time.
   debounced effect syncs to the API in the background. One in-progress
   session at a time; past sessions show as history on Home.
 - **Navigation, the recipe graph editor** (phase-grouped step cards,
-  drawer step editor, dependency-graph view, add/delete steps,
-  draft-vs-approved diff) — fully working. A session can hold more
+  drawer step editor, dependency-graph view, add/delete steps) — fully
+  working, always editable (there's no separate approve/lock step —
+  "Continue to the cooks" snapshots the plan and moves on, and coming
+  back to revise it is just navigating back). A session can hold more
   than one dish: steps from every dish render merged into the same
   phase columns and dependency graph, tagged by dish.
 - **Voice input** (`src/components/VoiceInput.jsx`, `VoiceBar.jsx`,

@@ -75,14 +75,15 @@ removed.
 |---|---|
 | Mark an ingredient out: `no [more] <INGREDIENT>`, `out of <INGREDIENT>`, `<INGREDIENT> is out`, `don't/dont have [any] <INGREDIENT>`, `mark <INGREDIENT> out`. | `src/utils/pageVoiceGrammar.test.js` checks all forms with a multiword ingredient. |
 | Mark an ingredient on hand: `got`/`have`/`found [the/some] <INGREDIENT>` (a subject is fine: `I have ginger`), `add [back] <INGREDIENT> [back]`, `put/bring <INGREDIENT> back`, `<INGREDIENT> back`, `<INGREDIENT> is back/on hand`, `mark <INGREDIENT> on hand`; `put it back` for the last one marked out. | `src/utils/pageVoiceGrammar.test.js` checks all forms with a multiword ingredient. |
+| Mark every ingredient on hand: `everything's on hand`, `everything is on hand`, `mark everything on hand`, `all on hand` (only while something is out). | `src/utils/pageVoiceGrammar.test.js` checks every phrase; `scripts/voice-commands-e2e.mjs` checks the button and the effect. |
 | Add a task or step: `add a task`, `add another task`, `add a step`, `add another step`. Optionally add `to`, `called`, `named`, or `for` plus a task name; place it with `before <STEP>` or `between <STEP> and <STEP>`. | `src/utils/pageVoiceGrammar.test.js` checks each command, connector, and placement parse. `src/utils/stepNameMatch.test.js` covers shared step-name resolution. |
 | Show ingredients: `show/open/see/view [me] [the] ingredients`, `switch [back] to`, `go [back] to`, `back to`, `take me to`, `jump to` `[the] ingredients`, `ingredients tab/list`, `ingredients`. Show the board: the same verbs with `recipe graph/recipe board/graph/board`, `recipe graph`, `graph tab`. | `src/utils/pageVoiceGrammar.test.js` checks both tabs and their phrase variants. |
 | Zoom: `zoom in`, `zoom closer`, `zoom in closer`, `zoom out`. Fit: `fit [the] board/graph`, `reset zoom`, `zoom to fit`. | `src/utils/pageVoiceGrammar.test.js` checks Inventory zoom phrases. `scripts/voice-commands-e2e.mjs` checks the actual zoom effect on Schedule. |
 | Pan or scroll: `scroll/pan [to the] right`, `scroll/pan [to the] left`, `scroll/pan up`, `scroll/pan down`. | `src/utils/pageVoiceGrammar.test.js` checks every direction and verb. |
 | Find a step: `scroll to [the] step <STEP>`, `find [the] step <STEP>`, `show me [the] step <STEP>`. Close matches ask for confirmation. | `src/utils/pageVoiceGrammar.test.js` checks all phrase forms and captures the step name. `src/utils/stepNameMatch.test.js` tests step-name matching. |
-| Open a step for editing while the plan is unapproved: `open [the] step <STEP>`, `edit [the] step <STEP>`, `select [the] step <STEP>`. Close matches ask for confirmation. | `src/utils/pageVoiceGrammar.test.js` checks all phrase forms and captures the step name. `src/utils/stepNameMatch.test.js` tests step-name matching. |
-| Approve with `approve` (no confirmation; refused with the reason while a step is blocked). After approval, use `revise`, `unapprove`, or `go back to editing`. | `src/utils/pageVoiceGrammar.test.js` checks the action phrases; `scripts/voice-commands-e2e.mjs` checks approval, the refusal and the locked checklist. |
+| Open a step for editing: `open [the] step <STEP>`, `edit [the] step <STEP>`, `select [the] step <STEP>`. Close matches ask for confirmation. | `src/utils/pageVoiceGrammar.test.js` checks all phrase forms and captures the step name. `src/utils/stepNameMatch.test.js` tests step-name matching. |
 | Remove blocked steps: `remove [the] blocked step(s)`, `drop [the] blocked step(s)` (confirmation required). | `src/utils/pageVoiceGrammar.test.js` checks the phrase variants. |
+| Move on to the cooks: `continue`, `continue to the cooks`, `move on`, `carry on`, `next step` (refused while a step is blocked, no confirmation needed — the board is never locked, so there's nothing to undo). | `src/utils/pageVoiceGrammar.test.js` checks the phrase variants; `scripts/voice-commands-e2e.mjs` checks it lands on Voice Binding. |
 | When an equipment notice is shown: `edit the kitchen profile`, `edit the kitchen`, `cook it anyway`. The edit command opens the [Kitchen Profile dialog](#kitchen-profile-dialog). | `src/utils/pageVoiceGrammar.test.js` checks all phrases and the Kitchen Profile matcher. |
 
 ### Add Task dialog
@@ -200,4 +201,4 @@ Step names are resolved against steps the current cook can act on.
   voice. `server/agent/turn.test.js` tests tool validation, not generated LLM
   wording.
 - There is no generic “next page” command. Forward navigation uses the page’s
-  own command, such as “approve” or “go live”.
+  own command, such as “continue to the cooks” or “go live”.

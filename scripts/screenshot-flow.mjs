@@ -108,10 +108,8 @@ await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
 await page.waitForTimeout(400);
 await shot("inventory-board");
 
-await click(/Approve the plan/);
-await page.waitForTimeout(800);
-await shot("inventory-approved");
-
+// No separate approve/lock step — one button snapshots the plan and
+// moves straight on.
 await click(/Continue to the cooks/);
 await page.waitForTimeout(600);
 await shot("voice-binding-empty");

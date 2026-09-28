@@ -110,22 +110,22 @@ While the board is still being written nothing is live.
 
 | Say | Does |
 |---|---|
-| "no ginger", "we're out of ginger", "ginger is out / gone", "I don't have any ginger", "mark ginger out" | Marks that ingredient out (not once approved) |
+| "no ginger", "we're out of ginger", "ginger is out / gone", "I don't have any ginger", "mark ginger out" | Marks that ingredient out |
 | "got ginger", "I have ginger", "found ginger", "add ginger back", "put the ginger back", "ginger is back / on hand", "mark ginger on hand" | Back on hand (says so if it already is) |
 | "put it back", "add it back", "undo that" | Puts the last ingredient marked out back on hand |
+| "everything's on hand", "mark everything on hand", "all on hand" | Clears every "out" (only while something is out) |
 | "show ingredients", "back to the ingredients", "go back to ingredients", "switch to ingredients", "ingredients tab", "ingredients" | Ingredients tab |
 | "show the recipe graph / board", "recipe graph", "back to the graph", "switch to the board", "graph tab" | Graph tab |
 | "zoom in", "zoom closer" · "zoom out" · "fit the board / graph", "reset zoom", "zoom to fit" | Zoom |
 | "scroll / pan left / right / up / down" | Pans the graph |
 | "scroll to step X", "find the step X", "show me the step X" | Scrolls to a step |
-| "open / edit / select the step X" | Opens the step editor (not once approved) |
+| "open / edit / select the step X" | Opens the step editor |
 | "add a task", "add a step" | Opens the add-task form |
 | "add a task to toast the sesame", "…called / named / for X" | Pre-fills the name |
 | "add a task … before X" | Pre-fills "runs before X" |
 | "add a task … between X and Y" | Pre-fills both positions |
-| "approve", "approve the plan" | Approves and locks the board and the ingredient checklist, no yes/no (refused, with the reason, while a step is blocked) |
-| "revise", "unapprove", "go back to editing" | Unlocks (only after approval) |
 | "remove / drop the blocked steps" | *Asks*, then deletes them (only when steps are blocked) |
+| "continue", "continue to the cooks", "move on", "carry on", "next step" | Moves on to Cooks (refused while a step is blocked) |
 | "edit the kitchen (profile)" | Opens the kitchen form (only when the kitchen falls short) |
 | "cook it anyway" | Dismisses the shortfall notice (same condition) |
 
@@ -278,5 +278,5 @@ Intents are tried in that priority order, so "we're done" never counts as one st
 
 - **Recipe-graph step names** are matched by similarity, so near-identical steps
   ("cut the yellow onion" / "cut the red onion") will often ask rather than act.
-- **Inventory "approve"** and **Voice Binding "remove"** ask a generic question
-  rather than naming the target.
+- **Inventory "remove the blocked steps"** and **Voice Binding "remove"** ask a
+  generic question rather than naming the target.

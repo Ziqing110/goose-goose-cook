@@ -15,10 +15,10 @@ import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { useSessionRecipes } from "../state/useSessionRecipes.js";
 import { mergeRecipesForDisplay, cyclicDependencyIds, cloneGraph } from "../utils/graphLayout.js";
+import PlanChangesPanel from "../components/PlanChangesPanel.jsx";
 import { missingEquipment, EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
 import RecipeBoard from "../components/RecipeBoard.jsx";
 import AddStepPanel from "../components/AddStepPanel.jsx";
-import ApprovedPanel from "../components/ApprovedPanel.jsx";
 import DeleteStepDialog from "../components/DeleteStepDialog.jsx";
 import ImpactList, { ImpactMark } from "../components/ImpactList.jsx";
 import Icon from "../components/Icon.jsx";
@@ -227,7 +227,7 @@ function CategoryMark({ category }) {
   );
 }
 
-function IngredientRow({ item, onToggle, statusLineFor, dishTitles, delay, locked = false }) {
+function IngredientRow({ item, onToggle, statusLineFor, dishTitles, delay }) {
   const onHand = !item.out;
   const [opened, setOpened] = useState(false);
   const expanded = !onHand || opened;
@@ -242,7 +242,7 @@ function IngredientRow({ item, onToggle, statusLineFor, dishTitles, delay, locke
   return (
     <li className={`inv-row ${onHand ? "" : "is-out"} ${expanded ? "is-open" : ""}`} style={{ animationDelay: `${delay}ms` }}>
       <div className="inv-row-head">
-        <Checkbox checked={onHand} label={item.label} onChange={onToggle} disabled={locked} />
+        <Checkbox checked={onHand} label={item.label} onChange={onToggle} />
         <span className="inv-row-main">
           <span className="inv-row-title-line" onClick={toggleOpen}>
             <span className="inv-row-title">{item.label}</span>
@@ -379,7 +379,7 @@ export default function InventoryPage() {
   );
 
   // The same steps the ingredients are folded under, as a board.
-  const { working, draft, approved } = useMemo(() => mergeRecipesForDisplay(recipes, sharedSteps), [recipes, sharedSteps]);
+  const { working, draft } = useMemo(() => mergeRecipesForDisplay(recipes, sharedSteps), [recipes, sharedSteps]);
   // Memoised rather than defaulted inline: `working.nodes || []` hands
   // back a fresh array on every render whenever nodes is empty, which
   // would rebuild everything keyed on it for no reason.
@@ -450,13 +450,12 @@ export default function InventoryPage() {
   // the editor), so the editor sees the catalog plus this run's own.
   const materialsInfo = { ...(catalog || {}), ...(working.custom_materials || {}) };
 
-  const editingNode = !approved && panel?.mode === "edit" ? nodeById[panel.id] || null : null;
+  const editingNode = panel?.mode === "edit" ? nodeById[panel.id] || null : null;
   const selectedId = editingNode?.id || null;
-  const panelOpen = !approved && (panel?.mode === "add" || Boolean(editingNode));
+  const panelOpen = panel?.mode === "add" || Boolean(editingNode);
 
   const closePanel = () => setPanel(null);
   const selectNode = (id) => {
-    if (approved) return;
     if (selectedId === id) closePanel();
     else setPanel({ mode: "edit", id });
   };
@@ -476,12 +475,9 @@ export default function InventoryPage() {
   // on the board.
   const pickImpact = (id) => {
     showTab("graph");
-    if (!approved) setPanel({ mode: "edit", id });
+    setPanel({ mode: "edit", id });
   };
 
-  // Approval is what the rest of the run reads: the schedule and the
-  // live cook run off `approved`, never `working`, so editing a step
-  // can't rewrite a plan someone is already cooking from.
   const kitchenProfile = state.kitchenProfiles.find((p) => p.id === session.kitchenProfileId) || null;
   const lacking = missingEquipment(boardNodes, kitchenProfile);
   const lackingKey = lacking.join(",");
@@ -489,7 +485,17 @@ export default function InventoryPage() {
   const stepsNeedingLacking = boardNodes.filter((n) => (n.required_equipment || []).some((e) => lacking.includes(e))).length;
   const dishIsUndoable = blockedIds.length > 0;
 
-  const approve = () => {
+  // There's no separate "approve, then revise to come back" step any
+  // more — the board is always editable, and coming back to this page
+  // (the session's own Back button, or the stage path) finds it exactly
+  // as it was left. What "Continue to the cooks" writes is still called
+  // `approved` underneath: the schedule and the live cook run off that
+  // snapshot, never off `working` directly, so a step edited later —
+  // after the cooks are already picked — can't rewrite a plan someone
+  // is mid-cook from. Every click here re-snapshots it fresh, so going
+  // back, changing a step, and continuing again carries the edit
+  // through exactly the way it looks like it should.
+  const continueToCooks = () => {
     recipes.forEach((r) =>
       dispatch({ type: "session/recipes/updateOne", payload: { recipeId: r.id, patch: { approved: cloneGraph(r.working) } } })
     );
@@ -497,37 +503,7 @@ export default function InventoryPage() {
       dispatch({ type: "session/sharedSteps/updateOne", payload: { sharedStepId: st.id, patch: { approved: cloneGraph(st.working) } } })
     );
     setPanel(null);
-  };
-
-  // The voice equivalent of the "Approve the plan" button, in the
-  // same words printed on it. It doesn't ask first: approving only
-  // locks the board, it doesn't leave the page, and "revise" undoes it
-  // in one word — a yes/no on top of that was a second approval. It
-  // refuses while a step is blocked, exactly as the button does when
-  // disabled, and says why rather than quietly doing nothing.
-  useEffect(() => {
-    // Nothing to approve while the board is still being generated.
-    if (recipes.length === 0) return undefined;
-    return registerVoiceCommands([
-      {
-        phrases: INVENTORY_VOICE.approve,
-        run: () => {
-          if (approved) return "Already approved. Say “continue” to pick the cooks.";
-          if (dishIsUndoable) {
-            const n = blockedIds.length;
-            return `Can't approve yet — ${n} ${n === 1 ? "step is" : "steps are"} blocked. Put the missing ingredients back, or say “remove the blocked steps.”`;
-          }
-          approve();
-          return "Approved. Say “continue” to pick the cooks, or “revise” to change it.";
-        },
-      },
-    ]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [approved, dishIsUndoable, blockedIds, recipes.length]);
-
-  const revise = () => {
-    recipes.forEach((r) => dispatch({ type: "session/recipes/updateOne", payload: { recipeId: r.id, patch: { approved: null } } }));
-    sharedSteps.forEach((st) => dispatch({ type: "session/sharedSteps/updateOne", payload: { sharedStepId: st.id, patch: { approved: null } } }));
+    navigate("/session/voice-binding");
   };
 
   // The escape hatch that makes the gate fair: drop what can't be done
@@ -573,9 +549,9 @@ export default function InventoryPage() {
   }, [beat]);
 
   useEffect(() => {
-    // Nothing on this page takes voice yet while the board is still being
-    // written — advertising ingredient/approve commands over an empty
-    // page is the same bug the "approve" gate above exists to avoid.
+    // Nothing on this page takes voice yet while the board is still
+    // being written — advertising ingredient commands over an empty
+    // page would promise something there's nothing to act on.
     if (!hasDishes || loading) {
       dispatch({ type: "voice/setHint", payload: { hint: { line: "Writing your recipes — one moment.", sub: null } } });
       return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
@@ -583,24 +559,18 @@ export default function InventoryPage() {
     dispatch({
       type: "voice/setHint",
       payload: {
-        hint: approved
-          ? { line: "Approved. Say “continue” to pick the cooks.", sub: "Or “revise” to change the plan." }
-          : {
-              line: "Tell me what you're out of — say “no ginger.”",
-              sub: "Changed your mind? Say “add ginger back.” You can also say “add a task.”",
-            },
+        hint: {
+          line: "Tell me what you're out of — say “no ginger.”",
+          sub: "Changed your mind? Say “add ginger back.” You can also say “add a task.”",
+        },
       },
     });
     return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
-  }, [dispatch, hasDishes, loading, approved]);
+  }, [dispatch, hasDishes, loading]);
 
-  // What's on hand is part of the plan: once it's approved the checklist
-  // is as locked as the board, and revising unlocks both. Leaving it
-  // editable let an approved plan pick up blocked steps behind its back.
-  const APPROVED_LOCK = "The plan's approved — say “revise” to change what's on hand.";
+  const hasOut = outMaterialIds.length > 0;
   const setOut = (ids) => dispatch({ type: "session/update", payload: { outMaterialIds: ids } });
   const toggle = (id) => {
-    if (approved) return;
     const next = new Set(outMaterialIds);
     next.has(id) ? next.delete(id) : next.add(id);
     setOut([...next]);
@@ -609,16 +579,15 @@ export default function InventoryPage() {
   // "got ginger" while it's already on hand should do nothing, not put
   // it back out.
   const markOut = (id) => {
-    if (approved) return APPROVED_LOCK;
     if (!outMaterialIds.includes(id)) setOut([...outMaterialIds, id]);
     return undefined;
   };
   const markOnHand = (id, label) => {
-    if (approved) return APPROVED_LOCK;
     if (!outMaterialIds.includes(id)) return label ? `${label} is already on hand.` : undefined;
     setOut(outMaterialIds.filter((x) => x !== id));
     return undefined;
   };
+  const markAllOnHand = () => setOut([]);
   // The ingredient most recently marked out that is still on the list:
   // what "put it back" means. outMaterialIds is in the order they went out.
   const lastOut = () => {
@@ -630,7 +599,6 @@ export default function InventoryPage() {
     inv.ingredients.length
       ? `Ingredients: ${inv.ingredients.map((i) => `${i.label} (${outMaterialIds.includes(i.id) ? "out" : "on hand"})`).join(", ")}`
       : null,
-    approved ? "The board is approved and locked." : "The board is not approved yet.",
     blockedIds.length ? `${blockedIds.length} step(s) are blocked by missing ingredients.` : null,
     boardNodes.length ? `Steps: ${boardNodes.slice(0, 40).map((n) => n.label).join("; ")}` : null,
   ]);
@@ -646,12 +614,16 @@ export default function InventoryPage() {
         phrases: INVENTORY_VOICE.restoreLast,
         allowSubject: true,
         run: () => {
-          if (approved) return APPROVED_LOCK;
           const id = lastOut();
           if (!id) return "Nothing's marked out.";
           markOnHand(id);
           return `${labelOfMaterial(id)} — back on hand.`;
         },
+      },
+      {
+        phrases: INVENTORY_VOICE.everythingOnHand,
+        label: "Everything's on hand.",
+        run: () => hasOut && markAllOnHand(),
       },
       {
         // The button only shows on the recipe graph tab, but the command
@@ -663,7 +635,6 @@ export default function InventoryPage() {
         // too.
         phrases: INVENTORY_VOICE.addTask,
         run: (m) => {
-          if (approved) return "The plan's approved — revise it to add a task.";
           const { name, before, between } = parseAddTaskSpeech((m?.[1] || "").trim());
           showTab("graph");
 
@@ -715,7 +686,7 @@ export default function InventoryPage() {
       },
     ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasDishes, catalog, inv.ingredients, outMaterialIds, approved, boardNodes, nodeById]);
+  }, [hasDishes, catalog, inv.ingredients, outMaterialIds, hasOut, boardNodes, nodeById]);
 
   // Board-level commands: switching tabs, opening a step by name, the
   // kitchen-shortfall notice, dropping blocked steps, and un-approving.
@@ -801,26 +772,24 @@ export default function InventoryPage() {
       },
     ];
 
-    if (!approved) {
-      commands.push({
-        phrases: INVENTORY_VOICE.editStep,
-        run: (m) => {
-          showTab("graph");
-          const said = (m?.[1] || "").trim();
-          const ids = boardNodes.map((n) => n.id);
-          const labelOf = (id) => nodeById[id]?.label;
-          const match = matchStepName(said, ids, labelOf);
-          if (match.confidence === "none") return "I couldn't tell which step you meant.";
-          if (match.confidence === "exact") {
-            setPanel({ mode: "edit", id: match.stepId });
-            return `Opening “${match.label}.”`;
-          }
-          const question = `Open “${match.label}”? Say yes or no.`;
-          setPendingConfirm({ question, onYes: () => setPanel({ mode: "edit", id: match.stepId }), onNo: () => {} });
-          return question;
-        },
-      });
-    }
+    commands.push({
+      phrases: INVENTORY_VOICE.editStep,
+      run: (m) => {
+        showTab("graph");
+        const said = (m?.[1] || "").trim();
+        const ids = boardNodes.map((n) => n.id);
+        const labelOf = (id) => nodeById[id]?.label;
+        const match = matchStepName(said, ids, labelOf);
+        if (match.confidence === "none") return "I couldn't tell which step you meant.";
+        if (match.confidence === "exact") {
+          setPanel({ mode: "edit", id: match.stepId });
+          return `Opening “${match.label}.”`;
+        }
+        const question = `Open “${match.label}”? Say yes or no.`;
+        setPendingConfirm({ question, onYes: () => setPanel({ mode: "edit", id: match.stepId }), onNo: () => {} });
+        return question;
+      },
+    });
 
     if (dishIsUndoable) {
       commands.push({
@@ -850,21 +819,18 @@ export default function InventoryPage() {
       });
     }
 
-    if (approved) {
-      commands.push({
-        phrases: INVENTORY_VOICE.revise,
-        label: "Back to editing.",
-        run: () => revise(),
-      });
-      // What the "Continue to the cooks" button does, said out loud. It
-      // lands on the cooks, which is the next step of the session — the
-      // schedule is the one after that.
-      commands.push({
-        phrases: INVENTORY_VOICE.continueOn,
-        label: "On to the cooks.",
-        run: () => navigate("/session/voice-binding"),
-      });
-    }
+    // What the "Continue to the cooks" button does, said out loud. It
+    // lands on the cooks, which is the next step of the session — the
+    // schedule is the one after that. Refuses the same way the button
+    // does when a step is blocked, rather than silently doing nothing.
+    commands.push({
+      phrases: INVENTORY_VOICE.continueOn,
+      run: () => {
+        if (dishIsUndoable) return "Not yet — a step is still blocked. Remove it or restock what it needs.";
+        continueToCooks();
+        return "On to the cooks.";
+      },
+    });
 
     return registerVoiceCommands(commands);
     // fitScale as well as zoomPct: setZoomPct reads it, and at the fitted
@@ -872,7 +838,7 @@ export default function InventoryPage() {
     // registered before the board measured itself zoomed off the wrong
     // scale — "zoom in" landed on 60% instead of 5%.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasDishes, catalog, approved, boardNodes, nodeById, dishIsUndoable, blockedIds, showEquipment, kitchenProfile, lackingKey, zoomPct, fitScale, navigate]);
+  }, [hasDishes, catalog, boardNodes, nodeById, dishIsUndoable, blockedIds, showEquipment, kitchenProfile, lackingKey, zoomPct, fitScale]);
 
   // A guessed step reference — an "open X" that came back close but not
   // exact, or a "before X"/"between X and Y" task position. Same
@@ -1088,7 +1054,7 @@ export default function InventoryPage() {
             </span>
           </div>
 
-          {approved && <ApprovedPanel draft={draft} approved={approved} onRevise={revise} />}
+          <PlanChangesPanel draft={draft} working={working} />
 
           <div className={`inv-split is-${tab}`}>
             <div className="inv-main">
@@ -1120,13 +1086,7 @@ export default function InventoryPage() {
                     tab it follows. */}
                 <div className="inv-tabrow-end">
                   <span className="inv-hint">
-                    {tab === "ingredients"
-                      ? approved
-                        ? "Approved — revise the plan to change what’s on hand."
-                        : "Uncheck whatever you’re out of."
-                      : approved
-                        ? "Approved — revise the plan to change a step."
-                        : "Drag a card to move it. Click one to edit."}
+                    {tab === "ingredients" ? "Uncheck whatever you’re out of." : "Drag a card to move it. Click one to edit."}
                   </span>
                   {tab === "graph" && (coverage.blocked > 0 || coverage.atRisk > 0) && (
                     <span className={`inv-status-counter is-${coverage.blocked > 0 ? "critical" : "warning"}`} role="status">
@@ -1212,7 +1172,6 @@ export default function InventoryPage() {
                             <IngredientRow
                               key={item.id}
                               item={item}
-                              locked={Boolean(approved)}
                               onToggle={() => toggle(item.id)}
                               statusLineFor={statusLineFor}
                               dishTitles={inv.dishTitles}
@@ -1282,7 +1241,6 @@ export default function InventoryPage() {
                       onFitScale={setFitScale}
                       onLink={linkNodes}
                       onUnlink={unlinkNodes}
-                      readOnly={Boolean(approved)}
                     />
 
                     {editingNode && (
@@ -1310,7 +1268,7 @@ export default function InventoryPage() {
                       />
                     )}
 
-                    {!approved && panel?.mode === "add" && (
+                    {panel?.mode === "add" && (
                       <AddStepPanel
                         recipes={recipes}
                         nodes={boardNodes}
@@ -1337,21 +1295,17 @@ export default function InventoryPage() {
                       <span className="inv-board-count-lead">
                         {boardNodes.length} {boardNodes.length === 1 ? "step" : "steps"}
                       </span>
-                      {!approved && (
-                        <span className="inv-board-pan">Drag a card&rsquo;s side dot to link &middot; click an arrow to unlink</span>
-                      )}
+                      <span className="inv-board-pan">Drag a card&rsquo;s side dot to link &middot; click an arrow to unlink</span>
                       {panHint && <span className="inv-board-pan">{panHint}</span>}
                     </span>
 
                     <span className="inv-board-tools">
-                      {!approved && (
-                        <button type="button" className="btn inv-add-btn" aria-pressed={panel?.mode === "add"} onClick={() => setPanel({ mode: "add" })}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                            <path d="M12 5v14M5 12h14" />
-                          </svg>
-                          Add a task
-                        </button>
-                      )}
+                      <button type="button" className="btn inv-add-btn" aria-pressed={panel?.mode === "add"} onClick={() => setPanel({ mode: "add" })}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                          <path d="M12 5v14M5 12h14" />
+                        </svg>
+                        Add a task
+                      </button>
                       <button
                         type="button"
                         className="inv-zoom-step"
@@ -1403,19 +1357,24 @@ export default function InventoryPage() {
               {inv.onHandCount} / {inv.ingredients.length} ingredients on hand
             </span>
             <div className="inv-footer-actions">
-              {!approved && dishIsUndoable && (
-                <button type="button" className="btn inv-footer-secondary inv-btn-remove" onClick={dropBlockedSteps}>
+              {hasOut && (
+                <button type="button" className="btn btn-lg inv-footer-secondary" onClick={markAllOnHand}>
+                  Mark everything on hand
+                </button>
+              )}
+              {dishIsUndoable && (
+                <button type="button" className="btn btn-lg inv-footer-secondary inv-btn-remove" onClick={dropBlockedSteps}>
                   Remove the blocked {blockedIds.length === 1 ? "step" : "steps"}
                 </button>
               )}
-              {/* No arrow: it does not take you anywhere. It writes the
-                  approved graphs, and the approved panel opens underneath
-                  carrying the button that does go onward. */}
-              {!approved && (
-                <button type="button" className="btn btn-primary btn-lg" onClick={approve} disabled={dishIsUndoable}>
-                  Approve the plan
-                </button>
-              )}
+              {/* Snapshots the current graph into `approved` (what the
+                  schedule and live cook read) and moves on — see
+                  continueToCooks above for why that snapshot still
+                  happens even though there's no separate approve step
+                  to show for it any more. */}
+              <button type="button" className="btn btn-primary btn-lg btn-key" onClick={continueToCooks} disabled={dishIsUndoable}>
+                Continue to the cooks &rarr;
+              </button>
             </div>
           </div>
         </>

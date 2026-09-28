@@ -104,8 +104,6 @@
 .inv-stepbar-seg.is-blocked { background: var(--crit); }
 .inv-stepbar-legend { font-size: 12px; line-height: 16px; color: var(--ink-faint); }
 
-.inventory-page .approved-panel { margin-top: 20px; }
-
 /* ---------------- split ---------------- */
 .inv-split { display: flex; align-items: stretch; gap: 20px; margin-top: 20px; }
 .inv-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
