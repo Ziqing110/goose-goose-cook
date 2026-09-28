@@ -994,63 +994,28 @@ try {
   });
 
   await settleVoiceCommands(inventoryPage);
-  await checkVoiceBehavior("Inventory: ‘approve the plan’ locks the board at once, with no yes/no", async () => {
-    await inventoryStream.say("approve the plan");
-    // The word "Approved" is on the page three times over once the board
-    // locks — the panel's own title, the diff summary under it, and the
-    // tab hint. The panel appearing is the thing being asserted.
-    await inventoryPage.locator(".approved-panel").waitFor({ state: "visible", timeout: 1_500 });
-    assert.notEqual(await inventoryPage.locator(".goose-bubble-tab").textContent(), "Confirm");
-    assert.match(await inventoryPage.locator(".goose-bubble-line").textContent(), /Approved/);
-  });
-  await checkVoiceBehavior("Inventory: an approved plan's checklist is locked, by click and by voice", async () => {
-    await inventoryStream.say("back to the ingredients");
-    await waitForAttribute(ingredientTab, "aria-selected", "true");
-    assert.equal(await ginger.isDisabled(), true, "the checkbox is disabled once approved");
-    await ginger.evaluate((el) => el.click());
-    assert.equal(await ginger.getAttribute("aria-checked"), "true");
-    await inventoryStream.say("no ginger");
-    await waitForPageCondition(inventoryPage, () => /approved/i.test(document.querySelector(".goose-bubble-line")?.textContent || ""));
-    assert.equal(await ginger.getAttribute("aria-checked"), "true", "voice does not change an approved checklist");
-  });
-  // Revise is meaningful only after approval. A mouse approval keeps that
-  // assertion independent from the voice-approval scenario above.
-  if (await ingredientTab.getAttribute("aria-selected") !== "true") await ingredientTab.evaluate((el) => el.click());
-  if (await ginger.count() && await ginger.getAttribute("aria-checked") === "false") await ginger.evaluate((el) => el.click());
-  if (await recipeTab.getAttribute("aria-selected") !== "true") await recipeTab.evaluate((el) => el.click());
-  const approveButton = inventoryPage.getByRole("button", { name: /Approve the plan/ });
-  if (await approveButton.count()) {
-    await approveButton.evaluate((el) => el.click());
-    await inventoryPage.waitForTimeout(250);
-  }
-  await checkVoiceBehavior("Inventory: revise returns an approved board to editing", async () => {
-    await inventoryStream.say("revise");
-    await inventoryPage.getByRole("button", { name: "Add a task" }).waitFor({ state: "visible" });
-  });
-  if (!(await inventoryPage.getByRole("button", { name: "Add a task" }).count())) {
-    const reviseButton = inventoryPage.getByRole("button", { name: /Revise/ });
-    if (await reviseButton.count()) await reviseButton.evaluate((el) => el.click());
-  }
+  // No separate approve/lock step any more — the board stays editable
+  // the whole time, so removing blocked steps needs nothing set up
+  // first.
   await checkVoiceBehavior("Inventory: removing blocked steps confirms, then removes the unavailable dependency chain", async () => {
     if (await ingredientTab.getAttribute("aria-selected") !== "true") await ingredientTab.evaluate((el) => el.click());
     if (await ginger.count() && await ginger.getAttribute("aria-checked") === "true") await ginger.evaluate((el) => el.click());
     await waitForAttribute(ginger, "aria-checked", "false");
     if (await recipeTab.getAttribute("aria-selected") !== "true") await recipeTab.evaluate((el) => el.click());
-    await inventoryStream.say("approve");
-    await waitForPageCondition(inventoryPage, () => /Can't approve yet/.test(document.querySelector(".goose-bubble-line")?.textContent || ""));
-    assert.equal(await inventoryPage.locator(".approved-panel").count(), 0, "a blocked plan is not approved by voice");
+    await inventoryStream.say("continue");
+    await waitForPageCondition(inventoryPage, () => /still blocked/.test(document.querySelector(".goose-bubble-line")?.textContent || ""));
+    assert.match(inventoryPage.url(), /session[/]inventory$/, "a blocked plan does not move on by voice");
     await inventoryStream.say("remove the blocked steps");
     await waitForPageCondition(inventoryPage, () => document.querySelector(".goose-bubble-tab")?.textContent === "Confirm");
     await inventoryStream.say("yes");
     await inventoryPage.getByRole("button", { name: /Dice ginger/ }).waitFor({ state: "hidden", timeout: 1_500 });
   });
 
-  // Last, because it leaves the page: approving is the end of this step,
-  // and the command under test is the one that walks out of it.
+  // Last, because it leaves the page: the command under test is the one
+  // that walks out of it. It still snapshots the graph into `approved`
+  // on the way (what the schedule and live cook read) — invisibly now,
+  // with nothing on screen to wait for first.
   await checkVoiceBehavior("Inventory: ‘continue to schedule’ moves on to the cooks", async () => {
-    const approveButton = inventoryPage.getByRole("button", { name: /Approve the plan/ });
-    if (await approveButton.count()) await approveButton.evaluate((el) => el.click());
-    await inventoryPage.locator(".approved-panel").waitFor({ state: "visible" });
     await settleVoiceCommands(inventoryPage);
     await inventoryStream.say("continue to schedule");
     await inventoryPage.waitForURL(/session[/]voice-binding$/, { timeout: 3_000 });

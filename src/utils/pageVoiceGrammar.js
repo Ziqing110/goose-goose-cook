@@ -105,11 +105,9 @@ export const INVENTORY_VOICE = {
   removeBlocked: [/\bremove (?:the )?blocked steps?\b/, /\bdrop (?:the )?blocked steps?\b/],
   editKitchen: [/\bedit (?:the )?kitchen profile\b/, /\bedit (?:the |my )?kitchen\b/],
   cookAnyway: [/\bcook it anyway\b/],
-  revise: [/\brevise\b/, /\bunapprove\b/, /\bgo back to editing\b/],
-  approve: [/\bapprove\b/],
-
-  // Moving on once the board is approved. "Continue to schedule" is the
-  // button's own wording, and with no command for it the phrase fell
+  // The board has no separate approve/lock step: this is what "Continue
+  // to the cooks" does, said out loud. "Continue to schedule" was the
+  // button's own old wording, and with no command for it the phrase fell
   // through to navigation, where "schedule" resolves to the schedule
   // route — which the session guards refuse, because the cooks have not
   // been picked yet. Saying what the button says was the one phrasing
@@ -352,8 +350,6 @@ help(INVENTORY_VOICE.editStep, "Open a step to edit it, by its name", ["edit the
 help(INVENTORY_VOICE.removeBlocked, "Remove the steps blocked by missing ingredients", ["remove the blocked steps"]);
 help(INVENTORY_VOICE.editKitchen, "Edit the kitchen profile", ["edit the kitchen"]);
 help(INVENTORY_VOICE.cookAnyway, "Cook even though some ingredients are missing", ["cook it anyway"]);
-help(INVENTORY_VOICE.revise, "Unlock the approved board to edit it again", ["revise"]);
-help(INVENTORY_VOICE.approve, "Approve the board", ["approve"]);
 help(INVENTORY_VOICE.continueOn, "Continue to the next stage", ["continue"]);
 
 KITCHEN_PROFILE_VOICE.count = described(KITCHEN_PROFILE_VOICE.count, (field) => [`Set how many ${field} the kitchen has`, [`set ${field} to 4`]]);

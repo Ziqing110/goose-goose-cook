@@ -4,6 +4,8 @@ import ConversationRail from "./ConversationRail.jsx";
 import BrandGoose from "./BrandGoose.jsx";
 import Wordmark from "./Wordmark.jsx";
 import { useDesignV4 } from "../utils/designV4.js";
+import { useAppState } from "../state/AppStateContext.jsx";
+import { usePlayerLaneVars } from "../hooks/usePlayerLaneVars.js";
 import "./AppShell.css";
 import "../styles/design-v4.css";
 
@@ -14,10 +16,21 @@ export default function AppShell() {
   // page's own <section> could never reach via descendant selectors.
   const isDesignV4 = useDesignV4();
   const { pathname } = useLocation();
+  const { state } = useAppState();
   // A cook journal is a frozen page, not a session step: it keeps the
   // same chrome as Home so it reads as part of the app — goose included —
   // plus a way back.
   const isJournal = pathname.startsWith("/cook/");
+
+  // The swim lane colours follow whichever birds the cooks picked. Set
+  // on the root element (not the shell div) so a portaled surface — the
+  // Schedule bottom sheet, which mounts straight onto document.body and
+  // so can't inherit from anything inside .app-shell — still picks up
+  // the right --kp-cook-a/-b before it remaps them. The journal reads a
+  // past session by id, not the app's current one, so it owns this for
+  // itself (CookSummaryPage.jsx) — setting it here too would fight over
+  // document.documentElement and the wrong session would win.
+  usePlayerLaneVars(isJournal ? null : state.session?.cooks);
 
   return (
     <div className={`app-shell${isDesignV4 ? " ds-v4" : ""}${isJournal ? " is-journal" : ""}`}>

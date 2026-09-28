@@ -22,6 +22,7 @@ import { PlayerAvatar, Stamp, StepReceipt } from "../components/ServiceResults.j
 import { GoosePrint } from "../components/GooseMarks.jsx";
 import BabyGoose from "../components/BabyGoose.jsx";
 import KpIcon from "../components/KpIcon.jsx";
+import { usePlayerLaneVars } from "../hooks/usePlayerLaneVars.js";
 import "./CookSummaryPage.css";
 
 // Past tense, because the cook is over by the time anyone reads this.
@@ -161,6 +162,10 @@ export default function CookSummaryPage() {
     const fromSession = (session?.cooks || []).filter((c) => inSummary.has(c.id));
     return fromSession.length ? fromSession : summary.cooks.map((c) => ({ id: c.cookId, name: c.name }));
   }, [session, summary]);
+  // AppShell skips setting these while on a journal page (see its own
+  // comment), so this page owns the swim lane colours for whichever
+  // past session it's reading — not the one currently active elsewhere.
+  usePlayerLaneVars(cooks);
   // What each cook actually did, read back out of the run's own event
   // log. Nothing new is stored for this and no model is asked: the
   // events were written during the cook, and getSession returns them

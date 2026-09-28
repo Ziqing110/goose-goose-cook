@@ -363,6 +363,12 @@ button { font: inherit; cursor: pointer; }
   --kp-phase-cook-ink: #8a6a00;
   --kp-phase-plate-ink: #166534;
 
+  /* Fallback only: AppShell.jsx overrides all six --kp-cook-a/-b*
+     properties on document.documentElement per session, from the bird
+     each cook picked (utils/playerColors.js). These raw values are what
+     shows before a session has cooks (or any cooks[] with an unpicked
+     bird, since playerBird then falls back to the seat's default bird —
+     Spoon/blue, Whisk/orange — which is why they're still blue/orange). */
   --kp-cook-a: #2f7dd1;
   --kp-cook-b: #e58a1f;
   /* -ink is the readable text tone on the surface, -bg the lane/rail
@@ -390,6 +396,8 @@ button { font: inherit; cursor: pointer; }
   --kp-paper-punch: #f2ead8;
   --kp-paper-dash: #d8ccb1;
   --kp-paper-hover: #f4eee1;
+  /* Fallback only, same as --kp-cook-a/-b above: overridden per session
+     from the bird each cook picked (utils/playerColors.js). */
   --kp-paper-rule-a: #9dc0d9;
   --kp-paper-rule-b: #e3b7a4;
   /* the one legitimate red on a planning page — outlines and text only */

@@ -1,27 +1,27 @@
-/* Approved — design system v4. A sunken card like the HUD, with the
-   draft-vs-approved diff and the way on (or back). */
-.approved-panel {
+/* What's changed since the drafted plan — design system v4. A sunken
+   card like the HUD. No lock, no way "back" to offer: the board is
+   always editable, so this is a running summary, not a gate. */
+.changes-panel {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 16px 24px;
+  flex-direction: column;
+  gap: 12px;
+  /* The page's own gap is 0 (every section spaces itself), and this
+     sits right under the HUD — same sunken background, same radius,
+     so with no margin of its own the two read as one fused box. */
+  margin-top: 20px;
   padding: 20px 24px;
   background: var(--surface-sunken);
   border-radius: var(--radius-card);
   animation: ds-reveal 240ms ease-out both;
 }
-.approved-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.approved-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 18px;
-  line-height: 24px;
-  font-weight: 700;
-  color: var(--success);
+.changes-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
 }
-.approved-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 
 .diff-block { display: flex; flex-wrap: wrap; gap: 12px 32px; }
 .diff-group { display: flex; flex-direction: column; gap: 4px; }

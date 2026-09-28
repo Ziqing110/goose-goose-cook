@@ -84,7 +84,16 @@ const MIN_CHECK_GAP_SEC = 120;
 export const EQUIPMENT = ["stove_burner", "wok", "oven", "pot", "cutting_board"];
 const PHASES = ["prep", "cook", "plate"];
 const DIFFICULTIES = ["low", "medium", "high"];
-const CATEGORIES = ["protein", "vegetable", "grain", "pantry"];
+// Keep in step with MATERIAL_CATEGORY_ORDER (src/data/dishes.js), minus
+// "other" — that one is a fallback for a material the client never
+// classified at all, not something worth offering the model as a live
+// choice. Seafood was missing here even though the client has always
+// displayed it (its own icon, its own group): asked for shrimp or fish,
+// the model had no legal category for either and picked the nearest
+// one on the list, "protein" — every seafood material landed in the
+// wrong group, silently, because the schema never allowed the right
+// answer in the first place.
+const CATEGORIES = ["protein", "seafood", "vegetable", "grain", "pantry"];
 
 // --- pass 3: decomposing every non-hands_on step -------------------------
 //
@@ -799,7 +808,7 @@ const SYSTEM = "You plan real cooking as a dependency graph. You are precise abo
 // declared" and the model answered with 226 materials and no recipes.
 const SHAPE = `Reply with ONLY a JSON object, no prose and no markdown fence:
 
-{"materials":[{"id":"snake_case","label":"Tofu","category":"protein|vegetable|grain|pantry","amount":400,"unit":"g"}],
+{"materials":[{"id":"snake_case","label":"Tofu","category":"protein|seafood|vegetable|grain|pantry","amount":400,"unit":"g"}],
  "recipes":[{"title":"Mapo Tofu","dish_idea_raw":"mapo tofu","servings":4,
    "nodes":[{"id":"snake_case","label":"Cut tofu into cubes","description":"How to do it.",
      "estimated_duration_sec":180,"difficulty":"low|medium|high","phase":"prep|cook|plate",

@@ -91,10 +91,14 @@
   --ds-waiting: var(--kp-status-waiting);
   --ds-live: var(--kp-status-live);
 
-  /* Player colors — by index in cooks[] (player 1 = a, player 2 = b),
+  /* Player slots — by index in cooks[] (player 1 = a, player 2 = b),
      never stored. The Schedule page is where they first appear; Live
      cook reuses them. -ink is the readable text tone on the surface,
-     -bg the lane/rail tint; both have dark variants in tokens.css. */
+     -bg the lane/rail tint; both have dark variants in tokens.css. The
+     --kp-cook-a/-b tokens these read are set per session on
+     document.documentElement (AppShell.jsx) from the bird each player
+     picked (utils/playerColors.js) — the values below are just the
+     fallback before a session has cooks. */
   --cook-a: var(--kp-cook-a);
   --cook-a-ink: var(--kp-cook-a-ink);
   --cook-a-bg: var(--kp-cook-a-bg);
