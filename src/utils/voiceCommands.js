@@ -14,6 +14,16 @@ const INTENTS = [
   // "start", and "hold on" mustn't fire "on it".
   { intent: "resume", patterns: [/继续|接着/, /\bresume\b/, /\bunpause\b/, /\bback on\b/, /\bkeep going\b/] },
   { intent: "pause", patterns: [/暂停|等一下/, /\bpause\b/, /\bhold on\b/, /\btake (?:a )?(?:break|five)\b/, /\btime ?out\b/] },
+  // Ahead of "start" on purpose: that intent's bare /\bgo\b/ would
+  // otherwise swallow "go to the schedule" first.
+  {
+    intent: "schedule",
+    patterns: [
+      /\bback to (?:the )?(?:schedule|plan|timeline)\b/,
+      /\b(?:go|open|show|take me|jump|switch|navigate)\b(?:\s+(?:me|us))?(?:\s+to)?\s+(?:the )?(?:schedule|plan|timeline)\b/,
+      /\bcheck (?:the )?(?:plan|schedule)\b/,
+    ],
+  },
   { intent: "finish_run", patterns: [/都好了|都做完了|可以上菜|全部完成/, /\bwe(?:'re| are)? done\b/, /\ball done\b/, /\bfinish(?: the)? cook/, /\bend the cook/, /\bdinner'?s up\b/] },
   { intent: "help", patterns: [/\bhelp\b/, /what can i say/, /\bcommands?\b/, /what can you do/] },
   { intent: "undo", patterns: [/\bundo\b/, /never ?mind/, /\boops\b/, /wait,? no\b/, /i didn'?t\b/] },
@@ -106,7 +116,7 @@ export function parseCommand(text, ctx) {
     ? resolveCookRef(text, cooks)?.id ?? null
     : null;
   const base = { intent, raw: text, stepId: null, candidates: [], confidence: "none", cookId: forCook };
-  if (["status", "score", "help", "undo", "finish_run", "unknown"].includes(intent)) return base;
+  if (["status", "score", "help", "undo", "finish_run", "schedule", "unknown"].includes(intent)) return base;
 
   // Each intent only ever looks at the steps it could plausibly mean.
   const scope =

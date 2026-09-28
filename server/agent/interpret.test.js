@@ -52,6 +52,25 @@ test("message: page state, commands with examples and patterns, destinations, an
   assert.match(msg, /They said: "no, it's Zeina, Z E I N A"$/);
 });
 
+test("message: recent history is short and comes before the words, when given", () => {
+  const msg = buildInterpretMessage({
+    text: "we'll do coop mode",
+    route: "/session/schedule",
+    commands: [],
+    history: [
+      { speaker: "them", text: "let's get started" },
+      { speaker: "agent", text: "Pick a mode and I'll deal the plan." },
+    ],
+  });
+  assert.match(msg, /Recent: them: let's get started \| agent: Pick a mode and I'll deal the plan\./);
+  assert.ok(msg.indexOf("Recent:") < msg.indexOf('They said: "we\'ll do coop mode"'));
+});
+
+test("message: no history line at all when none is given", () => {
+  const msg = buildInterpretMessage({ text: "co-op", route: "/session/schedule", commands: [] });
+  assert.doesNotMatch(msg, /Recent:/);
+});
+
 test("prompt: names the agent and tells it spelled letters are the spelling", () => {
   const prompt = buildInterpretPrompt("Goose");
   assert.match(prompt, /^You are Goose/);

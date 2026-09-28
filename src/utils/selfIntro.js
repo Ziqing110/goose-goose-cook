@@ -41,6 +41,16 @@ const tidy = (rest) => rest.replace(JOINER, "").trim();
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+// Speech often opens with a filler before either the agent's name or
+// the introduction itself: "Uh, hey Goose, I'm Zina...". Stripped first,
+// because both the agent-name strip below and LEAD/TRAIL are anchored
+// at the start of the string and would otherwise miss the whole thing
+// -- not just fail to recognise the filler, but never see the
+// introduction that follows it either. Punctuation is optional after
+// the filler word ("Uh," as well as "Uh"); this runs before any
+// punctuation gets normalized away, unlike navCommands' LEADING_FILLER.
+const LEADING_FILLER = /^(?:(?:um+|uh+|er+|erm|ah+|oh|hmm+|mm+|well|so)[,.]?\s+)+/i;
+
 /**
  * @param {string} text  what was said
  * @param {Array}  cooks [{ id, name }]
@@ -54,7 +64,7 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  */
 export function findSelfIntro(text, cooks, { agentName = "" } = {}) {
   // "I'm Z-E-I-N-A": the name spelled out, because saying it did not work.
-  let said = joinSpelledLetters(String(text || "").trim());
+  let said = joinSpelledLetters(String(text || "").trim()).replace(LEADING_FILLER, "");
   if (agentName) {
     said = said.replace(new RegExp(`^(?:(?:hey|ok|okay)\\s+)?${escapeRe(agentName)}[,.!:]*\\s+`, "i"), "");
   }

@@ -39,9 +39,14 @@ export async function requestTurn({ apiKey, model, text, agentName, engaged = fa
   // the cook in trouble is the one least likely to say the name; the
   // model is told why it is hearing this and to stay quiet if it misread.
   const urgent = !named && !engaged && isUrgent(text);
-  if (!named && !engaged && !urgent) {
-    return { addressed: false, named, urgent, calls: [], reply: "", rejected: [], ms: 0, model: null };
-  }
+  // No name heard, no open question, no trouble. This used to be dropped
+  // right here without a model call -- but the recogniser mangles the
+  // name past the one-letter slack isAddressed allows often enough
+  // ("Boost", "juice") that a real command said to the goose went
+  // nowhere, with nothing to show why. Now the model reads it, told
+  // plainly that nobody clearly said its name, and decides. It costs a
+  // call per unnamed turn; that is the trade asked for.
+  const unnamed = !named && !engaged && !urgent;
   if (!apiKey) {
     throw new TurnError("ASSEMBLYAI_API_KEY is not set. Copy .env.example to .env, add the key, and restart the server.", 503);
   }
@@ -51,7 +56,7 @@ export async function requestTurn({ apiKey, model, text, agentName, engaged = fa
   const tools = buildTools(snapshot, { search });
   const messages = [
     { role: "system", content: buildSystemPrompt({ agentName, speakerName: snapshot.speakerName, search }) },
-    { role: "user", content: buildUserMessage(snapshot, text, { shared, urgent }) },
+    { role: "user", content: buildUserMessage(snapshot, text, { shared, urgent, unnamed }) },
   ];
 
   // A turn that never searches keeps its original budget exactly; one
@@ -84,9 +89,33 @@ export async function requestTurn({ apiKey, model, text, agentName, engaged = fa
   const choice = await ask();
   const lookups = (choice?.message?.tool_calls || []).filter((c) => c?.function?.name === "search_web");
   const vetted = parseChoice(choice, snapshot, { shared });
+  // There was no way to answer "did the model even try to name a cook,
+  // or did vetting throw it out?" after the fact -- both looked
+  // identical from the client, an assignment silently landing on the
+  // speaker. This is the raw tool call the model actually produced,
+  // cook_name included, next to what survived vetting and why anything
+  // didn't.
+  console.info("[agent] turn", {
+    speaker: snapshot.speakerName,
+    text,
+    rawCalls: (choice?.message?.tool_calls || []).map((c) => ({ name: c?.function?.name, args: c?.function?.arguments })),
+    calls: vetted.calls,
+    rejected: vetted.rejected,
+  });
+
+  // The model's verdict on an unnamed turn: it acted or looked something
+  // up. A reply alone is NOT enough -- a model told to be playful will
+  // answer "did you watch the game" however it is asked not to, and a
+  // real cooking question still calls a tool (status, score, explain).
+  // Anything short of that is talk between cooks, handed back as not
+  // addressed so the client keeps routing it to room talk (banter).
+  const inferred = unnamed && (vetted.calls.length > 0 || lookups.length > 0);
+  if (unnamed && !inferred) {
+    return { addressed: false, named, urgent, inferred: false, calls: [], reply: "", rejected: vetted.rejected, ms: Date.now() - started, model };
+  }
 
   if (!lookups.length) {
-    return { addressed: true, named, urgent, ...vetted, searched: false, ms: Date.now() - started, model };
+    return { addressed: true, named, urgent, inferred, ...vetted, searched: false, ms: Date.now() - started, model };
   }
 
   // The model wants to look something up. Do NOT wait for it here: the
@@ -120,6 +149,7 @@ export async function requestTurn({ apiKey, model, text, agentName, engaged = fa
     addressed: true,
     named,
     urgent,
+    inferred,
     ...vetted,
     // Something to say now, so nobody is left listening to silence while
     // it reads. The model's own line if it offered one, ours if not.

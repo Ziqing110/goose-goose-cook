@@ -1,7 +1,8 @@
 /* ---- Goose's Notes ---------------------------------------------------
    Design 4e, "Handle → pull-out sheet" (claude.ai/design, "Live cook -
    Goose panel"). Tucked: a slim handle on the right edge, draggable up
-   and down, with a dot that pings when a note lands. Opened: a sheet
+   and down, that flashes in place when a note lands -- same size
+   throughout, no dot, no layout shift. Opened: a sheet
    slides over the page from that edge. A plain white card with a 1px
    rule, so it can sit on any page.
 
@@ -308,23 +309,23 @@
   height: 22px;
 }
 
-/* Tucked with notes unread: the dot pings. */
-@keyframes gn-ping {
-  0% { box-shadow: 0 0 0 2px var(--kp-bg), 0 0 0 2px color-mix(in srgb, var(--kp-accent) 55%, transparent); }
-  70%, 100% { box-shadow: 0 0 0 2px var(--kp-bg), 0 0 0 10px transparent; }
+/* Tucked with notes unread: the whole handle flashes, not just a dot --
+   same size throughout, only its fill and edge pulse. */
+@keyframes gn-flash {
+  0%, 100% { background: var(--kp-bg); box-shadow: -2px 2px 8px rgba(32, 30, 29, 0.08); }
+  50% { background: var(--kp-accent); box-shadow: -2px 2px 8px color-mix(in srgb, var(--kp-accent) 55%, transparent); }
 }
 
-.gn-dot {
-  position: fixed;
-  right: 6px;
-  z-index: 51;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--kp-accent);
-  box-shadow: 0 0 0 2px var(--kp-bg);
-  animation: gn-ping 1600ms ease-out infinite;
-  pointer-events: none;
+.gn-handle.is-unread {
+  animation: gn-flash 1100ms ease-in-out infinite;
+}
+
+.gn-handle.is-unread .gn-handle-label {
+  color: var(--kp-bg);
+}
+
+.gn-handle.is-unread .gn-grip-line {
+  background: var(--kp-bg);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -334,7 +335,11 @@
     transition: none;
   }
 
-  .gn-dot,
+  .gn-handle.is-unread {
+    animation: none;
+    background: var(--kp-accent);
+  }
+
   .gn-row.is-new {
     animation: none;
   }

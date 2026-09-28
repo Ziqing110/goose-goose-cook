@@ -10,8 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { getSession, updateSession } from "../api/sessions.js";
-import { stylePhoto } from "../api/photo.js";
-import { fileToDataUrl, applyLocalStyle, downloadDataUrl } from "../utils/summaryCard.js";
+import { fileToDataUrl, downloadDataUrl } from "../utils/summaryCard.js";
 import { renderShareCard } from "../utils/shareCard.js";
 import { clock, isOnPlan, planDelta, resultPlayers, summaryOutcome } from "../utils/serviceResults.js";
 import { runTimeline } from "../utils/cookTimeline.js";
@@ -115,15 +114,21 @@ function ResultLedger({ players, versus, winnerCookIds }) {
               <span className="cc-ledger-unit">{versus ? "pts" : p.entry.doneCount === 1 ? "step" : "steps"}</span>
             </span>
           </div>
-          {p.quips.length > 0 && (
-            <div className="cc-quips">
-              {p.quips.map((line, n) => (
-                <p key={n} className="cc-quip">
-                  <GoosePrint size={13} />
-                  <span>{line}</span>
-                </p>
-              ))}
-            </div>
+          {p.quote ? (
+            // Their own words win over commentary about the numbers —
+            // no goose print here, this line isn't the goose's.
+            <p className="cc-quote">“{p.quote}”</p>
+          ) : (
+            p.quips.length > 0 && (
+              <div className="cc-quips">
+                {p.quips.map((line, n) => (
+                  <p key={n} className="cc-quip">
+                    <GoosePrint size={13} />
+                    <span>{line}</span>
+                  </p>
+                ))}
+              </div>
+            )
           )}
         </div>
       ))}
@@ -214,7 +219,8 @@ export default function CookSummaryPage() {
   const players = useMemo(() => {
     if (!outcome) return [];
     const quips = Object.fromEntries(summary.cooks.map((c) => [c.cookId, (c.quips || []).slice(0, 2)]));
-    return resultPlayers({ outcome, cooks, dishOfStep: (s) => s.dish, quips });
+    const quotes = Object.fromEntries(summary.cooks.map((c) => [c.cookId, c.quote || null]));
+    return resultPlayers({ outcome, cooks, dishOfStep: (s) => s.dish, quips, quotes });
   }, [outcome, cooks, summary]);
 
   const saveSummary = async (next) => {
@@ -229,15 +235,12 @@ export default function CookSummaryPage() {
     try {
       const photo = await fileToDataUrl(file);
       setPendingPhoto(photo);
-      setBusy("styling");
-      try {
-        const result = await stylePhoto(photo, `A styled hero shot of ${summary.dish}`);
-        const styledPhoto = result.source === "model" ? result.dataUrl : await applyLocalStyle(result.dataUrl);
-        await saveSummary({ ...summary, photo, styledPhoto, photoSource: result.source });
-      } catch {
-        await saveSummary({ ...summary, photo, styledPhoto: null, photoSource: null });
-        setError("Styling didn't work — kept your photo as is.");
-      }
+      setBusy("photo");
+      // Shown as taken. Styling it (pixel art, then a background cutout)
+      // was tried and read worse than the photo; server/routes/photo.js
+      // is still the seam if a real image model is wired in later. Any
+      // styledPhoto an older card saved is cleared with it.
+      await saveSummary({ ...summary, photo, styledPhoto: null, photoSource: null });
     } catch (photoError) {
       setError(photoError.message || "Couldn't read that photo.");
     } finally {
@@ -284,7 +287,9 @@ export default function CookSummaryPage() {
     );
   }
 
-  const hero = pendingPhoto || summary.styledPhoto || summary.photo;
+  // The photo as taken. A styledPhoto saved by an older card (pixel art,
+  // a sticker cutout) is ignored rather than shown.
+  const hero = pendingPhoto || summary.photo;
   const versus = summary.mode === "competition";
   const date = formatDate(summary.createdAt);
   const { show: showDelta, deltaSec } = planDelta(outcome);

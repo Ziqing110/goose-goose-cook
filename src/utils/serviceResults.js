@@ -25,10 +25,10 @@ export function longestStep(perStep) {
 /**
  * One entry per player (at most two), in player order: their scoreboard
  * line, their longest step, the dish most of their points came from,
- * and whether they won. `dishOfStep` names a step's dish; `quips`, by
- * cook id, rides along for the cook card.
+ * and whether they won. `dishOfStep` names a step's dish; `quips` and
+ * `quotes`, by cook id, ride along for the cook card.
  */
-export function resultPlayers({ outcome, cooks, dishOfStep = () => null, quips = {} }) {
+export function resultPlayers({ outcome, cooks, dishOfStep = () => null, quips = {}, quotes = {} }) {
   const winners = outcome.winnerCookIds || [];
   return cooks.slice(0, 2).map((cook, i) => {
     const entry = outcome.scoreboard.find((b) => b.cookId === cook.id) || { points: 0, doneCount: 0, skippedCount: 0 };
@@ -48,6 +48,7 @@ export function resultPlayers({ outcome, cooks, dishOfStep = () => null, quips =
       topDish: topDish && topDish[1] > 0 ? topDish[0] : null,
       won: winners.includes(cook.id),
       quips: quips[cook.id] || [],
+      quote: quotes[cook.id] || null,
     };
   });
 }

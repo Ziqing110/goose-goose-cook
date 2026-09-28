@@ -2,7 +2,7 @@
 // Run with: node --test src/utils/cookVoice.test.js
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ORDINAL, ordinalIndex, resolveCookRef, cleanSpokenName, nearestCook, joinSpelledLetters } from "./cookVoice.js";
+import { ORDINAL, ordinalIndex, resolveCookRef, cleanSpokenName, nearestCook, joinSpelledLetters, impliedAssignee } from "./cookVoice.js";
 import { MAX_COOK_NAME_LENGTH } from "./cooks.js";
 
 const two = [{ name: "Mia" }, { name: "" }];
@@ -202,4 +202,44 @@ test("spelled names: however the recogniser writes the letters, they join back",
 test("spelled names: ordinary words and short letter runs are left alone", () => {
   assert.equal(joinSpelledLetters("I want a tofu"), "I want a tofu");
   assert.equal(joinSpelledLetters("plan B or C"), "plan B or C");
+});
+
+test("impliedAssignee: a bare yes to the agent's own question hands it to whoever it named", () => {
+  const question = { speaker: "agent", text: "Should I give the garlic to Zeina? Say yes or no." };
+  assert.equal(impliedAssignee("yes", question, undefined, pair), "Z");
+  assert.equal(impliedAssignee("yeah", question, undefined, pair), "Z");
+});
+
+test("impliedAssignee: only a yes counts -- no, silence, and a fresh request all fall through", () => {
+  const question = { speaker: "agent", text: "Should I give the garlic to Zeina? Say yes or no." };
+  assert.equal(impliedAssignee("no", question, undefined, pair), null);
+  assert.equal(impliedAssignee("start the rice", question, undefined, pair), null);
+  assert.equal(impliedAssignee("", question, undefined, pair), null);
+});
+
+test("impliedAssignee: nothing applies without a prior agent question, or one that named nobody and nothing before it either", () => {
+  assert.equal(impliedAssignee("yes", undefined, undefined, pair), null);
+  assert.equal(impliedAssignee("yes", { speaker: "Lindy", text: "yes give it to Zeina" }, undefined, pair), null);
+  assert.equal(impliedAssignee("yes", { speaker: "agent", text: "Want me to start the rice?" }, undefined, pair), null);
+});
+
+test("impliedAssignee: a step-clarification answer still carries the cook the original request named", () => {
+  // "assign Zina the latest task" -> "which step do you mean?" -> "the
+  // add soy sauce step" -- the answer only settles the step; Zeina was
+  // already the target, misheard spelling and all.
+  const request = { speaker: "L", text: "Hey Goose, can you assign Zina the latest task?" };
+  const clarify = { speaker: "agent", text: "Which step do you mean by the latest task -- add sauce or thicken sauce?" };
+  assert.equal(impliedAssignee("the add soy sauce step, that was the only one available", clarify, request, pair), "Z");
+});
+
+test("impliedAssignee: a step-clarification with no cook in the original request names nobody", () => {
+  const request = { speaker: "L", text: "done with something" };
+  const clarify = { speaker: "agent", text: "Which one did you finish?" };
+  assert.equal(impliedAssignee("the onion one", clarify, request, pair), null);
+});
+
+test("impliedAssignee: the entry before the question only counts when it's not the agent's own", () => {
+  const clarify = { speaker: "agent", text: "Which step did you mean?" };
+  const alsoAgent = { speaker: "agent", text: "By the way, Zeina asked about the rice earlier." };
+  assert.equal(impliedAssignee("the tofu step", clarify, alsoAgent, pair), null);
 });

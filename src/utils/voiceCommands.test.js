@@ -41,6 +41,18 @@ test("parseCommand: English run controls keep their own intent", () => {
   assert.equal(parseCommand("pass the salt", ctx).intent, "unknown");
 });
 
+test("parseCommand: heading back to the plan is its own intent, ahead of 'start'", () => {
+  for (const said of [
+    "back to the schedule", "go to the plan", "go back to the schedule",
+    "open the schedule", "show me the plan", "check the plan",
+  ]) {
+    assert.equal(parseCommand(said, ctx).intent, "schedule", said);
+  }
+  // "go" alone is still "start" -- only "go (to) schedule/plan/timeline"
+  // is claimed by the new intent.
+  assert.equal(parseCommand("go", ctx).intent, "start");
+});
+
 test("parseCommand: every English claim and start phrase resolves its spoken step", () => {
   const claimPhrases = [
     "claim mince garlic", "I'll take mince garlic", "I'll do mince garlic", "take mince garlic",

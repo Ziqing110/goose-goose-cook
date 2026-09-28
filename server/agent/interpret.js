@@ -63,10 +63,11 @@ Rules:
 - A correction ("no, it's Zeina", "not Zina, Zeina") means change the thing named in the page state to what they said.
 - Use the page state to decide which thing they mean ("the first cook", "her"). If it is still unclear which one, call nothing and ask one short question.
 - If they are talking to someone else, or nothing listed fits, call nothing and reply with an empty string. Doing nothing is the right answer to most kitchen talk.
+- Recent, when given, is the last few things said and heard on this page. Use it only to read what they just said against it -- a reply to your own last question, "no, the other one" -- never as a reason to act on something from earlier that they are not saying now.
 - Your reply is spoken aloud: at most 15 words, plain speech. Leave it empty when you call say_command.`;
 }
 
-export function buildInterpretMessage({ text, route, context, commands, destinations }) {
+export function buildInterpretMessage({ text, route, context, commands, destinations, history }) {
   const lines = [`Page: ${route}`];
   if (context?.length) lines.push("Page state:", ...context.map((c) => `- ${c}`));
   lines.push("", "Commands:");
@@ -78,6 +79,9 @@ export function buildInterpretMessage({ text, route, context, commands, destinat
   if (destinations?.length) {
     lines.push(`${commands.length + 1}. Go to another page`, `   say: ${destinations.map((d) => `"go to ${d}"`).join(", ")}`);
   }
+  // Short on purpose -- this is a nudge for pronouns and follow-ups, not
+  // a transcript. See VoiceBar's RECENT_HISTORY_LIMIT for the cap.
+  if (history?.length) lines.push("", `Recent: ${history.map((h) => `${h.speaker}: ${h.text}`).join(" | ")}`);
   lines.push("", `They said: "${text}"`);
   return lines.join("\n");
 }
@@ -110,7 +114,7 @@ export function parseInterpretation(choice) {
  * @returns {Promise<{utterance: string|null, reply: string, named: boolean, ms: number, model: string}>}
  * @throws {InterpretError}
  */
-export async function requestInterpretation({ apiKey, model, agentName, text, route, context, commands, destinations, timeoutMs = TIMEOUT_MS }) {
+export async function requestInterpretation({ apiKey, model, agentName, text, route, context, commands, destinations, history, timeoutMs = TIMEOUT_MS }) {
   if (!apiKey) throw new InterpretError("ASSEMBLYAI_API_KEY is not set.", 503);
   const started = Date.now();
   let upstream;
@@ -126,7 +130,7 @@ export async function requestInterpretation({ apiKey, model, agentName, text, ro
         tools: [TOOL],
         messages: [
           { role: "system", content: buildInterpretPrompt(agentName) },
-          { role: "user", content: buildInterpretMessage({ text, route, context, commands, destinations }) },
+          { role: "user", content: buildInterpretMessage({ text, route, context, commands, destinations, history }) },
         ],
       }),
     });

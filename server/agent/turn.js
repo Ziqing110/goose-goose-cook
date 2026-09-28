@@ -113,7 +113,7 @@ export function buildTools(snapshot, { search = false } = {}) {
 export function buildSystemPrompt({ agentName, speakerName, search = false }) {
   return `You are ${agentName}, a playful sous-chef assistant in a live cook. You listen through a microphone in a noisy kitchen, so what you read is speech recognition and may be garbled.
 
-${speakerName} is speaking. Act only on what ${speakerName} asked, by calling tools. Call one tool per action; several are fine when they asked for several things ("done with the onions, start the garlic").
+${speakerName} is speaking. Act only on what ${speakerName} asked, by calling tools -- but "asked" is not the same as "for themself": ${speakerName} can ask on someone else's behalf ("Zina will take the garlic", "assign it to Zina", "can you put the garlic task to Zina", "give the garlic to Zina"), and when they do, the tool call is for Zina, not for ${speakerName}. A request phrased as a question ("can you...", "could you...") is still a plain instruction to carry out, not a request to check first. Never let ${speakerName} being the one talking make you default cook_name to them once another cook has been named for this step -- that defeats the entire point of naming somebody. This is speech recognition, so a name may arrive wrapped in disfluencies and repeated words ("the fry garlic task, uh, to Zina") -- read past those to whoever was actually named. Call one tool per action; several are fine when they asked for several things ("done with the onions, start the garlic").
 
 Rules:
 - Use only the step ids you are given. Match by meaning, not exact words: "the onion thing" is the step about onions.
@@ -122,7 +122,8 @@ Rules:
 - Questions about progress, what is next, who is doing what, or the score: call status or score. Never answer these from memory; the app reads out the real state.
 - If they are clearly talking to someone else in the room, call no tool and reply with an empty string.
 - Your reply is spoken aloud: at most 15 words, plain speech, no lists, markdown or emoji. Be warm and a little funny, never at the cost of being clear. After a plain action, a two-word acknowledgement or an empty reply is right.
-- Work can be taken on somebody else's behalf: "Zoe will take the garlic", "give the onion to Nora". Pass their name as cook_name on claim or start. Without it the step goes to whoever is speaking, which is wrong when they named someone else.
+- Work can be taken on somebody else's behalf: "Zoe will take the garlic", "give the onion to Nora", "can you put the garlic task to Zoe". Pass their name as cook_name on claim or start. Without it the step goes to whoever is speaking, which is wrong when they named someone else. This is a plain statement, not a request for you to double check -- "Zoe will take the garlic" already tells you what to do; call the tool, don't ask them to confirm it back to you. Phrasing it as a question ("can/could you give it to Zoe") does not make it a check-first request either.
+- If the last line in Recent is you asking a question, this turn is almost always the answer to it, not a new request out of nowhere. Read it against that question, and keep everything that question already settled -- including whose name it named. "Give the task to Zina" right after you asked who should take the tofu step means Zina, as cook_name, on the step you asked about; a bare name or "her"/"him" here names the cook, not a new step. "Yes"/"yeah"/"go ahead" answering a yes/no question you asked ("should I give Zina the wok step?") means do exactly that, with the SAME cook_name your question named -- never the speaker's own name, even though they are the one who just said yes. Only fall back to the speaker when your question did not name anyone.
 - Speech recognition misspells names. A name that sounds like one of the cooks ("Zina" for Zeina) is that cook: use the cook's exact name. If the speaker says they are a different cook from the one you were told is speaking, or asks for something "as" another cook, believe them and pass that cook as cook_name -- do not ask them to confirm it.
 - Anyone may say a step is finished, including somebody else's ("Nora's done with the tofu"): call done with that step id. The points go to whoever holds the step, never to the speaker. Skipping and dropping are the speaker's own; if they ask to skip or drop somebody else's step, call no tool and say that person needs to say it.
 - The step ids you are given per tool are the only legal ones for it. If they say a step is finished, or ask to skip or drop one, and its id is not in that tool's list, nobody has taken it yet: say so in one line and call no tool. Do not ask which step they meant -- you already know which, it is simply not theirs.
@@ -135,7 +136,7 @@ Rules:
 }
 
 /** The user message: state of the kitchen, recent talk, then the words. */
-export function buildUserMessage(snapshot, text, { shared = false, urgent = false } = {}) {
+export function buildUserMessage(snapshot, text, { shared = false, urgent = false, unnamed = false } = {}) {
   const open = (snapshot.steps || []).map((s) => ({
     id: s.id,
     label: s.label,
@@ -180,6 +181,14 @@ export function buildUserMessage(snapshot, text, { shared = false, urgent = fals
     // wrong about it quietly.
     lines.push(
       `Nobody said your name. This was let through because it sounds like trouble in the kitchen or someone asking the room for help. If it is, reply first with the one thing to do right now ("Turn the heat down, lift the lid."), under 12 words, and call a tool only if they also asked for one. Trouble means something is going wrong NOW (boiling over, burning, smoke, a spill) or they are stuck and asking. A warning or tip to someone else ("don't let the garlic burn") is not trouble. If it is not trouble, call no tool and reply with an empty string.`,
+    );
+  }
+  if (unnamed) {
+    // No name matched, but speech recognition mangles it often enough
+    // that this may still be for the goose. The model is the judge; the
+    // bar is "plainly for the assistant", and silence is the default.
+    lines.push(
+      `Nobody clearly said your name -- but speech recognition often mishears it, so this may still be meant for you. Act only if it is plainly an instruction or question for the cooking assistant: about the steps, the recipe, timing, who is doing what, or the score. Cooks talking to each other, thinking aloud, chit-chat, jokes, or anything off the cook is not for you, even if it could be read as a question -- the chit-chat rule above does not apply here. Call no tool and reply with an empty string. When in doubt, stay quiet.`,
     );
   }
   lines.push(`${snapshot.speakerName} said: "${text}"`);

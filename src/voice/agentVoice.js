@@ -90,7 +90,16 @@ function load() {
       dtype: AGENT_VOICE.dtype,
       device: AGENT_VOICE.device,
     });
-  })();
+  })().catch((err) => {
+    // `??=` only skips reassigning for null/undefined, and a REJECTED
+    // promise is neither -- left as caching that rejection, one transient
+    // failure here (a flaky fetch of the weights, a one-off WebGPU init
+    // hiccup) would stick forever: every line after falls back to the
+    // plain browser voice for the rest of the tab's life, with no way
+    // back short of a reload. Clearing it lets the next speak() retry.
+    ttsPromise = null;
+    throw err;
+  });
   return ttsPromise;
 }
 
@@ -138,7 +147,17 @@ function speakWebSpeech(text, myToken) {
     u.onstart = () => spans.begin();
     u.onend = u.onerror = finish;
     speechSynthesis.cancel();
-    speechSynthesis.speak(u);
+    // Not synchronous with cancel(): Chrome does not always finish
+    // cancelling before the next speak() call runs on the same tick, and
+    // the cancelled utterance can still fire, with the new one queued
+    // right after it -- so instead of replacing what was playing, both
+    // get said, back to back. A tick is enough for the cancellation to
+    // land first. A page change or a newer line mid-wait (myToken
+    // stale) skips speaking a line nobody is here to replace.
+    setTimeout(() => {
+      if (myToken !== token) return resolve();
+      speechSynthesis.speak(u);
+    }, 0);
   });
 }
 
@@ -195,6 +214,15 @@ export function stop() {
 export async function speak(text) {
   const line = text?.trim();
   if (!line) return;
+  // The exact same line, still in the middle of being said, is not a new
+  // thing to say — it is (at least) two callers agreeing on one line, or
+  // one caller asked twice. Restarting it (stop, then say it again from
+  // the top) is exactly the "the goose keeps repeating itself" bug this
+  // is here to head off, and it is the Web Speech fallback that shows it
+  // worst: Chrome does not always honour cancel() on an utterance that
+  // has not started yet, so two speak() calls close together can queue
+  // both rather than replace the first.
+  if (speaking && line === currentLine) return;
   // The goose's voice egg. Off means the agent still decides what it
   // would say — the caller's logic is untouched — it just doesn't say
   // it out loud, so the subtitle bubble still carries the line.
@@ -219,7 +247,8 @@ export async function speak(text) {
     const buffer = ctx.createBuffer(1, audio.audio.length, audio.sampling_rate);
     buffer.copyToChannel(audio.audio, 0);
     await playBuffer(buffer, myToken);
-  } catch {
+  } catch (err) {
+    console.warn("[voice] Kokoro unavailable, falling back to the browser voice:", err?.message || err);
     await speakWebSpeech(line, myToken);
   } finally {
     if (myToken === token) {
