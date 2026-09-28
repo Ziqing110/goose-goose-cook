@@ -84,6 +84,19 @@ export async function requestTurn({ apiKey, model, text, agentName, engaged = fa
   const choice = await ask();
   const lookups = (choice?.message?.tool_calls || []).filter((c) => c?.function?.name === "search_web");
   const vetted = parseChoice(choice, snapshot, { shared });
+  // There was no way to answer "did the model even try to name a cook,
+  // or did vetting throw it out?" after the fact -- both looked
+  // identical from the client, an assignment silently landing on the
+  // speaker. This is the raw tool call the model actually produced,
+  // cook_name included, next to what survived vetting and why anything
+  // didn't.
+  console.info("[agent] turn", {
+    speaker: snapshot.speakerName,
+    text,
+    rawCalls: (choice?.message?.tool_calls || []).map((c) => ({ name: c?.function?.name, args: c?.function?.arguments })),
+    calls: vetted.calls,
+    rejected: vetted.rejected,
+  });
 
   if (!lookups.length) {
     return { addressed: true, named, urgent, ...vetted, searched: false, ms: Date.now() - started, model };

@@ -37,3 +37,74 @@
   text-decoration: none;
 }
 .topbar-link:hover { color: var(--ink, inherit); background: var(--surface-sunken, transparent); text-decoration: none; }
+
+/* No voice bar on the journal, so no room reserved for it. */
+.app-shell.is-journal { padding-bottom: 48px; }
+
+/* ---------------- demo notice ---------------- */
+/* Always on, on every page — no way to dismiss it. Says this is a demo
+   and nothing typed or spoken here survives closing the tab. */
+.demo-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px 10px 16px;
+  border: 1px solid color-mix(in srgb, var(--warning-soft-ink) 18%, transparent);
+  border-radius: var(--radius-control);
+  background: var(--warning-soft);
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.demo-banner-tag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.demo-banner-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-wrap: pretty;
+}
+.demo-banner-link {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  color: var(--ds-honk);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.demo-banner-link:hover { background: color-mix(in srgb, var(--warning-soft-ink) 8%, transparent); color: var(--ink); text-decoration: none; }
+.demo-banner-close {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.demo-banner-close:hover { background: color-mix(in srgb, var(--warning-soft-ink) 8%, transparent); color: var(--ink); }
+@media (max-width: 720px) {
+  .demo-banner { flex-wrap: wrap; }
+  .demo-banner-body { flex-basis: 100%; order: 1; }
+  .demo-banner-link { margin-left: auto; }
+}

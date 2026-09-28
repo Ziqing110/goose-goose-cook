@@ -340,7 +340,7 @@ export default function ConversationRail() {
 
       <button
         type="button"
-        className="gn-handle"
+        className={`gn-handle ${unread > 0 ? "is-unread" : ""}`}
         style={{ top: `${handleTop}px` }}
         title="Goose's Notes — tap to open, drag to move"
         aria-label={unread ? `Goose's Notes, ${unread} new` : "Goose's Notes"}
@@ -358,7 +358,6 @@ export default function ConversationRail() {
           <span className="gn-grip-line" />
         </span>
       </button>
-      {unread > 0 && <span className="gn-dot" style={{ top: `${handleTop - 4}px` }} aria-hidden="true" />}
     </div>
   );
 }

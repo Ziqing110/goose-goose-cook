@@ -2,6 +2,7 @@
 // photo and the download. The share card itself is drawn in shareCard.js.
 import { cookColorKey } from "./cooks.js";
 import { buildRunContext, cookQuipStats, pickQuips, headlineFor } from "./cookQuips.js";
+import { pickCookQuote } from "./cookQuotes.js";
 
 const MAX_PHOTO_PX = 1200;
 
@@ -9,7 +10,7 @@ const MAX_PHOTO_PX = 1200;
  * Snapshot of a finished cook. Frozen deliberately: it's a record of one
  * evening, so it shouldn't change later when scoring rules or quip copy do.
  */
-export function buildSummary({ outcome, cooks, dish, mode, dishOfStep = () => null, photo = null, styledPhoto = null, photoSource = null }) {
+export function buildSummary({ outcome, cooks, dish, mode, dishOfStep = () => null, photo = null, styledPhoto = null, photoSource = null, transcript = [] }) {
   const context = buildRunContext(outcome, outcome.scoreboard.map((b) => b.cookId).join("-"));
   const topPoints = outcome.scoreboard[0]?.points ?? 0;
 
@@ -25,6 +26,10 @@ export function buildSummary({ outcome, cooks, dish, mode, dishOfStep = () => nu
     headline: headlineFor(context),
     cooks: outcome.scoreboard.map((entry, i) => {
       const stats = cookQuipStats(entry, outcome.perStep);
+      // Their own words first — a real quote beats commentary about the
+      // numbers. Only fall back to the deterministic performance quips
+      // when nothing they said during the run rose above a bare command.
+      const quote = pickCookQuote(entry.cookId, transcript);
       return {
         cookId: entry.cookId,
         name: entry.name,
@@ -35,7 +40,8 @@ export function buildSummary({ outcome, cooks, dish, mode, dishOfStep = () => nu
         isWinner: entry.points === topPoints && topPoints > 0,
         doneCount: entry.doneCount,
         skippedCount: entry.skippedCount,
-        quips: pickQuips(stats, context),
+        quote,
+        quips: quote ? [] : pickQuips(stats, context),
         steps: outcome.perStep
           .filter((s) => s.cookId === entry.cookId && s.status !== "pending")
           .map((s) => ({
@@ -91,41 +97,50 @@ export function fileToDataUrl(file, maxPx = MAX_PHOTO_PX) {
   });
 }
 
+// Bigger blocks read as chunkier, more deliberate pixel art; smaller
+// ones start to look like ordinary downscaling. 10px is a sprite you
+// can tell is a sprite on a photo this size.
+const PIXEL_BLOCK = 10;
+
 /**
- * Local stand-in for the image model: a warm grade, a vignette and a
- * little grain. Used when the backend returns `source: "stub"`, so the
- * user still gets a visibly different "styled" version — labelled as a
- * local effect rather than passed off as generated.
+ * A blocky, retro pixel-art pass over an image, alpha preserved. Runs
+ * entirely on canvas — no model, no network — so it always has
+ * something to apply, whether `dataUrl` is a real cutout from the
+ * background-removal model or (no key configured, or the model refused)
+ * the original photo untouched. See server/routes/photo.js for the
+ * seam that does the cutting-out.
  */
-export function applyLocalStyle(dataUrl) {
+export function applyPixelArt(dataUrl, blockSize = PIXEL_BLOCK) {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onerror = () => reject(new Error("Could not style that image"));
+    img.onerror = () => reject(new Error("Could not pixelate that image"));
     img.onload = () => {
+      const w = img.width;
+      const h = img.height;
+      const cols = Math.max(1, Math.round(w / blockSize));
+      const rows = Math.max(1, Math.round(h / blockSize));
+
+      // Shrink WITH smoothing, so each tiny pixel is an honest average
+      // of the block it stands for rather than a lucky sample of it.
+      const small = document.createElement("canvas");
+      small.width = cols;
+      small.height = rows;
+      const sctx = small.getContext("2d");
+      sctx.imageSmoothingEnabled = true;
+      sctx.drawImage(img, 0, 0, cols, rows);
+
+      // Blow it back up WITHOUT smoothing, so each average lands as one
+      // crisp square instead of a blur back to where it started.
       const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
+      canvas.width = w;
+      canvas.height = h;
       const ctx = canvas.getContext("2d");
-      ctx.filter = "saturate(1.25) contrast(1.12) sepia(0.18) brightness(1.04)";
-      ctx.drawImage(img, 0, 0);
-      ctx.filter = "none";
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(small, 0, 0, w, h);
 
-      const { width: w, height: h } = canvas;
-      const vignette = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.32, w / 2, h / 2, Math.max(w, h) * 0.75);
-      vignette.addColorStop(0, "rgba(0,0,0,0)");
-      vignette.addColorStop(1, "rgba(40,24,10,0.42)");
-      ctx.fillStyle = vignette;
-      ctx.fillRect(0, 0, w, h);
-
-      const grain = ctx.getImageData(0, 0, w, h);
-      for (let i = 0; i < grain.data.length; i += 4) {
-        const n = (Math.random() - 0.5) * 12;
-        grain.data[i] += n;
-        grain.data[i + 1] += n;
-        grain.data[i + 2] += n;
-      }
-      ctx.putImageData(grain, 0, 0);
-      resolve(canvas.toDataURL("image/jpeg", 0.9));
+      // PNG, not JPEG: a background-removed cutout is transparent, and
+      // JPEG has no alpha channel to hold that.
+      resolve(canvas.toDataURL("image/png"));
     };
     img.src = dataUrl;
   });

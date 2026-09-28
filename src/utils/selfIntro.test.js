@@ -106,6 +106,18 @@ test("an introduction to the goose counts: its name may come first", () => {
   assert.equal(findSelfIntro("Hey goose, I'm Zeina, start the eggs", kitchen, { agentName: "Goose" })?.cookId, "Z");
 });
 
+test("a filler before the name still counts: this went to Lindy, because 'Uh,' opened the sentence", () => {
+  // Both the agent-name strip and the introduction pattern are anchored
+  // at the start of the string, so a leading "Uh," made them miss not
+  // just the filler but the introduction sitting right behind it.
+  assert.deepEqual(
+    findSelfIntro("Uh, hey Goose, I'm Zina. I'll take the Stir Ground Beef task.", kitchen, { agentName: "Goose" }),
+    { cookId: "Z", rest: "I'll take the Stir Ground Beef task." },
+  );
+  assert.equal(findSelfIntro("um, I'm Zeina, start the eggs", kitchen, { agentName: "Goose" })?.cookId, "Z");
+  assert.equal(findSelfIntro("so, uh, I'm Zeina, start the eggs", kitchen, { agentName: "Goose" })?.cookId, "Z");
+});
+
 test("a near-miss name is only taken where an introduction clearly is", () => {
   assert.equal(findSelfIntro("Goose, I'm done with the tofu", kitchen, { agentName: "Goose" }), null);
   assert.equal(findSelfIntro("Goose I'm ready", kitchen, { agentName: "Goose" }), null);

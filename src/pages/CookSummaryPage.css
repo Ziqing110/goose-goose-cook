@@ -116,6 +116,10 @@
 .cc-quip { display: flex; align-items: flex-start; gap: 9px; margin: 0; font-size: 15px; line-height: 22px; color: var(--ink-soft); text-wrap: pretty; }
 .cc-quip > svg { margin-top: 5px; }
 
+/* Their own words, not the goose's commentary about them — no print icon,
+   set as a quote rather than a line of dialogue. */
+.cc-quote { margin: 0; padding-left: 44px; font-size: 15px; line-height: 22px; font-style: italic; color: var(--ink-soft); text-wrap: pretty; }
+
 /* ---------------- actions ---------------- */
 .cc-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 36px; padding: 20px 0 8px; border-top: 1px solid var(--line); }
 .cc-actions-left { display: flex; align-items: center; gap: 4px; }
@@ -141,7 +145,7 @@
 @media (max-width: 720px) {
   .cc-title-row { padding: 16px 0 24px; }
   .cc-print { rotate: -0.5deg; }
-  .cc-quips { padding-left: 0; }
+  .cc-quips, .cc-quote { padding-left: 0; }
   .cc-actions { flex-direction: column-reverse; align-items: stretch; }
   .cc-actions-left { display: grid; grid-template-columns: 1fr 1fr; }
   .ds-v4 .cc-actions .btn-lg { width: 100%; }

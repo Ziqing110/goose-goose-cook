@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import VoiceBar from "./VoiceBar.jsx";
 import ConversationRail from "./ConversationRail.jsx";
@@ -21,6 +22,10 @@ export default function AppShell() {
   // same chrome as Home so it reads as part of the app — goose included —
   // plus a way back.
   const isJournal = pathname.startsWith("/cook/");
+  // Live-cook has its own demo notice (voice recognition, non-dismissable);
+  // showing this generic one there too would be a redundant second banner.
+  const isLiveCook = pathname.startsWith("/session/live-cook");
+  const [demoOpen, setDemoOpen] = useState(true);
 
   // The swim lane colours follow whichever birds the cooks picked. Set
   // on the root element (not the shell div) so a portaled surface — the
@@ -49,6 +54,21 @@ export default function AppShell() {
           </nav>
         )}
       </header>
+
+      {!isLiveCook && demoOpen && (
+        <div className="demo-banner" role="note">
+          <span className="demo-banner-tag">Honk! This is a demo</span>
+          <span className="demo-banner-body">
+            Nothing you enter is saved anywhere — closing or reloading this tab loses your kitchen, cooks, and schedule.
+          </span>
+          <a className="demo-banner-link" href="https://github.com/Ziqing110/goose-goose-cook" target="_blank" rel="noopener noreferrer">
+            Full voice kit on GitHub
+          </a>
+          <button type="button" className="demo-banner-close" aria-label="Dismiss demo notice" onClick={() => setDemoOpen(false)}>
+            &times;
+          </button>
+        </div>
+      )}
 
       <main className="stage-root">
         <Outlet />

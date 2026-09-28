@@ -80,6 +80,17 @@ short-lived token from our own endpoint, never the key. Scripts load it
 via Node's built-in `--env-file-if-exists`; there is no `dotenv`
 dependency and we don't want one.
 
+## Other secrets
+
+`HUGGINGFACE_API_TOKEN` (`server/routes/photo.js`) cuts the background
+out of the summary card's dish photo, via HF's free serverless Inference
+API — no billing, but a community model cold-starts and is
+rate-limited, so it's not for production volume. **Optional**: with no
+token set, the photo is left untouched (`source: "stub"`) and the
+client still pixelates it locally, so nothing fails at save time either
+way. Same `.env` file, same loading mechanism as `ASSEMBLYAI_API_KEY`
+above. Get one at <https://huggingface.co/settings/tokens>.
+
 ## Where things are
 
 - `VOICE_PLAN.md` — the staged plan (A explore → B decide → C integrate)

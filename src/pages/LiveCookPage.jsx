@@ -45,7 +45,7 @@ import { matchConfirmation, hasSubject, normalizeUtterance } from "../utils/navC
 import { routeConfirmReply } from "../utils/confirmReply.js";
 import { routeModalReply, FINISH_PHRASE } from "../utils/modalReply.js";
 import { findSelfIntro } from "../utils/selfIntro.js";
-import { joinSpelledLetters } from "../utils/cookVoice.js";
+import { joinSpelledLetters, impliedAssignee } from "../utils/cookVoice.js";
 import { opensFollowUp } from "../utils/followUp.js";
 import { rejectionLines } from "../utils/agentRejection.js";
 import { voiceLog } from "../voice/voiceLog.js";
@@ -393,8 +393,6 @@ export default function LiveCookPage() {
   const [confirm, setConfirm] = useState(null); // { kind: "finish" } | { kind: "skip", stepId, cookId }
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
-  // The "this is a demo" notice above the header; dismissed per visit.
-  const [demoOpen, setDemoOpen] = useState(true);
   // The score moment in flight: which card it left, how many points,
   // and a key so two quick Dones each get their own "+20".
   const [fly, setFly] = useState(null);
@@ -427,7 +425,7 @@ export default function LiveCookPage() {
     const hint = finished
       ? { line: "Service done — see the cook card when you're ready.", sub: null }
       : paused
-        ? { line: "Paused — say “resume” to pick it back up.", sub: "No need for my name while we're paused. Every clock is stopped." }
+        ? { line: "Paused — say “resume” to pick it back up.", sub: "Or say “back to the schedule”. No need for my name while we're paused." }
         : {
             line: `Say “${AGENT_NAME}” first — “${AGENT_NAME}, I'm done with the onion.”`,
             sub: confirm?.kind === "finish"
@@ -785,6 +783,7 @@ export default function LiveCookPage() {
       dish: approved?.title || "Untitled cook",
       mode: run.mode,
       dishOfStep: (s) => dishOf(byId[s.id]),
+      transcript: run.transcript,
     });
     setSaveError(null);
     setSaving(true);
@@ -849,6 +848,17 @@ export default function LiveCookPage() {
   const PAUSED_OK = new Set(["resume", "status", "score", "help", "explain"]);
   const applyAgentTurn = (turn, text, cookId, via = null) => {
     const at = () => new Date().toISOString();
+    // Captured before this turn's own line goes on -- otherwise it would
+    // be looking at itself. See impliedAssignee: a bare "yes" answering
+    // the agent's own "should I give it to Zeina?", or an answer that
+    // only settles WHICH STEP after a request that already named a
+    // cook ("assign Zina the latest task" -> "which step?" -> "add
+    // sauce"), both need this to hand the step to Zeina rather than to
+    // whoever is speaking.
+    const priorTranscript = latestRunRef.current.transcript || [];
+    const priorAgentEntry = priorTranscript[priorTranscript.length - 1];
+    const entryBeforeThat = priorTranscript[priorTranscript.length - 2];
+    const impliedCookId = impliedAssignee(text, priorAgentEntry, entryBeforeThat, cooks);
     commit(appendTranscript(latestRunRef.current, { at: at(), speaker: cookId, text, via }));
     const spoken = [];
     // Where the run log stands before any of this turn's actions. Each
@@ -857,6 +867,13 @@ export default function LiveCookPage() {
     // below is a diff of the log rather than a second account that could
     // disagree with it.
     const logBefore = (latestRunRef.current.transcript || []).length;
+    // A handler that refuses (doUndo past its window, doDone on a step
+    // that isn't yours) commits a new run for the transcript line alone
+    // and leaves `steps` untouched -- so its identity is a cheap, honest
+    // "did anything actually happen", independent of which tool was
+    // named. A rejection turn.calls names ("undo") is not in ANSWERING,
+    // and looks exactly like a completed one to opensFollowUp otherwise.
+    const stepsBefore = latestRunRef.current.steps;
     askedRef.current = [];
 
     turn.calls.forEach((call) => {
@@ -875,7 +892,11 @@ export default function LiveCookPage() {
       // whoever the toggle was left on, and saying whose it is was the
       // only way to give the other cook anything.
       const named = call.cookName ? cooks.find((c) => c.name === call.cookName)?.id : null;
-      const actor = named ?? cookId;
+      // The model's own cook_name wins when it gave one; otherwise, on
+      // claim/start only, a bare "yes" to the agent's own question falls
+      // back to whoever that question named, before defaulting to the
+      // speaker.
+      const actor = named ?? (["claim", "start"].includes(call.name) ? impliedCookId : null) ?? cookId;
 
       // done, skip and drop without a name mean "the one I'm on".
       const own = ["done", "skip", "drop"].includes(call.name) ? activeStepFor(cookId, cur, nodes) : null;
@@ -1015,10 +1036,18 @@ export default function LiveCookPage() {
     // next question is what made this a command line you speak at rather
     // than something you talk to.
     //
+    // A call that named a tool but changed nothing is a refusal wearing
+    // an action's clothes -- "I can't undo that anymore" is exactly the
+    // kind of half-an-exchange a question or an explain is, not the end
+    // of a thing the way a completed claim or done is. Without this, the
+    // very next thing anyone says needs the name again, on what reads as
+    // the same exchange to whoever is talking.
+    const acted = latestRunRef.current.steps !== stepsBefore;
+    //
     // Still never for unaddressed chatter: a turn only let through
     // because the door was already open must not hold it open for the
     // rest of the room.
-    if (!chatter && opensFollowUp(turn)) engagedUntilRef.current = Date.now() + ENGAGED_MS;
+    if (!chatter && (opensFollowUp(turn) || !acted)) engagedUntilRef.current = Date.now() + ENGAGED_MS;
   };
 
   // Who was that? Asks the local speaker service, which compares the turn's
@@ -1217,6 +1246,18 @@ export default function LiveCookPage() {
           speaker: saidBy ?? speaker,
           text: said,
         }));
+        return null;
+      }
+      // Leaving mid-cook by voice must not happen -- but nothing is
+      // running while paused, so heading back to the plan is safe here
+      // the same way resuming is, and heard the same way: no name needed.
+      if (intent === "schedule" && !hasSubject(normalizeUtterance(said))) {
+        commit(appendTranscript(latestRunRef.current, {
+          at: new Date().toISOString(),
+          speaker: saidBy ?? speaker,
+          text: said,
+        }));
+        navigate("/session/schedule");
         return null;
       }
     }
@@ -1423,10 +1464,16 @@ export default function LiveCookPage() {
 
     const heard = appendTranscript(run, { at: new Date().toISOString(), speaker: cookId, text });
 
-    // While paused only "resume" does anything; everything else is
-    // logged and answered, never acted on.
+    // While paused only "resume" and heading back to the plan do
+    // anything -- nothing is running, so leaving is safe; everything
+    // else is logged and answered, never acted on.
     if (paused) {
       if (result.intent === "resume") return togglePause(heard);
+      if (result.intent === "schedule") {
+        commit(heard);
+        navigate("/session/schedule");
+        return;
+      }
       return commit(say(heard, "We're paused — say \"resume\" when you're ready."));
     }
 
@@ -1505,23 +1552,15 @@ export default function LiveCookPage() {
 
   return (
     <section className={`page live-cook-page ${isVersus ? "is-versus" : "is-coop"} ${paused ? "is-paused" : ""} ${finished ? "is-finished" : ""}`}>
-      {demoOpen && (
-        <div className="lc-demo" role="note">
-          <span className="lc-demo-tag">Honk! This is a demo</span>
-          <span className="lc-demo-body">
-            <span>Voice is limited in this demo. Start with your name when you call {AGENT_NAME}:</span>
-            <Mono className="lc-demo-say">&ldquo;{AGENT_NAME}, {cooks[0]?.name || "Mia"} finished the garlic&rdquo;</Mono>
-            <span className="lc-demo-sep" aria-hidden="true">&middot;</span>
-            <Mono className="lc-demo-say">&ldquo;{AGENT_NAME}, {cooks[1]?.name || "Leo"} will take the rice&rdquo;</Mono>
-          </span>
-          <a className="lc-demo-link" href="https://github.com/Ziqing110/goose-goose-cook" target="_blank" rel="noopener noreferrer">
-            Full voice kit on GitHub
-          </a>
-          <button type="button" className="lc-demo-close" aria-label="Dismiss demo notice" onClick={() => setDemoOpen(false)}>
-            &times;
-          </button>
-        </div>
-      )}
+      <div className="lc-demo" role="note">
+        <span className="lc-demo-tag">Honk!</span>
+        <span className="lc-demo-body">
+          <span>Voice recognition isn&rsquo;t deployed in this demo. Start with your name when you call {AGENT_NAME}:</span>
+          <Mono className="lc-demo-say">&ldquo;{AGENT_NAME}, {cooks[0]?.name || "Mia"} finished the garlic&rdquo;</Mono>
+          <span className="lc-demo-sep" aria-hidden="true">&middot;</span>
+          <Mono className="lc-demo-say">&ldquo;{AGENT_NAME}, {cooks[1]?.name || "Leo"} will take the rice&rdquo;</Mono>
+        </span>
+      </div>
       {/* The same header every stage has: the run eyebrow, the title
           with its crooked underline, the run's facts, and one line of
           the goose's own. His aside here is the standing rule of the

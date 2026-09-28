@@ -6,6 +6,7 @@
 // when someone is saying "call the first cook Mia".
 
 import { MAX_COOK_NAME_LENGTH } from "./cooks.js";
+import { matchConfirmation } from "./navCommands.js";
 
 // Bare "to" is deliberately not a synonym for two: "add a cook to the
 // kitchen" would resolve it. "too" is what recognizers actually hear.
@@ -42,6 +43,67 @@ export function resolveCookRef(said, cooks) {
     return name && new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(text);
   });
   return hits.length === 1 ? hits[0] : null;
+}
+
+/**
+ * Who work goes to when the agent's tool call named nobody but a
+ * question sits right before this answer in the transcript. Two shapes:
+ *
+ *  - The agent's OWN question named a cook ("Should I give the garlic
+ *    to Zeina? Say yes or no."), and this answer is a bare "yes". A
+ *    small model does not reliably repeat cook_name on the tool call
+ *    that follows its own question, so it is resolved here instead.
+ *  - The agent asked about something ELSE -- almost always which step
+ *    ("Which step do you mean, add sauce or thicken sauce?") -- after a
+ *    request that already named a cook ("assign Zina the latest task").
+ *    The answer here settles the step, not who; the name from the
+ *    request that opened the exchange still stands. No "yes" gate here
+ *    -- the answer is a step name, never one.
+ *
+ * Either way, this only runs when the model's own call carried no
+ * cook_name, so it never overrides an explicit choice -- it only fills
+ * in what an open exchange had already settled.
+ *
+ * @param {string} answer  the current utterance
+ * @param {{speaker: string, text: string}|undefined} priorAgentEntry
+ *   the transcript entry immediately before this answer
+ * @param {{speaker: string, text: string}|undefined} entryBeforeThat
+ *   the one before that -- the request the agent's question answered,
+ *   when the question wasn't about who
+ * @param {Array<{id, name}>} cooks
+ * @returns {string|null} a cook id, or null when nothing applies
+ */
+export function impliedAssignee(answer, priorAgentEntry, entryBeforeThat, cooks) {
+  // A "?" anywhere, not just at the end: "Did you mean X? Say yes or
+  // no." is still a question, and that trailing phrase is exactly how
+  // the app's own confirmations are worded.
+  if (priorAgentEntry?.speaker !== "agent" || !(priorAgentEntry.text || "").includes("?")) return null;
+  const namedByQuestion = cookMentionedIn(priorAgentEntry.text, cooks);
+  if (namedByQuestion) {
+    return matchConfirmation(answer) === "yes" ? namedByQuestion.id : null;
+  }
+  if (entryBeforeThat && entryBeforeThat.speaker !== "agent") {
+    return cookMentionedIn(entryBeforeThat.text, cooks)?.id ?? null;
+  }
+  return null;
+}
+
+// A cook named anywhere in a full sentence, spelled right or as the
+// recogniser heard it. resolveCookRef alone only catches the exact
+// spelling; nearestCook alone only works on a word or two, not a whole
+// sentence, since it edit-distances the ENTIRE input against each name.
+// So: try the sentence whole (exact), then each word on its own
+// (fuzzy) -- reusing nearestCook's tested tolerance rather than
+// reimplementing it.
+function cookMentionedIn(text, cooks) {
+  const exact = resolveCookRef(text, cooks);
+  if (exact) return exact;
+  const words = String(text || "").toLowerCase().replace(/[^a-z' -]/g, " ").split(/\s+/).filter(Boolean);
+  for (const word of words) {
+    const hit = nearestCook(word, cooks);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 // Words that follow "I'm" without being a name. Without this, "I'm
