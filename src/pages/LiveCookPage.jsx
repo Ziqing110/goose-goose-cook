@@ -45,7 +45,7 @@ import { matchConfirmation, hasSubject, normalizeUtterance } from "../utils/navC
 import { routeConfirmReply } from "../utils/confirmReply.js";
 import { routeModalReply, FINISH_PHRASE } from "../utils/modalReply.js";
 import { findSelfIntro } from "../utils/selfIntro.js";
-import { joinSpelledLetters, impliedAssignee } from "../utils/cookVoice.js";
+import { joinSpelledLetters, impliedAssignee, resolveCookRef } from "../utils/cookVoice.js";
 import { opensFollowUp } from "../utils/followUp.js";
 import { rejectionLines } from "../utils/agentRejection.js";
 import { voiceLog } from "../voice/voiceLog.js";
@@ -64,7 +64,7 @@ const ASIDE_CHECK_MS = 5000;
 import { AGENT_NAME, speak, takeInterrupted } from "../voice/agentVoice.js";
 import { explainStep } from "../utils/stepExplain.js";
 import { audioTap } from "../voice/audioTap.js";
-import { identifySpeaker, learnVoice } from "../api/speaker.js";
+import { identifySpeaker, learnVoice, SPEAKER_SERVICE } from "../api/speaker.js";
 import { decideSpeaker, hasHandover, shouldLearn } from "../utils/speakerMatch.js";
 import { cookFromTurn } from "../utils/speakerLabels.js";
 import { isNameOnlyTurn } from "../utils/addressing.js";
@@ -157,11 +157,12 @@ const NAME_CARRY_MS = 5_000;
 function onMomentDue(stepId, phase, index) {}
 
 // How to say a step verb with the step in it, for when the goose cannot
-// tell which step was meant. Said as a whole command, name included, so
-// the answer is heard like any other turn and nothing has to be held
-// open waiting for it.
+// tell which step was meant. Said as a whole command, so the answer is
+// heard like any other turn and nothing has to be held open waiting for
+// it. No name in it: the goose no longer needs one to act (see
+// requestTurn), and asking for it taught cooks a rule that isn't there.
 const NAMED_FORM = { done: "done with", start: "start", claim: "I'll take", skip: "skip", drop: "put back" };
-const sayWithName = (intent) => `Say “${AGENT_NAME}, ${NAMED_FORM[intent] || intent}” and the step.`;
+const sayWithStep = (intent) => `Say “${NAMED_FORM[intent] || intent}” and the step.`;
 
 const capitalize = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
@@ -389,7 +390,9 @@ export default function LiveCookPage() {
   // onion" against both "Cut the yellow onion" and "Cut the red onion",
   // say. Firing on that guess is how a mishearing finishes the wrong
   // step; asking first is the whole point of this state.
-  const [pendingConfirm, setPendingConfirm] = useState(null); // { intent, stepId, cookId, label, candidates }
+  // { intent, stepId, cookId, label, candidates }, or for "are you Toni?"
+  // { who: true, cookId, actions: [{ intent, stepId }] }.
+  const [pendingConfirm, setPendingConfirm] = useState(null);
   const [confirm, setConfirm] = useState(null); // { kind: "finish" } | { kind: "skip", stepId, cookId }
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
@@ -425,9 +428,9 @@ export default function LiveCookPage() {
     const hint = finished
       ? { line: "Service done — see the cook card when you're ready.", sub: null }
       : paused
-        ? { line: "Paused — say “resume” to pick it back up.", sub: "Or say “back to the schedule”. No need for my name while we're paused." }
+        ? { line: "Paused — say “resume” to pick it back up.", sub: "Or say “back to the schedule”." }
         : {
-            line: `Say “${AGENT_NAME}” first — “${AGENT_NAME}, I'm done with the onion.”`,
+            line: "Just say it — “I'm done with the onion.” No need for my name.",
             sub: confirm?.kind === "finish"
               ? `Say “${FINISH_PHRASE}” to end now, or “keep cooking”.`
               : confirm?.kind === "skip" || pendingConfirm
@@ -604,6 +607,19 @@ export default function LiveCookPage() {
     speak(line);
   };
 
+  // Taking work on for somebody the app only GUESSED was talking -- a
+  // diarization label or the toggle, with no voiceprint behind it (the
+  // demo never has one) -- asks first: "Are you Toni?". A wrong claim
+  // puts a step, and in versus its points, on the wrong cook, and
+  // nobody may notice until it matters. Skipped when the step is
+  // already this cook's dealt ticket: the plan and the guess agree.
+  const WHO_CHECKED = new Set(["claim", "start"]);
+  const guessMatchesPlan = (stepId, cookId) => assignments?.byCook?.[cookId]?.stepId === stepId;
+  const askWho = (base, cookId, actions) => {
+    setPendingConfirm({ who: true, cookId, actions });
+    askAloud(base, `Are you ${name(cookId)}? Say yes or no.`);
+  };
+
 
 
   // --- the handlers every button AND every utterance routes through ---
@@ -623,9 +639,20 @@ export default function LiveCookPage() {
   // `reporter` is whoever said or tapped it. The points are the
   // holder's, whoever reports it -- see the credit rule at applyDone.
   const doDone = (stepId, reporter, source = "tap", base = run) => {
-    if (paused || !stepId || base.steps[stepId]?.status !== "active") return;
-    const cookId = base.steps[stepId].cookId ?? reporter;
+    if (paused || !stepId) return;
     const at = new Date().toISOString();
+    // A co-op ticket reported finished before anyone pressed Start
+    // ("Toni is done"): it was cooked, just never started on screen.
+    // Started now for the cook it was dealt to, so the points follow
+    // that cook rather than whoever said it.
+    const unstarted = base.steps[stepId]?.status === "pending";
+    if (unstarted) {
+      const owner = Object.entries(assignments?.byCook || {}).find(([, a]) => a?.stepId === stepId && a.reason === "assigned")?.[0];
+      if (!owner) return;
+      base = applyStart({ run: base, stepId, cookId: owner, at, source });
+    }
+    if (base.steps[stepId]?.status !== "active") return;
+    const cookId = base.steps[stepId].cookId ?? reporter;
     const v = stepVariance(byId[stepId], { ...base.steps[stepId], endedAt: at });
     let next = applyDone({ run: base, stepId, cookId: reporter, at, source });
     // Recompile the rest of the plan on every completion — real times
@@ -637,7 +664,9 @@ export default function LiveCookPage() {
       next,
       isVersus
         ? `+${pts} for ${name(cookId)}. ${byId[stepId].label}, ${clock(v.actualSec)}${overNote}.`
-        : `${byId[stepId].label} done in ${clock(v.actualSec)}${overNote}.`
+        : unstarted
+          ? `${byId[stepId].label} done, ${name(cookId)}.` // never timed, so no time to read out
+          : `${byId[stepId].label} done in ${clock(v.actualSec)}${overNote}.`
     );
     if (isRunComplete(next, nodes)) next = say(next, "That's everything. Dinner's up.");
     commit(next);
@@ -816,11 +845,30 @@ export default function LiveCookPage() {
   // getting through has the cards' own buttons instead.
   const resolvePendingConfirm = (answer, base = run) => {
     if (!pendingConfirm) return undefined;
+    if (pendingConfirm.who) {
+      const { cookId, actions } = pendingConfirm;
+      setPendingConfirm(null);
+      if (answer === "yes") {
+        // Settled: whoever is talking IS this cook, so the toggle says so
+        // and the rest of their turns stop needing the question.
+        setSpeakerId(cookId);
+        let cur = base;
+        actions.forEach(({ intent, stepId }) => {
+          runIntentAction(intent, stepId, cookId, cur);
+          cur = latestRunRef.current;
+        });
+        return undefined;
+      }
+      const line = `Sorry. Who's taking it? Say “I'm” and your name, then the step.`;
+      commit(say(base, line));
+      speak(line);
+      return undefined;
+    }
     const { intent, stepId, cookId, label, candidates } = pendingConfirm;
     setPendingConfirm(null);
     if (answer === "yes") return runIntentAction(intent, stepId, cookId, base);
     const others = candidates.filter((id) => id !== stepId).map((id) => byId[id]?.label).filter(Boolean).slice(0, 2);
-    return commit(say(base, `Not “${label}”. ${others.length ? `Maybe ${others.join(" or ")}? ` : ""}${sayWithName(intent)}`));
+    return commit(say(base, `Not “${label}”. ${others.length ? `Maybe ${others.join(" or ")}? ` : ""}${sayWithStep(intent)}`));
   };
 
   // Co-op keeps no score — the honest answer is the progress.
@@ -875,6 +923,8 @@ export default function LiveCookPage() {
     // and looks exactly like a completed one to opensFollowUp otherwise.
     const stepsBefore = latestRunRef.current.steps;
     askedRef.current = [];
+    const guessed = cooks.length > 1 && (via === "label" || via === "toggle");
+    const unsure = [];
 
     turn.calls.forEach((call) => {
       const cur = latestRunRef.current;
@@ -910,9 +960,19 @@ export default function LiveCookPage() {
           done: "Which one did you finish?",
           skip: "Which one should I skip?",
           drop: "Which one are you putting back?",
-        }[call.name]} ${sayWithName(call.name)}`;
+        }[call.name]} ${sayWithStep(call.name)}`;
         commit(say(cur, question));
         spoken.push(question);
+        return;
+      }
+      // Held back for "are you ...?" when who is talking was a guess and
+      // nobody named whose it is. Asked once, below, for all of them.
+      // A cook named in the sentence itself ("Toni will take the task")
+      // is never asked about, even when the model left cook_name out
+      // because the toggle already said Toni.
+      const saidWho = resolveCookRef(text, cooks)?.id === actor;
+      if (guessed && WHO_CHECKED.has(call.name) && !named && !saidWho && !impliedCookId && !guessMatchesPlan(stepId, actor)) {
+        unsure.push({ intent: call.name, stepId });
         return;
       }
       switch (call.name) {
@@ -954,6 +1014,7 @@ export default function LiveCookPage() {
         default: return undefined;
       }
     });
+    if (unsure.length) askWho(latestRunRef.current, cookId, unsure);
 
     // Talk that was not addressed by name, only let through because the
     // agent had just asked something, gets a reply only if it turned into
@@ -1070,7 +1131,7 @@ export default function LiveCookPage() {
   // the voice was matched or the toggle was simply left where it was.
   const whoSpoke = async (clip, turn) => {
     if (cooks.length < 2) return null;
-    if (!clip) {
+    if (!clip || !SPEAKER_SERVICE) {
       const byLabel = cookFromTurn(turn, cooks).cookId;
       return byLabel ? { cookId: byLabel, via: "label" } : null;
     }
@@ -1481,7 +1542,7 @@ export default function LiveCookPage() {
       return commit(say(heard, "We're paused — say \"resume\" when you're ready."));
     }
 
-    const needTarget = (message) => commit(say(heard, `${message} ${sayWithName(result.intent)}`));
+    const needTarget = (message) => commit(say(heard, `${message} ${sayWithStep(result.intent)}`));
 
     // A close-but-not-exact name match — a word dropped or swapped among
     // steps that read alike — gets checked before it fires, instead of
@@ -1492,6 +1553,12 @@ export default function LiveCookPage() {
       // speaker here quietly handed the step back to whoever was talking.
       setPendingConfirm({ intent: result.intent, stepId: result.stepId, cookId: actor, label: byId[result.stepId]?.label, candidates: result.candidates });
       return commit(say(heard, `Did you mean “${byId[result.stepId]?.label}”? Say yes or no.`));
+    }
+
+    // Same check as the model path: nobody named, nobody introduced
+    // themselves, and the toggle is all this has to go on.
+    if (WHO_CHECKED.has(result.intent) && result.stepId && cooks.length > 1 && !saidBy && !result.cookId && !guessMatchesPlan(result.stepId, actor)) {
+      return askWho(heard, actor, [{ intent: result.intent, stepId: result.stepId }]);
     }
 
     switch (result.intent) {
@@ -1559,10 +1626,10 @@ export default function LiveCookPage() {
       <div className="lc-demo" role="note">
         <span className="lc-demo-tag">Honk!</span>
         <span className="lc-demo-body">
-          <span>Voice recognition isn&rsquo;t deployed in this demo. Start with your name when you call {AGENT_NAME}:</span>
-          <Mono className="lc-demo-say">&ldquo;{AGENT_NAME}, {cooks[0]?.name || "Mia"} finished the garlic&rdquo;</Mono>
+          <span>No need to say {AGENT_NAME} first. Voiceprints are off in this demo, so say who&rsquo;s doing it:</span>
+          <Mono className="lc-demo-say">&ldquo;{cooks[0]?.name || "Mia"} finished the garlic&rdquo;</Mono>
           <span className="lc-demo-sep" aria-hidden="true">&middot;</span>
-          <Mono className="lc-demo-say">&ldquo;{AGENT_NAME}, {cooks[1]?.name || "Leo"} will take the rice&rdquo;</Mono>
+          <Mono className="lc-demo-say">&ldquo;{cooks[1]?.name || "Leo"} will take the rice&rdquo;</Mono>
         </span>
       </div>
       {/* The same header every stage has: the run eyebrow, the title

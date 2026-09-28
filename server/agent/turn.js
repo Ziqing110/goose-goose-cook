@@ -54,7 +54,9 @@ export function buildTools(snapshot, { search = false } = {}) {
   const ids = {
     claim: steps.filter((s) => s.status === "pending" && s.ready).map((s) => s.id),
     start: steps.filter((s) => s.status === "pending" && s.ready).map((s) => s.id),
-    done: steps.filter((s) => s.status === "active").map((s) => s.id),
+    // A cook's dealt-but-unstarted ticket (next_for) can be reported
+    // finished too: people cook first and forget to press Start.
+    done: steps.filter((s) => s.status === "active" || (s.status === "pending" && s.next_for)).map((s) => s.id),
     skip: steps.filter((s) => s.status === "active" || s.status === "pending").map((s) => s.id),
     drop: steps.filter((s) => s.status === "active").map((s) => s.id),
     // Any step on the board, finished ones included. Asking what
@@ -125,8 +127,10 @@ Rules:
 - Work can be taken on somebody else's behalf: "Zoe will take the garlic", "give the onion to Nora", "can you put the garlic task to Zoe". Pass their name as cook_name on claim or start. Without it the step goes to whoever is speaking, which is wrong when they named someone else. This is a plain statement, not a request for you to double check -- "Zoe will take the garlic" already tells you what to do; call the tool, don't ask them to confirm it back to you. Phrasing it as a question ("can/could you give it to Zoe") does not make it a check-first request either.
 - If the last line in Recent is you asking a question, this turn is almost always the answer to it, not a new request out of nowhere. Read it against that question, and keep everything that question already settled -- including whose name it named. "Give the task to Zina" right after you asked who should take the tofu step means Zina, as cook_name, on the step you asked about; a bare name or "her"/"him" here names the cook, not a new step. "Yes"/"yeah"/"go ahead" answering a yes/no question you asked ("should I give Zina the wok step?") means do exactly that, with the SAME cook_name your question named -- never the speaker's own name, even though they are the one who just said yes. Only fall back to the speaker when your question did not name anyone.
 - Speech recognition misspells names. A name that sounds like one of the cooks ("Zina" for Zeina) is that cook: use the cook's exact name. If the speaker says they are a different cook from the one you were told is speaking, or asks for something "as" another cook, believe them and pass that cook as cook_name -- do not ask them to confirm it.
-- Anyone may say a step is finished, including somebody else's ("Nora's done with the tofu"): call done with that step id. The points go to whoever holds the step, never to the speaker. Skipping and dropping are the speaker's own; if they ask to skip or drop somebody else's step, call no tool and say that person needs to say it.
-- The step ids you are given per tool are the only legal ones for it. If they say a step is finished, or ask to skip or drop one, and its id is not in that tool's list, nobody has taken it yet: say so in one line and call no tool. Do not ask which step they meant -- you already know which, it is simply not theirs.
+- Anyone may say a step is finished, including somebody else's ("Nora's done with the tofu"): call done with that step id. The points go to whoever holds the step, never to the speaker.
+- "The next task" / "the next one" for a cook is the step marked next_for that cook or listing them in offered_to -- the one their card is showing. "Toni will take the next task" is claim on that step with cook_name Toni, not whichever ready step is listed first.
+- When a cook is named as finished ("Toni is done", "Toni finished the task"), the step is Toni's: the one Toni holds, or else the one marked next_for Toni (their ticket, not started yet). Never pick a step held by, or next for, a different cook -- if Toni has neither, call no tool and say Toni has nothing on the go. Skipping and dropping are the speaker's own; if they ask to skip or drop somebody else's step, call no tool and say that person needs to say it.
+- The step ids you are given per tool are the only legal ones for it. A step marked next_for is that cook's ticket and counts as theirs: saying it is finished means call done with it. If they say a step is finished, or ask to skip or drop one, and its id is not in that tool's list, nobody has taken it yet: say so in one line and call no tool. Do not ask which step they meant -- you already know which, it is simply not theirs.
 - A short step name can hide what it actually involves. If they ask what a step means, how to do it, what it needs, or how long it takes, call explain with that step id rather than answering from the step name -- the app reads back the recipe's own wording, which you cannot see in full.
 - A Brief line, when present, is what they asked for before any of this was planned. Honour it without being asked: never suggest something their diet rules out, and let their stated skill level set how much you explain.
 - Chit-chat, jokes and teasing aimed at you: call no tool and play along in one short, goofy line. You are a goose; lean into it. Do not call help for it.
@@ -145,6 +149,8 @@ export function buildUserMessage(snapshot, text, { shared = false, urgent = fals
     status: s.status,
     ready: s.ready,
     holder: s.holder ?? null,
+    ...(s.next_for ? { next_for: s.next_for } : null),
+    ...(s.offered_to ? { offered_to: s.offered_to } : null),
   }));
   const lines = [
     `Mode: ${snapshot.mode || "coop"}. ${snapshot.paused ? "PAUSED." : "Running."}`,

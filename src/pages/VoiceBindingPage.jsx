@@ -657,8 +657,9 @@ export default function VoiceBindingPage() {
       ],
       // Every line read here misses every command, and none of it is for
       // the goose -- sending it off to be interpreted would have the
-      // goose answer somebody's enrollment script.
-      { priority: 10, exclusive: true, interpret: false },
+      // goose answer somebody's enrollment script. Nor is it worth
+      // writing into Goose's Notes, line by line.
+      { priority: 10, exclusive: true, interpret: false, transcribe: false },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordingCookId]);
@@ -754,7 +755,7 @@ export default function VoiceBindingPage() {
           <p className="vb-sub">Two cooks max · different names · voices stay on this device</p>
           {!SPEAKER_SERVICE && (
             <p className="vb-demo-banner mono" role="note">
-              Demo build: voiceprint matching is off. I tell cooks apart by the mic&rsquo;s speaker labels from your reading, or when you say who you are (&ldquo;Goose, I&rsquo;m Mia&rdquo;).
+              Demo build: voiceprint matching is off. I tell cooks apart by the mic&rsquo;s speaker labels from your reading, or when you say who you are (&ldquo;I&rsquo;m Mia, I&rsquo;ll take the rice&rdquo;).
             </p>
           )}
           <span className="ds-aside">

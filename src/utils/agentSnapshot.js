@@ -4,7 +4,7 @@
 //
 // Only steps someone could still act on go in. Finished and skipped steps
 // are noise to the model and tokens on every turn.
-import { readyStepIds } from "./liveCook.js";
+import { activeStepFor, claimSuggestions, readyStepIds, resolveAssignments } from "./liveCook.js";
 
 const MAX_STEPS = 40;
 const MAX_HISTORY = 6;
@@ -67,6 +67,30 @@ function briefFrom(conversation) {
 export function buildAgentSnapshot({ run, nodes, cooks, speakerId, paused = false, conversation = null }) {
   const readySet = new Set(readyStepIds(nodes, run));
   const nameOf = (id) => cooks.find((c) => c.id === id)?.name ?? null;
+  // Co-op deals each cook a ticket before they start it. Until Start is
+  // pressed it is a pending step with no holder, so without this the
+  // model had no way to know "Toni is done" meant Toni's ticket -- and
+  // marked the speaker's own step done instead.
+  const nextFor = {};
+  // What each free cook's card offers them to take -- a co-op fill-in
+  // from someone else's queue, or versus's top suggestion -- so "Toni
+  // will take the next task" means the one on Toni's card, not the
+  // first ready step in the list.
+  const offeredTo = {};
+  if (run.mode !== "competition") {
+    const byCook = resolveAssignments({ nodes, run, cooks }).byCook;
+    for (const [cookId, a] of Object.entries(byCook)) {
+      if (a?.stepId && a.reason === "assigned") nextFor[a.stepId] = nameOf(cookId);
+      else if (a?.stepId && a.reason === "idle_fill") (offeredTo[a.stepId] ||= []).push(nameOf(cookId));
+    }
+  } else {
+    for (const cook of cooks) {
+      if (activeStepFor(cook.id, run, nodes)) continue;
+      const [top] = claimSuggestions({ nodes, run, cookId: cook.id, limit: 1 });
+      // Versus cards race for the same step, so one may be on both.
+      if (top) (offeredTo[top] ||= []).push(cook.name);
+    }
+  }
 
   const steps = nodes
     .map((n) => ({ node: n, record: run.steps[n.id] }))
@@ -85,6 +109,8 @@ export function buildAgentSnapshot({ run, nodes, cooks, speakerId, paused = fals
       // needs the flag for pending ones.
       ready: record.status === "active" || readySet.has(node.id),
       holder: nameOf(record.cookId),
+      ...(nextFor[node.id] ? { next_for: nextFor[node.id] } : null),
+      ...(offeredTo[node.id] ? { offered_to: offeredTo[node.id] } : null),
     }));
 
   const brief = briefFrom(conversation);

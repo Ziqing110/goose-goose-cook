@@ -38,6 +38,7 @@ import {
   subscribeVoiceRegistry,
   voiceCommandsAreExclusive,
   voiceCommandsInterpretable,
+  voiceCommandsTranscribed,
 } from "../utils/voicePageCommands.js";
 import { ROUTES, voiceReachablePaths } from "../utils/routeGuards.js";
 import { isPaused } from "../utils/liveCook.js";
@@ -440,11 +441,6 @@ export default function VoiceBar() {
   const onTurn = useCallback(
     (turn) => {
       const text = turn.transcript?.trim();
-      // Everything heard goes in the record, whatever becomes of it.
-      // A turn that was ignored is exactly the one somebody wants to
-      // look at afterwards. The live cook keeps its own transcript, so
-      // it would be a second copy there.
-      if (text && routeRef.current !== ROUTES.liveCook) voiceLog.heard(text);
 
       // Diarization tells voices apart without knowing whose they are.
       // Recorded on every page, because the page that needs it (voice
@@ -467,6 +463,15 @@ export default function VoiceBar() {
         canGoBack: (window.history.state?.idx ?? 0) > 0,
         interpret: voiceCommandsInterpretable(),
       });
+
+      // Everything heard goes in the record, whatever becomes of it.
+      // A turn that was ignored is exactly the one somebody wants to
+      // look at afterwards. The live cook keeps its own transcript, so
+      // it would be a second copy there. The exception is a page that
+      // says the words are not for the goose -- a cook reading their
+      // voice lines -- where only a command that matched is kept.
+      const transcribed = voiceCommandsTranscribed() || decision.type !== "ignore";
+      if (text && transcribed && route !== ROUTES.liveCook) voiceLog.heard(text);
 
       // Read before clearing: "yes" performs the question being closed.
       const answered = pendingRef.current;
@@ -594,11 +599,15 @@ export default function VoiceBar() {
     dispatch({ type: "voice/setMuted", payload: { muted: !muted } });
   };
 
+  // Somebody reading their voice lines is not talking to the goose, so
+  // their words do not scroll through its bubble as it listens.
+  const shownPartial = voiceCommandsTranscribed() ? partial : "";
+
   // One source of truth for the three places that describe state, so
   // the pill, the label and the body copy can never disagree.
-  const view = describe({ muted, status, error, idled, pending, feedback, partial, hint, pathname, reachable, idleMs: streamConfig.idleMs, runPaused });
+  const view = describe({ muted, status, error, idled, pending, feedback, partial: shownPartial, hint, pathname, reachable, idleMs: streamConfig.idleMs, runPaused });
 
-  const goose = describeGoose({ view, speaking, muted, status, partial, hearing, pending, feedback, error, interpreting });
+  const goose = describeGoose({ view, speaking, muted, status, partial: shownPartial, hearing, pending, feedback, error, interpreting });
   // ?goose=<state> pins a pose for design review (dev only).
   const pinned = devGooseState();
   const shown = pinned ? { ...GOOSE_PREVIEW[pinned], state: pinned } : goose;

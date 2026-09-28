@@ -42,7 +42,9 @@ import "./VoiceInput.css";
 // next question appears, so the felt delay is longer than these numbers.
 const THINKING_PAUSE = { min_turn_silence: 1000, max_turn_silence: 6000 };
 
-export default function VoiceInput({ question, onAnswer, busy = false }) {
+// `onBack`, when given, reopens the previous question. Null on the first
+// question, and once recipes are drafted from these answers.
+export default function VoiceInput({ question, onAnswer, busy = false, onBack = null }) {
   const { state, dispatch } = useAppState();
   const { pathname } = useLocation();
   const muted = state.voice.muted;
@@ -140,6 +142,19 @@ export default function VoiceInput({ question, onAnswer, busy = false }) {
       )}
 
       <form className="answer-input-row" onSubmit={submit}>
+        {/* An answer the goose already took is otherwise final short of
+            starting over; this is the one step back. */}
+        {onBack && (
+          <button
+            type="button"
+            className="btn btn-ghost answer-back"
+            onClick={onBack}
+            disabled={busy}
+            title="Go back and answer the previous question again"
+          >
+            &larr; Back
+          </button>
+        )}
         <input
           ref={inputRef}
           type="text"

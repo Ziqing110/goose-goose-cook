@@ -594,6 +594,28 @@ export function matchChineseConfirmation(text) {
   return null;
 }
 
+// "No, I meant…", "that's not what I meant", "go back": the cook is
+// objecting to the answer the goose just took, not answering the question
+// it moved on to. Read as an answer, "oh no, I mean chicken stir fry" went
+// to the servings slot and the goose asked for servings again, with no
+// way back short of starting over. A bare "no" is NOT one — it is a fair
+// answer to "any dietary needs?" — so it has to come with a meant/mean.
+const REDO_REQUEST = [
+  /^(?:(?:oh|uh|um|wait|sorry|hold on|hang on|actually|but)[\s,.!]+)*no+\b[\s,.!]*(?:(?:but|wait|sorry)[\s,.!]+)*i (?:mean|meant)\b/,
+  /\b(?:that'?s|that is|it'?s|it is) not what i (?:mean|meant|said|wanted)\b/,
+  /\bi (?:didn'?t|did not|don'?t|do not) mean (?:that|it)\b/,
+  /\byou (?:got|misheard|misunderstood) (?:that|it|me)\b|\bthat'?s wrong\b/,
+  /^(?:(?:yeah|yes|ok|okay|so|um|uh|wait|sorry|hold on|hang on|actually|no)[\s,.!]+)*(?:(?:can|could) we |let'?s |lets )?go back\b/,
+  /^(?:(?:wait|sorry|actually|no)[\s,.!]+)*(?:redo|change|fix|undo) (?:that|the last (?:one|answer|question)|my (?:last )?answer)\b/,
+  /不是这个意思|我不是说|我的意思是|说错了|回到上一(?:个|题)|上一题|返回上一/,
+];
+
+/** True when the cook is taking back the answer just given, not answering. */
+export function isRedoRequest(text) {
+  const t = String(text ?? "").trim().toLowerCase().replace(/[’‘]/g, "'");
+  return REDO_REQUEST.some((pattern) => pattern.test(t));
+}
+
 const ECHO_PREFIX = "I took that as";
 
 /** The agent's echo for a read it isn't sure of, prepended to its next turn. */
@@ -608,6 +630,9 @@ export function echoFor(reading) {
 export function isEchoLine(text = "") {
   return text.startsWith(ECHO_PREFIX);
 }
+
+/** True for a slot that holds an answer, sure or not. */
+export const isFilled = (slot) => slot.status === "confirmed" || slot.status === "low-confidence";
 
 /**
  * One slot per question, in question order:

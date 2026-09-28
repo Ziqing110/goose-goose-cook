@@ -20,7 +20,8 @@ test("snapshot lists open steps with readiness and holders, and drops finished o
   const snap = buildAgentSnapshot({ run, nodes, cooks, speakerId: "k1" });
   assert.equal(snap.speakerName, "Lindy");
   assert.deepEqual(snap.steps.map((s) => s.id), ["b", "c"]);
-  assert.deepEqual(snap.steps.find((s) => s.id === "b"), { id: "b", label: "Fry garlic", status: "pending", ready: true, holder: null });
+  // Lindy is free, so her card offers the one ready step.
+  assert.deepEqual(snap.steps.find((s) => s.id === "b"), { id: "b", label: "Fry garlic", status: "pending", ready: true, holder: null, offered_to: ["Lindy"] });
   assert.equal(snap.steps.find((s) => s.id === "c").holder, "Zeina");
   assert.equal(snap.mode, "coop");
 });
@@ -70,4 +71,13 @@ test("snapshot puts the most recently finished step first", () => {
 
   const snap = buildAgentSnapshot({ run, nodes, cooks, speakerId: "k1" });
   assert.deepEqual(snap.finished.map((s) => s.id), ["c", "a"]);
+});
+
+test("snapshot marks what each free cook's card offers, so 'the next task' can be named", () => {
+  const run = createRun({ nodes, mode: "competition", schedule: null });
+  const snap = buildAgentSnapshot({ run, nodes, cooks, speakerId: "k1" });
+  // Every free cook's card offers something, and the step says whose.
+  const offered = snap.steps.flatMap((s) => s.offered_to || []);
+  assert.deepEqual(offered.sort(), ["Lindy", "Zeina"]);
+  assert.equal(snap.steps.some((s) => s.next_for), false);
 });

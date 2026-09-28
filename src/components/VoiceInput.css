@@ -126,6 +126,8 @@
 /* The mic's own labels are longer than "Send" and are not the bill, so
    they size themselves. */
 .ds-v4 .answer-input-row .btn-primary.is-wide { width: auto; padding: 0 20px; }
+/* Back sits quietly before the input: a way out, not a second action. */
+.ds-v4 .answer-input-row .answer-back { flex: none; min-height: 44px; padding: 0 14px; color: var(--ink-soft); }
 
 /* ---------------- Send, as a bill ----------------
    Straight taper with only the point rounded (3px). `clip-path:

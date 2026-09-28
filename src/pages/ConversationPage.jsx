@@ -5,8 +5,8 @@ import { ELICITATION_QUESTIONS } from "../data/dishes.js";
 // interpretAnswer is still used directly by correctReading below: a typed
 // correction in the sidecar is the cook's own word for the slot, so it is
 // taken as given rather than sent back to a model to be re-read.
-import { conversationSlots, echoFor, interpretAnswer } from "../utils/understanding.js";
-import { readAnswer } from "../api/understanding.js";
+import { conversationSlots, echoFor, interpretAnswer, isFilled, isRedoRequest } from "../utils/understanding.js";
+import { readTurn } from "../api/understanding.js";
 import { UNCLAIMED_AVATAR } from "../utils/cooks.js";
 import VoiceInput from "../components/VoiceInput.jsx";
 import UnderstandingSidecar from "../components/UnderstandingSidecar.jsx";
@@ -131,13 +131,20 @@ export default function ConversationPage() {
   const readingsLocked = state.session.recipes.length > 0;
 
   const total = ELICITATION_QUESTIONS.length;
-  const answered = Math.min(questionIndex, total);
+  // The question "back one" returns to; -1 while on the first.
+  const lastAnswered = Math.min(questionIndex, total) - 1;
+  const canGoBack = lastAnswered >= 0 && !readingsLocked;
   // A session started before a question was removed can sit past the end
   // of the (now shorter) list without being flagged complete; there's
   // nothing left to ask, so treat it as done rather than rendering an
   // answer bar for a question that no longer exists.
   const isComplete = complete || !currentQuestion;
-  const slots = conversationSlots(conversation);
+  // Memoized: handleAnswer reads it, and a new array every render would
+  // rebuild that handler — and re-register dictation — on each one.
+  const slots = useMemo(() => conversationSlots(conversation), [conversation]);
+  // Counted, not read off the question index: answers can land in any
+  // order now, and going back to an early question leaves later ones set.
+  const answered = slots.filter(isFilled).length;
   // Readings the agent is not sure of. The footer names them rather than
   // repeating the tally the progress bar and the notes rail both carry.
   const lowReadings = slots.filter((s) => s.status === "low-confidence").length;
@@ -284,20 +291,77 @@ export default function ConversationPage() {
       // makes the app look like it did not hear.
       const heardTranscript = [...transcript, { speaker: "cook", text }];
       dispatch({ type: "session/conversation/update", payload: { transcript: heardTranscript } });
-      setReading(true);
 
-      let result;
-      try {
-        result = await readAnswer(currentQuestion, text, pendingFollowUp, pendingSuggestion);
-      } finally {
-        setReading(false);
+      // The whole chat is one conversation about all five slots, not five
+      // questions in a row: any turn can answer or change any of them
+      // ("make it kung pao after all", after servings), and the goose
+      // stays on a topic until it is settled or the cook says to move on.
+      // A quick-answer chip is an exact pick with nothing to interpret,
+      // so it skips the round trip.
+      const chip = currentQuestion.options.some((o) => o.label === text.trim());
+      let turn = null;
+      if (!chip) {
+        setReading(true);
+        try {
+          turn = await readTurn({
+            slots: slots.map((s) => ({
+              id: s.id,
+              question: ELICITATION_QUESTIONS.find((q) => q.id === s.id).agentText,
+              answer: isFilled(s) ? s.display : "",
+            })),
+            focus: currentQuestion.id,
+            history: transcript,
+            text,
+          });
+        } finally {
+          setReading(false);
+        }
       }
 
+      if (turn) {
+        const nextAnswers = { ...answers };
+        const nextUnderstanding = { ...understanding };
+        for (const u of turn.updates) {
+          nextAnswers[u.slot] = u.value;
+          nextUnderstanding[u.slot] = { value: u.value, display: u.display, status: u.status };
+        }
+        const focusIndex = ELICITATION_QUESTIONS.findIndex((q) => q.id === turn.focus);
+        setPendingFollowUp(null);
+        setPendingSuggestion(null);
+        dispatch({
+          type: "session/conversation/update",
+          payload: {
+            answers: nextAnswers,
+            understanding: nextUnderstanding,
+            transcript: [...heardTranscript, { speaker: "agent", text: turn.reply }],
+            questionIndex: turn.done ? total : Math.max(0, focusIndex),
+            complete: Boolean(turn.done),
+          },
+        });
+        return;
+      }
+
+      // Offline: the model is out of reach, so the answer is read locally
+      // as an answer to the question in focus.
+      //
+      // "No, I meant…" objects to the answer just taken rather than
+      // answering this one, so it reopens that question instead of being
+      // read into the wrong slot. Not while a follow-up is open: then the
+      // objection is about this question's own reading, and the follow-up
+      // is already asking it again.
+      if (!chip && !pendingFollowUp && canGoBack && isRedoRequest(text)) {
+        backOneQuestionRef.current({ base: heardTranscript, line: `My mistake — let’s redo that one. ${ELICITATION_QUESTIONS[lastAnswered].agentText}` });
+        return;
+      }
+      const result = {
+        followUp: null,
+        ...interpretAnswer(currentQuestion, text, { alreadyAsked: Boolean(pendingFollowUp), suggestion: pendingSuggestion }),
+      };
+
       // The answer was not enough to fill the slot, so the agent asks
-      // rather than guessing. The question index does NOT advance: we are
-      // still on this slot, and the next thing they say is an answer to
-      // the follow-up, which is passed back so a bare "three" is read as
-      // answering it.
+      // rather than guessing. The focus does NOT move: we are still on
+      // this slot, and the next thing they say is an answer to the
+      // follow-up.
       if (result.status === "needs-followup" && result.followUp) {
         setPendingFollowUp(result.followUp);
         setPendingSuggestion(result.suggestion || null);
@@ -316,23 +380,29 @@ export default function ConversationPage() {
 
       setPendingFollowUp(null);
       setPendingSuggestion(null);
-      const nextIndex = questionIndex + 1;
-      const isLast = nextIndex >= ELICITATION_QUESTIONS.length;
+      const nextAnswers = { ...answers, [currentQuestion.id]: result.value };
+      const nextUnderstanding = { ...understanding, [currentQuestion.id]: result };
+      // On to the first question still open — not simply the next one,
+      // since going back to an early question leaves the later ones
+      // answered.
+      const nextIndex = conversationSlots({ ...conversation, answers: nextAnswers, understanding: nextUnderstanding })
+        .findIndex((s) => !isFilled(s));
+      const isLast = nextIndex < 0;
       const nextLine = isLast ? "Got it — drafting your recipe graph now." : ELICITATION_QUESTIONS[nextIndex].agentText;
       const agentText = result.status === "low-confidence" ? `${echoFor(result)} ${nextLine}` : nextLine;
 
       dispatch({
         type: "session/conversation/update",
         payload: {
-          answers: { ...answers, [currentQuestion.id]: result.value },
-          understanding: { ...understanding, [currentQuestion.id]: result },
+          answers: nextAnswers,
+          understanding: nextUnderstanding,
           transcript: [...heardTranscript, { speaker: "agent", text: agentText }],
-          questionIndex: nextIndex,
+          questionIndex: isLast ? total : nextIndex,
           ...(isLast ? { complete: true } : {}),
         },
       });
     },
-    [answers, understanding, questionIndex, transcript, currentQuestion, pendingFollowUp, pendingSuggestion, dispatch],
+    [conversation, answers, understanding, slots, total, transcript, currentQuestion, pendingFollowUp, pendingSuggestion, canGoBack, lastAnswered, dispatch],
   );
 
   const confirmReading = (id) => {
@@ -382,8 +452,9 @@ export default function ConversationPage() {
   // One question back, to be answered again. Its old answer stays in
   // `answers` until the new one lands — leaving the page halfway through
   // should not lose it — but its note goes back to "Asking now…".
-  const lastAnswered = Math.min(questionIndex, total) - 1;
-  const backOneQuestion = () => {
+  // `base` is the log to add to when the cook's "no, I meant…" is already
+  // in it, and `line` is what the goose says to reopen the question.
+  const backOneQuestion = ({ base = transcript, line } = {}) => {
     const previous = ELICITATION_QUESTIONS[lastAnswered];
     if (!previous) return;
     const nextUnderstanding = { ...understanding };
@@ -400,7 +471,7 @@ export default function ConversationPage() {
         questionIndex: lastAnswered,
         complete: false,
         understanding: nextUnderstanding,
-        transcript: [...transcript, { speaker: "agent", text: `Back one. ${previous.agentText}` }],
+        transcript: [...base, { speaker: "agent", text: line || `Back one. ${previous.agentText}` }],
       },
     });
   };
@@ -663,6 +734,11 @@ export default function ConversationPage() {
                 <button className="btn btn-ghost" onClick={restart}>
                   Start over
                 </button>
+                {canGoBack && (
+                  <button className="btn btn-ghost" onClick={() => backOneQuestion()}>
+                    Change last answer
+                  </button>
+                )}
                 <span className="ds-tracks" aria-hidden="true">
                   <GoosePrint depth="pale" size={16} rotate={78} style={{ position: "absolute", left: 4, bottom: 4 }} />
                   <GoosePrint depth="deep" size={19} rotate={98} style={{ position: "absolute", left: 34, bottom: 16 }} />
@@ -673,7 +749,12 @@ export default function ConversationPage() {
               </div>
             </>
           ) : (
-            <VoiceInput question={currentQuestion} onAnswer={handleAnswer} busy={reading} />
+            <VoiceInput
+              question={currentQuestion}
+              onAnswer={handleAnswer}
+              busy={reading}
+              onBack={canGoBack ? () => backOneQuestion() : null}
+            />
           )}
         </div>
       </div>

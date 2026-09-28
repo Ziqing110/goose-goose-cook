@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ELICITATION_QUESTIONS } from "../data/dishes.js";
-import { interpretAnswer, isNonAnswer } from "./understanding.js";
+import { interpretAnswer, isNonAnswer, isRedoRequest } from "./understanding.js";
 
 const q = Object.fromEntries(ELICITATION_QUESTIONS.map((question) => [question.id, question]));
 const read = (id, text, context) => interpretAnswer(q[id], text, context);
@@ -162,4 +162,25 @@ test("clear answers are unchanged", () => {
   assert.equal(read("skill", "I'm new to this").value, "beginner");
   assert.deepEqual(read("dishIdea", "mapo tofu, egg drop soup").value, ["mapo tofu", "egg drop soup"]);
   assert.equal(read("diet", "Vegan").value, "vegan");
+});
+
+test("taking back the last answer is spotted, and a plain no is not", () => {
+  for (const said of [
+    "Oh no, but I mean chicken stir fry. I don't mean like, like I literally want chicken stir fry.",
+    "No, I meant something else",
+    "wait no I mean dumplings",
+    "That's not what I meant",
+    "I didn't mean that",
+    "go back",
+    "Wait, can we go back?",
+    "Yeah, can we go back to the last question?",
+    "change my answer",
+    "不是这个意思",
+    "回到上一题",
+  ]) {
+    assert.equal(isRedoRequest(said), true, said);
+  }
+  for (const said of ["no", "No.", "no pork", "no, none", "four", "I mean, four I guess", "chicken stir fry", "nothing"]) {
+    assert.equal(isRedoRequest(said), false, said);
+  }
 });

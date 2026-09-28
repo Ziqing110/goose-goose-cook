@@ -7,6 +7,7 @@ import {
   matchPageCommand,
   clearVoiceCommands,
   voiceCommandsAreExclusive,
+  voiceCommandsTranscribed,
   registerVoiceDictation,
   getVoiceDictation,
 } from "./voicePageCommands.js";
@@ -137,4 +138,18 @@ test("a higher-priority layer still shadows every layer beneath it", () => {
   matchPageCommand("no ginger")?.run();
   assert.deepEqual(fired, ["cancel", "ginger"]);
   assert.equal(voiceCommandsAreExclusive(), false);
+});
+
+test("a layer can keep what is heard out of the transcript while it is live", () => {
+  registerVoiceCommands([{ phrases: [/\bnext\b/], run: () => {} }]);
+  assert.equal(voiceCommandsTranscribed(), true);
+
+  const stopReading = registerVoiceCommands(
+    [{ phrases: [/\bstop and save\b/], run: () => {} }],
+    { priority: 10, exclusive: true, interpret: false, transcribe: false },
+  );
+  assert.equal(voiceCommandsTranscribed(), false);
+
+  stopReading();
+  assert.equal(voiceCommandsTranscribed(), true);
 });

@@ -82,10 +82,13 @@ const liveLayers = () => {
  *   interpret  false while the words are not meant for the goose at all
  *             -- a cook reading their enrollment lines -- so nothing
  *             unmatched is sent off to be interpreted.
+ *   transcribe  false for the same case: words that are not for the goose
+ *             stay out of Goose's Notes and off its speech bubble. A turn
+ *             that matched a command is still recorded.
  * @returns {Function} unregister
  */
-export function registerVoiceCommands(commands, { priority = 0, exclusive = false, describe = null, interpret = true } = {}) {
-  const layer = { commands: commands || [], priority, exclusive, describe, interpret };
+export function registerVoiceCommands(commands, { priority = 0, exclusive = false, describe = null, interpret = true, transcribe = true } = {}) {
+  const layer = { commands: commands || [], priority, exclusive, describe, interpret, transcribe };
   layers = [...layers, layer];
   return () => {
     // Remove this layer specifically, wherever it now sits. A late
@@ -218,6 +221,11 @@ export function interpretationMenu() {
 /** May an unmatched turn be sent to the goose to interpret right now? */
 export function voiceCommandsInterpretable() {
   return liveLayers().every((l) => l.interpret !== false);
+}
+
+/** Should what is heard be shown and logged? See `transcribe`. */
+export function voiceCommandsTranscribed() {
+  return liveLayers().every((l) => l.transcribe !== false);
 }
 
 /**

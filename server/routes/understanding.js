@@ -83,9 +83,10 @@ const SKILL_LEVELS = new Set(["beginner", "regular", "confident"]);
 // this prompt let "no pork please" come back as value "none", which
 // reads as "no restrictions" downstream and silently drops the one
 // constraint the cook actually gave.
-const SYSTEM = `You convert one answer from a cooking app's setup conversation into JSON.
-
-value      the answer in canonical form, or "" if it cannot be determined.
+//
+// The value and reading rules are shared with /turn below, so a slot
+// means the same thing whichever endpoint filled it.
+const VALUE_RULES = `value      the answer in canonical form, or "" if it cannot be determined.
            servings   -> a bare integer, e.g. "4"
            targetTime -> total MINUTES as a bare integer, e.g. "90"
            diet       -> "none" ONLY when there are no restrictions at all.
@@ -108,23 +109,12 @@ value      the answer in canonical form, or "" if it cannot be determined.
                          a beginner may attempt any dish, however hard.
                          Never use it to discourage or refuse a dish.
 display    short label for the UI, e.g. "4 servings", "90 minutes", "Vegan",
-           "Mapo tofu + Egg drop soup", "Explain everything"
-status     confirmed        the answer is clear
-           low-confidence   you had to guess
-           needs-followup   you cannot land on a value without asking again
-followUp   ONE short question, only when status is needs-followup, else "".
-           It must be answerable in a few words and must NOT repeat the
-           question already asked.
+           "Mapo tofu + Egg drop soup", "Explain everything"`;
 
-Work out what the person means, not just what parses. "me and three mates"
+const READING_RULES = `Work out what the person means, not just what parses. "me and three mates"
 is 4 servings. "half an hour" is 30 minutes. "an hour and a half" is 90.
 Never invent a dish they did not name. The answer may be lightly garbled:
 it came from speech recognition in a kitchen.
-An answer that does not answer the question at all is needs-followup,
-never confirmed: a name or a stray word for diet ("Megan"), no number
-for servings or targetTime. When it sounds like a real answer misheard
-("Megan" is one sound from "vegan"), the followUp asks whether they
-meant that: "Did you mean vegan?".
 
 For servings and targetTime, a vague quantity ALWAYS needs a follow-up:
 "a few", "some", "a handful", "a couple of hours". The serving count
@@ -132,6 +122,24 @@ scales every ingredient amount in the plan, so reading "a few people" as
 3 when they meant 6 is a shopping list wrong by half — and nobody will
 notice until they are cooking. Ask the one short question instead of
 guessing. Never return a range in display when value is a single number.`;
+
+const SYSTEM = `You convert one answer from a cooking app's setup conversation into JSON.
+
+${VALUE_RULES}
+status     confirmed        the answer is clear
+           low-confidence   you had to guess
+           needs-followup   you cannot land on a value without asking again
+followUp   ONE short question, only when status is needs-followup, else "".
+           It must be answerable in a few words and must NOT repeat the
+           question already asked.
+
+${READING_RULES}
+
+An answer that does not answer the question at all is needs-followup,
+never confirmed: a name or a stray word for diet ("Megan"), no number
+for servings or targetTime. When it sounds like a real answer misheard
+("Megan" is one sound from "vegan"), the followUp asks whether they
+meant that: "Did you mean vegan?".`;
 
 const clampText = (s, max) => String(s ?? "").slice(0, max);
 
@@ -258,12 +266,63 @@ function coerce(reading, slot, said) {
   return { value, display, status, followUp, source: "llm" };
 }
 
-understandingRouter.post("/read", async (req, res) => {
-  if (!API_KEY) {
-    return res.status(503).json({
-      error: "ASSEMBLYAI_API_KEY is not set on the server; add it to .env and restart.",
+/**
+ * One call to the gateway, answering JSON to `schema`.
+ *
+ * Resolves to { content } with the parsed reply, or { status, error } for
+ * the route to send back. Rate limits are told apart from breakage: the
+ * first is expected on this account and means fall back quietly.
+ */
+async function askGateway({ system, user, schema, maxTokens, timeoutMs = TIMEOUT_MS }) {
+  try {
+    const upstream = await fetch(GATEWAY, {
+      method: "POST",
+      // Raw key. Adding "Bearer" here is the mistake this codebase keeps
+      // making in the other direction.
+      headers: { authorization: API_KEY, "content-type": "application/json" },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: maxTokens,
+        // Reading an answer is extraction, not writing. The same words
+        // should give the same slot value every time.
+        temperature: 0,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        response_format: { type: "json_schema", json_schema: schema },
+        post_processing_steps: [{ type: "json-repair" }],
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
     });
+
+    if (upstream.status === 429) {
+      return { status: 429, error: { error: "LLM Gateway rate limit", retryable: true } };
+    }
+    if (!upstream.ok) {
+      const detail = await upstream.text().catch(() => "");
+      console.error("LLM Gateway error:", upstream.status, detail.slice(0, 300));
+      return { status: 502, error: { error: `LLM Gateway returned ${upstream.status}` } };
+    }
+    const json = await upstream.json();
+    return { content: extractJson(json?.choices?.[0]?.message?.content) };
+  } catch (err) {
+    const timedOut = err?.name === "TimeoutError" || err?.name === "AbortError";
+    console.error("LLM Gateway request failed:", err?.message || err);
+    return {
+      status: timedOut ? 504 : 502,
+      error: { error: timedOut ? "LLM Gateway timed out" : "LLM Gateway unreachable" },
+    };
   }
+}
+
+const missingKey = (res) =>
+  res.status(503).json({
+    error: "ASSEMBLYAI_API_KEY is not set on the server; add it to .env and restart.",
+  });
+
+understandingRouter.post("/read", async (req, res) => {
+  if (!API_KEY) return missingKey(res);
 
   const { slot, question, text, followUpAsked } = req.body || {};
   if (!text || !String(text).trim()) {
@@ -277,59 +336,219 @@ understandingRouter.post("/read", async (req, res) => {
     ? `Question: ${clampText(question, 300)}\nFollow-up just asked: ${clampText(followUpAsked, 300)}`
     : `Question: ${clampText(question, 300)}`;
 
-  try {
-    const upstream = await fetch(GATEWAY, {
-      method: "POST",
-      // Raw key. Adding "Bearer" here is the mistake this codebase keeps
-      // making in the other direction.
-      headers: { authorization: API_KEY, "content-type": "application/json" },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: MAX_TOKENS,
-        // Reading an answer is extraction, not writing. The same words
-        // should give the same slot value every time.
-        temperature: 0,
-        messages: [
-          { role: "system", content: SYSTEM },
-          {
-            role: "user",
-            content: `Slot: ${clampText(slot, 40)}\n${asked}\nThe cook said: ${clampText(text, 600)}`,
+  const reply = await askGateway({
+    system: SYSTEM,
+    user: `Slot: ${clampText(slot, 40)}\n${asked}\nThe cook said: ${clampText(text, 600)}`,
+    schema: SCHEMA,
+    maxTokens: MAX_TOKENS,
+  });
+  if (reply.error) return res.status(reply.status).json(reply.error);
+
+  const reading = coerce(reply.content, slot, text);
+  if (!reading) return res.status(502).json({ error: "LLM Gateway returned no usable reading" });
+
+  res.set("Cache-Control", "no-store");
+  return res.json(reading);
+});
+
+// ---------------------------------------------------------------------
+// /turn — the whole setup chat as one conversation.
+//
+// /read took each answer as the answer to one question, in order, so
+// once the goose moved on there was no way back: "no, I meant chicken
+// stir fry" was read as a number of servings, and "we're not ready for
+// servings, talk more about the dishes" got asked for servings again.
+//
+// Here every turn is read against ALL the slots. The cook can change the
+// dishes after giving servings; the goose stays on a topic while they are
+// still working it out, suggests when asked, and only moves on once the
+// slot is settled or the cook says to. The chat is done when every slot
+// has an answer and nothing is still being discussed.
+
+const TURN_SCHEMA = {
+  name: "conversation_turn",
+  strict: true,
+  schema: {
+    type: "object",
+    properties: {
+      updates: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            slot: { type: "string" },
+            value: { type: "string", description: "Empty string for dishIdea." },
+            dishes: { type: "array", items: { type: "string" }, description: "dishIdea only; else []." },
+            display: { type: "string" },
+            status: { type: "string", enum: ["confirmed", "low-confidence"] },
           },
-        ],
-        response_format: { type: "json_schema", json_schema: SCHEMA },
-        post_processing_steps: [{ type: "json-repair" }],
-      }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
+          required: ["slot", "value", "dishes", "display", "status"],
+          additionalProperties: false,
+        },
+      },
+      focus: { type: "string", description: "Slot id the conversation is on after this turn." },
+      done: { type: "boolean" },
+      reply: { type: "string" },
+    },
+    required: ["updates", "focus", "done", "reply"],
+    additionalProperties: false,
+  },
+};
 
-    // Surfaced distinctly so the client can tell "we are being throttled"
-    // from "this is broken" — the first is expected on this account and
-    // means fall back quietly, not show an error.
-    if (upstream.status === 429) {
-      return res.status(429).json({ error: "LLM Gateway rate limit", retryable: true });
-    }
+// A reply can carry a few dish suggestions, and updates can touch
+// several slots at once.
+const TURN_MAX_TOKENS = 500;
+// Enough of the chat to know what was just offered or asked, without
+// sending the whole transcript every turn.
+const TURN_HISTORY = 12;
+// A turn writes a reply, not just a reading: live runs of a follow-up
+// with suggestions took 6-7s against /read's 1.3s, too near its 8s. Still
+// under the client's 12s, so a stall lands on the local reader.
+const TURN_TIMEOUT_MS = 11_000;
 
-    if (!upstream.ok) {
-      const detail = await upstream.text().catch(() => "");
-      console.error("LLM Gateway error:", upstream.status, detail.slice(0, 300));
-      return res.status(502).json({ error: `LLM Gateway returned ${upstream.status}` });
-    }
+const TURN_SYSTEM = `You are Goose, the chef goose running the setup chat of a cooking app.
+The chat has one job: land an answer for every slot listed. Treat the whole
+chat as ONE conversation. The cook may answer, change or reopen ANY slot at
+any time — change the dishes after giving servings, add a dish, fix a
+number — and every such change is an update.
 
-    const json = await upstream.json();
-    const reading = coerce(
-      extractJson(json?.choices?.[0]?.message?.content),
-      slot,
-      text,
-    );
-    if (!reading) return res.status(502).json({ error: "LLM Gateway returned no usable reading" });
+Each turn you get the slots in order with the answers so far, the slot in
+focus, the recent chat, and what the cook just said. Return JSON:
 
-    res.set("Cache-Control", "no-store");
-    return res.json(reading);
-  } catch (err) {
-    const timedOut = err?.name === "TimeoutError" || err?.name === "AbortError";
-    console.error("LLM Gateway request failed:", err?.message || err);
-    return res
-      .status(timedOut ? 504 : 502)
-      .json({ error: timedOut ? "LLM Gateway timed out" : "LLM Gateway unreachable" });
+updates   every slot the cook's words answer or change, each with slot,
+          value, dishes, display and status (confirmed, or low-confidence
+          when you had to guess), following the value rules below. Only
+          when they stated or accepted a value: someone still deciding
+          gets no update. A dish you suggested counts once they accept it.
+          [] when nothing was settled.
+focus     the slot id the conversation is on after this turn. The slots
+          are topics of discussion, not a form: the cook leads, and the
+          focus follows what they are talking about.
+          - FOLLOW THE COOK. When they bring up a different slot than the
+            focus — answered or not, earlier or later ("we're not ready for
+            servings, talk more about the dishes", "oh, my partner can't do
+            peanuts", "how long would that take?") — that slot becomes the
+            focus, even if the old focus is still open. Come back to open
+            slots later.
+          - STAY on the focus slot while the cook is still working it out:
+            asking for ideas, undecided, comparing, unhappy with what they
+            have, or raising something that needs a follow-up to plan well.
+          - MOVE to the first slot, in the order given, that has no answer
+            once the focus slot is settled by a clear answer, or when the
+            cook says they are happy with it or want to move on.
+          A plain, complete answer to the question you asked is itself the
+          signal to move on; do not ask "anything else?" about it.
+done      true only when every slot has an answer (counting this turn's
+          updates) and the cook is not still discussing any of them.
+reply     what the goose says next, read aloud in a kitchen: one or two
+          short sentences, warm and a little cheeky. Acknowledge a change
+          in a few words. When done, say you are drafting the recipe graph.
+          Otherwise end with ONE question about the focus slot:
+          - on a slot the cook shifted to or is still working out, a
+            FOLLOW-UP that moves that discussion forward and gives some
+            guidance — two or three concrete options when they want ideas
+            ("chicken stir fry: kung pao, cashew chicken, or a simple
+            ginger-scallion?"), or the detail that matters for the plan
+            ("is that an allergy? then I'll keep it off every board");
+          - on a slot you are moving to, its question in words close to
+            the one given.
+          Never ask a slot's question again once it has an answer, unless
+          the cook brought that slot up.
+
+${VALUE_RULES}
+
+${READING_RULES}
+Where these rules say to ask a follow-up, give no update for that slot and
+ask it in the reply instead.
+Anything that is no answer at all ("okay", "hmm", a stray name) settles
+nothing: stay on the focus slot and ask again in different words.`;
+
+const DONE_LINE = "Got it — drafting your recipe graph now.";
+
+/**
+ * Force a model turn into the shape the page expects.
+ *
+ * Every update goes through the same coerce() as /read, so a number is a
+ * number and a skill is one of three, whichever endpoint set it. The
+ * model does not get to declare the chat done with a slot still empty:
+ * that sends it to the first empty slot, with that slot's own question,
+ * since a reply written for "done" would be wrong.
+ *
+ * @param {object} raw     parsed model reply
+ * @param {object} ctx
+ * @param {Array<{id, question, answer}>} ctx.slots  in order; answer "" when empty
+ * @param {string} ctx.focus  slot in focus before this turn
+ * @param {string} ctx.said   what the cook said
+ */
+export function coerceTurn(raw, { slots, focus, said }) {
+  if (!raw || typeof raw !== "object") return null;
+  const ids = slots.map((s) => s.id);
+
+  const updates = [];
+  for (const u of Array.isArray(raw.updates) ? raw.updates : []) {
+    if (!u || !ids.includes(u.slot)) continue;
+    const reading = coerce(u, u.slot, said);
+    if (!reading || reading.value === null || reading.status === "needs-followup") continue;
+    // A later update to the same slot in one turn wins.
+    const at = updates.findIndex((x) => x.slot === u.slot);
+    const entry = { slot: u.slot, value: reading.value, display: reading.display, status: reading.status };
+    if (at >= 0) updates[at] = entry;
+    else updates.push(entry);
   }
+
+  const filled = new Set(slots.filter((s) => s.answer).map((s) => s.id));
+  updates.forEach((u) => filled.add(u.slot));
+  const firstOpen = ids.find((id) => !filled.has(id)) ?? null;
+
+  let nextFocus = ids.includes(raw.focus) ? raw.focus : ids.includes(focus) ? focus : firstOpen || ids[0];
+  let reply = clampText(String(raw.reply ?? "").trim(), 500);
+  const done = raw.done === true && !firstOpen;
+
+  if (raw.done === true && firstOpen) {
+    nextFocus = firstOpen;
+    reply = slots.find((s) => s.id === firstOpen).question;
+  }
+  if (!reply) reply = done ? DONE_LINE : slots.find((s) => s.id === nextFocus).question;
+
+  return { updates, focus: done ? null : nextFocus, done, reply, source: "llm" };
+}
+
+understandingRouter.post("/turn", async (req, res) => {
+  if (!API_KEY) return missingKey(res);
+
+  const { slots, focus, history, text } = req.body || {};
+  if (!text || !String(text).trim()) {
+    return res.status(400).json({ error: "text is required" });
+  }
+  if (!Array.isArray(slots) || !slots.length) {
+    return res.status(400).json({ error: "slots are required" });
+  }
+  const clean = slots.slice(0, 12).map((s) => ({
+    id: clampText(s?.id, 40),
+    question: clampText(s?.question, 300),
+    answer: clampText(s?.answer, 200),
+  }));
+
+  const slotLines = clean
+    .map((s) => `- ${s.id}: "${s.question}" — ${s.answer ? `answer: ${s.answer}` : "no answer yet"}`)
+    .join("\n");
+  const chat = (Array.isArray(history) ? history : [])
+    .slice(-TURN_HISTORY)
+    .map((m) => `${m?.speaker === "cook" ? "Cook" : "Goose"}: ${clampText(m?.text, 400)}`)
+    .join("\n");
+
+  const reply = await askGateway({
+    system: TURN_SYSTEM,
+    user: `Slots, in order:\n${slotLines}\nFocus: ${clampText(focus, 40)}\n\nRecent chat:\n${chat || "(none)"}\n\nThe cook just said: ${clampText(text, 600)}`,
+    schema: TURN_SCHEMA,
+    maxTokens: TURN_MAX_TOKENS,
+    timeoutMs: TURN_TIMEOUT_MS,
+  });
+  if (reply.error) return res.status(reply.status).json(reply.error);
+
+  const turn = coerceTurn(reply.content, { slots: clean, focus, said: text });
+  if (!turn) return res.status(502).json({ error: "LLM Gateway returned no usable turn" });
+
+  res.set("Cache-Control", "no-store");
+  return res.json(turn);
 });

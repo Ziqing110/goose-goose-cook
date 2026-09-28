@@ -234,11 +234,14 @@ nothing running is a wait, not free time.
 Before "Go live" the page is empty and navigation works as anywhere else ("go back
 to the plan"). Once a run exists the page takes every turn and navigation stands down.
 
-Say the agent's name first: **"Goose, I'm done with the onion"**. Turns without it
-are ignored, and for a few seconds after Goose asks a question a short answer
-("the garlic") needs no name. The other exception is a paused run: a short turn
-that is only a resume ("resume", "keep going", "继续") restarts it without the name,
-since the paused screen asks for exactly that; "we'll resume after the call" does not. The words go to a model that picks the action and the
+No wake word is needed: **"I'm done with the onion"** works as well as "Goose, I'm
+done with the onion". A turn without the name still goes to the model, told nobody
+said its name, and only counts as meant for the goose if the model acts on it (calls
+a tool); talk between cooks stays room talk. Saying the name is still the surest
+way to be heard. For a few seconds after Goose asks a question a short answer
+("the garlic") is taken as the answer, and on a paused run a short turn that is only
+a resume ("resume", "keep going", "继续") restarts it, since the paused screen asks
+for exactly that; "we'll resume after the call" does not. The words go to a model that picks the action and the
 step, so you can talk naturally ("take the garlic and start the rice"), and every
 action runs through the same handler as its button. If the model is slow or
 unreachable the page falls back to the keyword grammar below. Typed commands in

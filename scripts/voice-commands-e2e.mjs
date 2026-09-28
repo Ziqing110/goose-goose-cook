@@ -155,18 +155,18 @@ async function mockApi(page, { sessionState = session, kitchenProfiles = [kitche
       hasActiveSession = true;
       return route.fulfill({ json: clone(sessionState) });
     }
-    if (url.pathname === "/api/understanding/read" && request.method() === "POST") {
+    if (url.pathname === "/api/understanding/turn" && request.method() === "POST") {
       const body = request.postDataJSON();
       understandingInputs.push(body.text);
-      // A fixed, valid reading keeps this test about dictation delivery and
+      // A fixed, valid turn keeps this test about dictation delivery and
       // page behavior; generated interpretation is not under test here.
       return route.fulfill({
         json: {
-          value: ["ramen"],
-          display: "Ramen",
-          status: "confirmed",
-          followUp: null,
-          source: "local",
+          updates: [{ slot: "dishIdea", value: ["ramen"], display: "Ramen", status: "confirmed" }],
+          focus: "servings",
+          done: false,
+          reply: "How many people are we cooking for?",
+          source: "llm",
         },
       });
     }
@@ -1051,7 +1051,7 @@ try {
   const progress = conversationPage.getByRole("progressbar", { name: "Questions answered" });
   assert.equal(await progress.getAttribute("aria-valuenow"), "0");
   const understandingRequest = conversationPage.waitForRequest(
-    (request) => request.url().endsWith("/api/understanding/read"),
+    (request) => request.url().endsWith("/api/understanding/turn"),
     { timeout: 5_000 },
   );
   await conversationStream.say(spokenAnswer, async () => {
@@ -1159,7 +1159,7 @@ try {
   // reach (a free-tier key), so answers are read locally. "Megan" for the
   // dietary question — "vegan", misheard — used to be taken as given.
   const localReader = await openVoicePage(context, "/session/conversation", { sessionState: inProgressConversation() });
-  await localReader.page.route("**/api/understanding/read", (route) =>
+  await localReader.page.route("**/api/understanding/*", (route) =>
     route.fulfill({ status: 503, json: { error: "Your account does not have access to this LLM Gateway model" } }));
   diagnosticPage = localReader.page;
   await checkVoiceBehavior("Conversation: an answer that isn't one is asked about again, and ‘yes’ takes the offered reading", async () => {
