@@ -41,8 +41,9 @@ import VersusCountdown from "../components/VersusCountdown.jsx";
 import { GooseFeather, GooseFeatherMark } from "../components/GooseMarks.jsx";
 import "./SchedulePage.css";
 
-// Player colors come from the index in cooks[] — player 1 is "a",
-// player 2 is "b" — never stored, never chosen (design-v4.css tokens).
+// Player slots come from the index in cooks[] — player 1 is "a", player
+// 2 is "b" — never stored. What --cook-a/--cook-b actually resolve to
+// follows the bird each player picked (utils/playerColors.js).
 const PLAYER_KEYS = ["a", "b"];
 const playerKey = (index) => PLAYER_KEYS[index % PLAYER_KEYS.length];
 

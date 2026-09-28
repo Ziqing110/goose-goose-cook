@@ -2,8 +2,10 @@
 // — shared by Service done, which reads a live run's outcome, and the
 // cook card, which reads the frozen summary back into the same shape.
 
-// Player colors come from the index in cooks[] — player 1 is "a",
-// player 2 is "b" — never stored, never chosen (design-v4.css tokens).
+// Player slots come from the index in cooks[] — player 1 is "a", player
+// 2 is "b" — never stored. The slot is just which lane a player renders
+// in; the colour that --cook-a/--cook-b resolve to now follows the bird
+// each player picked (see utils/playerColors.js), not a fixed pair.
 const PLAYER_KEYS = ["a", "b"];
 export const playerKey = (index) => PLAYER_KEYS[index % PLAYER_KEYS.length];
 

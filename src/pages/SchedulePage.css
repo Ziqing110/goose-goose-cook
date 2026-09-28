@@ -1086,8 +1086,8 @@
   --sch-versus-paper: #fffdf7;
   --sch-versus-edge: #e6dcc6;
   --sch-versus-shadow: #eee7d7;
-  --sch-versus-divider-a: #9dc0d9;
-  --sch-versus-divider-b: #e3b7a4;
+  --sch-versus-divider-a: var(--kp-paper-rule-a);
+  --sch-versus-divider-b: var(--kp-paper-rule-b);
   --sch-versus-row-line: #f1e9d8;
   --sch-versus-punch: #f2ead8;
   --sch-versus-locked-bg: #fff;

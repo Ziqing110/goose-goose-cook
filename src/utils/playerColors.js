@@ -1,13 +1,12 @@
-// The colour of a player's bird, for the ring around their avatar. The
-// rest of the player's colour (names, scores, bars, bands) stays the
-// fixed player A blue / player B orange; only the ring follows the bird
-// they picked, so it never clashes with the bird's own tint inside it.
-// A player who never picked a bird borrows the bird at their seat
-// (player 1 Spoon, player 2 Whisk), the way the "Up for grabs" claim
-// buttons do.
+// The colour of a player's bird, used both for the ring around their
+// avatar and — via playerLaneCssVars below — for the whole swim lane
+// (names, scores, bars, bands, ticks). A player who never picked a bird
+// borrows the bird at their seat (player 1 Spoon, player 2 Whisk), the
+// way the "Up for grabs" claim buttons do.
 //
 // A bird carries two tones, `bg` (the tile tint) and `ink` (text that
-// clears 4.5:1 on it). The ring is derived from them, never stored.
+// clears 4.5:1 on it). The ring and the lane palette are both derived
+// from them, never stored.
 import { CHEF_AVATARS, chefAvatar } from "./cooks.js";
 
 const hex = (n) => Math.round(n).toString(16).padStart(2, "0");
@@ -52,4 +51,52 @@ export function playerBird(cook, index) {
 /** The ring colour for a player's avatar: a mid tone of their bird. */
 export function playerRing(cook, index) {
   return midTone(playerBird(cook, index));
+}
+
+// The rest of the swim lane — not just the ring — follows the bird a
+// player picked. `bg` is already the bird's solid tile colour, so it
+// becomes the lane's accent (borders, ticks, fills); `ink` is already
+// tuned to 4.5:1 on white (see cooks.js), so it becomes the lane's text
+// colour untouched. `bg` and `field` are pale washes of the same tile
+// colour toward white, at the same two depths the old fixed blue/orange
+// tokens used (--kp-cook-a-bg and --kp-field-cook-a). `rule` is the
+// muted header underline (--kp-paper-rule-a): a touch of ink stirred
+// into the tile colour, then washed back toward white so it stays a
+// quiet hairline rather than a bold stripe of the bird's own colour.
+const LANE_BG_MIX = 0.22;
+const LANE_FIELD_MIX = 0.4;
+const LANE_RULE_MIX = 0.12;
+const LANE_RULE_WASH = 0.5;
+
+/** A player's full lane palette: { accent, ink, bg, field, rule }, from their bird. */
+export function playerLaneColors(cook, index) {
+  const bird = playerBird(cook, index);
+  return {
+    accent: bird.bg,
+    ink: bird.ink,
+    bg: mix(WHITE, bird.bg, LANE_BG_MIX),
+    field: mix(WHITE, bird.bg, LANE_FIELD_MIX),
+    rule: mix(WHITE, mix(bird.bg, bird.ink, LANE_RULE_MIX), LANE_RULE_WASH),
+  };
+}
+
+const SLOT_VARS = ["a", "b"];
+
+/**
+ * CSS custom properties for the two lane slots, keyed the way tokens.css
+ * and design-v4.css already name them (--kp-cook-a, --kp-cook-a-ink, ...).
+ * Meant to be applied once, high enough in the DOM to reach both the
+ * in-tree page and any portaled surface (e.g. document.documentElement).
+ */
+export function playerLaneCssVars(cooks = []) {
+  const vars = {};
+  SLOT_VARS.forEach((slot, index) => {
+    const { accent, ink, bg, field, rule } = playerLaneColors(cooks[index], index);
+    vars[`--kp-cook-${slot}`] = accent;
+    vars[`--kp-cook-${slot}-ink`] = ink;
+    vars[`--kp-cook-${slot}-bg`] = bg;
+    vars[`--kp-field-cook-${slot}`] = field;
+    vars[`--kp-paper-rule-${slot}`] = rule;
+  });
+  return vars;
 }
