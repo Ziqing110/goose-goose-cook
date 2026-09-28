@@ -139,7 +139,6 @@ test("Inventory ingredient, tab, zoom, pan, step, approval, and notice commands 
   assertCapture(INVENTORY_VOICE.editStep, "open the step dice onion", "dice onion");
   assertCapture(INVENTORY_VOICE.editStep, "edit step dice onion", "dice onion");
   assertCapture(INVENTORY_VOICE.editStep, "select the step dice onion", "dice onion");
-  assertMatches(INVENTORY_VOICE.everythingOnHand, ["everything's on hand", "everything is on hand", "mark everything on hand", "all on hand"]);
   assertMatches(INVENTORY_VOICE.continueOn, ["continue", "continue to the cooks", "move on", "carry on", "next step"]);
   assertMatches(INVENTORY_VOICE.removeBlocked, ["remove blocked step", "remove the blocked steps", "drop blocked steps"]);
   assertMatches(INVENTORY_VOICE.editKitchen, ["edit kitchen profile", "edit the kitchen", "edit my kitchen"]);

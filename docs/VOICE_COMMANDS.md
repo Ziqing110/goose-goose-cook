@@ -113,7 +113,6 @@ While the board is still being written nothing is live.
 | "no ginger", "we're out of ginger", "ginger is out / gone", "I don't have any ginger", "mark ginger out" | Marks that ingredient out |
 | "got ginger", "I have ginger", "found ginger", "add ginger back", "put the ginger back", "ginger is back / on hand", "mark ginger on hand" | Back on hand (says so if it already is) |
 | "put it back", "add it back", "undo that" | Puts the last ingredient marked out back on hand |
-| "everything's on hand", "mark everything on hand", "all on hand" | Clears every "out" (only while something is out) |
 | "show ingredients", "back to the ingredients", "go back to ingredients", "switch to ingredients", "ingredients tab", "ingredients" | Ingredients tab |
 | "show the recipe graph / board", "recipe graph", "back to the graph", "switch to the board", "graph tab" | Graph tab |
 | "zoom in", "zoom closer" · "zoom out" · "fit the board / graph", "reset zoom", "zoom to fit" | Zoom |

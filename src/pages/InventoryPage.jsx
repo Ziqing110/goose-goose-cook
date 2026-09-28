@@ -568,7 +568,6 @@ export default function InventoryPage() {
     return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
   }, [dispatch, hasDishes, loading]);
 
-  const hasOut = outMaterialIds.length > 0;
   const setOut = (ids) => dispatch({ type: "session/update", payload: { outMaterialIds: ids } });
   const toggle = (id) => {
     const next = new Set(outMaterialIds);
@@ -587,7 +586,6 @@ export default function InventoryPage() {
     setOut(outMaterialIds.filter((x) => x !== id));
     return undefined;
   };
-  const markAllOnHand = () => setOut([]);
   // The ingredient most recently marked out that is still on the list:
   // what "put it back" means. outMaterialIds is in the order they went out.
   const lastOut = () => {
@@ -619,11 +617,6 @@ export default function InventoryPage() {
           markOnHand(id);
           return `${labelOfMaterial(id)} — back on hand.`;
         },
-      },
-      {
-        phrases: INVENTORY_VOICE.everythingOnHand,
-        label: "Everything's on hand.",
-        run: () => hasOut && markAllOnHand(),
       },
       {
         // The button only shows on the recipe graph tab, but the command
@@ -686,7 +679,7 @@ export default function InventoryPage() {
       },
     ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasDishes, catalog, inv.ingredients, outMaterialIds, hasOut, boardNodes, nodeById]);
+  }, [hasDishes, catalog, inv.ingredients, outMaterialIds, boardNodes, nodeById]);
 
   // Board-level commands: switching tabs, opening a step by name, the
   // kitchen-shortfall notice, dropping blocked steps, and un-approving.
@@ -1357,11 +1350,6 @@ export default function InventoryPage() {
               {inv.onHandCount} / {inv.ingredients.length} ingredients on hand
             </span>
             <div className="inv-footer-actions">
-              {hasOut && (
-                <button type="button" className="btn btn-lg inv-footer-secondary" onClick={markAllOnHand}>
-                  Mark everything on hand
-                </button>
-              )}
               {dishIsUndoable && (
                 <button type="button" className="btn btn-lg inv-footer-secondary inv-btn-remove" onClick={dropBlockedSteps}>
                   Remove the blocked {blockedIds.length === 1 ? "step" : "steps"}

@@ -86,11 +86,6 @@ export const INVENTORY_VOICE = {
   // "Put it back" right after "no ginger": the ingredient is the one just
   // marked out, so the cook doesn't have to name it twice.
   restoreLast: [/\b(?:put|bring|add|get) (?:it|that|them) back\b/, /\bundo that\b/, /\bi (?:do )?have (?:it|that)\b/],
-  everythingOnHand: [
-    /\beverything(?:'s| is)? on hand\b/,
-    /\bmark everything on hand\b/,
-    /\ball on hand\b/,
-  ],
   zoomIn: [/\bzoom in\b/, /\bzoom (?:in )?closer\b/],
   zoomOut: [/\bzoom out\b/],
   fit: [/\bfit (?:the )?(?:board|graph)\b/, /\breset zoom\b/, /\bzoom to fit\b/],
@@ -355,7 +350,6 @@ help(INVENTORY_VOICE.editStep, "Open a step to edit it, by its name", ["edit the
 help(INVENTORY_VOICE.removeBlocked, "Remove the steps blocked by missing ingredients", ["remove the blocked steps"]);
 help(INVENTORY_VOICE.editKitchen, "Edit the kitchen profile", ["edit the kitchen"]);
 help(INVENTORY_VOICE.cookAnyway, "Cook even though some ingredients are missing", ["cook it anyway"]);
-help(INVENTORY_VOICE.everythingOnHand, "Mark every ingredient on hand", ["mark everything on hand"]);
 help(INVENTORY_VOICE.continueOn, "Continue to the next stage", ["continue"]);
 
 KITCHEN_PROFILE_VOICE.count = described(KITCHEN_PROFILE_VOICE.count, (field) => [`Set how many ${field} the kitchen has`, [`set ${field} to 4`]]);

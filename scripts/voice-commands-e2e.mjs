@@ -694,17 +694,14 @@ try {
     await onTheBoard(() =>
       inventoryPage.getByRole("button", { name: /Boil water, blocked/ }).waitFor({ state: "visible" }));
   });
-  await checkVoiceBehavior("Inventory: ‘everything's on hand’ appears once something is out, and clears the list", async () => {
-    // The button (and its voice phrase) only show while something is
-    // actually out — restoring on-hand-by-default ingredients would be
-    // a no-op with nothing to undo.
+  await checkVoiceBehavior("Inventory: with ingredients out there is no ‘Mark everything on hand’ button", async () => {
+    // Removed: it came and went with the out list, shoving the footer
+    // buttons around, and outlived the ingredients it was about once
+    // their steps were removed. Each row's own checkbox restores it.
     if (await ginger.getAttribute("aria-checked") === "true") await ginger.evaluate((el) => el.click());
     await waitForAttribute(ginger, "aria-checked", "false");
-    const markAll = inventoryPage.getByRole("button", { name: /Mark everything on hand/ });
-    await markAll.waitFor({ state: "visible" });
-    await inventoryStream.say("everything's on hand");
-    await waitForAttribute(ginger, "aria-checked", "true", 1_500);
-    await markAll.waitFor({ state: "hidden" });
+    await inventoryPage.getByRole("button", { name: /Remove the blocked/ }).waitFor({ state: "visible" });
+    assert.equal(await inventoryPage.getByRole("button", { name: /Mark everything on hand/ }).count(), 0);
   });
   // Housekeeping between checks, not an assertion — put both ingredients
   // back on hand for what follows. Toggling one regroups the list, so the
