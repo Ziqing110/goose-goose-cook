@@ -184,6 +184,9 @@ It needs a Python 3.13 environment at `.venv-voice` with CUDA PyTorch,
 NVIDIA NeMo, `soundfile`, `soxr` and `librosa`. The TitaNet model downloads
 on first use. Set `SPEAKER_DEVICE=cpu` to skip the GPU.
 
+The app only calls the service when `VITE_SPEAKER_SERVICE=on` is set in
+`.env`. It is off by default and always off in the deployed demo.
+
 ## Project structure
 
 ```
@@ -213,16 +216,7 @@ scheduler and run state machine are tested without mounting a page. The
 browser owns the live run. Each agent request carries a snapshot of it, so
 the server stays stateless.
 
-## Deploying
-
-The static app goes to GitHub Pages and the API goes to Render, because the
-API holds the key and the frontend is public. `render.yaml` and
-`.github/workflows/pages.yml` do most of the work. Full steps in
-[DEPLOY.md](DEPLOY.md).
-
 ## Further reading
 
 - [docs/API_FLOW.md](docs/API_FLOW.md): every external call and what triggers it
 - [docs/VOICE_COMMANDS.md](docs/VOICE_COMMANDS.md): what you can say on each page
-- [design/GOOSE_PERSONA.md](design/GOOSE_PERSONA.md): who the goose is and how it talks
-- [DESIGN_BASE.md](DESIGN_BASE.md): design tokens and visual language

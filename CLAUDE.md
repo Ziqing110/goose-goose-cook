@@ -87,7 +87,8 @@ dependency and we don't want one.
 - `voice-lab/` — standalone API bench, `npm run lab`. Imports nothing
   from the app and nothing imports it. Safe to delete when done.
 - `HANDOFF.md` — what's built vs. stubbed, and where the seams are
-- `DESIGN_BASE.md` — design tokens and visual language
+- `internal-design/` — local only, gitignored: `DESIGN_BASE.md` (design
+  tokens and visual language) and `GOOSE_PERSONA.md` (the goose's voice)
 
 ## Conventions
 
