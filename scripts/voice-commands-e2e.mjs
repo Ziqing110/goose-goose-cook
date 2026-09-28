@@ -275,6 +275,17 @@ async function mockStreamingSocket(page) {
       if (!nonSilentFrames) await waitForFrame(audioFrames + 1, true);
       assert.ok(nonSilentFrames > 0, "the fake microphone sent non-silent PCM audio");
     },
+    // The server ends the session with an Error, as AssemblyAI does for a
+    // 3005 or a 3009. Resolves once the page has opened a new socket.
+    async dropWithServerError(code = 3005, error = "Session Cancelled: An error occurred") {
+      const old = socket;
+      assert.ok(old, "a socket to drop");
+      old.send(JSON.stringify({ type: "Error", error_code: code, error }));
+      await old.close({ code: 1011, reason: "voice e2e" });
+      const deadline = Date.now() + 15_000;
+      while (socket === old && Date.now() < deadline) await page.waitForTimeout(100);
+      assert.notEqual(socket, old, "the page reconnected after the server error");
+    },
     async say(text, inspectPartial, { startedAgoMs = 10_000 } = {}) {
       assert.ok(socket, "the streaming socket opened after unmuting");
       await waitForFrame(audioFrames + 1);
@@ -1496,6 +1507,27 @@ try {
     await live.page.locator(".live-cook-page.is-paused").waitFor({ state: "visible" });
     await live.stream.say("接着");
     await live.page.locator(".live-cook-page:not(.is-paused)").waitFor({ state: "visible" });
+  });
+  // The mic goes off when the user turns it off or nobody speaks for too
+  // long, and never because the transcriber had a bad moment. A server
+  // Error used to be treated as final: the goose muted itself mid-cook.
+  await checkVoiceBehavior("Live Cook: a server error reconnects instead of switching the goose off", async () => {
+    await live.stream.dropWithServerError();
+    await live.page.getByRole("button", { name: "Mute listening" }).waitFor({ state: "visible" });
+    await live.stream.say("Goose pause");
+    await live.page.locator(".live-cook-page.is-paused").waitFor({ state: "visible" });
+    await live.stream.say("Goose resume");
+    await live.page.locator(".live-cook-page:not(.is-paused)").waitFor({ state: "visible" });
+  });
+  // Goose's Notes open and close by voice even here, where the page owns
+  // every turn -- ahead of the cook's own handling, not through it.
+  await checkVoiceBehavior("Live Cook: ‘open the notes’ pulls out Goose's Notes and ‘close the notes’ tucks them away", async () => {
+    await live.stream.say("Goose, open the notes");
+    // The wrapper has no box of its own; the sheet inside it is what shows.
+    await live.page.locator(".gn.is-open .gn-sheet").waitFor({ state: "visible" });
+    await live.stream.say("close the notes");
+    await live.page.locator(".gn.is-tucked").waitFor({ state: "attached" });
+    assert.equal(await live.page.locator(".gn.is-open").count(), 0);
   });
   // The shared mock fails every agent call, which sends even unnamed words
   // down the keyword path. The real server answers unnamed words with

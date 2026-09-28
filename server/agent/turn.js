@@ -11,8 +11,9 @@
 // The addressing rule is shared with the client, which uses it to decide
 // what is worth sending at all. One copy, so the two can't disagree about
 // whether a turn was meant for the agent.
-export { isAddressed } from "../../src/utils/addressing.js";
+export { isAddressed, isUrgent } from "../../src/utils/addressing.js";
 import { SEARCH_TOOL } from "./search.js";
+import { joinSpelledLetters, nearestCook } from "../../src/utils/cookVoice.js";
 
 /** Tool names are the intent names parseCommand already produces. */
 export const INTENTS = [
@@ -122,17 +123,19 @@ Rules:
 - If they are clearly talking to someone else in the room, call no tool and reply with an empty string.
 - Your reply is spoken aloud: at most 15 words, plain speech, no lists, markdown or emoji. Be warm and a little funny, never at the cost of being clear. After a plain action, a two-word acknowledgement or an empty reply is right.
 - Work can be taken on somebody else's behalf: "Zoe will take the garlic", "give the onion to Nora". Pass their name as cook_name on claim or start. Without it the step goes to whoever is speaking, which is wrong when they named someone else.
+- Speech recognition misspells names. A name that sounds like one of the cooks ("Zina" for Zeina) is that cook: use the cook's exact name. If the speaker says they are a different cook from the one you were told is speaking, or asks for something "as" another cook, believe them and pass that cook as cook_name -- do not ask them to confirm it.
 - Anyone may say a step is finished, including somebody else's ("Nora's done with the tofu"): call done with that step id. The points go to whoever holds the step, never to the speaker. Skipping and dropping are the speaker's own; if they ask to skip or drop somebody else's step, call no tool and say that person needs to say it.
 - The step ids you are given per tool are the only legal ones for it. If they say a step is finished, or ask to skip or drop one, and its id is not in that tool's list, nobody has taken it yet: say so in one line and call no tool. Do not ask which step they meant -- you already know which, it is simply not theirs.
 - A short step name can hide what it actually involves. If they ask what a step means, how to do it, what it needs, or how long it takes, call explain with that step id rather than answering from the step name -- the app reads back the recipe's own wording, which you cannot see in full.
 - A Brief line, when present, is what they asked for before any of this was planned. Honour it without being asked: never suggest something their diet rules out, and let their stated skill level set how much you explain.
-- Anything unrelated to this cook (weather, trivia, chit-chat): call no tool, and decline in one short, friendly sentence. Do not call help for it.
+- Chit-chat, jokes and teasing aimed at you: call no tool and play along in one short, goofy line. You are a goose; lean into it. Do not call help for it.
+- Things you cannot know from here (weather, news, facts beyond cooking): ${search ? "look them up with search_web" : "call no tool, and say so in one short, friendly line. Never guess"}.
 - Never claim to have done something you did not call a tool for.${search ? `
-- You can call search_web for a cooking question the recipe does not answer. It makes ${speakerName} wait several seconds, so use it only when you genuinely do not know, never for anything about this run.` : ""}`;
+- You can call search_web for a question the recipe does not answer, cooking or not: weather, news, a fact. It makes ${speakerName} wait several seconds, so use it only when you genuinely do not know, never for anything about this run, and answer from what it returns.` : ""}`;
 }
 
 /** The user message: state of the kitchen, recent talk, then the words. */
-export function buildUserMessage(snapshot, text, { shared = false } = {}) {
+export function buildUserMessage(snapshot, text, { shared = false, urgent = false } = {}) {
   const open = (snapshot.steps || []).map((s) => ({
     id: s.id,
     label: s.label,
@@ -170,6 +173,14 @@ export function buildUserMessage(snapshot, text, { shared = false } = {}) {
       `TWO COOKS SPOKE AT ONCE and this is both of them in one transcript, so it may be two half-sentences and the speaker above may be the wrong one. Take no action. Ask, in one short question, which of them meant it and what they wanted: "${text}"`,
     );
     return lines.join("\n");
+  }
+  if (urgent) {
+    // Nobody said the name. This got through only because it sounded
+    // like trouble, so the model must know that and be allowed to be
+    // wrong about it quietly.
+    lines.push(
+      `Nobody said your name. This was let through because it sounds like trouble in the kitchen or someone asking the room for help. If it is, reply first with the one thing to do right now ("Turn the heat down, lift the lid."), under 12 words, and call a tool only if they also asked for one. Trouble means something is going wrong NOW (boiling over, burning, smoke, a spill) or they are stuck and asking. A warning or tip to someone else ("don't let the garlic burn") is not trouble. If it is not trouble, call no tool and reply with an empty string.`,
+    );
   }
   lines.push(`${snapshot.speakerName} said: "${text}"`);
   return lines.join("\n");
@@ -283,7 +294,11 @@ export function parseChoice(choice, snapshot, { shared = false } = {}) {
     // A name the snapshot does not list is dropped rather than
     // guessed at: assigning work to a cook who is not in the kitchen
     // is worse than assigning it to the speaker.
-    const cookName = ASSIGNABLE.has(name) && args.cook_name ? String(args.cook_name) : null;
+    //
+    // Near enough counts, though: the recogniser spells names its own way,
+    // and "Zina" for the cook named Zeina is her, not a stranger.
+    const said = ASSIGNABLE.has(name) && args.cook_name ? String(args.cook_name) : null;
+    const cookName = said ? nearestCook(joinSpelledLetters(said), snapshot.cooks || [])?.name ?? said : null;
     if (cookName && !(snapshot.cooks || []).some((c) => c.name === cookName)) {
       rejected.push({ name, reason: "unknown_cook", cookName });
       continue;

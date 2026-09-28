@@ -1,7 +1,7 @@
 // One agent turn, end to end: the addressing gate, the gateway call, and
 // validation. The route and the calibration runner both call this, so
 // what gets calibrated is exactly what ships.
-import { buildSystemPrompt, buildTools, buildUserMessage, cleanReply, isAddressed, parseChoice } from "./turn.js";
+import { buildSystemPrompt, buildTools, buildUserMessage, cleanReply, isAddressed, isUrgent, parseChoice } from "./turn.js";
 import { searchConfigured, searchWeb } from "./search.js";
 
 const GATEWAY = "https://llm-gateway.assemblyai.com/v1/chat/completions";
@@ -35,8 +35,12 @@ export async function requestTurn({ apiKey, model, text, agentName, engaged = fa
   // (answering its question) lets a turn through but is a weaker claim on
   // the agent's attention, and the caller uses the difference.
   const named = isAddressed(text, agentName, false);
-  if (!named && !engaged) {
-    return { addressed: false, named, calls: [], reply: "", rejected: [], ms: 0, model: null };
+  // Trouble, or a cry for help, with no name on it. Let through, because
+  // the cook in trouble is the one least likely to say the name; the
+  // model is told why it is hearing this and to stay quiet if it misread.
+  const urgent = !named && !engaged && isUrgent(text);
+  if (!named && !engaged && !urgent) {
+    return { addressed: false, named, urgent, calls: [], reply: "", rejected: [], ms: 0, model: null };
   }
   if (!apiKey) {
     throw new TurnError("ASSEMBLYAI_API_KEY is not set. Copy .env.example to .env, add the key, and restart the server.", 503);
@@ -47,7 +51,7 @@ export async function requestTurn({ apiKey, model, text, agentName, engaged = fa
   const tools = buildTools(snapshot, { search });
   const messages = [
     { role: "system", content: buildSystemPrompt({ agentName, speakerName: snapshot.speakerName, search }) },
-    { role: "user", content: buildUserMessage(snapshot, text, { shared }) },
+    { role: "user", content: buildUserMessage(snapshot, text, { shared, urgent }) },
   ];
 
   // A turn that never searches keeps its original budget exactly; one
@@ -82,7 +86,7 @@ export async function requestTurn({ apiKey, model, text, agentName, engaged = fa
   const vetted = parseChoice(choice, snapshot, { shared });
 
   if (!lookups.length) {
-    return { addressed: true, named, ...vetted, searched: false, ms: Date.now() - started, model };
+    return { addressed: true, named, urgent, ...vetted, searched: false, ms: Date.now() - started, model };
   }
 
   // The model wants to look something up. Do NOT wait for it here: the
@@ -115,6 +119,7 @@ export async function requestTurn({ apiKey, model, text, agentName, engaged = fa
   return {
     addressed: true,
     named,
+    urgent,
     ...vetted,
     // Something to say now, so nobody is left listening to silence while
     // it reads. The model's own line if it offered one, ours if not.

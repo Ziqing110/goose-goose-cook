@@ -11,6 +11,7 @@ import { PHASE_OPTIONS, EQUIPMENT_OPTIONS, equipmentLabel } from "../data/dishes
 import BoardPanel, { ChoiceChip, LinkPicker, LinkRow, MaterialsField, PanelField, Segmented } from "./BoardPanel.jsx";
 import { DIFFICULTY_SEGMENTS } from "./NodeEditorPanel.jsx";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { useVoicePageState } from "../hooks/useVoicePageState.js";
 import { spokenNumber, NUMBER_TOKEN } from "../utils/understanding.js";
 import { matchStepName } from "../utils/stepNameMatch.js";
 import { ADD_STEP_VOICE } from "../utils/pageVoiceGrammar.js";
@@ -38,6 +39,10 @@ export default function AddStepPanel({
   // asked for here rather than invented and quietly scheduled.
   const [minutes, setMinutes] = useState(2);
   const [difficulty, setDifficulty] = useState("low");
+  useVoicePageState(
+    [`Adding a task: ${label.trim() ? `"${label.trim()}"` : "no name yet"}, ${minutes} min, ${difficulty} difficulty, ${phase} phase.`],
+    { priority: 10 },
+  );
   const [equipment, setEquipment] = useState([]);
   // Ingredients are asked for here rather than after the fact: a step
   // saved without them reads as craftable on the board and in the

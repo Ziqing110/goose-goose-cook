@@ -3,6 +3,7 @@ import Modal from "./Modal.jsx";
 import KitchenProfileForm, { emptyKitchenProfileDraft } from "./KitchenProfileForm.jsx";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { useVoicePageState } from "../hooks/useVoicePageState.js";
 import { spokenNumber, NUMBER_TOKEN } from "../utils/understanding.js";
 import { KITCHEN_PROFILE_VOICE } from "../utils/pageVoiceGrammar.js";
 import "./KitchenProfileFormModal.css";
@@ -37,6 +38,14 @@ export default function KitchenProfileFormModal({ profile, notice, error, onSave
   const { dispatch } = useAppState();
   const [draft, setDraft] = useState(profile ? { ...profile } : emptyKitchenProfileDraft());
   const [nameError, setNameError] = useState(false);
+  useVoicePageState(
+    [
+      "A kitchen form is open.",
+      `Name: ${draft.name.trim() ? `"${draft.name.trim()}"` : "not set"}`,
+      `Burners ${draft.burners}, cutting boards ${draft.cuttingBoards}, pots ${draft.pots}, wok ${draft.hasWok ? "yes" : "no"}, oven ${draft.hasOven ? "yes" : "no"}.`,
+    ],
+    { priority: 10 },
+  );
   const isEdit = Boolean(profile);
 
   const handleChange = (next) => {

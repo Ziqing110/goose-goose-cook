@@ -25,6 +25,7 @@ import {
 import StagePath from "../components/StagePath.jsx";
 import "./HomePage.css";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { useVoicePageState } from "../hooks/useVoicePageState.js";
 import { HOME_VOICE } from "../utils/pageVoiceGrammar.js";
 // The same normalizer VoiceBar runs over the utterance before matching —
 // kitchen names have to be folded exactly the same way or they will
@@ -286,6 +287,12 @@ export default function HomePage() {
     dispatch({ type: "voice/setHint", payload: { hint } });
     return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
   }, [heroState, session, profiles, dispatch]);
+
+  useVoicePageState([
+    profiles.length ? `Kitchens: ${profiles.map((p) => `"${p.name}"`).join(", ")}` : "No kitchens yet.",
+    session ? "A cooking run is in progress and can be resumed." : "No run in progress.",
+    pickerOpen ? "The kitchen picker is open, asking which kitchen to cook in." : null,
+  ]);
 
   // Register the commands the hint above advertises. Without this the
   // bar says "say 'resume the run'" and then ignores you when you do,

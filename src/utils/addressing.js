@@ -84,3 +84,37 @@ export function isNameOnlyTurn(text, name) {
   }
   return sawName;
 }
+
+// Trouble at the stove, or a cook asking the room what to do. Checked on
+// whole words after norm(), so punctuation and case don't matter.
+//
+// Every other unnamed turn is ignored, and that is right for chatter. It
+// is wrong for "the water's boiling over, what do I do?": the cook who
+// says it has their hands full and their mind on the pot, which is
+// exactly when they will not remember to say the name first. Missing
+// that turn costs a mess; hearing one that wasn't meant for the goose
+// costs one model call that is told to stay quiet if it isn't trouble.
+//
+// Kept to phrases that mean trouble on their own. "burn" is in because
+// "it's burning" is the whole message; "quick" and "someone" are not,
+// because "quick question" and "someone took my knife" are not.
+const URGENT = [
+  /\b(?:boil|boils|boiling|boiled|bubbling|spilling|pouring|foaming) over\b/,
+  /\b(?:overflow|overflowing|overflowed|boiling out|coming out|spilling out|pouring out|leaking)\b/,
+  /\b(?:burning|burnt|burned|scorching|scorched)\b/,
+  /\b(?:smoke|smoking|smoky|on fire|caught fire|catching fire|fire|flames?)\b/,
+  /\bhelp\b/,
+  /\bwhat (?:do|should|can) (?:i|we) do\b/,
+  /\bwhat (?:do|should) (?:i|we) do now\b/,
+  /\bwhat now\b/,
+  /\boh no\b/,
+];
+
+/**
+ * Worth the goose's attention with no name on it: something is going
+ * wrong, or someone is asking the room for help.
+ */
+export function isUrgent(text) {
+  const said = norm(text);
+  return Boolean(said) && URGENT.some((re) => re.test(said));
+}

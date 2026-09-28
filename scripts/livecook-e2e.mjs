@@ -263,10 +263,14 @@ await check("versus: tapping the handle pulls the sheet out; it reads the run ba
   assert.equal(await leo.getAttribute("aria-checked"), "true", "choosing Leo selects Leo");
   assert.match(await sheet.locator(".gn-listening").innerText(), /listening to Leo/);
   await sheet.getByRole("radio", { name: /Mia/ }).click();
-  // The faint scrim closes it; so does Escape.
-  await page.mouse.click(200, 400);
+  // Nothing covers the page while it is out: what is under a point on the
+  // board is the board, not a scrim, so the cards stay tappable.
+  const under = await page.evaluate(() => document.elementFromPoint(200, 400)?.closest(".gn") === null);
+  assert.ok(under, "the page is still clickable with the sheet out");
+  // Its own grip tucks it away; so does Escape.
+  await sheet.getByRole("button", { name: /Tuck Goose's Notes away/ }).click();
   await page.waitForTimeout(500);
-  assert.ok((await box(sheet)).x >= 1280, "a tap on the page tucks it away");
+  assert.ok((await box(sheet)).x >= 1280, "the grip tucks it away");
   await page.locator(".gn-handle").click();
   await page.keyboard.press("Escape");
   await page.waitForTimeout(500);

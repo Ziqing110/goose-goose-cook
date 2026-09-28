@@ -30,6 +30,14 @@ export const identifySpeaker = ({ pcm, rate, candidates }) =>
 export const enrollVoice = ({ cookId, pcm, rate }) =>
   post(`/enroll?cook=${encodeURIComponent(cookId)}&rate=${rate}`, pcm);
 
+/**
+ * Add a turn the app is sure about to a cook's voiceprint (see
+ * shouldLearn). Fails quietly on an older sidecar without /learn, as
+ * every call here may.
+ */
+export const learnVoice = ({ cookId, pcm, rate }) =>
+  post(`/learn?cook=${encodeURIComponent(cookId)}&rate=${rate}`, pcm);
+
 /** Forget one cook's voice, or everyone's when no id is given. */
 export const clearVoice = (cookId) =>
   call(`/voiceprints${cookId ? `?cook=${encodeURIComponent(cookId)}` : ""}`, { method: "DELETE" });

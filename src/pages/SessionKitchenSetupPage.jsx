@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { useVoicePageState } from "../hooks/useVoicePageState.js";
 import { kitchenPickCommands } from "../utils/kitchenPick.js";
 import "./SessionKitchenSetupPage.css";
 
@@ -32,6 +33,10 @@ export default function SessionKitchenSetupPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [state.kitchenProfiles]
   );
+  useVoicePageState([
+    "This run's kitchen was removed; pick another one to cook in.",
+    state.kitchenProfiles.length ? `Kitchens: ${state.kitchenProfiles.map((p) => `"${p.name}"`).join(", ")}` : "No kitchens yet.",
+  ]);
 
   return (
     <section className="page session-kitchen-setup-page">

@@ -5,15 +5,17 @@
 // did not join up.
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { LINES, routeVoiceTurn, turnConfidence } from "./voiceTurn.js";
+import { LINES, routeInterpretedTurn, routeVoiceTurn, turnConfidence } from "./voiceTurn.js";
 import { ROUTES } from "./routeGuards.js";
 import {
+  askGoose,
   clearVoiceCommands,
+  interpretationMenu,
   matchPageCommand,
   registerVoiceCommands,
   voiceCommandsAreExclusive,
 } from "./voicePageCommands.js";
-import { AVATAR_PICKER_VOICE, CONVERSATION_VOICE, HOME_VOICE, INVENTORY_VOICE, SCHEDULE_VOICE, ingredientVoicePhrases } from "./pageVoiceGrammar.js";
+import { NOTES_VOICE, VOICE_BINDING_VOICE, AVATAR_PICKER_VOICE, CONVERSATION_VOICE, HOME_VOICE, INVENTORY_VOICE, SCHEDULE_VOICE, ingredientVoicePhrases } from "./pageVoiceGrammar.js";
 
 const ALL = Object.values(ROUTES);
 const UP_TO_INVENTORY = [ROUTES.home, ROUTES.conversation, ROUTES.inventory];
@@ -408,4 +410,147 @@ test("nav: help lists places you can go, and never a 'next' that doesn't exist",
   assert.doesNotMatch(r.line, /\bnext\b/);
   assert.match(r.line, /conversation/);
   assert.doesNotMatch(r.line, /schedule|live cook/);
+});
+
+// --- when nothing matched: asking the goose ---------------------------------
+
+test("interpret: an unmatched turn goes to the goose only when the bar says it can", () => {
+  const said = "no, it's Zeina, Z E I N A";
+  assert.deepEqual(turn(said), { type: "ignore", reason: "not-a-command" }, "unchanged without the flag");
+  assert.deepEqual(turn(said, { interpret: true }), { type: "interpret" });
+});
+
+test("interpret: a dialog's unmatched words go to the goose too, not past the dialog", () => {
+  registerVoiceCommands([{ phrases: [/\bsave\b/], run: noop }], { priority: 10, exclusive: true });
+  assert.deepEqual(turn("hmm keep that one", { interpret: true, exclusive: true }), { type: "interpret" });
+});
+
+test("interpret: things that were never commands still are not -- echo, dictation, chatter", () => {
+  assert.equal(turn("go to the schedule", { interpret: true, echo: true }).type, "ignore");
+  assert.equal(turn("whatever they say", { interpret: true, dictation: { onFinal: noop } }).type, "dictate");
+});
+
+const nameCook = () =>
+  registerVoiceCommands([
+    { phrases: VOICE_BINDING_VOICE.nameByOrdinal("first|second|1|2"), run: noop, examples: ["call the first cook Mia"] },
+    { phrases: [/\bremove (?:the )?cook (.+)$/], confirm: "Remove that cook and their voice?", run: noop },
+  ]);
+
+test("interpreted: a rewrite that matches a page command asks before it runs", () => {
+  nameCook();
+  const d = routeInterpretedTurn("call the first cook Zeina", { ...ctxFor(), interpret: true });
+  assert.equal(d.type, "confirm");
+  assert.equal(d.question, "Did you mean “call the first cook Zeina”? Say yes or no.");
+  assert.equal(d.then.type, "page");
+  assert.equal(d.then.command.match[2], "zeina");
+});
+
+test("interpreted: a command that already asks keeps its own question, not two", () => {
+  nameCook();
+  const d = routeInterpretedTurn("remove the cook zeina", ctxFor());
+  assert.equal(d.question, "Remove that cook and their voice?");
+});
+
+test("interpreted: navigation asks too, by the page's name", () => {
+  const d = routeInterpretedTurn("go to the schedule", ctxFor());
+  assert.equal(d.type, "confirm");
+  assert.equal(d.then.type, "navigate");
+  assert.match(d.question, /^Did you mean go to /);
+});
+
+test("interpreted: a rewrite the page does not accept is dropped, never re-asked", () => {
+  nameCook();
+  assert.deepEqual(routeInterpretedTurn("rename zina please", { ...ctxFor(), interpret: true }), {
+    type: "ignore",
+    reason: "interpreted-no-match",
+  });
+  assert.equal(routeInterpretedTurn("   ", ctxFor()).type, "ignore");
+});
+
+test("menu: what the goose is shown is the live layer's commands and state", () => {
+  registerVoiceCommands([{ phrases: [/\bhome\b/], run: noop }], { describe: () => ["under the dialog"] });
+  registerVoiceCommands(
+    [{ phrases: [/\bsave\b/], description: "Save it", examples: ["save"], run: noop }],
+    { priority: 10, exclusive: true, describe: () => ["Cook 1: named \"Zina\""] },
+  );
+  const menu = interpretationMenu();
+  assert.deepEqual(menu.context, ['Cook 1: named "Zina"']);
+  // Examples stand in for the pattern; the matcher still checks the rewrite.
+  assert.deepEqual(menu.commands, [{ description: "Save it", examples: ["save"], patterns: [] }]);
+});
+
+test("menu: a page whose describe throws still offers its commands", () => {
+  registerVoiceCommands([{ phrases: [/\bsave\b/], run: noop }], { describe: () => { throw new Error("stale"); } });
+  assert.deepEqual(interpretationMenu().context, []);
+  assert.equal(interpretationMenu().commands.length, 1);
+});
+
+test("askGoose: carries the line to fall back on", () => {
+  assert.deepEqual(askGoose("Both cooks have names."), { askGoose: true, fallback: "Both cooks have names." });
+  assert.deepEqual(askGoose(), { askGoose: true, fallback: null });
+});
+
+function ctxFor() {
+  return {
+    route: ROUTES.inventory,
+    reachable: ALL,
+    hasSession: true,
+    matchPage: matchPageCommand,
+    exclusive: voiceCommandsAreExclusive(),
+    canGoBack: true,
+  };
+}
+
+test("interpret: a sentence with a subject goes to the goose instead of the bin", () => {
+  registerVoiceCommands([{ phrases: ingredientVoicePhrases("ginger").out, run: noop }]);
+  assert.deepEqual(turn("i think we're out of ginger", { interpret: true }), { type: "interpret" });
+  assert.deepEqual(turn("i think we're out of ginger"), { type: "ignore", reason: "conversation" });
+});
+
+test("menu: a command with no help of its own is described by its grammar", () => {
+  registerVoiceCommands([
+    { phrases: HOME_VOICE.resume, run: noop },
+    { phrases: [/\bmystery\b/], run: noop },
+  ]);
+  const [resume, mystery] = interpretationMenu().commands;
+  assert.equal(resume.description, "Resume the cooking run in progress");
+  assert.deepEqual(resume.patterns, []);
+  // Nothing to go on but the pattern, so the pattern goes.
+  assert.deepEqual(mystery, { description: "", examples: [], patterns: ["\\bmystery\\b"] });
+});
+
+// --- Goose's Notes, on every page -----------------------------------------
+
+const notesCommands = () =>
+  registerVoiceCommands([
+    { phrases: NOTES_VOICE.open, everywhere: true, whileDictating: true, run: noop, label: "open" },
+    { phrases: NOTES_VOICE.close, everywhere: true, whileDictating: true, run: noop, label: "close" },
+  ]);
+
+test("notes: opened by voice mid-cook, ahead of the page that owns every turn", () => {
+  notesCommands();
+  const d = turn("Goose, open the notes", { route: ROUTES.liveCook, dictation: { takeover: true } });
+  assert.equal(d.type, "page");
+  assert.equal(d.command.label, "open");
+  assert.equal(turn("Goose close the notes", { route: ROUTES.liveCook, dictation: { takeover: true } }).command.label, "close");
+});
+
+test("notes: everything else on the live cook still goes to the cook", () => {
+  notesCommands();
+  const cook = { route: ROUTES.liveCook, dictation: { takeover: true } };
+  assert.equal(turn("Goose, I'm done with the onions", cook).type, "takeover");
+  // Mentions notes; is not asking for them.
+  assert.equal(turn("I left my notes by the stove", cook).type, "takeover");
+});
+
+test("notes: heard mid-question, where everything else is typed as the answer", () => {
+  notesCommands();
+  const asking = { route: ROUTES.conversation, dictation: { onFinal: noop } };
+  assert.equal(turn("show me the notes", asking).type, "page");
+  assert.equal(turn("my notes say two eggs each", asking).type, "dictate");
+});
+
+test("notes: an ordinary page hears them like any other command", () => {
+  notesCommands();
+  assert.equal(turn("open your notes").type, "page");
 });

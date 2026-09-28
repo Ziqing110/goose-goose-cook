@@ -37,6 +37,7 @@ import "./InventoryPage.css";
 // How long the thumbs-up frame holds once the recipes land.
 const WORKING_DONE_MS = 700;
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { useVoicePageState } from "../hooks/useVoicePageState.js";
 import { normalizeUtterance, CONFIRM_YES_PATTERN, CONFIRM_NO_PATTERN } from "../utils/navCommands.js";
 import { matchStepName } from "../utils/stepNameMatch.js";
 import { INVENTORY_VOICE, ingredientVoicePhrases, parseAddTaskSpeech } from "../utils/pageVoiceGrammar.js";
@@ -624,6 +625,15 @@ export default function InventoryPage() {
     const listed = new Set(inv.ingredients.map((i) => i.id));
     return [...outMaterialIds].reverse().find((id) => listed.has(id)) || null;
   };
+
+  useVoicePageState([
+    inv.ingredients.length
+      ? `Ingredients: ${inv.ingredients.map((i) => `${i.label} (${outMaterialIds.includes(i.id) ? "out" : "on hand"})`).join(", ")}`
+      : null,
+    approved ? "The board is approved and locked." : "The board is not approved yet.",
+    blockedIds.length ? `${blockedIds.length} step(s) are blocked by missing ingredients.` : null,
+    boardNodes.length ? `Steps: ${boardNodes.slice(0, 40).map((n) => n.label).join("; ")}` : null,
+  ]);
 
   // Mirrors the checkboxes and the "Add a task" button: everything voice
   // can do here is something a click already does, said in the words the

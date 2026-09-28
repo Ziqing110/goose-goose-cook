@@ -45,14 +45,16 @@ import { matchConfirmation, hasSubject, normalizeUtterance } from "../utils/navC
 import { routeConfirmReply } from "../utils/confirmReply.js";
 import { routeModalReply, FINISH_PHRASE } from "../utils/modalReply.js";
 import { findSelfIntro } from "../utils/selfIntro.js";
+import { joinSpelledLetters } from "../utils/cookVoice.js";
 import { opensFollowUp } from "../utils/followUp.js";
 import { rejectionLines } from "../utils/agentRejection.js";
 import { voiceLog } from "../voice/voiceLog.js";
 import { speakerSelection, resolveSpeaker } from "../voice/speakerSelection.js";
 import { registerVoiceDictation } from "../utils/voicePageCommands.js";
 import { buildAgentSnapshot } from "../utils/agentSnapshot.js";
-import { agentTurn, agentAside, collectAnswer } from "../api/agent.js";
+import { agentTurn, agentAside, agentBanter, collectAnswer } from "../api/agent.js";
 import { shouldCommentate } from "../utils/commentary.js";
+import { recentRoomTalk, shouldBanter } from "../utils/banter.js";
 
 // Often enough that a lull is noticed while it is still a lull, rarely
 // enough to be free -- the decision it drives is pure and local. Module
@@ -62,8 +64,8 @@ const ASIDE_CHECK_MS = 5000;
 import { AGENT_NAME, speak, takeInterrupted } from "../voice/agentVoice.js";
 import { explainStep } from "../utils/stepExplain.js";
 import { audioTap } from "../voice/audioTap.js";
-import { identifySpeaker } from "../api/speaker.js";
-import { decideSpeaker, hasHandover } from "../utils/speakerMatch.js";
+import { identifySpeaker, learnVoice } from "../api/speaker.js";
+import { decideSpeaker, hasHandover, shouldLearn } from "../utils/speakerMatch.js";
 import { cookFromTurn } from "../utils/speakerLabels.js";
 import { isNameOnlyTurn } from "../utils/addressing.js";
 import { buildSummary } from "../utils/summaryCard.js";
@@ -391,6 +393,8 @@ export default function LiveCookPage() {
   const [confirm, setConfirm] = useState(null); // { kind: "finish" } | { kind: "skip", stepId, cookId }
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  // The "this is a demo" notice above the header; dismissed per visit.
+  const [demoOpen, setDemoOpen] = useState(true);
   // The score moment in flight: which card it left, how many points,
   // and a key so two quick Dones each get their own "+20".
   const [fly, setFly] = useState(null);
@@ -549,6 +553,11 @@ export default function LiveCookPage() {
   const lastAsideAtRef = useRef(0);
   const asideBusyRef = useRef(false);
   const asideRunnerRef = useRef(null);
+  // The cooks' own talk, not meant for the goose, kept briefly so it can
+  // occasionally join in (see utils/banter.js).
+  const roomTalkRef = useRef([]);
+  const lastBanterAtRef = useRef(0);
+  const banterBusyRef = useRef(false);
 
   useEffect(() => {
     const id = setInterval(() => asideRunnerRef.current?.(), ASIDE_CHECK_MS);
@@ -930,7 +939,11 @@ export default function LiveCookPage() {
     // an action. Otherwise the room's chatter, or the other cook talking
     // to someone, would be answered out loud, and each answer would open
     // the window for the next.
-    const chatter = !turn.named && !turn.calls.length;
+    //
+    // Trouble is the exception: "the water's boiling over, what do I
+    // do?" was let through without the name precisely so it gets an
+    // answer, and the model was told to reply empty if it misheard.
+    const chatter = !turn.named && !turn.urgent && !turn.calls.length;
 
     // The app refused something the model asked for, and the model
     // cannot see refusals -- so its reply is written around a call that
@@ -1035,7 +1048,7 @@ export default function LiveCookPage() {
       console.info(`[speaker] ${verdict.cookId ? name(verdict.cookId) : "unsure"} (${verdict.reason})`, named, `margin ${result.margin}`);
       // A voiceprint outranks a label: it was measured against this
       // cook's own voice, not inferred from who else is in the room.
-      if (verdict.cookId) return { cookId: verdict.cookId, via: "voiceprint" };
+      if (verdict.cookId) return { cookId: verdict.cookId, via: "voiceprint", result };
       const byLabel = cookFromTurn(turn, cooks).cookId;
       return byLabel ? { cookId: byLabel, via: "label" } : null;
     } catch (err) {
@@ -1056,6 +1069,14 @@ export default function LiveCookPage() {
       // Somebody who just said who they are outranks every guess about
       // it: not knowing their voice is precisely why they had to say so.
       const heard = saidBy ? { cookId: saidBy, via: "said so" } : await whoSpoke(clip, sttTurn);
+      // A turn we are sure about is another reading of that cook's
+      // voice, and a print built from more readings credits more turns
+      // (see shouldLearn). Not awaited: nobody waits on this.
+      if (clip && heard?.cookId && shouldLearn({ via: heard.via, result: heard.result, seconds: clip.pcm.length / clip.rate, shared })) {
+        learnVoice({ cookId: heard.cookId, pcm: clip.pcm, rate: clip.rate })
+          .then((r) => console.info(`[speaker] learned ${name(heard.cookId)} (${heard.via}), ${r.learned} turns so far`))
+          .catch(() => {});
+      }
       // Nothing recognised it, so the turn belongs to whoever the
       // toggle was left on. Worth recording as such: it is a guess
       // nobody made deliberately.
@@ -1089,6 +1110,8 @@ export default function LiveCookPage() {
         // how a chronically misheard agent name gets caught.
         console.info("[voice] not addressed:", text);
         voiceLog.setThinking(null);
+        // Not awaited: the queue must not wait on a joke.
+        overheard(text, cookId);
         return;
       }
       applyAgentTurn(turn, text, cookId, via);
@@ -1144,8 +1167,9 @@ export default function LiveCookPage() {
     // are is addressed to the app, and needing the agent's name first
     // would make the fix for a misattributed turn depend on the thing
     // that is already going wrong.
-    const intro = findSelfIntro(text, cooks);
-    let said = text;
+    const intro = findSelfIntro(text, cooks, { agentName: AGENT_NAME });
+    // A name spelled out ("as Z-E-I-N-A") reaches the model as the name.
+    let said = joinSpelledLetters(text);
     let saidBy = null;
     if (intro) {
       setSpeakerId(intro.cookId);
@@ -1283,6 +1307,48 @@ export default function LiveCookPage() {
     }
   };
 
+  // Talk that wasn't for the goose. Mostly it stays out of it; now and
+  // then, when the cooks are joking with each other, it chimes in.
+  const overheard = async (text, cookId) => {
+    const now = Date.now();
+    roomTalkRef.current = recentRoomTalk([...roomTalkRef.current, { speaker: name(cookId), text, at: now }], now);
+    const current = latestRunRef.current;
+    const lastAgent = [...(current?.transcript || [])].reverse().find((e) => e.speaker === "agent");
+    const verdict = shouldBanter({
+      roomLines: roomTalkRef.current,
+      paused: isPaused(current),
+      ended: Boolean(current?.endedAt) || finished,
+      busy: banterBusyRef.current,
+      msSinceBanter: lastBanterAtRef.current ? now - lastBanterAtRef.current : Infinity,
+      msSinceAgent: lastAgent ? now - Date.parse(lastAgent.at) : Infinity,
+    });
+    if (!verdict.ok) return;
+
+    // Marked before the request, as with asides: a second line inside
+    // the call's window would ask twice.
+    banterBusyRef.current = true;
+    lastBanterAtRef.current = now;
+    const heardAt = lastVoiceAtRef.current;
+    try {
+      const { line } = await agentBanter({
+        agentName: AGENT_NAME,
+        lines: roomTalkRef.current.map(({ speaker, text: said }) => ({ speaker, text: said })),
+      });
+      // Somebody has spoken since: the moment has passed, and a joke
+      // about the line before last lands on the wrong thing.
+      if (!line || lastVoiceAtRef.current !== heardAt) {
+        if (line) console.info("[voice] banter too late, dropped:", line);
+        return;
+      }
+      console.info("[voice] chiming in:", line);
+      lastVoiceAtRef.current = Date.now();
+      commit(say(latestRunRef.current, line));
+      speak(line);
+    } finally {
+      banterBusyRef.current = false;
+    }
+  };
+
   voiceHandlerRef.current = (text, turn) => {
     // Somebody spoke. Whatever comes of it, the room is not quiet.
     lastVoiceAtRef.current = Date.now();
@@ -1317,7 +1383,11 @@ export default function LiveCookPage() {
     // happened and asks which of them meant it.
     const shared = hasHandover(turn?.words);
     if (shared) console.info("[voice] two cooks in one turn:", routed.said);
-    askAgent(routed.said, routed.saidBy ?? speaker, { engaged, clip, shared, sttTurn: turn, saidBy: routed.saidBy });
+    // Saying who you are is talking to the app, whether or not the rest
+    // of the sentence names the goose: "Goose, I'm Zeina, I'll wash the
+    // tofu" reaches the model as "I'll wash the tofu", and the name gate
+    // would otherwise throw it away.
+    askAgent(routed.said, routed.saidBy ?? speaker, { engaged: engaged || Boolean(routed.saidBy), clip, shared, sttTurn: turn, saidBy: routed.saidBy });
   };
 
   const submitKeywordUtterance = (text, saidBy = null) => {
@@ -1435,6 +1505,23 @@ export default function LiveCookPage() {
 
   return (
     <section className={`page live-cook-page ${isVersus ? "is-versus" : "is-coop"} ${paused ? "is-paused" : ""} ${finished ? "is-finished" : ""}`}>
+      {demoOpen && (
+        <div className="lc-demo" role="note">
+          <span className="lc-demo-tag">Honk! This is a demo</span>
+          <span className="lc-demo-body">
+            <span>Voice is limited in this demo. Start with your name when you call {AGENT_NAME}:</span>
+            <Mono className="lc-demo-say">&ldquo;{AGENT_NAME}, {cooks[0]?.name || "Mia"} finished the garlic&rdquo;</Mono>
+            <span className="lc-demo-sep" aria-hidden="true">&middot;</span>
+            <Mono className="lc-demo-say">&ldquo;{AGENT_NAME}, {cooks[1]?.name || "Leo"} will take the rice&rdquo;</Mono>
+          </span>
+          <a className="lc-demo-link" href="https://github.com/Ziqing110/goose-goose-cook" target="_blank" rel="noopener noreferrer">
+            Full voice kit on GitHub
+          </a>
+          <button type="button" className="lc-demo-close" aria-label="Dismiss demo notice" onClick={() => setDemoOpen(false)}>
+            &times;
+          </button>
+        </div>
+      )}
       {/* The same header every stage has: the run eyebrow, the title
           with its crooked underline, the run's facts, and one line of
           the goose's own. His aside here is the standing rule of the

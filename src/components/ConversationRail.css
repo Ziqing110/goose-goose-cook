@@ -2,8 +2,12 @@
    Design 4e, "Handle → pull-out sheet" (claude.ai/design, "Live cook -
    Goose panel"). Tucked: a slim handle on the right edge, draggable up
    and down, with a dot that pings when a note lands. Opened: a sheet
-   slides over the page from that edge, over a faint scrim that closes
-   it. A plain white card with a 1px rule, so it can sit on any page.
+   slides over the page from that edge. A plain white card with a 1px
+   rule, so it can sit on any page.
+
+   No scrim, unlike the design: dimming the page says the rest of it is
+   off, and it has to stay clickable while the sheet is out. The sheet's
+   shadow stays close to its own edge for the same reason.
 
    Above the goose (z 60) while open: the sheet runs the full height of
    the window, and the goose's corner would otherwise hide its newest
@@ -13,22 +17,6 @@
   --gn-sheet-w: 292px;
   font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
   color: var(--kp-text);
-}
-
-/* Faint, and only there to be tapped: it closes the sheet. */
-.gn-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 64;
-  background: color-mix(in srgb, var(--kp-text) 8%, transparent);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 260ms ease;
-}
-
-.gn.is-open .gn-scrim {
-  opacity: 1;
-  pointer-events: auto;
 }
 
 .gn-sheet {
@@ -42,7 +30,7 @@
   background: var(--kp-bg);
   border: 1px solid var(--kp-divider);
   border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(32, 30, 29, 0.14);
+  box-shadow: -4px 0 12px rgba(32, 30, 29, 0.10);
   overflow: hidden;
   transform: translateX(calc(100% + 24px));
   transition: transform 420ms cubic-bezier(0.22, 1.1, 0.3, 1);
@@ -341,7 +329,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .gn-sheet,
-  .gn-scrim,
   .gn-handle,
   .gn-switch-pill {
     transition: none;

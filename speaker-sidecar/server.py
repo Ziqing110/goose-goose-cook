@@ -6,7 +6,17 @@ Uses .venv-voice (NeMo + torch cu124). Listens on 127.0.0.1 only.
   GET    /health
   POST   /enroll?cook=<id>&rate=<hz>            body: raw little-endian int16 mono PCM
   POST   /identify?rate=<hz>&candidates=a,b     body: raw int16 mono PCM
+  POST   /learn?cook=<id>&rate=<hz>             body: raw int16 mono PCM
   DELETE /voiceprints[?cook=<id>]               one cook, or everyone
+
+/learn adds a turn the app is sure about -- the cook said who they were,
+or the match was well clear -- to that cook's voiceprint. Measured on the
+kitchen takes, the amount of voice a print is built from is what decides
+how many turns can be credited at all: one reading credits about 6 of 34
+marked turns, six readings 16, and learning from confident turns adds
+two to four more on top without adding a wrong one. Learned samples are
+kept apart from the enrolled ones and capped, oldest out first, so a
+long cook cannot drift the print away from the reading it started from.
 
 Privacy: this is the reason it is a sidecar and not a cloud call. Audio is
 turned into a 192-number embedding and discarded; only embeddings are kept,
@@ -31,10 +41,13 @@ import torch
 from nemo.collections.asr.models import EncDecSpeakerLabelModel
 
 PORT = int(os.environ.get("SPEAKER_PORT", "3103"))
-STORE = os.path.join(os.path.dirname(__file__), "voiceprints.json")
+# SPEAKER_STORE points a second copy (an eval, a test) at its own file,
+# so it never touches the voiceprints of the cooks actually bound.
+STORE = os.environ.get("SPEAKER_STORE") or os.path.join(os.path.dirname(__file__), "voiceprints.json")
 TARGET_RATE = 16000
 MIN_SECONDS = 0.5   # shorter than this and the embedding is mostly noise
 MAX_SECONDS = 30.0
+MAX_LEARNED = 20    # per cook; the enrolled reading always stays
 
 def load_model():
     """GPU if it will have us, CPU otherwise.
@@ -66,22 +79,35 @@ def load_model():
 model, device = load_model()
 
 lock = threading.Lock()
-# cook id -> list of unit-length embeddings (one per enrollment sample)
+# cook id -> unit-length embeddings, from the reading they enrolled with
 prints: dict[str, list[np.ndarray]] = {}
+# cook id -> unit-length embeddings from live turns, newest last
+learned: dict[str, list[np.ndarray]] = {}
 
 
 def load_store():
     if not os.path.exists(STORE):
         return
     with open(STORE, "r", encoding="utf-8") as f:
-        for cook, vecs in json.load(f).items():
-            prints[cook] = [np.array(v, dtype=np.float32) for v in vecs]
+        for cook, entry in json.load(f).items():
+            # Older stores are a bare list of enrolled samples.
+            if isinstance(entry, list):
+                entry = {"enrolled": entry, "learned": []}
+            prints[cook] = [np.array(v, dtype=np.float32) for v in entry.get("enrolled", [])]
+            learned[cook] = [np.array(v, dtype=np.float32) for v in entry.get("learned", [])]
     print(f"restored voiceprints for {len(prints)} cook(s)", flush=True)
 
 
 def save_store():
     with open(STORE, "w", encoding="utf-8") as f:
-        json.dump({k: [v.tolist() for v in vs] for k, vs in prints.items()}, f)
+        json.dump({
+            k: {"enrolled": [v.tolist() for v in vs], "learned": [v.tolist() for v in learned.get(k, [])]}
+            for k, vs in prints.items()
+        }, f)
+
+
+def samples_of(cook):
+    return prints.get(cook, []) + learned.get(cook, [])
 
 
 def embed(pcm_bytes: bytes, rate: int) -> tuple[np.ndarray, float]:
@@ -129,7 +155,12 @@ class Handler(BaseHTTPRequestHandler):
         if urlparse(self.path).path != "/health":
             return self._send(404, {"error": "not found"})
         with lock:
-            self._send(200, {"ok": True, "device": device, "enrolled": {k: len(v) for k, v in prints.items()}})
+            self._send(200, {
+                "ok": True,
+                "device": device,
+                "enrolled": {k: len(v) for k, v in prints.items()},
+                "learned": {k: len(learned.get(k, [])) for k in prints},
+            })
 
     def do_POST(self):
         url = urlparse(self.path)
@@ -150,10 +181,24 @@ class Handler(BaseHTTPRequestHandler):
                 samples = len(prints[cook])
             return self._send(200, {"cook": cook, "samples": samples, "seconds": round(seconds, 2)})
 
+        if url.path == "/learn":
+            cook = q.get("cook")
+            with lock:
+                # Only a cook who enrolled can be learned: a live turn on its
+                # own is not a voiceprint anybody agreed to.
+                if not cook or cook not in prints:
+                    return self._send(404, {"error": "no voiceprint for that cook"})
+                bucket = learned.setdefault(cook, [])
+                bucket.append(vec)
+                del bucket[:-MAX_LEARNED]
+                save_store()
+                count = len(bucket)
+            return self._send(200, {"cook": cook, "learned": count, "seconds": round(seconds, 2)})
+
         if url.path == "/identify":
             wanted = [c for c in q.get("candidates", "").split(",") if c]
             with lock:
-                pool = {c: v for c, v in prints.items() if not wanted or c in wanted}
+                pool = {c: samples_of(c) for c in prints if not wanted or c in wanted}
                 scores = {c: float(np.dot(vec, centroid(vs))) for c, vs in pool.items()}
             ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
             best = ranked[0] if ranked else (None, None)
@@ -176,8 +221,10 @@ class Handler(BaseHTTPRequestHandler):
         with lock:
             if cook:
                 prints.pop(cook, None)
+                learned.pop(cook, None)
             else:
                 prints.clear()
+                learned.clear()
             save_store()
         self._send(200, {"deleted": cook or "all"})
 

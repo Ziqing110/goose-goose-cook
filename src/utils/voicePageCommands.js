@@ -25,6 +25,8 @@
 // its command set when the hero state changes — and a later push from
 // the page must not end up shadowing the dialog sitting above it.
 // Layers register at a depth rather than in arrival order.
+import { voiceHelp } from "./pageVoiceGrammar.js";
+
 let layers = [];
 
 // Every layer at the highest priority is live, not just the last one
@@ -58,14 +60,32 @@ const liveLayers = () => {
  *                      anything irreversible: starting a cook,
  *                      throwing answers away. Mishearing those costs
  *                      more than one extra sentence.
+ *   everywhere  boolean  heard on every page, before a page that takes
+ *                      dictation or owns every turn (the live cook) gets
+ *                      the words. For the app's own chrome -- Goose's
+ *                      Notes -- and only with phrases anchored to the
+ *                      whole utterance.
  *   whileDictating  boolean  still heard while the page takes
  *                      dictation. Only for words that are never an
  *                      answer, and its phrases should be anchored to the
  *                      whole utterance.
+ *   description  string    optional, what the command does -- for the
+ *                      goose, when nothing matched and it is asked what
+ *                      was meant (see interpretationMenu).
+ *   examples     string[]  optional, ways to say it that match `phrases`.
+ *                      The model rewrites toward these.
+ * @param {object} [options]
+ *   describe  () => string[]  optional, the page's state in a few lines
+ *             ("Cook 1 is named Zina"), read when the goose is asked
+ *             what somebody meant. Without it "no, it's Zeina" has
+ *             nothing to be a correction OF.
+ *   interpret  false while the words are not meant for the goose at all
+ *             -- a cook reading their enrollment lines -- so nothing
+ *             unmatched is sent off to be interpreted.
  * @returns {Function} unregister
  */
-export function registerVoiceCommands(commands, { priority = 0, exclusive = false } = {}) {
-  const layer = { commands: commands || [], priority, exclusive };
+export function registerVoiceCommands(commands, { priority = 0, exclusive = false, describe = null, interpret = true } = {}) {
+  const layer = { commands: commands || [], priority, exclusive, describe, interpret };
   layers = [...layers, layer];
   return () => {
     // Remove this layer specifically, wherever it now sits. A late
@@ -120,11 +140,13 @@ function rawMatch(phrase, transcript) {
  * `dictating` narrows the search to commands marked `whileDictating`,
  * for a page that is otherwise typing every word it hears.
  */
-export function matchPageCommand(said, transcript, { dictating = false } = {}) {
+export function matchPageCommand(said, transcript, { dictating = false, everywhere = false } = {}) {
   if (!said) return null;
   const live = liveLayers();
   if (!live.length) return null;
-  const commands = live.flatMap((l) => l.commands).filter((c) => !dictating || c.whileDictating);
+  const commands = live
+    .flatMap((l) => l.commands)
+    .filter((c) => (!dictating || c.whileDictating) && (!everywhere || c.everywhere));
   // Tried in order — command grammar is closed and this only widens how
   // the same words can be padded, so the first hit either way is the
   // right one.
@@ -156,6 +178,55 @@ export function matchPageCommand(said, transcript, { dictating = false } = {}) {
 export function voiceCommandsAreExclusive() {
   return liveLayers().some((l) => l.exclusive);
 }
+
+/**
+ * What the live layers accept, for asking the goose what somebody meant
+ * when none of it matched. Patterns go as their source so the model can
+ * aim at them; the matcher in the browser still decides.
+ *
+ * Commands that only exist to be said while dictating are left out --
+ * this runs on pages that take commands, not answers.
+ */
+export function interpretationMenu() {
+  const live = liveLayers();
+  const context = live.flatMap((l) => {
+    try {
+      return l.describe?.() || [];
+    } catch {
+      return [];
+    }
+  });
+  // Described by the command, or by the grammar it was built from (see
+  // voiceHelp). With examples the patterns are left out: the examples
+  // are what the model aims at, the matcher still checks the result, and
+  // Inventory alone registers two commands per ingredient.
+  const seen = new Set();
+  const commands = [];
+  for (const c of live.flatMap((l) => l.commands)) {
+    const known = voiceHelp(c.phrases);
+    const description = c.description || known?.description || "";
+    const examples = c.examples || known?.examples || [];
+    const entry = { description, examples, patterns: examples.length ? [] : (c.phrases || []).map((p) => p.source) };
+    const key = JSON.stringify(entry);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    commands.push(entry);
+  }
+  return { context, commands };
+}
+
+/** May an unmatched turn be sent to the goose to interpret right now? */
+export function voiceCommandsInterpretable() {
+  return liveLayers().every((l) => l.interpret !== false);
+}
+
+/**
+ * A command's `run` returns this when it matched the words but cannot
+ * make sense of them in the page's state -- "I'm Zeina" when both cooks
+ * already have names. The goose gets a look at the sentence before the
+ * fallback line is said.
+ */
+export const askGoose = (fallback) => ({ askGoose: true, fallback: fallback ?? null });
 
 /** For tests, and for making sure a stale page can't leave commands behind. */
 export function clearVoiceCommands() {

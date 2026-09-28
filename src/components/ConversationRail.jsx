@@ -24,6 +24,11 @@
 // that can be dragged up or down and pings when a note lands; opened, a
 // sheet that slides over the page from that edge. History only -- the
 // voice controls stay on the goose.
+//
+// Unlike the design, nothing dims or covers the rest of the page while
+// the sheet is out: a scrim reads as "everything else is off", and the
+// cards have to stay tappable while somebody reads back what happened.
+// The grip on the sheet's edge and Escape tuck it away.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { buildConversationFeed, feedKey } from "../utils/conversationFeed.js";
 import { useLocation } from "react-router-dom";
@@ -36,6 +41,9 @@ import { speakerSelection, resolveSpeaker } from "../voice/speakerSelection.js";
 import { playerKey } from "../utils/serviceResults.js";
 import { PlayerAvatar } from "./ServiceResults.jsx";
 import { clampHandleTop, DEFAULT_HANDLE_TOP, parseHandleTop } from "../utils/railPlacement.js";
+import { notesPanel } from "../voice/notesPanel.js";
+import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { NOTES_VOICE } from "../utils/pageVoiceGrammar.js";
 import "./ConversationRail.css";
 
 const TOP_KEY = "goosesNotes.handleTop";
@@ -168,6 +176,30 @@ export default function ConversationRail() {
     if (open) endRef.current?.scrollIntoView({ block: "end" });
   }, [feed.length, open]);
 
+  // "Open the notes" / "close the notes", on every page. Heard ahead of
+  // pages that take every word (the conversation's questions, the live
+  // cook), which is what `everywhere` is for; see voiceTurn.js.
+  useEffect(() => notesPanel.onRequest(setOpen), []);
+  useEffect(
+    () =>
+      registerVoiceCommands([
+        {
+          phrases: NOTES_VOICE.open,
+          everywhere: true,
+          whileDictating: true,
+          label: "Here's everything so far.",
+          run: () => notesPanel.request(true),
+        },
+        {
+          phrases: NOTES_VOICE.close,
+          everywhere: true,
+          whileDictating: true,
+          run: () => notesPanel.request(false),
+        },
+      ]),
+    [],
+  );
+
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => {
@@ -218,8 +250,6 @@ export default function ConversationRail() {
 
   return (
     <div className={`gn ${open ? "is-open" : "is-tucked"}`}>
-      <div className="gn-scrim" onClick={close} aria-hidden="true" />
-
       <aside className="gn-sheet" aria-label="Goose's Notes" aria-hidden={!open} inert={open ? undefined : ""}>
         <button type="button" className="gn-grip" onClick={close} title="Tap to tuck away" aria-label="Tuck Goose's Notes away">
           <span className="gn-grip-line" />
