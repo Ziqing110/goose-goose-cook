@@ -1,223 +1,228 @@
-# Goose! Goose! Cook!
+<h1 align="center">Goose! Goose! Cook!</h1>
 
-React + Vite frontend, Node/Express + SQLite backend, for the
-Goose! Goose! Cook! hackathon build (formerly Kitchen Path). Home is a
-real entry point (start/resume a cooking session, manage kitchens, see
-recent sessions) rather than step 0 of a wizard; a "session" then walks
-through conversational
-elicitation → recipe graph draft/review → cook voice binding →
-schedule preview + mode select, with live cook / diary stubbed as
-future stages.
+<p align="center">
+  <img src="src/assets/programming%20goose.png" alt="A goose in a chef's hat writing code at a desk" width="560">
+</p>
 
-## Run it
+<p align="center">
+  <b>A voice-run kitchen for two cooks and one very serious goose.</b><br>
+  Tell Goose what you want for dinner. It drafts the recipe, splits the work, and calls the steps while you cook.
+</p>
 
-You need both the frontend (Vite) and the backend (Express API +
-SQLite) running — kitchens are stored in the database, not the
-browser.
+<p align="center">
+  <a href="https://ziqing110.github.io/goose-goose-cook/">Live demo</a> ·
+  <a href="docs/API_FLOW.md">API flow</a> ·
+  <a href="docs/VOICE_COMMANDS.md">Voice commands</a> ·
+  <a href="DEPLOY.md">Deploy</a>
+</p>
+
+---
+
+## The pitch
+
+Cooking a multi-dish dinner with someone else is a scheduling problem that
+nobody treats as one. Two people, one stove, three dishes, and a rice cooker
+that needs starting before anything else. Somebody ends up idle while the
+other is juggling four pans.
+
+Goose! Goose! Cook! treats a recipe as a **graph of steps** and your kitchen
+as a set of **limited resources**. It works out the fastest plan for the
+cooks and equipment you actually have, then runs that plan live, by voice,
+so nobody has to touch a screen with wet hands.
+
+- **Talk, don't type.** Streaming speech-to-text runs through the whole app.
+  Say "Goose, I'm done with the onion" and the plan moves on.
+- **Real scheduling.** A branch-and-bound scheduler finds the shortest
+  finish time against burners, woks, pots and people, then balances the work
+  so one cook isn't doing three times as much.
+- **Two ways to play.** *Co-op* follows the plan together. *Versus* opens a
+  pool of steps that cooks claim and score on.
+- **An agent that can't go rogue.** The model only proposes actions. The
+  server checks every one against the live run before the page applies it.
+- **A keepsake at the end.** Each cook ends with a summary card: photo,
+  stats, and a few lines from Goose about how it went.
+
+## How it works
+
+A session walks through five stages. Every page listens to the same mic.
+
+```mermaid
+flowchart LR
+    H[Home<br/>pick a kitchen] --> C[Conversation<br/>what, how many, diet, skill]
+    C --> R[Recipe graph<br/>check ingredients, edit steps]
+    R --> V[Cooks<br/>name + voiceprint]
+    V --> S[Schedule<br/>Co-op or Versus]
+    S --> L[Live cook<br/>voice-driven run]
+    L --> K[Cook card<br/>summary + photo]
+```
+
+| Stage | What happens | Where it lives |
+|---|---|---|
+| Home | Pick or create a kitchen (its equipment is the resource limit), resume a run, see past cooks | `src/pages/HomePage.jsx` |
+| Conversation | Goose asks four questions. Each spoken answer is read by an LLM into a structured slot | `ConversationPage.jsx`, `server/routes/understanding.js` |
+| Recipe graph | An LLM drafts one step graph per dish, a second model reviews it, and shared prep (like mincing garlic) is merged across dishes. You uncheck what you're out of and see which steps it blocks | `InventoryPage.jsx`, `server/routes/recipes.js`, `reviewPlan.js` |
+| Cooks | Each cook reads a line aloud. Optionally, a local service stores a voiceprint so Goose knows who spoke | `VoiceBindingPage.jsx`, `speaker-sidecar/` |
+| Schedule | The scheduler builds a two-lane timeline with the critical path, or the Versus opening hand | `SchedulePage.jsx`, `src/utils/scheduleLayout.js` |
+| Live cook | Cooks start, finish and hand off steps by voice or tap. Goose re-plans on every change | `LiveCookPage.jsx`, `src/utils/liveCook.js`, `server/agent/` |
+| Cook card | A frozen record of the run, downloadable as a PNG | `CookSummaryPage.jsx`, `src/utils/summaryCard.js` |
+
+### One live-cook turn
+
+```mermaid
+sequenceDiagram
+    participant Cook
+    participant Browser
+    participant API as Express API
+    participant AAI as AssemblyAI
+
+    Cook->>Browser: "Goose, done with the garlic"
+    Browser->>AAI: raw PCM over WebSocket (Streaming STT)
+    AAI-->>Browser: final transcript
+    Browser->>Browser: addressed to Goose? who spoke?
+    Browser->>API: POST /api/agent/turn (text + run snapshot)
+    API->>AAI: LLM Gateway, tools limited to valid step ids
+    AAI-->>API: tool calls + reply
+    API->>API: validate calls against the snapshot
+    API-->>Browser: vetted calls + reply
+    Browser->>Browser: apply through the same handlers as a tap
+    Browser->>Cook: reply spoken by Kokoro TTS in the browser
+```
+
+If the agent is slow or unreachable, a local keyword grammar
+(`src/utils/voiceCommands.js`) handles the command offline. If a question
+needs a lookup ("can I use a shallot?"), the answer is fetched in the
+background so the cook isn't blocked.
+
+## Tech stack
+
+| Layer | Tools |
+|---|---|
+| Frontend | React 18, Vite 5, React Router 6, plain CSS with design tokens |
+| Backend | Node 24, Express 5, SQLite via `better-sqlite3` |
+| Speech in | AssemblyAI Streaming STT (`universal-3-5-pro`), browser connects directly with a short-lived token |
+| LLMs | AssemblyAI LLM Gateway: Claude Sonnet 4.6 (reading answers, reviewing plans, cook summary), Gemini 3.8 Flash (recipe graphs), GPT-4.1 (live agent with tools), Gemini 2.5 Flash Lite (small talk) |
+| Speech out | Kokoro-82M on WebGPU through `kokoro-js`, runs in the browser. Falls back to Web Speech |
+| Web lookup | Tavily (optional) |
+| Speaker ID | NVIDIA NeMo TitaNet in a local Python sidecar (optional, never deployed) |
+| Testing | `node:test` for pure logic, Playwright for end-to-end runs |
+| Hosting | GitHub Pages (static app) + Render (API) |
+
+Every model choice was benchmarked, not picked by name. The numbers and
+reasoning are in [.env.example](.env.example) and `recipe-bench/`.
+
+## Getting started
+
+**You need:** Node 24 (Node 22 minimum), an
+[AssemblyAI API key](https://www.assemblyai.com/dashboard/api-keys), and
+Chrome or Edge for the mic and WebGPU.
 
 ```bash
+git clone https://github.com/Ziqing110/goose-goose-cook.git
+cd goose-goose-cook
 npm install
+cp .env.example .env        # then set ASSEMBLYAI_API_KEY
 npm run dev:full
 ```
 
-Opens the app at `http://localhost:5173` and the API at
-`http://localhost:3001` (Vite proxies `/api/*` to it, so the frontend
-never needs CORS config). `dev:full` runs both together via
-`concurrently`; use `npm run dev` (frontend only) or `npm run server`
-(backend only) if you want them in separate terminals.
+Open <http://localhost:5173> and allow the microphone. The API runs on
+port 3001, and Vite proxies `/api/*` to it.
 
-The SQLite file lives at `server/data.sqlite` and is **not** in the
-repo — it's created and seeded automatically on first run, so a clone
-is `npm install && npm run dev:full` with no setup steps. The seed
-(`seedIfEmpty` in `server/db.js`) gives you a demo kitchen, the two
-demo dishes and the materials catalog, which is everything the app
-needs to be clicked through end to end. It's safe to delete the file
-at any point to get back to a clean demo.
+The SQLite database (`server/data.sqlite`) is created and seeded on first
+run with a demo kitchen, dish templates and a materials catalog. Delete it
+any time to start clean.
 
-The seed is placeholder content standing in for real generation. When
-the recipe API lands, `TEMPLATE_SEED` stops being the source of dishes
-and the seed shrinks back to the kitchen and the materials catalog.
+> [!NOTE]
+> On Windows, `npm install` may need the C++ build tools because
+> `better-sqlite3` is a native module.
 
-## Setting up on a new machine
+> [!IMPORTANT]
+> The API key stays on the server. The browser only ever receives
+> short-lived tokens from `/api/voice/stt-token`.
 
-The app, the AssemblyAI voice features and the agent's brain need only
-this:
+### Environment
 
-1. Install a recent **Node** (developed on 24; the server script relies on
-   `--env-file-if-exists`). On a fresh Windows laptop `npm install` may
-   need the C++ build tools, because `better-sqlite3` is a native module.
-2. `npm install`
-3. Copy `.env.example` to `.env` and set `ASSEMBLYAI_API_KEY`. That one key
-   covers streaming speech-to-text, the LLM gateway (recipe generation and
-   the live-cook agent's brain) and everything else that calls AssemblyAI.
-   It stays on the server: the browser only ever gets short-lived tokens.
-4. `npm run dev:full`, then open `http://localhost:5173` in **Chrome or
-   Edge** and allow the microphone when asked.
+Only `ASSEMBLYAI_API_KEY` is required. The rest have working defaults.
 
-Things the key does not cover:
-
-- **Gateway model access depends on the account.** The agent defaults to
-  `gpt-4.1` (`AAI_AGENT_MODEL`). A "no access" error means the account
-  doesn't have it; pick another from `.env.example`. A free-tier account
-  may only have a small fallback model.
-- **The agent's voice** runs in the browser on WebGPU (Kokoro-82M) and
-  needs a working GPU and internet on first use: the library loads from a
-  CDN and the model (about 300 MB) from Hugging Face, then it is cached.
-  Without WebGPU it falls back to the browser's built-in voice.
-- **Speaker identification is optional and separate** (see below). Without
-  it everything works, and the live cook uses its speaker toggle.
-
-## Voice agent
-
-The live cook has an agent, currently named **Goose** (`AGENT_NAME` in
-`src/voice/agentVoice.js`; the one place to rename it). Say its name first:
-"Goose, I'm done with the onion". It only acts when addressed, and typed
-commands in the agent box work the same way. Turn the mic on in the voice
-bar to speak; it starts muted.
-
-| Piece | Where | Notes |
+| Variable | Default | Purpose |
 |---|---|---|
-| Speech in | `src/components/VoiceBar.jsx`, `src/hooks/useStreamingTranscript.js` | AssemblyAI streaming STT, one mic for the whole app |
-| Brain | `server/routes/agent.js`, `server/agent/` | `POST /api/agent/turn`; the model proposes tool calls, the server checks them, the page applies them through the same handlers a tap uses |
-| Voice out | `src/voice/agentVoice.js` | Kokoro-82M on WebGPU; the voice settings are in `AGENT_VOICE` |
-| Who is speaking | `speaker-sidecar/`, `src/api/speaker.js` | local TitaNet service, optional |
+| `ASSEMBLYAI_API_KEY` | none | Streaming STT and every LLM call |
+| `AAI_AGENT_MODEL` | `gpt-4.1` | Live-cook agent. Must support tools |
+| `AAI_RECIPE_MODEL` | `gemini-3.8-flash` | Recipe graph generation |
+| `AAI_RECIPE_REVIEW_MODEL` | `claude-sonnet-4-6` | Second-pass plan review (`AAI_RECIPE_REVIEW=off` skips it) |
+| `TAVILY_API_KEY` | empty | Enables mid-cook web lookups |
+| `ALLOWED_ORIGINS` | empty (allow all) | CORS for the deployed API |
 
-Checks and tools:
+A free-tier AssemblyAI account may not have access to every model. If you
+see a "no access" error, pick another model listed in `.env.example`.
 
-```bash
-npm run agent:calibrate                       # test the agent against a table of utterances
-npm run agent:calibrate -- --models a,b       # compare gateway models
-node --test src/utils/*.test.js server/agent/*.test.js   # unit tests
-npm run tts-lab                               # voice bench at http://localhost:3101
-```
+### Scripts
+
+| Command | What it does |
+|---|---|
+| `npm run dev:full` | Frontend and API together |
+| `npm run dev:voice` | Frontend, API and the speaker sidecar |
+| `npm run dev` / `npm run server` | Frontend or API alone |
+| `npm test` | Unit tests |
+| `npm run test:e2e` | Playwright run through a live cook |
+| `npm run agent:calibrate` | Score the agent against a table of utterances (`-- --models a,b` to compare) |
+| `npm run tts-lab` | Voice bench at <http://localhost:3101> |
+| `npm run build` | Production build into `dist/` |
 
 ### Speaker identification (optional)
 
-One mic, two cooks: a local service identifies who spoke by comparing each
-turn's audio with a voiceprint recorded on the chef assignment page.
-Voiceprints never leave the machine; audio is turned into numbers and
-discarded, and they are kept in `speaker-sidecar/voiceprints.json`
-(gitignored).
+With one mic and two cooks, a local service can tell who is speaking by
+matching each turn against the voiceprint recorded on the Cooks page.
+Voiceprints stay on your machine in `speaker-sidecar/voiceprints.json`
+(gitignored). Without the service, the live cook uses a speaker toggle
+instead.
 
 ```bash
-npm run speaker        # http://127.0.0.1:3103, or run everything: npm run dev:voice
+npm run speaker   # http://127.0.0.1:3103
 ```
 
-It needs the Python environment `.venv-voice` (Python 3.13, CUDA torch,
-NVIDIA NeMo, `soundfile`, `soxr`, `librosa`) and the
-`nvidia/speakerverification_en_titanet_large` model, which downloads on
-first use. That environment is not in the repo and has to be created on
-each machine; the steps have not been tested from a clean install. If the
-GPU is short of memory it falls back to CPU (`SPEAKER_DEVICE=cpu` forces
-it). Delete one cook's voiceprint by removing the cook on the chef page, or
-everyone's with `DELETE http://127.0.0.1:3103/voiceprints`.
-
-On the chef assignment page, tapping "Start reading" records the cook
-reading their line and enrols it. The recording ends when they stop
-speaking, not after a fixed time.
-
-## What's real vs. stubbed
-
-- **Kitchen profiles** — full CRUD (`src/components/KitchenProfileForm*`),
-  persisted in SQLite via `server/routes/kitchens.js` and
-  `src/api/kitchens.js`. A session can't start without at least one
-  kitchen; Home gates on this and prompts you to add one.
-- **Sessions** (`src/state/AppStateContext.jsx`, `server/routes/sessions.js`)
-  — conversation, recipe instances, shared steps, cooks and mode all
-  persisted in SQLite. The reducer stays synchronous/optimistic and a
-  debounced effect syncs to the API in the background. One in-progress
-  session at a time; past sessions show as history on Home.
-- **Navigation, the recipe graph editor** (phase-grouped step cards,
-  drawer step editor, dependency-graph view, add/delete steps) — fully
-  working, always editable (there's no separate approve/lock step —
-  "Continue to the cooks" snapshots the plan and moves on, and coming
-  back to revise it is just navigating back). A session can hold more
-  than one dish: steps from every dish render merged into the same
-  phase columns and dependency graph, tagged by dish.
-- **Voice input** (`src/components/VoiceInput.jsx`, `VoiceBar.jsx`,
-  `src/pages/VoiceBindingPage.jsx`) — real AssemblyAI streaming STT
-  through the one mic in the voice bar. Voice binding records the cook
-  reading their line for real and, if the speaker service is running,
-  enrols their voice. See "Voice agent" above.
-- **Recipe generation** — dish templates and the materials catalog are
-  seeded rows in SQLite (`server/db.js`), served via
-  `/api/recipe-templates` and `/api/materials`. Two demo dishes (Mapo
-  Tofu, with a vegetarian variant, and Chicken Noodle Soup) are
-  instantiated into every session together. `matchTemplates` in
-  `RecipeGraphPage` is the seam where an LLM tool call replaces
-  template lookup.
-- **Shared steps** — steps flagged `is_shareable` with a matching
-  `share_key` across dishes (today: mincing garlic) are folded into one
-  session-owned `shared_steps` row instead of duplicated per dish, with
-  combined quantities and a per-dish breakdown.
-- **Schedule** (`src/pages/SchedulePage.jsx`, `src/utils/scheduleLayout.js`)
-  — the game plan before going live, on the v4 design system
-  (`design/claude-design-schedule-prompt.md`): Co-op / Versus mode
-  picker, a plan HUD, then either a two-lane timeline (critical path,
-  waits, task detail) or the Versus opening hand + "up for grabs" pool,
-  all computed by the resource-constrained scheduler. Mode is session
-  state; "Go live" writes the run and hands off to Live cook.
-- **Live cook** (`src/pages/LiveCookPage.jsx`, `src/utils/liveCook.js`)
-  — built. Takes typed or spoken commands through the agent, with the
-  old keyword grammar (`src/utils/voiceCommands.js`) as the fallback when
-  the agent is slow or unreachable. Not yet run end to end with a real
-  microphone.
+It needs a Python 3.13 environment at `.venv-voice` with CUDA PyTorch,
+NVIDIA NeMo, `soundfile`, `soxr` and `librosa`. The TitaNet model downloads
+on first use. Set `SPEAKER_DEVICE=cpu` to skip the GPU.
 
 ## Project structure
 
 ```
 server/
-  index.js                    # Express app entry (CORS, JSON, mounts the routers)
-  db.js                       # SQLite connection, schema, demo dish/materials seed
-  routes/kitchens.js          # kitchens CRUD API
-  routes/sessions.js          # sessions + recipe instances + shared steps API
-  routes/recipeTemplates.js   # read-only dish templates + materials catalog
-  data.sqlite                 # created on first run (see note above about tracking)
-
+  index.js              Express entry, mounts every /api router
+  db.js                 SQLite schema and demo seed
+  routes/               kitchens, sessions, recipes, reviewPlan,
+                        understanding, voice (token minting), agent, photo
+  agent/                live-cook brain: turn validation, gateway call,
+                        web search, background answers, asides, summaries
 src/
-  api/                        # fetch clients: client.js (shared wrapper), kitchens,
-                               # sessions, recipeTemplates
-  state/AppStateContext.jsx   # app-wide store (React context + reducer); hydrates
-                               # kitchens + the active session from the API and
-                               # syncs changes back on a debounce
-  data/dishes.js              # generic content/helpers: elicitation questions,
-                               # equipment/difficulty/phase options, id + slug helpers
-  utils/graphLayout.js        # pure DAG helpers (layout, diff, phase grouping, merging
-                               # dishes + shared steps, material totals) — no DOM/React
-  utils/scheduleLayout.js     # pure resource-constrained scheduler + critical path
-  utils/cooks.js              # cook colors, bound-check, per-cook voice lines
-  components/                 # reusable UI: AppShell, VoiceBar, VoiceInput, StepCard,
-                               # GraphCanvas, NodeEditorPanel, Drawer, Modal,
-                               # KitchenProfileForm*, SessionProgress, NumberStepper,
-                               # ToggleSwitch
-  pages/                      # HomePage, SessionLayout, SessionKitchenSetupPage,
-                               # ConversationPage, RecipeGraphPage, VoiceBindingPage,
-                               # SchedulePage
-  styles/tokens.css           # design tokens + shared primitives (buttons, cards, fields, bands)
+  pages/                one page per stage (Home through Cook card)
+  components/           shared UI: VoiceBar, RecipeBoard, GooseVoiceAgent...
+  state/                app store (React context + reducer), synced to the API
+  hooks/                useStreamingTranscript (mic to AssemblyAI)
+  voice/                agent voice (Kokoro), audio taps, speaker selection
+  utils/                pure logic with tests: scheduler, run state machine,
+                        graph layout, voice grammars, scoring
+  styles/tokens.css     design tokens, light and dark
+speaker-sidecar/        optional Python TitaNet service
+scripts/                e2e runs, seeding, evaluation, asset builds
+docs/                   API flow, voice commands, test plans
 ```
 
-Routing lives in `src/App.jsx`. `/` (Home) is always reachable — it's
-the entry point, not a wizard step. Everything else lives under
-`/session/*` and requires an in-progress session (`RequireSession`);
-per-step guards (`RequireKitchenProfile`, `RequireConversationComplete`,
-`RequireRecipeApproved`, `RequireCooksBound`) send you to wherever you
-actually left off if you land somewhere out of order — e.g.
-`/session/schedule` bounces back to `/session/voice-binding` if the
-cooks aren't bound yet, and `/session/recipe-graph` bounces back to
-`/session/conversation` if that isn't complete.
+Pure logic lives in `src/utils/` with no DOM or React imports, so the
+scheduler and run state machine are tested without mounting a page. The
+browser owns the live run. Each agent request carries a snapshot of it, so
+the server stays stateless.
 
-## Data shapes
+## Deploying
 
-`server/db.js` and `src/state/AppStateContext.jsx` follow the schemas in
-the project brief (`RecipeGraph`, etc.) directly, so swapping
-placeholder logic for real API/AssemblyAI calls later is a drop-in
-change rather than a restructure. Kitchen profiles' shape is defined by
-`server/db.js`'s schema and mirrored by `KitchenProfileForm`.
+The static app goes to GitHub Pages and the API goes to Render, because the
+API holds the key and the frontend is public. `render.yaml` and
+`.github/workflows/pages.yml` do most of the work. Full steps in
+[DEPLOY.md](DEPLOY.md).
 
-Step (node) objects carry a few flags worth knowing about, all set in
-the seed data and expected from any future generator: `is_end_step`
-pins a dish's final step to the last column of the dependency graph;
-`is_shareable` + `share_key` mark a step as foldable into a
-session-level shared step when two dishes both need it;
-`material_usage` states how much of a material that one step consumes,
-which is what lets shared steps report a real combined total.
+## Further reading
+
+- [docs/API_FLOW.md](docs/API_FLOW.md): every external call and what triggers it
+- [docs/VOICE_COMMANDS.md](docs/VOICE_COMMANDS.md): what you can say on each page
+- [design/GOOSE_PERSONA.md](design/GOOSE_PERSONA.md): who the goose is and how it talks
+- [DESIGN_BASE.md](DESIGN_BASE.md): design tokens and visual language
