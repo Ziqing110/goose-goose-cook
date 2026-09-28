@@ -49,8 +49,23 @@ test("turn: the agent's own voice is never acted on, even a perfect command", ()
   assert.deepEqual(turn("go home", { echo: true }), { type: "ignore", reason: "echo" });
 });
 
-test("turn: the agent's own voice does not answer an open question", () => {
-  const r = turn("yes", { echo: true, pending: {} });
+test("turn: a plain yes/no question is answered even through the echo filter", () => {
+  // Barging in on a long "Did you mean ...?" before it finishes is
+  // normal, not the mic hearing the agent -- safe because the agent
+  // never actually says "yes" or "no" out loud for one of these (see
+  // VoiceBar's askToConfirm), so an echo of its own voice here still
+  // can't parse as an answer.
+  assert.deepEqual(turn("yes", { echo: true, pending: {} }), { type: "perform", clearPending: true });
+  assert.deepEqual(turn("no", { echo: true, pending: {} }), { type: "say", line: LINES.cancelled, clearPending: true });
+  // Something that isn't a clean yes/no is still just an echo.
+  const r = turn("start recording for purple", { echo: true, pending: {} });
+  assert.equal(r.type, "ignore");
+  assert.equal(r.clearPending, undefined);
+});
+
+test("turn: a passphrase confirmation gets no echo shortcut -- the agent reads the phrase itself", () => {
+  const pending = { phrase: "i want to abort this cooking session" };
+  const r = turn("I want to abort this cooking session.", { echo: true, pending });
   assert.equal(r.type, "ignore");
   assert.equal(r.clearPending, undefined);
 });

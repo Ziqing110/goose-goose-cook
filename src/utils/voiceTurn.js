@@ -69,6 +69,25 @@ export function turnConfidence(words) {
 export function routeVoiceTurn(text, ctx) {
   const said = (text || "").trim();
   if (!said) return { type: "ignore", reason: "empty" };
+
+  // A plain yes/no question is answered even through the echo filter —
+  // a "yes" said before a long "Did you mean ...?" finishes is somebody
+  // barging in, not the mic hearing the agent. This is only safe
+  // because the agent's own audio for that question never actually
+  // says the words "yes" or "no" out loud (VoiceBar's askToConfirm
+  // strips that instruction before speaking, keeping it only in the
+  // question text this compares against and the on-screen line) — an
+  // echo of the agent's own voice here still can't parse as an answer.
+  // A passphrase confirmation doesn't get this: the agent reads the
+  // exact phrase back as instruction, so an echo of ITS OWN voice could
+  // parse as the readback — the one case this shortcut would make
+  // dangerous instead of just convenient. Anything else here falls
+  // through to the ordinary echo check below, same as ever.
+  if (ctx.echo && ctx.pending && !ctx.pending.phrase) {
+    const answer = matchConfirmation(said);
+    if (answer === "yes") return { type: "perform", clearPending: true };
+    if (answer === "no") return { type: "say", line: LINES.cancelled, clearPending: true };
+  }
   // The mic hears the agent's own voice. Judged by when the words were
   // spoken, since the transcript lands after the agent is done.
   if (ctx.echo) return { type: "ignore", reason: "echo" };
