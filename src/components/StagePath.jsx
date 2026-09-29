@@ -7,7 +7,7 @@
 // Callers hand it stages already resolved to a state; where that state
 // comes from is their business (the route, for the session chrome; the
 // session's own progress, for Home's card).
-import Icon from "./Icon.jsx";
+import KpIcon from "./KpIcon.jsx";
 import "./StagePath.css";
 
 /**
@@ -23,7 +23,7 @@ export default function StagePath({ stages, label = "Session progress" }) {
         const body = (
           <>
             <span className="stage-node" aria-hidden="true">
-              {stage.state === "done" && <Icon glyph="checkmark-burst" size={16} />}
+              {stage.state === "done" && <KpIcon glyph="checkmark-burst" size={16} />}
               {stage.state === "waiting" && <span className="stage-dot" />}
             </span>
             <span className="stage-label">{stage.label}</span>

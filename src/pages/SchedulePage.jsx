@@ -1,6 +1,4 @@
-// Schedule — session step 6 of 7, the game plan before going live
-// (design/claude-design-schedule-prompt.md, "Kitchen Path - Schedule").
-// The player's job, in order: pick a mode, read the plan the agent made
+// Schedule: the game plan before going live. The player's job, in order: pick a mode, read the plan the agent made
 // for it, go live. Nothing here is authored by hand — the plan is
 // computed by utils/scheduleLayout.js from the approved main line, the
 // two players and the kitchen; this page only renders it. Mode is
@@ -116,7 +114,7 @@ function fitLabel(label, widthPx) {
 // An unattended step's hands-on moments are much narrower than a step
 // block, so they degrade on their own ladder: "Check 1/2" → "1/2" → the
 // mono duration → a bare bar. The 10px floor keeps a 20-second check
-// visible at Fit zoom (design/claude-design-schedule-v2-unattended.md §2).
+// visible at Fit zoom.
 const MOMENT_MIN_PX = 10;
 const MOMENT_LABEL_PX_PER_CHAR = 6.8;
 const MOMENT_MONO_PX_PER_CHAR = 8.3;

@@ -17,12 +17,12 @@ import { useSessionRecipes } from "../state/useSessionRecipes.js";
 import { mergeRecipesForDisplay, cyclicDependencyIds, cloneGraph } from "../utils/graphLayout.js";
 import PlanChangesPanel from "../components/PlanChangesPanel.jsx";
 import { missingEquipment } from "../utils/scheduleLayout.js";
-import { equipmentName } from "../data/dishes.js";
+import { EQUIPMENT_GLYPHS, equipmentName } from "../data/dishes.js";
 import RecipeBoard from "../components/RecipeBoard.jsx";
 import AddStepPanel from "../components/AddStepPanel.jsx";
 import DeleteStepDialog from "../components/DeleteStepDialog.jsx";
 import ImpactList, { ImpactMark } from "../components/ImpactList.jsx";
-import Icon from "../components/Icon.jsx";
+import KpIcon from "../components/KpIcon.jsx";
 import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
 import ChefWorkingScreen from "../components/ChefWorkingScreen.jsx";
 import { devPreview } from "../dev/preview.js";
@@ -95,7 +95,6 @@ const ZOOM_STEP = 5;
 /** How far in the slider can go: half again over the fitted view. */
 const zoomCeiling = (fit) => Math.max(1.5, fit + 0.5);
 
-const EQUIPMENT_GLYPH = { wok: "wok", oven: "oven", pot: "pot", stove_burner: "burner", cutting_board: "cutting-board" };
 const withArticle = (label) => `${/^[aeiou]/i.test(label) ? "an" : "a"} ${label}`;
 
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -1118,7 +1117,7 @@ export default function InventoryPage() {
               {showEquipment && (
                 <div className="inv-equip" role="note">
                   <span className="inv-equip-glyph" aria-hidden="true">
-                    <Icon glyph={EQUIPMENT_GLYPH[lacking[0]] || "flame"} size={24} />
+                    <KpIcon glyph={EQUIPMENT_GLYPHS[lacking[0]] || "flame"} size={24} />
                   </span>
                   <div className="inv-equip-main">
                     <span className="inv-equip-title">

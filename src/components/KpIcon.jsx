@@ -1,7 +1,6 @@
-// Kitchen Path glyph sheet — single-weight line icons on a 24px grid,
-// stroke = currentColor so the caller sets color via CSS. Home only
-// needs these; add glyphs here (not another icon set) when a page
-// needs more.
+// Kitchen Path glyph sheet: single-weight line icons on a 24px grid,
+// stroke = currentColor so the caller sets colour via CSS. The app's one
+// icon set; add glyphs here when a page needs more.
 const GLYPHS = {
   "fork-branch": (
     <>
@@ -63,6 +62,7 @@ const GLYPHS = {
       <path d="M6 11a6 6 0 0 0 12 0M12 17v4M9 21h6" />
     </>
   ),
+  waveform: <path d="M3.4 10.8v2.4M7.7 7.4v9.2M12 4.4v15.2M16.3 8.6v6.8M20.6 10.8v2.4" />,
   trophy: (
     <>
       <path d="M8 4h8v5a4 4 0 0 1-8 0V4Z" />
@@ -86,7 +86,7 @@ export default function KpIcon({ glyph, size = 24, className = "", ...rest }) {
       strokeLinejoin="round"
       aria-hidden="true"
       focusable="false"
-      className={`kp-icon ${className}`}
+      className={className ? `kp-icon ${className}` : "kp-icon"}
       {...rest}
     >
       {paths}

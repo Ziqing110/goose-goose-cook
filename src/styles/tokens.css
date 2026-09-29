@@ -299,11 +299,10 @@ button { font: inherit; cursor: pointer; }
 }
 
 /* ---------------------------------------------------------------
-   Kitchen Path Agent Design System v1.0 tokens (kp-*)
-   Used by the Home v4 page (design/claude-design-home-*.md). Kept
-   namespaced so the older Figtree/cream pages keep their own look
-   until they're migrated. Light-only in the system; the dark block
-   just keeps Home readable under the app's dark theme.
+   Kitchen Path design system tokens (kp-*), used by Home and by the
+   v4 pages (styles/design-v4.css). Namespaced so they cannot collide
+   with the base tokens above. Light-only in the system; the dark block
+   keeps the pages readable under the app's dark theme.
 ----------------------------------------------------------------*/
 :root {
   --kp-bg: #ffffff;

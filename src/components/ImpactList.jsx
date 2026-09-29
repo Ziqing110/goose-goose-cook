@@ -4,7 +4,7 @@
 // inside the board panel on the recipe graph. Every row is a button that
 // takes you to that step on the board.
 import { useState } from "react";
-import Icon from "./Icon.jsx";
+import KpIcon from "./KpIcon.jsx";
 import { GooseTracks } from "./GooseMarks.jsx";
 import { formatMinutes } from "../utils/inventory.js";
 import "./ImpactList.css";
@@ -16,7 +16,7 @@ const VISIBLE = 5;
 export function ImpactMark() {
   return (
     <span className="impact-mark" aria-hidden="true">
-      <Icon glyph="waveform" size={14} />
+      <KpIcon glyph="waveform" size={14} />
     </span>
   );
 }
@@ -27,7 +27,7 @@ export default function ImpactList({ entries, onPick, hint }) {
   if (entries.length === 0) {
     return (
       <div className="impact-empty">
-        <Icon glyph="checkmark-burst" size={24} />
+        <KpIcon glyph="checkmark-burst" size={24} />
         <span>Nothing &mdash; everything&rsquo;s craftable.</span>
         {/* Nobody has been through here: the goose walked across the
             empty panel instead, the same prints it leaves in an

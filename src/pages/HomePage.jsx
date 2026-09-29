@@ -1,6 +1,4 @@
-// Home v4 — "Tonight's run". A planning surface in the Kitchen Path
-// Agent Design System (design/claude-design-home-*.md): the hero is
-// the run card (states A–F below), then the kitchens loadout and the
+// Home: "Tonight's run". The hero is the run card (states A–F below), then the kitchens loadout and the
 // run log. Everything shown is derived from data the backend already
 // returns — see src/utils/runStats.js for the derivations.
 import { useEffect, useMemo, useState } from "react";
