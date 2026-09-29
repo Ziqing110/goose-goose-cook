@@ -28,14 +28,13 @@ const ART = {
   hover: hoverArt,
 };
 
-// Tag copy and tab colour per state, from the design's `S` table with
-// the "peach" tab palette applied (its default).
+// Tag copy and size per state; the tab's colour is in the stylesheet.
 const STATES = {
-  idle: { tag: "Mic off", tab: "#1a1a1a", tabFg: "#ffffff", scale: 1 },
-  listening: { tag: "Listening", tab: "#3f8f5a", tabFg: "#ffffff", scale: 1 },
-  thinking: { tag: "Thinking", tab: "#f6dc86", tabFg: "#1a1a1a", scale: 1 },
-  speaking: { tag: "Speaking", tab: "#d4552a", tabFg: "#ffffff", scale: 1.08 },
-  warning: { tag: "Mic error", tab: "#b3261e", tabFg: "#ffffff", scale: 1.08 },
+  idle: { tag: "Mic off", scale: 1 },
+  listening: { tag: "Listening", scale: 1 },
+  thinking: { tag: "Thinking", scale: 1 },
+  speaking: { tag: "Speaking", scale: 1.08 },
+  warning: { tag: "Mic error", scale: 1.08 },
 };
 
 // The goose is 160px wide and parks bottom-right, clear of the edge.
@@ -236,7 +235,7 @@ export default function GooseVoiceAgent({
 
       {showBubble && (
         <div className={`goose-bubble ${onRight ? "is-left" : "is-right"}`}>
-          <span className="goose-bubble-tab mono" style={{ background: spec.tab, color: spec.tabFg }}>
+          <span className={`goose-bubble-tab mono is-${STATES[state] ? state : "idle"}`}>
             {tag ?? spec.tag}
           </span>
           <span className="goose-bubble-tail" aria-hidden="true" />

@@ -5,19 +5,20 @@ import ConversationRail from "./ConversationRail.jsx";
 import BrandGoose from "./BrandGoose.jsx";
 import gooseSm from "../assets/baby-goose-final/png/goose-exclamation-v2.png";
 import Wordmark from "./Wordmark.jsx";
-import { useDesignV4 } from "../utils/designV4.js";
 import { useAppState } from "../state/AppStateContext.jsx";
 import { usePlayerLaneVars } from "../hooks/usePlayerLaneVars.js";
 import "./AppShell.css";
 import "../styles/design-v4.css";
 
+// The session stages and the cook card use the v4 design system
+// (styles/design-v4.css); Home and kitchen setup keep their own look.
+const DESIGN_V4_PATHS = ["/session/conversation", "/session/inventory", "/session/voice-binding", "/session/schedule", "/session/live-cook"];
+
 export default function AppShell() {
-  // The design-system class has to sit on the shell (not the page):
-  // that's the only ancestor shared by the page, SessionProgress (in
-  // SessionLayout) and VoiceBar (rendered below) — which a class on the
-  // page's own <section> could never reach via descendant selectors.
-  const isDesignV4 = useDesignV4();
   const { pathname } = useLocation();
+  // On the shell, the only ancestor the page, SessionProgress and the
+  // VoiceBar share.
+  const isDesignV4 = DESIGN_V4_PATHS.includes(pathname) || pathname.startsWith("/cook/");
   const { state } = useAppState();
   // A cook journal is a frozen page, not a session step: it keeps the
   // same chrome as Home so it reads as part of the app — goose included —

@@ -315,6 +315,10 @@ button { font: inherit; cursor: pointer; }
   --kp-text-tertiary: #a3a29e;
 
   --kp-accent: #d4552a;
+  /* The voice agent's status tab, one colour per state. */
+  --kp-agent-listening: #3f8f5a;
+  --kp-agent-thinking: #f6dc86;
+  --kp-agent-warning: #b3261e;
   --kp-accent-hover: #c64e26;
   --kp-accent-tint: #fbeee8;
 

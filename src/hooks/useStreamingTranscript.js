@@ -1,9 +1,5 @@
 // Mic -> AssemblyAI Streaming STT, as a hook.
 //
-// Ported from the voice-lab bench, minus the instrumentation. The lab
-// exists to expose every parameter; this exists to do one job reliably
-// and stay quiet.
-//
 // Connection lifecycle is driven by `enabled` (in practice: VoiceBar's
 // mute toggle). Unmuting opens a socket, muting closes it. That matters
 // for more than tidiness — AssemblyAI bills for the time the socket is
@@ -96,7 +92,7 @@ const EMPTY_TURN_MS = 9_000;
  * should say so rather than look muted.
  */
 export function useStreamingTranscript({ enabled, onTurn, config = {}, onError, onIdle } = {}) {
-  const [status, setStatus] = useState("idle"); // idle|connecting|live|closing|error
+  const [status, setStatus] = useState("idle");
   const [partial, setPartial] = useState("");
   // Speech was detected but has not resolved into words yet. The API
   // sends SpeechStarted before a turn's first transcript, and it only
