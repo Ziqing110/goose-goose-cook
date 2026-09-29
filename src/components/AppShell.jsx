@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import VoiceBar from "./VoiceBar.jsx";
 import ConversationRail from "./ConversationRail.jsx";
 import BrandGoose from "./BrandGoose.jsx";
+import gooseSm from "../assets/baby-goose-final/png/goose-exclamation-v2.png";
 import Wordmark from "./Wordmark.jsx";
 import { useDesignV4 } from "../utils/designV4.js";
 import { useAppState } from "../state/AppStateContext.jsx";
@@ -25,6 +26,7 @@ export default function AppShell() {
   // Live-cook has its own demo notice (voice recognition, non-dismissable);
   // showing this generic one there too would be a redundant second banner.
   const isLiveCook = pathname.startsWith("/session/live-cook");
+  // Keep dismissal during navigation; a page reload starts a fresh notice.
   const [demoOpen, setDemoOpen] = useState(true);
 
   // The swim lane colours follow whichever birds the cooks picked. Set
@@ -48,6 +50,20 @@ export default function AppShell() {
               14.4px cap (size 20). The wordmark carries the name. */}
           <Wordmark cap={14.4} className="brand-name" />
         </div>
+        {!isLiveCook && demoOpen && (
+          <div className="demo-note" role="note" aria-label="Demo notice">
+            <img className="demo-note-goose" src={gooseSm} alt="" width="20" height="36" />
+            <div className="demo-note-text">
+              <span className="demo-note-title">Just a demo — nothing is saved.</span>
+              <span className="demo-note-body">Reload and your kitchen, cooks and schedule are gone · <a href="https://github.com/Ziqing110/goose-goose-cook" target="_blank" rel="noopener noreferrer">Voice kit on GitHub ↗</a></span>
+            </div>
+            <button type="button" className="demo-note-close" aria-label="Dismiss demo notice" onClick={() => setDemoOpen(false)}>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+                <path d="m3 3 6 6M9 3 3 9" />
+              </svg>
+            </button>
+          </div>
+        )}
         {isJournal && (
           <nav className="topbar-nav" aria-label="Journal">
             <Link className="topbar-link" to="/">← Home</Link>
@@ -55,20 +71,6 @@ export default function AppShell() {
         )}
       </header>
 
-      {!isLiveCook && demoOpen && (
-        <div className="demo-banner" role="note">
-          <span className="demo-banner-tag">Honk! This is a demo</span>
-          <span className="demo-banner-body">
-            Nothing you enter is saved anywhere — closing or reloading this tab loses your kitchen, cooks, and schedule.
-          </span>
-          <a className="demo-banner-link" href="https://github.com/Ziqing110/goose-goose-cook" target="_blank" rel="noopener noreferrer">
-            Full voice kit on GitHub
-          </a>
-          <button type="button" className="demo-banner-close" aria-label="Dismiss demo notice" onClick={() => setDemoOpen(false)}>
-            &times;
-          </button>
-        </div>
-      )}
 
       <main className="stage-root">
         <Outlet />

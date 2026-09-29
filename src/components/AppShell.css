@@ -8,23 +8,26 @@
   min-height: 100dvh;
 }
 
-.topbar {
+.app-shell header.topbar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  height: 60px;
+  flex: 0 0 60px;
   align-items: center;
   justify-content: space-between;
-  gap: 16px 28px;
-  padding-bottom: 16px;
+  gap: 12px;
+  padding: 0;
   border-bottom: 1px solid var(--line);
 }
 
-.brand { display: flex; align-items: center; gap: 10px; color: var(--kp-text, var(--ink)); }
+.brand { flex: none; display: flex; align-items: center; gap: 10px; color: var(--kp-text, var(--ink)); }
 .brand-mark { display: inline-flex; flex: 0 0 28px; }
 
 .stage-root { flex: 1; }
 
-/* Right-hand slot in the topbar; only the cook journal uses it today. */
-.topbar-nav { display: flex; align-items: center; gap: 4px; }
+/* Journal navigation follows the notice, with a short divider. */
+.topbar-nav { flex: none; display: flex; align-items: center; gap: 4px; }
+.demo-note + .topbar-nav::before { content: ""; width: 1px; height: 20px; background: var(--line); }
 .topbar-link {
   display: inline-flex;
   align-items: center;
@@ -41,70 +44,18 @@
 /* No voice bar on the journal, so no room reserved for it. */
 .app-shell.is-journal { padding-bottom: 48px; }
 
-/* ---------------- demo notice ---------------- */
-/* Always on, on every page — no way to dismiss it. Says this is a demo
-   and nothing typed or spoken here survives closing the tab. */
-.demo-banner {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 10px 12px 10px 16px;
-  border: 1px solid color-mix(in srgb, var(--warning-soft-ink) 18%, transparent);
-  border-radius: var(--radius-control);
-  background: var(--warning-soft);
-  color: var(--ink-soft);
-  font-size: 13.5px;
-  line-height: 1.45;
-}
-.demo-banner-tag {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 9px;
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-  color: #fff;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.demo-banner-body {
-  flex: 1 1 auto;
-  min-width: 0;
-  text-wrap: pretty;
-}
-.demo-banner-link {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 6px;
-  color: var(--ds-honk);
-  font-size: 13px;
-  font-weight: 500;
-  text-decoration: none;
-}
-.demo-banner-link:hover { background: color-mix(in srgb, var(--warning-soft-ink) 8%, transparent); color: var(--ink); text-decoration: none; }
-.demo-banner-close {
-  flex: none;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink-faint);
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-}
-.demo-banner-close:hover { background: color-mix(in srgb, var(--warning-soft-ink) 8%, transparent); color: var(--ink); }
-@media (max-width: 720px) {
-  .demo-banner { flex-wrap: wrap; }
-  .demo-banner-body { flex-basis: 100%; order: 1; }
-  .demo-banner-link { margin-left: auto; }
+/* Keep the icon and copy together as one vertically centered notice. */
+.demo-note { align-self: stretch; display: flex; align-items: center; gap: 9px; min-width: 0; margin-left: auto; }
+.demo-note-text { align-self: center; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; min-width: 0; }
+.demo-note-title { font: 600 13.5px/18px Figtree, sans-serif; color: var(--ink); }
+.demo-note-body { font: 400 12.5px/18px Figtree, sans-serif; color: var(--ink-soft); white-space: nowrap; }
+.demo-note-body a { color: var(--ink); font-weight: 500; text-decoration: underline; text-decoration-color: #d6c9b1; text-underline-offset: 3px; padding: 2px 3px; margin: 0 -3px; border-radius: 4px; }
+.demo-note-body a:hover { text-decoration-color: var(--ink); background: rgba(32,30,29,.05); }
+.demo-note-body a:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ink); }
+.demo-note-goose { display: block; flex: none; object-fit: contain; object-position: center; margin: 0; }
+.demo-note-close { align-self: center; flex: none; width: 36px; height: 36px; margin: 0 -8px 0 4px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--ink-faint); cursor: pointer; }
+.demo-note-close:hover { background: rgba(32,30,29,.06); color: var(--ink); }
+.demo-note-close:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ink); color: var(--ink); }
+@media (max-width: 1023px) {
+  .demo-note-body { display: none; }
 }
