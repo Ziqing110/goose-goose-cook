@@ -74,8 +74,6 @@ export function setVoiceEnabled(next) {
   if (!voiceEnabled) stop();
 }
 
-export const isVoiceEnabled = () => voiceEnabled;
-
 /** Subscribe to speaking changes. Returns an unsubscribe function. */
 export function onSpeakingChange(fn) {
   listeners.add(fn);

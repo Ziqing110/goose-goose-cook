@@ -69,14 +69,8 @@ export function tendingOf(node) {
   return declared;
 }
 
-/** The initial/checkpoints/ending breakdown, or null on a hands_on step (or one never decomposed). */
-export const unattendedOf = (node) => node?.unattended || null;
-
 /** Does this step occupy a cook for its whole duration? */
 export const isAttended = (node) => tendingOf(node) === TENDING.HANDS_ON;
-
-/** Does it run without a cook — either kind of unattended? */
-export const runsAlone = (node) => !isAttended(node);
 
 /**
  * Is being late on this step a failure?

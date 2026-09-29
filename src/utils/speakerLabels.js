@@ -46,13 +46,6 @@ export function withLabelBound(cooks, cookId, label) {
   });
 }
 
-/** Forget one cook's label, or everyone's. Mirrors clearVoice. */
-export function withLabelsCleared(cooks, cookId = null) {
-  return (cooks || []).map((c) =>
-    cookId === null || c.id === cookId ? { ...c, speakerLabel: null } : c,
-  );
-}
-
 // How much of a recording has to agree before the label is taken as
 // this cook's. Enrollment is one person reading one line, so anything
 // close to a split means the room was talking over them and the binding

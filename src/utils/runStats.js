@@ -36,11 +36,6 @@ export function runFlames(session) {
   return allWorkingNodes(session).reduce((max, n) => Math.max(max, DIFFICULTY_FLAMES[n.difficulty] || 0), 0);
 }
 
-export function runPlayers(session) {
-  const cooks = Number(session?.conversation?.answers?.cooks);
-  return Number.isFinite(cooks) && cooks > 0 ? cooks : null;
-}
-
 export function runServings(session) {
   const fromRecipe = session?.recipes?.[0]?.working?.servings;
   if (fromRecipe != null) return fromRecipe;

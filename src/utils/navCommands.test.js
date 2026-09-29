@@ -6,7 +6,6 @@ import {
   matchNavCommand,
   matchConfirmation,
   matchesConfirmationPhrase,
-  navCommandList,
   navHelpLine,
   navHintFor,
   normalizeUtterance,
@@ -153,7 +152,6 @@ test("nav: every documented destination alias works with every navigation verb",
       }
     }
   }
-  assert.deepEqual(navCommandList(), destinations.map(([, names]) => names[0]));
 });
 
 test("nav: every back alias and help phrase has its global action", () => {

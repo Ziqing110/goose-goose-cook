@@ -651,14 +651,6 @@ export function echoFor(reading) {
   return `${ECHO_PREFIX} ${reading.display} — it's on the right if you want to check it.`;
 }
 
-/** True for an agent line that opens with an echo of an unsure reading.
- * The transcript stores the finished sentence rather than its parts, so
- * this is how the page spots the turn that asks you to check a reading
- * (see the HONK pill in ConversationPage). */
-export function isEchoLine(text = "") {
-  return text.startsWith(ECHO_PREFIX);
-}
-
 /** True for a slot that holds an answer, sure or not. */
 export const isFilled = (slot) => slot.status === "confirmed" || slot.status === "low-confidence";
 

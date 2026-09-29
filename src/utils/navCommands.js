@@ -361,11 +361,6 @@ function reachableDestinations(route, reachable) {
   return DESTINATIONS.filter((d) => d.path !== route && (!reachable || reachable.includes(d.path))).reverse();
 }
 
-/** Destination names, for the "help" action. */
-export function navCommandList() {
-  return DESTINATIONS.map((d) => d.names[0]);
-}
-
 /** Friendly name for a route, for confirmation prompts. */
 export function pathLabel(path) {
   return DESTINATIONS.find((d) => d.path === path)?.names[0] ?? "that page";

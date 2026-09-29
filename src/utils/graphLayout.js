@@ -80,38 +80,6 @@ export function computeDownstreamClosure(nodes) {
 }
 
 /**
- * The true amount of a material this session actually needs is the sum
- * of every step's own `material_usage` for it (e.g. a shared "mince
- * garlic" step whose usage_breakdown already folds in every dish it
- * serves) — not the flat per-catalog-row default, which doesn't know
- * how many dishes are drawing on the same ingredient. Falls back to the
- * catalog's own amount/unit for a material no step states a usage for,
- * so materials without per-step data keep behaving exactly as before.
- */
-export function computeMaterialTotals(nodes, materialsInfo) {
-  const totals = {};
-  Object.keys(materialsInfo).forEach((id) => {
-    const usages = nodes.map((n) => n.material_usage?.[id]).filter(Boolean);
-    totals[id] = usages.length
-      ? { amount: usages.reduce((sum, u) => sum + u.amount, 0), unit: usages[0].unit }
-      : { amount: materialsInfo[id].amount, unit: materialsInfo[id].unit };
-  });
-  return totals;
-}
-
-const PHASES = ["prep", "cook", "plate"];
-
-/** Groups nodes into the three cooking-phase columns (defaults to "prep" for nodes with no phase set). */
-export function groupByPhase(nodes) {
-  const groups = { prep: [], cook: [], plate: [] };
-  nodes.forEach((n) => {
-    const phase = PHASES.includes(n.phase) ? n.phase : "prep";
-    groups[phase].push(n);
-  });
-  return groups;
-}
-
-/**
  * Determines each step's availability given a set of unavailable
  * materials. A step is "impossible" only when EVERY one of its own
  * required materials is missing, or — cascading transitively — when
