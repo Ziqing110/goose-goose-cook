@@ -1,42 +1,48 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900">
   <defs>
-    <clipPath id="mapoSurface"><ellipse cx="440" cy="446" rx="262" ry="60"/></clipPath>
+    <clipPath id="mapoSurface"><path d="M 198 456 C 192 414 262 386 334 386 C 388 368 488 370 540 382 C 616 384 688 418 682 456 C 688 492 616 514 548 512 C 486 522 402 520 350 512 C 274 516 202 494 198 456 Z"/></clipPath>
   </defs>
   <g stroke="#1a1a1a" stroke-linecap="round" stroke-linejoin="round">
   <rect width="1200" height="900" fill="#f2ead8" stroke="none"/>
-  <path d="M0 470 C 250 458 540 466 800 462 C 960 459 1090 466 1200 472 L1200 900 L0 900 Z" fill="#fffdf7" stroke="none"/>
-  <path d="M0 470 C 250 458 540 466 800 462 C 960 459 1090 466 1200 472" fill="none" stroke-width="5"/>
+  <!-- the table, drawn a touch closer so the plate is not lost under an empty wall -->
+  <g transform="translate(600 900) scale(1.1) translate(-600 -900)">
+  <path d="M0 392 C 250 380 540 388 800 384 C 960 381 1090 388 1200 394 L1200 900 L0 900 Z" fill="#fffdf7" stroke="none"/>
+  <path d="M0 392 C 250 380 540 388 800 384 C 960 381 1090 388 1200 394" fill="none" stroke-width="5"/>
   <g fill="none" stroke-width="4" opacity="0.55">
       <path d="M40 706 C 300 698 620 706 1160 700" stroke="#e3b7a4"/>
       <path d="M40 766 C 300 758 620 766 1160 760" stroke="#9dc0d9"/>
       <path d="M40 826 C 300 818 620 826 1160 820" stroke="#e3b7a4"/>
   </g>
-  <g transform="translate(600 250) scale(1.05)" fill="none" stroke-width="6" opacity="0.8">
+  <g transform="translate(600 404) scale(1.15)" fill="none" stroke-width="6" opacity="0.8">
     <path d="M-40 0 C -58 -30 -22 -48 -40 -78 C -52 -100 -34 -118 -42 -134"/>
     <path d="M10 -8 C -4 -40 30 -58 14 -90"/>
     <path d="M58 2 C 42 -26 76 -42 62 -70 C 52 -90 66 -106 62 -120"/>
   </g>
-  <g transform="translate(215 470) scale(0.6)" fill="none" stroke-width="6" opacity="0.8">
+  <g transform="translate(228 520) scale(0.6)" fill="none" stroke-width="6" opacity="0.8">
     <path d="M-40 0 C -58 -30 -22 -48 -40 -78 C -52 -100 -34 -118 -42 -134"/>
     <path d="M10 -8 C -4 -40 30 -58 14 -90"/>
     <path d="M58 2 C 42 -26 76 -42 62 -70 C 52 -90 66 -106 62 -120"/>
   </g>
-  <g transform="translate(985 470) scale(0.6)" fill="none" stroke-width="6" opacity="0.8">
+  <g transform="translate(972 526) scale(0.6)" fill="none" stroke-width="6" opacity="0.8">
     <path d="M-40 0 C -58 -30 -22 -48 -40 -78 C -52 -100 -34 -118 -42 -134"/>
     <path d="M10 -8 C -4 -40 30 -58 14 -90"/>
     <path d="M58 2 C 42 -26 76 -42 62 -70 C 52 -90 66 -106 62 -120"/>
   </g>
-  <g transform="translate(600 318) scale(0.92 0.92)"><g transform="translate(-440 -432)">
-    <!-- ===== the big bowl: mapo tofu, with the pork ===== -->
-    <ellipse cx="440" cy="690" rx="226" ry="20" fill="#e6dcc6" stroke="none"/>
-    <path d="M350 646 L360 680 L520 680 L530 646" fill="#fffdf7" stroke-width="7"/>
-    <path d="M154 432 C 160 568 262 652 440 654 C 618 652 720 568 726 432" fill="#fffdf7" stroke-width="8"/>
-    <path d="M184 510 C 226 566 300 612 388 626" fill="none" stroke-width="4.5" opacity="0.35"/>
-    <ellipse cx="440" cy="432" rx="286" ry="74" fill="#fffdf7" stroke-width="8"/>
-    <ellipse cx="440" cy="446" rx="262" ry="60" fill="#c9683a" stroke-width="5"/>
+  <g transform="translate(600 476) scale(0.94)"><g transform="translate(-440 -452)">
+    <!-- ===== mapo tofu, on a plate ===== -->
+    <ellipse cx="440" cy="566" rx="330" ry="24" fill="#e6dcc6" stroke="none"/>
+    <path d="M100 452 A340 96 0 0 0 780 452 L 776 468 A336 94 0 0 1 104 468 Z" fill="#fffdf7" stroke-width="7"/>
+    <ellipse cx="440" cy="452" rx="340" ry="96" fill="#fffdf7" stroke-width="7"/>
+    <ellipse cx="440" cy="460" rx="280" ry="72" fill="#faf5ea" stroke-width="4" stroke-opacity="0.45"/>
+    <path d="M150 418 C 196 390 256 374 318 366" fill="none" stroke-width="4" opacity="0.35"/>
+    <!-- chili oil running out to the edge of the food -->
+    <path d="M 198 456 C 192 414 262 386 334 386 C 388 368 488 370 540 382 C 616 384 688 418 682 456 C 688 492 616 514 548 512 C 486 522 402 520 350 512 C 274 516 202 494 198 456 Z" transform="translate(440 454) scale(1.06 1.12) translate(-440 -454)" fill="#ea9259" stroke="none" opacity="0.55"/>
+    <path d="M 198 456 C 192 414 262 386 334 386 C 388 368 488 370 540 382 C 616 384 688 418 682 456 C 688 492 616 514 548 512 C 486 522 402 520 350 512 C 274 516 202 494 198 456 Z" fill="#c9683a" stroke-width="5"/>
     <g clip-path="url(#mapoSurface)">
       <path d="M220 452 C 270 436 316 444 344 430" fill="none" stroke="#ea9259" stroke-width="8" opacity="0.9"/>
       <path d="M520 478 C 570 466 612 470 646 454" fill="none" stroke="#ea9259" stroke-width="8" opacity="0.9"/>
+    </g>
+    <!-- tofu stands up out of the sauce, so it is not clipped -->
       <g stroke-width="5">
         <path d="M232 426 L292 418 L304 452 L244 460 Z" fill="#fffdf7"/>
         <path d="M244 460 L304 452 L306 470 L246 478 Z" fill="#f2ead8"/>
@@ -48,8 +54,9 @@
         <path d="M534 434 L592 432 L593 450 L535 452 Z" fill="#f2ead8"/>
         <path d="M324 470 L382 464 L390 496 L332 502 Z" fill="#fffdf7"/>
         <path d="M600 450 L652 448 L656 478 L604 480 Z" fill="#fffdf7"/>
-        <path d="M188 464 L230 462 L234 490 L192 492 Z" fill="#fffdf7"/>
+        <path d="M216 468 L256 466 L260 492 L220 494 Z" fill="#fffdf7"/>
       </g>
+    <g clip-path="url(#mapoSurface)">
       <!-- browned pork crumbs -->
       <g fill="#8a5a3c" stroke-width="3">
         <path d="M262 402 c6 -6 16 -4 18 3 c2 7 -8 12 -15 9 c-6 -2 -8 -8 -3 -12 z"/>
@@ -76,9 +83,8 @@
         <ellipse cx="584" cy="468" rx="5" ry="3"/><ellipse cx="660" cy="438" rx="4.5" ry="2.6"/>
       </g>
     </g>
-
   </g></g>
-  <g transform="translate(215 560) scale(0.86 0.86)"><g transform="translate(-930 -508)">
+  <g transform="translate(228 612) scale(0.86 0.86)"><g transform="translate(-930 -508)">
     <!-- ===== rice bowl ===== -->
     <ellipse cx="930" cy="690" rx="140" ry="15" fill="#e6dcc6" stroke="none"/>
     <path d="M876 660 L882 682 L978 682 L984 660" fill="#fffdf7" stroke-width="6"/>
@@ -96,7 +102,7 @@
     <path d="M766 508 A 164 42 0 0 0 1094 508" fill="none" stroke-width="7"/>
 
   </g></g>
-  <g transform="translate(985 566) scale(-0.86 0.86)"><g transform="translate(-930 -508)">
+  <g transform="translate(972 618) scale(-0.86 0.86)"><g transform="translate(-930 -508)">
     <!-- ===== rice bowl ===== -->
     <ellipse cx="930" cy="690" rx="140" ry="15" fill="#e6dcc6" stroke="none"/>
     <path d="M876 660 L882 682 L978 682 L984 660" fill="#fffdf7" stroke-width="6"/>
@@ -114,19 +120,23 @@
     <path d="M766 508 A 164 42 0 0 0 1094 508" fill="none" stroke-width="7"/>
 
   </g></g>
-  <g transform="translate(600 800) scale(0.78 0.78)"><g transform="translate(-608 -783)">
-    <!-- ===== two pairs of chopsticks, crossed: it was Versus ===== -->
-    <g stroke-width="6">
-      <path d="M300 842 L 900 702 L 905 718 L 305 858 Z" fill="#c9925a"/>
-      <path d="M316 818 L 912 674 L 917 690 L 321 834 Z" fill="#c9925a"/>
-      <path d="M312 690 L 910 846 L 905 862 L 307 706 Z" fill="#8fb4cf"/>
-      <path d="M300 716 L 896 876 L 891 892 L 295 732 Z" fill="#8fb4cf"/>
-    </g>
-
-  </g></g>
+  <!-- one pair beside each rice bowl, one colour each side: it was Versus -->
+  <g transform="translate(424 782) rotate(-76)" stroke-width="5">
+    <ellipse cx="86" cy="0" rx="11" ry="24" fill="#e3b7a4" stroke-width="5"/>
+    <path d="M-115 -17 L 115 -7 Q 118 -4 115 -1 L -115 -3 Q -120 -10 -115 -17 Z" fill="#c9925a"/>
+    <path d="M-115 3 L 115 1 Q 118 4 115 7 L -115 17 Q -120 10 -115 3 Z" fill="#c9925a"/>
+    <path d="M-80 -15.5 L -80 -3 M-80 3 L -80 15.5" fill="none" stroke-width="3.5"/>
+  </g>
+  <g transform="translate(776 782) scale(-1 1) rotate(-76)" stroke-width="5">
+    <ellipse cx="86" cy="0" rx="11" ry="24" fill="#e3b7a4" stroke-width="5"/>
+    <path d="M-115 -17 L 115 -7 Q 118 -4 115 -1 L -115 -3 Q -120 -10 -115 -17 Z" fill="#8fb4cf"/>
+    <path d="M-115 3 L 115 1 Q 118 4 115 7 L -115 17 Q -120 10 -115 3 Z" fill="#8fb4cf"/>
+    <path d="M-80 -15.5 L -80 -3 M-80 3 L -80 15.5" fill="none" stroke-width="3.5"/>
+  </g>
   <g stroke-width="2.2" stroke-linejoin="round">
-    <path d="M13 3.2c1.6 0 2.2 1.6 2.4 3.4l.5 4.6c.1 1.2 1 1.6 2 1.1l3.6-1.8c1.6-.8 2.8.6 1.7 2L14.9 25c-1 1.3-2.6 1.3-3.5 0L2.9 12.6c-1-1.4.2-2.8 1.8-2l3.5 1.8c1 .5 1.9.1 2-1.1l.5-4.6C10.9 4.8 11.4 3.2 13 3.2Z" transform="translate(1080 790) rotate(62 13 14) scale(2.4)" fill="#f6cfa6" stroke="#b08a63"/>
-    <path d="M13 3.2c1.6 0 2.2 1.6 2.4 3.4l.5 4.6c.1 1.2 1 1.6 2 1.1l3.6-1.8c1.6-.8 2.8.6 1.7 2L14.9 25c-1 1.3-2.6 1.3-3.5 0L2.9 12.6c-1-1.4.2-2.8 1.8-2l3.5 1.8c1 .5 1.9.1 2-1.1l.5-4.6C10.9 4.8 11.4 3.2 13 3.2Z" transform="translate(1010 846) rotate(74 13 14) scale(2.0)" fill="#faddbe" stroke="#c2a081"/>
+    <path d="M13 3.2c1.6 0 2.2 1.6 2.4 3.4l.5 4.6c.1 1.2 1 1.6 2 1.1l3.6-1.8c1.6-.8 2.8.6 1.7 2L14.9 25c-1 1.3-2.6 1.3-3.5 0L2.9 12.6c-1-1.4.2-2.8 1.8-2l3.5 1.8c1 .5 1.9.1 2-1.1l.5-4.6C10.9 4.8 11.4 3.2 13 3.2Z" transform="translate(1096 812) rotate(62 13 14) scale(2.4)" fill="#f6cfa6" stroke="#b08a63"/>
+    <path d="M13 3.2c1.6 0 2.2 1.6 2.4 3.4l.5 4.6c.1 1.2 1 1.6 2 1.1l3.6-1.8c1.6-.8 2.8.6 1.7 2L14.9 25c-1 1.3-2.6 1.3-3.5 0L2.9 12.6c-1-1.4.2-2.8 1.8-2l3.5 1.8c1 .5 1.9.1 2-1.1l.5-4.6C10.9 4.8 11.4 3.2 13 3.2Z" transform="translate(1030 852) rotate(74 13 14) scale(2.0)" fill="#faddbe" stroke="#c2a081"/>
+  </g>
   </g>
   </g>
 </svg>

@@ -93,15 +93,18 @@
     <path d="M1010 452 C 1034 470 1040 500 1030 532" fill="none" stroke="#fffdf7" stroke-width="9"/>
 
   </g></g>
-  <g transform="translate(290 760) rotate(-8)" stroke-width="6">
-    <path d="M-150 -9 L 20 -7 C 30 -7 34 7 20 7 L -150 9 C -160 9 -160 -9 -150 -9 Z" fill="#dfe6ea"/>
-    <path d="M18 -26 C 70 -30 104 -14 104 0 C 104 14 70 30 18 26 C -4 24 -4 -24 18 -26 Z" fill="#dfe6ea"/>
-    <path d="M30 -12 C 60 -14 80 -6 82 0" fill="none" stroke-width="4" opacity="0.4"/>
+  <!-- a pair of chopsticks in front of each bowl, tips on a rest -->
+  <g transform="translate(322 752) rotate(-5)" stroke-width="5">
+    <ellipse cx="128" cy="0" rx="12" ry="27" fill="#9dc0d9" stroke-width="5"/>
+    <path d="M-165 -20 L 165 -8.5 Q 169 -5 165 -1.5 L -165 -4 Q -171 -12 -165 -20 Z" fill="#c9925a"/>
+    <path d="M-165 4 L 165 1.5 Q 169 5 165 8.5 L -165 20 Q -171 12 -165 4 Z" fill="#c9925a"/>
+    <path d="M-120 -18 L -120 -4.5 M-120 4.5 L -120 18" fill="none" stroke-width="3.5"/>
   </g>
-  <g transform="translate(900 772) rotate(188)" stroke-width="6">
-    <path d="M-150 -9 L 20 -7 C 30 -7 34 7 20 7 L -150 9 C -160 9 -160 -9 -150 -9 Z" fill="#dfe6ea"/>
-    <path d="M18 -26 C 70 -30 104 -14 104 0 C 104 14 70 30 18 26 C -4 24 -4 -24 18 -26 Z" fill="#dfe6ea"/>
-    <path d="M30 -12 C 60 -14 80 -6 82 0" fill="none" stroke-width="4" opacity="0.4"/>
+  <g transform="translate(878 758) scale(-1 1) rotate(-5)" stroke-width="5">
+    <ellipse cx="128" cy="0" rx="12" ry="27" fill="#9dc0d9" stroke-width="5"/>
+    <path d="M-165 -20 L 165 -8.5 Q 169 -5 165 -1.5 L -165 -4 Q -171 -12 -165 -20 Z" fill="#c9925a"/>
+    <path d="M-165 4 L 165 1.5 Q 169 5 165 8.5 L -165 20 Q -171 12 -165 4 Z" fill="#c9925a"/>
+    <path d="M-120 -18 L -120 -4.5 M-120 4.5 L -120 18" fill="none" stroke-width="3.5"/>
   </g>
   <g transform="translate(600 700) rotate(-14)" stroke-width="4">
     <path d="M0 40 C 2 10 -4 -20 -2 -44" fill="none" stroke-width="5"/>
