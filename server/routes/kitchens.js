@@ -88,14 +88,25 @@ kitchensRouter.put("/:id", (req, res) => {
 // the cook to kitchen setup mid-cook, and every later re-plan fell back
 // to a one-burner, one-board kitchen without saying so. Refuse instead;
 // finished runs hold no such claim and don't block it.
+//
+// Only a cook that has actually started and not ended, and only in this
+// browser. Every visit leaves an 'active' session row behind while it is
+// still planning -- including other tabs, other browsers and test
+// runs -- and counting those blocked the delete with "the run you have
+// in progress" when nothing was cooking anywhere the person could see.
+// A planning session whose kitchen goes is already handled: the route
+// guards send it back to the kitchen picker.
 const countActiveSessionsStmt = db.prepare(
-  "SELECT COUNT(*) AS n FROM sessions WHERE kitchen_profile_id = ? AND status = 'active'"
+  `SELECT COUNT(*) AS n FROM sessions
+   WHERE kitchen_profile_id = ? AND status = 'active'
+     AND run_json IS NOT NULL AND json_extract(run_json, '$.endedAt') IS NULL
+     AND ifnull(client_id, '') = ?`
 );
 
 kitchensRouter.delete("/:id", (req, res) => {
   const existing = getStmt.get(req.params.id);
   if (!existing) return res.status(404).json({ error: "kitchen not found" });
-  if (countActiveSessionsStmt.get(req.params.id).n > 0) {
+  if (countActiveSessionsStmt.get(req.params.id, req.get("X-Kitchen-Client") || "").n > 0) {
     return res.status(409).json({ error: `"${existing.name}" is in use by the run you have in progress. Finish or abandon that run first.` });
   }
   deleteStmt.run(req.params.id);
