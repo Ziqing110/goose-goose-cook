@@ -16,7 +16,8 @@ import { useAppState } from "../state/AppStateContext.jsx";
 import { useSessionRecipes } from "../state/useSessionRecipes.js";
 import { mergeRecipesForDisplay, cyclicDependencyIds, cloneGraph } from "../utils/graphLayout.js";
 import PlanChangesPanel from "../components/PlanChangesPanel.jsx";
-import { missingEquipment, EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
+import { missingEquipment } from "../utils/scheduleLayout.js";
+import { equipmentName } from "../data/dishes.js";
 import RecipeBoard from "../components/RecipeBoard.jsx";
 import AddStepPanel from "../components/AddStepPanel.jsx";
 import DeleteStepDialog from "../components/DeleteStepDialog.jsx";
@@ -42,6 +43,7 @@ import { useVoicePageState } from "../hooks/useVoicePageState.js";
 import { normalizeUtterance, CONFIRM_YES_PATTERN, CONFIRM_NO_PATTERN } from "../utils/navCommands.js";
 import { matchStepName } from "../utils/stepNameMatch.js";
 import { INVENTORY_VOICE, ingredientVoicePhrases, parseAddTaskSpeech } from "../utils/pageVoiceGrammar.js";
+import Mono from "../components/Mono.jsx";
 
 // One banner beside the title, whatever the dishes are. It replaces the
 // pair of dish marks: two illustrations competed with each other and
@@ -134,10 +136,6 @@ function numberRange(numbers) {
   if (sorted.length > 2 && consecutive) return `${sorted[0]}–${sorted[sorted.length - 1]}`;
   if (sorted.length > 4) return `${sorted.slice(0, 3).join(", ")} +${sorted.length - 3}`;
   return sorted.join(", ");
-}
-
-function Mono({ children }) {
-  return <span className="mono">{children}</span>;
 }
 
 function Checkbox({ checked, label, onChange, disabled = false }) {
@@ -1124,7 +1122,7 @@ export default function InventoryPage() {
                   </span>
                   <div className="inv-equip-main">
                     <span className="inv-equip-title">
-                      Planned with {lacking.map((e) => withArticle(EQUIPMENT_LABELS[e] || e)).join(" and ")} you don&rsquo;t have
+                      Planned with {lacking.map((e) => withArticle(equipmentName(e).toLowerCase())).join(" and ")} you don&rsquo;t have
                     </span>
                     <span className="inv-equip-body">
                       {stepsNeedingLacking} {stepsNeedingLacking === 1 ? "step asks" : "steps ask"} for{" "}

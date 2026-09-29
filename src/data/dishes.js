@@ -131,7 +131,13 @@ export const EQUIPMENT_LABELS = {
   oven: "Oven",
 };
 export const equipmentLabel = (id) => EQUIPMENT_LABELS[id] || id.replace(/_/g, " ");
+// The short form for chips and lanes, where "Burner" says enough.
+export const equipmentName = (id) => (id === "stove_burner" ? "Burner" : equipmentLabel(id));
+// KpIcon glyphs for each piece of equipment.
+export const EQUIPMENT_GLYPHS = { cutting_board: "cutting-board", stove_burner: "burner", wok: "wok", pot: "pot", oven: "oven" };
 export const DIFFICULTY_OPTIONS = ["low", "medium", "high"];
+// How many flames each difficulty shows.
+export const DIFFICULTY_FLAMES = { low: 1, medium: 2, high: 3 };
 export const PHASE_OPTIONS = [
   { value: "prep", label: "Prep" },
   { value: "cook", label: "Cook" },

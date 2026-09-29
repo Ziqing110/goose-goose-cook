@@ -19,19 +19,19 @@ import {
   equipmentLanes,
   unattendedEvents,
   cookFreeWindows,
-  isAttended,
-  EQUIPMENT_LABELS,
 } from "../utils/scheduleLayout.js";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 import { useVoicePageState } from "../hooks/useVoicePageState.js";
 import { CONFIRM_YES_PATTERN, CONFIRM_NO_PATTERN } from "../utils/navCommands.js";
 import { matchStepName } from "../utils/stepNameMatch.js";
 import { SCHEDULE_VOICE } from "../utils/pageVoiceGrammar.js";
-import { tendingOf, TENDING } from "../utils/tending.js";
+import { isAttended, isOneShot, momentName, tendingLabel } from "../utils/tending.js";
+import { DIFFICULTY_FLAMES, EQUIPMENT_GLYPHS, equipmentName } from "../data/dishes.js";
 import { timer } from "../utils/time.js";
 import { chefAvatar } from "../utils/cooks.js";
 import { playerRing } from "../utils/playerColors.js";
 import KpIcon from "../components/KpIcon.jsx";
+import Mono from "../components/Mono.jsx";
 import Modal from "../components/Modal.jsx";
 import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
 import ChefWorkingScreen from "../components/ChefWorkingScreen.jsx";
@@ -123,38 +123,9 @@ const MOMENT_MONO_PX_PER_CHAR = 8.3;
 const RAIL_LABEL_MIN_PX = 44;
 const RAIL_LABEL_PX_PER_CHAR = 6.4;
 
-// What the page calls each tending kind. Hands-on is the default and
-// says nothing; the rail is the signal, the chip only names it.
-const TENDING_LABELS = {
-  [TENDING.TENDED]: "Check on it",
-  [TENDING.TIMED]: "Timed",
-  [TENDING.SET_AND_FORGET]: "Leave it",
-};
-const tendingLabel = (node) => TENDING_LABELS[tendingOf(node)] || null;
-
-// Equipment lane glyphs come from the 14-glyph sheet only; the lane for
-// steps that need no equipment (resting, chilling) borrows the timer.
-const EQUIPMENT_GLYPHS = {
-  cutting_board: "cutting-board",
-  stove_burner: "burner",
-  wok: "wok",
-  pot: "pot",
-  oven: "oven",
-  __unattended__: "timer",
-};
-
-const momentName = (m, count) => (m.kind === "initial" ? "Start" : m.kind === "ending" ? "Finish" : `Check ${m.index + 1}/${count}`);
 const momentShort = (m, count) => (m.kind === "initial" ? "Start" : m.kind === "ending" ? "Finish" : `${m.index + 1}/${count}`);
 
-const DIFFICULTY_FLAMES = { low: 1, medium: 2, high: 3 };
-
-const capitalize = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
-const equipmentLabel = (type) => capitalize(EQUIPMENT_LABELS[type] || type);
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
-
-function Mono({ children, className = "" }) {
-  return <span className={`mono ${className}`}>{children}</span>;
-}
 
 // System Chip, neutral: names the tending kind wherever a step is listed
 // off the timeline (detail panel, Versus rows). Renders nothing for
@@ -330,7 +301,7 @@ export default function SchedulePage() {
       const holderStep = cause.refStepId ? stepById[cause.refStepId] : null;
       const holderCook = holderStep ? cookById[holderStep.cookId] : null;
       const holder = !holderCook ? "" : holderCook.id === cookId ? ` — your “${byId[holderStep.id]?.label || holderStep.id}” has it` : ` — ${holderCook.name} has it`;
-      return `Waiting · ${EQUIPMENT_LABELS[cause.equipmentType] || cause.equipmentType}${holder}`;
+      return `Waiting · ${equipmentName(cause.equipmentType).toLowerCase()}${holder}`;
     }
     if (cause.type === "dependency" && cause.refStepId) {
       return `Waiting on “${byId[cause.refStepId]?.label || cause.refStepId}”`;
@@ -778,7 +749,7 @@ export default function SchedulePage() {
           {lacking.length > 0 && (
             <div className="sch-notice is-warning" role="status">
               <span>
-                Planned with {lacking.map((e) => `a ${EQUIPMENT_LABELS[e] || e}`).join(" and ")} {kitchenProfile?.name || "this kitchen"} doesn&rsquo;t
+                Planned with {lacking.map((e) => `a ${equipmentName(e).toLowerCase()}`).join(" and ")} {kitchenProfile?.name || "this kitchen"} doesn&rsquo;t
                 have — timings assume you&rsquo;ll manage one. Real waits will be longer.
               </span>
               {kitchenProfile && (
@@ -1142,7 +1113,7 @@ function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepId
           {gearLanesShown.map((lane) => (
             <div className="sch-lane-label is-equipment" key={`${lane.type}-${lane.index}`} title={lane.label}>
               <KpIcon glyph={EQUIPMENT_GLYPHS[lane.type] || "timer"} size={20} className="sch-lane-glyph" />
-              <span className="sch-lane-name sch-long">{capitalize(lane.label)}</span>
+              <span className="sch-lane-name sch-long">{lane.label}</span>
               {/* Glyph-only on a phone: two burners still need telling apart. */}
               {/\d$/.test(lane.label) && <Mono className="sch-lane-index sch-short">{lane.index}</Mono>}
             </div>
@@ -1245,7 +1216,7 @@ function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepId
                       {rung === "full" && (
                         <Mono className="sch-block-meta">
                           {timer(durationSec)}
-                          {equipment && ` · ${equipmentLabel(equipment)}`}
+                          {equipment && ` · ${equipmentName(equipment)}`}
                         </Mono>
                       )}
                       {rung === "dur" && <Mono className="sch-block-meta">{timer(durationSec)}</Mono>}
@@ -1475,7 +1446,7 @@ function TaskDetail({ step, node, dish, cook, cookIndex, isCritical, waitLabel, 
               </span>
             ))}
           </span>
-          {tendingOf(node) === TENDING.SET_AND_FORGET ? (
+          {isOneShot(node) ? (
             <span className="sch-meta">Runs on its own — nothing to come back for.</span>
           ) : (
             <span className="sch-meta">
@@ -1507,7 +1478,7 @@ function TaskDetail({ step, node, dish, cook, cookIndex, isCritical, waitLabel, 
         <div>
           <span className="sch-eyebrow">Equipment</span>
           <span className="sch-detail-text">
-            {step.requiredEquipment.length ? step.requiredEquipment.map(equipmentLabel).join(", ") : "None"}
+            {step.requiredEquipment.length ? step.requiredEquipment.map(equipmentName).join(", ") : "None"}
           </span>
         </div>
         <div>

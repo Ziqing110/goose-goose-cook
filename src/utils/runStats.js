@@ -2,11 +2,10 @@
 // card": title, difficulty flames, HUD stats, phase split, stage path,
 // and run-log timings. Everything here is computed from data the
 // backend already returns (see AppStateContext.jsx) — no new fields.
+import { DIFFICULTY_FLAMES } from "../data/dishes.js";
 import { sessionStageStates } from "./sessionSteps.js";
 import { isAttended } from "./tending.js";
 import { timer } from "./time.js";
-
-const DIFFICULTY_FLAMES = { low: 1, medium: 2, high: 3 };
 
 /** Every step node in a session: per-recipe working nodes plus shared steps. */
 export function allWorkingNodes(session) {
