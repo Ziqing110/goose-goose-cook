@@ -28,7 +28,8 @@ import { findSelfIntro } from "../utils/selfIntro.js";
 import { joinSpelledLetters, impliedAssignee, resolveCookRef } from "../utils/cookVoice.js";
 import { opensFollowUp } from "../utils/followUp.js";
 import { rejectionLines } from "../utils/agentRejection.js";
-import { registerVoiceDictation } from "../utils/voicePageCommands.js";
+import { registerVoiceCommands, registerVoiceDictation } from "../utils/voicePageCommands.js";
+import { SERVICE_DONE_VOICE } from "../utils/pageVoiceGrammar.js";
 import { buildAgentSnapshot } from "../utils/agentSnapshot.js";
 import { shouldCommentate } from "../utils/commentary.js";
 import { recentRoomTalk, shouldBanter } from "../utils/banter.js";
@@ -38,7 +39,7 @@ import { decideSpeaker, hasHandover, shouldLearn } from "../utils/speakerMatch.j
 import { cookFromTurn } from "../utils/speakerLabels.js";
 import { isNameOnlyTurn } from "../utils/addressing.js";
 import { buildSummary } from "../utils/summaryCard.js";
-import { playerKey } from "../utils/serviceResults.js";
+import { playerKey, resultLine } from "../utils/serviceResults.js";
 import { clock } from "../utils/time.js";
 import { equipmentName } from "../data/dishes.js";
 import { agentTurn, agentAside, agentBanter, collectAnswer } from "../api/agent.js";
@@ -218,7 +219,7 @@ export default function LiveCookPage() {
   useEffect(() => {
     if (!run) return undefined;
     const hint = finished
-      ? { line: "Service done — see the cook card when you're ready.", sub: null }
+      ? { line: "Service done — say “who won”, or “take the cook card”.", sub: null }
       : paused
         ? { line: "Paused — say “resume” to pick it back up.", sub: "Or say “back to the schedule”." }
         : {
@@ -246,8 +247,10 @@ export default function LiveCookPage() {
   );
   const keytermsKey = keyterms.join("|");
   const hasRun = Boolean(run);
+  // While the cook runs, the page owns every turn. Once it is over the
+  // results screen takes ordinary page commands instead (below).
   useEffect(() => {
-    if (!hasRun) return undefined;
+    if (!hasRun || finished) return undefined;
     return registerVoiceDictation({
       route: "/session/live-cook",
       takeover: true,
@@ -256,7 +259,18 @@ export default function LiveCookPage() {
     });
     // keyterms is keyed by content so a re-render doesn't re-register.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasRun, keytermsKey]);
+  }, [hasRun, finished, keytermsKey]);
+
+  // The results screen's commands. The work is declared after the early
+  // return below, so it is reached through a ref, like voiceHandlerRef.
+  const serviceDoneRef = useRef(null);
+  useEffect(() => {
+    if (!finished) return undefined;
+    return registerVoiceCommands([
+      { phrases: SERVICE_DONE_VOICE.takeCard, run: () => serviceDoneRef.current?.takeCard() },
+      { phrases: SERVICE_DONE_VOICE.results, run: () => serviceDoneRef.current?.results() },
+    ]);
+  }, [finished]);
 
   // Rice closes itself. Nobody finishes a set-and-forget step — the end
   // of it belongs to whatever plates it — so once its time is up it
@@ -632,6 +646,15 @@ export default function LiveCookPage() {
       setSaving(false);
       setSaveError(err.message || "Couldn't save the page.");
     }
+  };
+
+  serviceDoneRef.current = {
+    takeCard: () => {
+      if (saving) return "Saving it now.";
+      saveAndSeeCard();
+      return "Saving the cook. Here's your card.";
+    },
+    results: () => resultLine(runOutcome(run, nodes, cooks), { versus: isVersus }),
   };
 
   // --- voice: parse, then call the exact same handlers ---

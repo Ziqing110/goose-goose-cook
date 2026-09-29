@@ -54,7 +54,8 @@ const liveLayers = () => {
 /**
  * @param {Array<object>} commands
  *   phrases  RegExp[]  matched against the normalized utterance
- *   run      Function  what the button does
+ *   run      Function  what the button does. May return the line to
+ *                      say, or a promise of one
  *   label    string    optional confirmation shown after it runs
  *   confirm  string    optional question to ask FIRST. Use it for
  *                      anything irreversible: starting a cook,

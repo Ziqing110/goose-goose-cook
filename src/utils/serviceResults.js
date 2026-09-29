@@ -1,6 +1,7 @@
 // The derivations behind the results pieces (components/ServiceResults)
 // — shared by Service done, which reads a live run's outcome, and the
 // cook card, which reads the frozen summary back into the same shape.
+import { spokenDuration } from "./kitchenReport.js";
 
 // Player slots come from the index in cooks[] — player 1 is "a", player
 // 2 is "b" — never stored. The slot is just which lane a player renders
@@ -84,3 +85,26 @@ export function planDelta(outcome) {
 
 /** Level with the plan to the second: "0:00 under plan" is a sentence nobody says. */
 export const isOnPlan = (deltaSec) => Math.round(deltaSec) === 0;
+
+/**
+ * How the night went, as something the goose can say: who won and the
+ * score in Versus, or how co-op did against the plan. No clock digits,
+ * because it is read aloud.
+ */
+export function resultLine(outcome, { versus }) {
+  const took = `Dinner took ${spokenDuration(outcome.totalSec)}.`;
+  if (versus) {
+    const winners = outcome.scoreboard.filter((b) => outcome.winnerCookIds.includes(b.cookId));
+    const verdict = winners.length === 1 ? `${winners[0].name} wins.` : winners.length ? "It's a tie." : "Nobody scored.";
+    const score = outcome.scoreboard.map((b) => `${b.name} ${b.points}`).join(", ");
+    return `${verdict} ${score}. ${took}`;
+  }
+  const { show, deltaSec } = planDelta(outcome);
+  const plan = !show
+    ? ""
+    : isOnPlan(deltaSec)
+      ? " Right on plan."
+      : ` That's ${spokenDuration(Math.abs(deltaSec))} ${deltaSec < 0 ? "under" : "over"} plan.`;
+  const skipped = outcome.skippedCount ? `, ${outcome.skippedCount} skipped` : "";
+  return `${took}${plan} ${outcome.doneCount} steps done${skipped}.`;
+}

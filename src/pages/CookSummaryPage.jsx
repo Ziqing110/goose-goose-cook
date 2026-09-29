@@ -9,10 +9,13 @@
 // receipt Service done tore off, pinned up whole.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useAppState } from "../state/AppStateContext.jsx";
 import { getSession, updateSession } from "../api/sessions.js";
 import { fileToDataUrl, downloadDataUrl } from "../utils/summaryCard.js";
 import { renderShareCard } from "../utils/shareCard.js";
-import { isOnPlan, planDelta, resultPlayers, summaryOutcome } from "../utils/serviceResults.js";
+import { isOnPlan, planDelta, resultLine, resultPlayers, summaryOutcome } from "../utils/serviceResults.js";
+import { registerVoiceCommands } from "../utils/voicePageCommands.js";
+import { COOK_CARD_VOICE } from "../utils/pageVoiceGrammar.js";
 import { clock } from "../utils/time.js";
 import { runTimeline } from "../utils/cookTimeline.js";
 import { agentNarrate } from "../api/agent.js";
@@ -148,6 +151,7 @@ export default function CookSummaryPage() {
   const [pendingPhoto, setPendingPhoto] = useState(null);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
+  const { dispatch } = useAppState();
 
   useEffect(() => {
     let live = true;
@@ -237,10 +241,8 @@ export default function CookSummaryPage() {
       const photo = await fileToDataUrl(file);
       setPendingPhoto(photo);
       setBusy("photo");
-      // Shown as taken. Styling it (pixel art, then a background cutout)
-      // was tried and read worse than the photo; server/routes/photo.js
-      // is still the seam if a real image model is wired in later. Any
-      // styledPhoto an older card saved is cleared with it.
+      // Shown as taken. Any styledPhoto an older card saved is cleared
+      // with it.
       await saveSummary({ ...summary, photo, styledPhoto: null, photoSource: null });
     } catch (photoError) {
       setError(photoError.message || "Couldn't read that photo.");
@@ -249,13 +251,16 @@ export default function CookSummaryPage() {
       setPendingPhoto(null);
     }
   };
+  // Both resolve to whether it worked, so a spoken request can say so.
   const onDownload = async () => {
     setBusy("saving");
     setError(null);
     try {
       downloadDataUrl(await renderShareCard({ summary, outcome, players }), `${(summary.dish || "cook").replace(/\W+/g, "-").toLowerCase()}.png`);
+      return true;
     } catch {
       setError("Couldn't build the image — try again.");
+      return false;
     } finally { setBusy(null); }
   };
   const onCopyLink = async () => {
@@ -264,8 +269,42 @@ export default function CookSummaryPage() {
       await navigator.clipboard.writeText(window.location.href);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
-    } catch { setError("Couldn't copy — use the address bar."); }
+      return true;
+    } catch {
+      setError("Couldn't copy — use the address bar.");
+      return false;
+    }
   };
+
+  // Voice: the same actions as the buttons. Registered once per card and
+  // reached through a ref, so a re-render doesn't re-register them.
+  const voiceRef = useRef(null);
+  voiceRef.current = {
+    download: async () => {
+      if (busy) return "One moment, I'm still on the last one.";
+      return (await onDownload()) ? "Saved the page as an image." : "I couldn't build the image. Try again?";
+    },
+    copyLink: async () => ((await onCopyLink()) ? "Link copied." : "I couldn't copy it. Use the address bar."),
+    results: () => resultLine(outcome, { versus: summary.mode === "competition" }),
+    readAloud: () => summary.story || [summary.headline, resultLine(outcome, { versus: summary.mode === "competition" })].filter(Boolean).join(" "),
+    // A browser only opens the photo picker from a real tap.
+    addPhoto: () => "Tap “Add the photo” — I can't open your camera roll by voice.",
+  };
+  const hasCard = Boolean(summary && outcome);
+  useEffect(() => {
+    if (!hasCard) return undefined;
+    const say = (name) => () => voiceRef.current[name]();
+    return registerVoiceCommands(
+      Object.keys(COOK_CARD_VOICE).map((name) => ({ phrases: COOK_CARD_VOICE[name], run: say(name) })),
+    );
+  }, [hasCard]);
+
+  // The VoiceBar's hint, so the commands are discoverable.
+  useEffect(() => {
+    if (!hasCard) return undefined;
+    dispatch({ type: "voice/setHint", payload: { hint: { line: "Say “read it out”, “who won”, or “save the page”.", sub: "Or “go home”." } } });
+    return () => dispatch({ type: "voice/setHint", payload: { hint: null } });
+  }, [hasCard, dispatch]);
 
   if (status === "loading") return null;
   if (status === "missing" || !summary) {
