@@ -19,22 +19,20 @@
 // request and this stays stateless. Nothing here executes anything: the
 // client applies `calls` through the same handlers a tap uses.
 //
-// Same gateway and same raw-key auth as understanding.js. The model is
-// its own knob (AAI_AGENT_MODEL) because a turn is judged on latency
-// first, and it must support `tools`. Gateway streaming works on OpenAI
-// models only, so replies arrive whole. The logic is in agent/gateway.js
-// so the calibration runner exercises the same path.
+// The model is its own knob (AAI_AGENT_MODEL) because a turn is judged
+// on latency first, and it must support `tools`. The logic is in
+// agent/requestTurn.js so the calibration runner exercises the same path.
 import { Router } from "express";
-import { requestTurn, TurnError } from "../agent/gateway.js";
+import { sendError } from "../llm.js";
+import { requestTurn } from "../agent/requestTurn.js";
 import { collect, park } from "../agent/pending.js";
 import { requestAside } from "../agent/aside.js";
 import { requestBanter } from "../agent/banter.js";
 import { requestNarration } from "../agent/narrate.js";
-import { requestInterpretation, InterpretError } from "../agent/interpret.js";
+import { requestInterpretation } from "../agent/interpret.js";
 
 export const agentRouter = Router();
 
-const API_KEY = process.env.ASSEMBLYAI_API_KEY || "";
 const MODEL = process.env.AAI_AGENT_MODEL || "gpt-4.1";
 const MAX_TEXT_CHARS = 500;
 // A garnish must never compete with a cook who actually asked for
@@ -58,8 +56,7 @@ agentRouter.get("/answer/:id", async (req, res) => {
   try {
     return res.json(await promise);
   } catch (err) {
-    if (err instanceof TurnError) return res.status(err.status).json({ error: err.message });
-    return res.status(500).json({ error: err.message });
+    return sendError(res, err);
   }
 });
 
@@ -78,7 +75,7 @@ agentRouter.post("/aside", async (req, res) => {
   if (!agentName || !Array.isArray(snapshot?.steps)) {
     return res.status(400).json({ error: "agentName and snapshot {steps} are required." });
   }
-  const { line } = await requestAside({ apiKey: API_KEY, model: ASIDE_MODEL, agentName, snapshot });
+  const { line } = await requestAside({ model: ASIDE_MODEL, agentName, snapshot });
   return res.json({ line });
 });
 
@@ -97,7 +94,7 @@ agentRouter.post("/banter", async (req, res) => {
     speaker: String(l?.speaker ?? "").slice(0, 40),
     text: String(l?.text ?? "").slice(0, MAX_TEXT_CHARS),
   }));
-  const { line } = await requestBanter({ apiKey: API_KEY, model: ASIDE_MODEL, agentName, lines: said });
+  const { line } = await requestBanter({ model: ASIDE_MODEL, agentName, lines: said });
   return res.json({ line });
 });
 
@@ -113,7 +110,7 @@ agentRouter.post("/narrate", async (req, res) => {
   if (!agentName || !record || typeof record !== "object") {
     return res.status(400).json({ error: "agentName and record are required." });
   }
-  const { story } = await requestNarration({ apiKey: API_KEY, model: NARRATE_MODEL, agentName, record });
+  const { story } = await requestNarration({ model: NARRATE_MODEL, agentName, record });
   return res.json({ story });
 });
 
@@ -142,7 +139,6 @@ agentRouter.post("/interpret", async (req, res) => {
   try {
     return res.json(
       await requestInterpretation({
-        apiKey: API_KEY,
         model: MODEL,
         agentName: String(agentName).slice(0, 40),
         text: said,
@@ -159,8 +155,7 @@ agentRouter.post("/interpret", async (req, res) => {
       }),
     );
   } catch (err) {
-    if (err instanceof InterpretError) return res.status(err.status).json({ error: err.message });
-    return res.status(500).json({ error: err.message });
+    return sendError(res, err);
   }
 });
 
@@ -172,7 +167,6 @@ agentRouter.post("/turn", async (req, res) => {
   }
   try {
     const turn = await requestTurn({
-      apiKey: API_KEY,
       model: MODEL,
       text: said,
       agentName,
@@ -186,7 +180,6 @@ agentRouter.post("/turn", async (req, res) => {
     if (resume) return res.json({ ...rest, pendingId: park(resume) });
     return res.json(rest);
   } catch (err) {
-    if (err instanceof TurnError) return res.status(err.status).json({ error: err.message });
-    return res.status(500).json({ error: err.message });
+    return sendError(res, err);
   }
 });

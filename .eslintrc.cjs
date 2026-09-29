@@ -11,10 +11,12 @@ module.exports = {
   rules: {
     "react/prop-types": "off",
     "react/react-in-jsx-scope": "off",
+    // `const { dropped, ...rest } = obj` is how a field is omitted.
+    "no-unused-vars": ["error", { ignoreRestSiblings: true }],
   },
   overrides: [
     {
-      files: ["server/**/*.js", "src/**/*.test.js"],
+      files: ["server/**/*.js", "server/**/*.mjs", "src/**/*.test.js"],
       env: { browser: false, node: true, es2021: true },
     },
     {

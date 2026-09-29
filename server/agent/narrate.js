@@ -13,8 +13,8 @@
 //
 // One call, after the cook, with nobody waiting on a hot pan -- the only
 // place in this app where a slower, better model is the right trade.
+import { chat } from "../llm.js";
 
-const GATEWAY = "https://llm-gateway.assemblyai.com/v1/chat/completions";
 const MAX_TOKENS = 300;
 // Three sentences of speech is about this. Past it, it stops being a
 // remark about the evening and becomes a report.
@@ -99,24 +99,18 @@ export function cleanNarration(raw) {
  *   means the card keeps its own headline, which is not a failure.
  */
 export async function requestNarration({ apiKey, model, agentName, record, timeoutMs = TIMEOUT_MS }) {
-  if (!apiKey) return { story: "", model: null };
   try {
-    const res = await fetch(GATEWAY, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: buildNarrationPrompt(agentName) },
-          { role: "user", content: buildNarrationMessage(record) },
-        ],
-        max_tokens: MAX_TOKENS,
-      }),
-      signal: AbortSignal.timeout(timeoutMs),
+    const choice = await chat({
+      apiKey,
+      model,
+      maxTokens: MAX_TOKENS,
+      timeoutMs,
+      messages: [
+        { role: "system", content: buildNarrationPrompt(agentName) },
+        { role: "user", content: buildNarrationMessage(record) },
+      ],
     });
-    if (!res.ok) return { story: "", model: null };
-    const json = await res.json();
-    return { story: cleanNarration(json?.choices?.[0]?.message?.content), model };
+    return { story: cleanNarration(choice?.message?.content), model };
   } catch {
     return { story: "", model: null };
   }

@@ -11,10 +11,9 @@
 // falls back to the speaker's current one", which is only listed where
 // that current step is the expected one. `orClarify` also accepts making
 // no call and asking a question, for requests a person would ask about.
-import { requestTurn } from "./gateway.js";
+import { requestTurn } from "./requestTurn.js";
 
 const AGENT = "Goose";
-const API_KEY = process.env.ASSEMBLYAI_API_KEY || "";
 
 const arg = (name, fallback) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -146,7 +145,6 @@ for (const model of models) {
       let turn;
       try {
         turn = await turnWithRetry({
-          apiKey: API_KEY,
           model,
           text: c.say,
           agentName: AGENT,
