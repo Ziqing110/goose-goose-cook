@@ -12,7 +12,7 @@ import {
   CHEF_AVATARS,
   MAX_COOK_NAME_LENGTH,
 } from "../utils/cooks.js";
-import Icon from "../components/Icon.jsx";
+import KpIcon from "../components/KpIcon.jsx";
 import { GoosePrint } from "../components/GooseMarks.jsx";
 import gooseChoir from "../assets/goose-choir.png";
 import "./VoiceBindingPage.css";
@@ -808,7 +808,7 @@ export default function VoiceBindingPage() {
                   </div>
                   <span className="vb-bound-tag">
                     <span className="vb-check">
-                      <Icon glyph="checkmark-burst" size={14} />
+                      <KpIcon glyph="checkmark-burst" size={14} />
                     </span>
                     Voice bound
                   </span>
@@ -938,7 +938,7 @@ export default function VoiceBindingPage() {
                             {isRecording && <span className="cook-on-air mono">ON AIR</span>}
                             {isBound && (
                               <span className="cook-avatar-badge">
-                                <Icon glyph="checkmark-burst" size={14} />
+                                <KpIcon glyph="checkmark-burst" size={14} />
                               </span>
                             )}
                           </div>

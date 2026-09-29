@@ -38,38 +38,27 @@ Two URL traps, both of which cost us a restart cycle:
   pointing at the URL above. Don't use it — AssemblyAI's published agent
   instructions still name it, and they're out of date.
 
-### This project uses two different AssemblyAI products
+### What this project uses
 
-They look similar and share nothing. **Never generalize a rule from one
-to the other** — this is the single most common way to waste an hour here.
+Two AssemblyAI products, with different rules. **Never generalize a rule
+from one to the other.**
 
-| | **Streaming STT** (live cook) | **Voice Agent API** (conversation) |
+| | **Streaming STT** (every page's mic) | **LLM Gateway** (every model call) |
 |---|---|---|
-| WebSocket | `wss://streaming.assemblyai.com/v3/ws` | `wss://agents.assemblyai.com/v1/ws` |
-| Token endpoint | `https://streaming.assemblyai.com/v3/token` | `https://agents.assemblyai.com/v1/token` |
-| Auth header | **raw key**, no prefix | **`Bearer <key>`** |
-| Audio transport | **raw binary frames** | **base64 inside JSON** events |
-| Sample rate | whatever you declare in `sample_rate` | **24 kHz**, fixed |
-| Config | query params on the URL | `session.update` message |
-| You supply | LLM, TTS, orchestration | nothing — it's managed |
+| Endpoint | `wss://streaming.assemblyai.com/v3/ws` | `https://llm-gateway.assemblyai.com/v1/chat/completions` |
+| Auth | token from `https://streaming.assemblyai.com/v3/token`, minted with the **raw key**, no prefix | **raw key** in `authorization`, server-side only |
+| Payload | **raw binary PCM frames**; config as URL query params | OpenAI-style chat completions JSON |
+| Code | `src/hooks/useStreamingTranscript.js`, `server/routes/voice.js` | `server/llm.js` (the only caller of the gateway) |
 
-Vendor reference for the Voice Agent API is checked in verbatim at
-[docs/assemblyai-voice-agent-api.md](docs/assemblyai-voice-agent-api.md).
-Re-fetch it rather than editing it if it goes stale.
+The Voice Agent API (`agents.assemblyai.com`, `Bearer` auth, base64 audio
+in JSON) is **not** used here; don't apply its rules to either of these.
 
 ### Gotchas that cost real time
 
 - Wrapping Streaming STT audio in JSON or base64 → silence, no error.
-- `input.audio` carries audio in `audio`; `reply.audio` carries it in
-  `data`. Voice Agent only.
-- Voice Agent tool schema is **flat** (`{type, name, description,
-  parameters}`), not OpenAI's nested form.
-- Voice Agent voice ids are exact strings; invented ones fail silently
-  at `session.update`.
-- Voice Agent tokens are single-use per session — mint a fresh one on
-  every reconnect, including `session.resume`.
+- Streaming tokens are single-use: mint a fresh one on every reconnect.
 - Voice Focus is `universal-3-5-pro` only, and silently no-ops elsewhere.
-- Both products bill on **connection-open time**, not audio sent. Always
+- Streaming bills on **connection-open time**, not audio sent. Always
   send `Terminate` / close on unmount.
 
 ### Secrets
@@ -82,11 +71,10 @@ dependency and we don't want one.
 
 ## Where things are
 
-- `VOICE_PLAN.md` — the staged plan (A explore → B decide → C integrate)
-- `VOICE_TEST_PLAN.md` — human voice test rounds and their pass gates
-- `voice-lab/` — standalone API bench, `npm run lab`. Imports nothing
-  from the app and nothing imports it. Safe to delete when done.
-- `HANDOFF.md` — what's built vs. stubbed, and where the seams are
+- `README.md` — what the app does, the stages, and where each lives
+- `docs/API_FLOW.md` — every external call, what triggers it, what it costs
+- `docs/VOICE_COMMANDS.md`, `docs/VOICE_COMMAND_TESTS.md` — the voice grammar and how it is tested
+- `docs/VOICE_FINDINGS.md`, `docs/VOICE_RECORDING_SCRIPTS.md` — replayable kitchen recordings and what they showed
 - `internal-design/` — local only, gitignored: `DESIGN_BASE.md` (design
   tokens and visual language) and `GOOSE_PERSONA.md` (the goose's voice)
 

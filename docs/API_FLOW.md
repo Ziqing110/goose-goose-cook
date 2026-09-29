@@ -29,14 +29,15 @@ Four things to hold onto:
         ▼
    transcript
         │
-        ├── stage 1  Conversation ───────▶ POST /api/understanding/read ──▶ LLM Gateway  claude-sonnet-4-6
-        │              (once per answer)                                                  read one spoken answer
+        ├── stage 1  Conversation ───────▶ POST /api/understanding/turn ──▶ LLM Gateway  claude-sonnet-4-6
+        │              (once per turn)                                                    read it against every
+        │                                                                                 setup question
         │
         ├── stage 2  Recipe draft ───────▶ POST /api/recipes/generate ────▶ LLM Gateway  gemini-3.8-flash
         │                                        │                                        (fallback: qwen3.5-4b,
         │                                        │                                         one dish at a time)
         │                                        └──── review pass ───────▶ LLM Gateway  claude-sonnet-4-6
-        │                                             (reviewPlan.js)                     a DIFFERENT model on
+        │                                             (server/plan/review.js)             a DIFFERENT model on
         │                                                                                 purpose: writing a plan
         │                                                                                 and checking one are
         │                                                                                 not the same skill
@@ -74,8 +75,11 @@ tab cannot run to the 3-hour ceiling.
 
 ### Stage 1 — Conversation
 
-One `POST /api/understanding/read` per spoken answer. Small job with a
-person waiting, so latency counts as much as accuracy.
+One `POST /api/understanding/turn` per spoken turn. The whole setup chat
+is one conversation: each turn is read against every question, so any
+answer can be given or changed at any time. Small job with a person
+waiting, so latency counts as much as accuracy; if the call fails, the
+page reads the answer locally with `src/utils/understanding.js`.
 
 ### Stage 2 — Recipe
 

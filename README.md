@@ -38,8 +38,9 @@ app you have to tap is one you stop using the moment the wok gets hot. So
 voice here is the main interface, not an add-on:
 
 - **Every action works by voice.** Start, finish, claim, skip, undo, pause
-  and "what's next" all have a spoken form. Buttons exist too, and both
-  run the same code.
+  and "what's next" all have a spoken form, and so does the end of the
+  night: "who won", "take the cook card", "read it out", "save the page".
+  Buttons exist too, and both run the same code.
 - **Just talk.** "I'm done with the onion" moves the plan on. Saying
   "Goose" first is optional, and chatter between cooks is left alone.
 - **Built to be read from across the room.** The live screen is meant to be
@@ -89,11 +90,11 @@ flowchart LR
 |---|---|---|
 | Home | Pick or create a kitchen (its equipment is the resource limit), resume a run, see past cooks | `src/pages/HomePage.jsx` |
 | Conversation | Goose asks four questions. Each spoken answer is read by an LLM into a structured slot | `ConversationPage.jsx`, `server/routes/understanding.js` |
-| Recipe graph | An LLM drafts one step graph per dish, a second model reviews it, and shared prep (like mincing garlic) is merged across dishes. You uncheck what you're out of and see which steps it blocks | `InventoryPage.jsx`, `server/routes/recipes.js`, `reviewPlan.js` |
+| Recipe graph | An LLM drafts one step graph per dish, a second model reviews it, and shared prep (like mincing garlic) is merged across dishes. You uncheck what you're out of and see which steps it blocks | `InventoryPage.jsx`, `server/plan/` |
 | Cooks | Each cook reads a line aloud. Optionally, a local service stores a voiceprint so Goose knows who spoke | `VoiceBindingPage.jsx`, `speaker-sidecar/` |
 | Schedule | The scheduler builds a two-lane timeline with the critical path, or the Versus opening hand | `SchedulePage.jsx`, `src/utils/scheduleLayout.js` |
-| Live cook | Cooks start, finish and hand off steps by voice or tap. Goose re-plans on every change | `LiveCookPage.jsx`, `src/utils/liveCook.js`, `server/agent/` |
-| Cook card | A frozen record of the run, downloadable as a PNG | `CookSummaryPage.jsx`, `src/utils/summaryCard.js` |
+| Live cook | Cooks start, finish and hand off steps by voice or tap. Goose re-plans on every change | `LiveCookPage.jsx`, `src/pages/liveCook/`, `src/utils/liveCook.js`, `server/agent/` |
+| Cook card | A frozen record of the run, downloadable as a PNG. Goose reads it out, says who won, saves it or copies its link on request | `CookSummaryPage.jsx`, `src/utils/summaryCard.js` |
 
 ### One live-cook turn
 
@@ -182,7 +183,7 @@ Where each model ended up, and what it does:
 | Hosting | GitHub Pages (static app) + Render (API) |
 
 Every model choice was benchmarked, not picked by name. The numbers and
-reasoning are in [.env.example](.env.example) and `recipe-bench/`.
+reasoning are in [.env.example](.env.example).
 
 ## Getting started
 
@@ -269,13 +270,17 @@ The app only calls the service when `VITE_SPEAKER_SERVICE=on` is set in
 ```
 server/
   index.js              Express entry, mounts every /api router
-  db.js                 SQLite schema and demo seed
-  routes/               kitchens, sessions, recipes, reviewPlan,
-                        understanding, voice (token minting), agent, photo
-  agent/                live-cook brain: turn validation, gateway call,
+  llm.js                the one LLM Gateway client every model call uses
+  db.js, seed.js        SQLite schema and the demo seed
+  routes/               kitchens, sessions, recipes, understanding,
+                        voice (token minting), agent
+  plan/                 recipe generation: prompts, the three-pass
+                        pipeline and fallback, validation, the review pass
+  agent/                live-cook brain: turn validation, the model call,
                         web search, background answers, asides, summaries
 src/
-  pages/                one page per stage (Home through Cook card)
+  pages/                one page per stage (Home through Cook card);
+                        liveCook/ holds the live cook's cards and board
   components/           shared UI: VoiceBar, RecipeBoard, GooseVoiceAgent...
   state/                app store (React context + reducer), synced to the API
   hooks/                useStreamingTranscript (mic to AssemblyAI)

@@ -26,16 +26,8 @@
 // grouping means "somebody was spare at each moment" does not imply
 // anyone can actually cover them all. Asking the pooled question
 // produced timelines no division of the work could staff.
-import { EQUIPMENT_OPTIONS } from "../data/dishes.js";
+import { EQUIPMENT_OPTIONS, equipmentName } from "../data/dishes.js";
 import { isAttended } from "./tending.js";
-
-export const EQUIPMENT_LABELS = {
-  cutting_board: "cutting board",
-  stove_burner: "burner",
-  wok: "wok",
-  pot: "pot",
-  oven: "oven",
-};
 
 const COOK_RESOURCE = "__cook__";
 // Display order of the equipment lanes on the schedule page. Anything
@@ -108,7 +100,6 @@ function resourceCapacities(cooks, kitchenProfile) {
 
 // Whether a step occupies a cook now lives in tending.js, alongside the
 // distinction between a pot that needs checking and one that does not.
-export { isAttended };
 
 /**
  * What a step occupies, and WHEN within its own span.
@@ -860,7 +851,7 @@ export function equipmentLanes(steps, nodes) {
   // order the scheduler's option list happens to be.
   EQUIPMENT_LANE_ORDER.forEach((type) => {
     (lanesByType.get(type) || []).forEach((lane, i) => {
-      const label = EQUIPMENT_LABELS[type] || type;
+      const label = equipmentName(type);
       out.push({
         type,
         index: i + 1,

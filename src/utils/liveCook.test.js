@@ -87,6 +87,21 @@ test("undo works inside the 60s window and is refused after it or once downstrea
   assert.equal(applyUndo({ run: later, nodes, cookId: "c2", at: at(120) }).rejected, "downstream_started");
 });
 
+test("each action is undone once: a second undo steps further back, then there is nothing left", () => {
+  let run = coopRun();
+  run = applyStart({ run, stepId: "dice", cookId: "c1", at: at(100) });
+  run = applyDone({ run, stepId: "dice", cookId: "c1", at: at(110) });
+
+  const first = applyUndo({ run, nodes, cookId: "c1", at: at(120) });
+  assert.equal(first.undid.type, "done");
+  assert.equal(first.run.steps.dice.status, "active");
+
+  const second = applyUndo({ run: first.run, nodes, cookId: "c1", at: at(121) });
+  assert.equal(second.undid.type, "start", "not the same Done again");
+  assert.equal(second.run.steps.dice.status, "pending");
+  assert.equal(canUndo({ run: second.run, nodes, cookId: "c1", at: at(122) }), false);
+});
+
 test("a pause freezes the run clock and every active step's clock, and the break is never billed", () => {
   let run = coopRun();
   run = applyStart({ run, stepId: "dice", cookId: "c1", at: at(0) });

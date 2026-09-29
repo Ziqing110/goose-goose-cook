@@ -9,9 +9,9 @@
 // (src/utils/banter.js). Most calls should still come back empty: the
 // model is the second, softer filter.
 
+import { chat } from "../llm.js";
 import { cleanAside } from "./aside.js";
 
-const GATEWAY = "https://llm-gateway.assemblyai.com/v1/chat/completions";
 const MAX_TOKENS = 80;
 // Banter that lands late is worse than none: the room has moved on.
 const TIMEOUT_MS = 3500;
@@ -35,24 +35,19 @@ export function buildBanterMessage(lines) {
 
 /** @returns {Promise<{line: string}>} empty means say nothing. */
 export async function requestBanter({ apiKey, model, agentName, lines, timeoutMs = TIMEOUT_MS }) {
-  if (!apiKey || !lines?.length) return { line: "" };
+  if (!lines?.length) return { line: "" };
   try {
-    const res = await fetch(GATEWAY, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        max_tokens: MAX_TOKENS,
-        messages: [
-          { role: "system", content: buildBanterPrompt(agentName) },
-          { role: "user", content: buildBanterMessage(lines) },
-        ],
-      }),
-      signal: AbortSignal.timeout(timeoutMs),
+    const choice = await chat({
+      apiKey,
+      model,
+      maxTokens: MAX_TOKENS,
+      timeoutMs,
+      messages: [
+        { role: "system", content: buildBanterPrompt(agentName) },
+        { role: "user", content: buildBanterMessage(lines) },
+      ],
     });
-    if (!res.ok) return { line: "" };
-    const json = await res.json();
-    const line = cleanAside(json?.choices?.[0]?.message?.content);
+    const line = cleanAside(choice?.message?.content);
     // "Reply with an empty string" is sometimes taken literally: "".
     return { line: /^["'\s.]*$/.test(line) ? "" : line };
   } catch {

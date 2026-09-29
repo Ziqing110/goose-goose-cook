@@ -338,6 +338,31 @@ export const AVATAR_PICKER_VOICE = {
   avatarName: (words) => [new RegExp(`\\b(${words.join("|")})\\b`)],
 };
 
+// How the night went, asked on either page that shows the result.
+const RESULTS = [
+  /\b(?:who won|who(?:'s| is) the winner|how did (?:we|i|it|everyone) (?:do|go))\b/,
+  /\b(?:read|say|tell me) (?:out |me )?(?:the )?(?:results?|score|scores)\b/,
+  /\b(?:what(?:'s| is| was) )?the (?:final )?score\b/,
+];
+
+// Service done: the results screen at the end of a live cook.
+export const SERVICE_DONE_VOICE = {
+  takeCard: [
+    /\b(?:take|see|open|show|get|save) (?:me )?(?:the |my |our )?(?:cook )?card\b/,
+    /\btear (?:it|the receipt) off\b/,
+  ],
+  results: RESULTS,
+};
+
+// The cook card: the evening kept, one page per finished cook.
+export const COOK_CARD_VOICE = {
+  download: [/\b(?:save|download|export) (?:the |this )?(?:page|card|image|picture|png)\b/],
+  copyLink: [/\b(?:copy|share) (?:the |this )?link\b/],
+  readAloud: [/\bread (?:it|this|the (?:page|story|card))(?: (?:out|back|aloud|to (?:me|us)))?\b/, /\bread (?:it )?(?:out|aloud)\b/],
+  results: RESULTS,
+  addPhoto: [/\b(?:add|change|upload|take|put) (?:a |the |our |in a )?(?:photo|picture|pic)\b/],
+};
+
 // Goose's Notes, the conversation rail on the side of every page.
 //
 // Anchored to the whole utterance, with the agent's name allowed in
@@ -438,6 +463,14 @@ help(SCHEDULE_VOICE.zoomOut, "Zoom the timeline out", ["zoom out"]);
 help(SCHEDULE_VOICE.closeDetails, "Close the step details", ["close the details"]);
 help(SCHEDULE_VOICE.showDetails, "Show one step's details, by its name", ["show details for boil the noodles"]);
 help(SCHEDULE_VOICE.freeTime, "When does each cook get a break", ["who's free"]);
+
+help(SERVICE_DONE_VOICE.takeCard, "Save the cook and open its cook card", ["take the cook card"]);
+help(RESULTS, "Say how the cook went: who won, or how it did against the plan", ["who won", "how did we do"]);
+
+help(COOK_CARD_VOICE.download, "Download the cook card as an image", ["save the page"]);
+help(COOK_CARD_VOICE.copyLink, "Copy the link to this cook card", ["copy the link"]);
+help(COOK_CARD_VOICE.readAloud, "Read the goose's story of the night aloud", ["read it out"]);
+help(COOK_CARD_VOICE.addPhoto, "Add or change the photo (needs a tap: browsers only open the photo picker from one)", ["add a photo"]);
 
 help(VOICE_BINDING_VOICE.continueSchedule, "Move on to scheduling once every cook is set up", ["continue to scheduling"]);
 VOICE_BINDING_VOICE.nameByOrdinal = described(VOICE_BINDING_VOICE.nameByOrdinal, () => [

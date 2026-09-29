@@ -1,9 +1,7 @@
-// Shared by every page that reads the run's recipes (Inventory, the
-// main line): loads the reference data (recipe templates + materials
-// catalog) and, once templates are in, instantiates the session's
-// recipes if it doesn't have any yet. Lives here rather than in
-// the pages so whichever one the cook reaches first does the
-// instantiation and the others just find it done.
+// The recipe graph page's data: loads the reference data (recipe
+// templates and the materials catalog) and, once templates are in, makes
+// sure the session has recipes, generating them from the conversation's
+// answers or falling back to the seeded templates.
 import { useEffect, useRef, useState } from "react";
 import { useAppState } from "./AppStateContext.jsx";
 import { listRecipeTemplates, listMaterials } from "../api/recipeTemplates.js";
@@ -15,10 +13,6 @@ import {
   toRecipeInstance,
   toSharedStepInstance,
 } from "../utils/recipeInstances.js";
-
-// Re-exported because they used to live here and this is where callers
-// look for them.
-export { matchTemplates, buildNamespacedGraph, toRecipeInstance, toSharedStepInstance };
 
 /**
  * Returns the materials catalog keyed by id ({ label, category, amount,
@@ -40,7 +34,9 @@ export function useSessionRecipes() {
   const [generatedBy, setGeneratedBy] = useState(null);
   const [missingDishes, setMissingDishes] = useState([]);
   // A ref, not state: the effect must not fire twice while the first
-  // request is still out, and StrictMode runs it twice on mount.
+  // request is still out, and StrictMode runs it twice on mount. Cleared
+  // once the recipes land, so starting the conversation over (which
+  // empties them) generates afresh.
   const generatingRef = useRef(false);
 
   const kitchenProfile =
@@ -102,7 +98,7 @@ export function useSessionRecipes() {
     const hasDishes = Array.isArray(asked) ? asked.length > 0 : Boolean(asked);
     if (!hasDishes) {
       instantiate(fromTemplates());
-      setGenerating(false);
+      generatingRef.current = false;
       return;
     }
 
@@ -151,7 +147,10 @@ export function useSessionRecipes() {
         setGeneratedBy(null);
         instantiate(fromTemplates());
       })
-      .finally(() => setGenerating(false));
+      .finally(() => {
+        generatingRef.current = false;
+        setGenerating(false);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templates, recipes.length]);
 

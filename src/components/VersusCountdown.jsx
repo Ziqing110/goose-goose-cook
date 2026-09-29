@@ -14,8 +14,9 @@
 import { useEffect, useRef, useState } from "react";
 import { GoosePrint } from "./GooseMarks.jsx";
 import KpIcon from "./KpIcon.jsx";
-import { CardGoose } from "../pages/LiveCookPage.jsx";
+import CardGoose from "./CardGoose.jsx";
 import { PlayerAvatar, Stamp } from "./ServiceResults.jsx";
+import { clock } from "../utils/time.js";
 import referee3 from "../assets/goose-referee-v1/referee-3-cut.png";
 import referee2 from "../assets/goose-referee-v1/referee-2-cut.png";
 import referee1 from "../assets/goose-referee-v1/referee-1-cut.png";
@@ -33,11 +34,6 @@ const START_FROM = 3;
 const FRAMES = [refereeGo, referee1, referee2, referee3];
 const CARD = ["GO", "1", "2", "3"];
 const SAYS = ["Go.", "One.", "Two.", "Three."];
-
-const clock = (sec) => {
-  const s = Math.max(0, Math.round(sec || 0));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-};
 
 export default function VersusCountdown({ cooks, title, nodes = [], opening, dishOf, onComplete, onCancel }) {
   const callbacks = useRef({ onComplete, onCancel });

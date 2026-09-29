@@ -2,10 +2,10 @@
 // card": title, difficulty flames, HUD stats, phase split, stage path,
 // and run-log timings. Everything here is computed from data the
 // backend already returns (see AppStateContext.jsx) — no new fields.
+import { DIFFICULTY_FLAMES } from "../data/dishes.js";
 import { sessionStageStates } from "./sessionSteps.js";
 import { isAttended } from "./tending.js";
-
-const DIFFICULTY_FLAMES = { low: 1, medium: 2, high: 3 };
+import { timer } from "./time.js";
 
 /** Every step node in a session: per-recipe working nodes plus shared steps. */
 export function allWorkingNodes(session) {
@@ -36,11 +36,6 @@ export function runFlames(session) {
   return allWorkingNodes(session).reduce((max, n) => Math.max(max, DIFFICULTY_FLAMES[n.difficulty] || 0), 0);
 }
 
-export function runPlayers(session) {
-  const cooks = Number(session?.conversation?.answers?.cooks);
-  return Number.isFinite(cooks) && cooks > 0 ? cooks : null;
-}
-
 export function runServings(session) {
   const fromRecipe = session?.recipes?.[0]?.working?.servings;
   if (fromRecipe != null) return fromRecipe;
@@ -69,14 +64,6 @@ export function runPhaseCounts(session) {
 /** Home's stage path — the same stages, states and counts as the in-session chrome. */
 export function runStages(session) {
   return sessionStageStates(session).map(({ key, label, state, count }) => ({ id: key, label, state, count }));
-}
-
-/** "42:00" — always mm:ss, minutes unpadded past 99. */
-export function formatClock(totalSeconds) {
-  const s = Math.max(0, Math.round(totalSeconds || 0));
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
 }
 
 /** "started 2h ago" — coarse relative time from an ISO string. */
@@ -134,6 +121,6 @@ export function runLogRecord(rows) {
   const done = rows.filter((r) => r.status === "completed");
   const best = done.filter((r) => r.durationSec != null).reduce((b, r) => (b == null || r.durationSec < b ? r.durationSec : b), null);
   const parts = [`${rows.length} ${rows.length === 1 ? "run" : "runs"}`, `${done.length} done`];
-  if (best != null) parts.push(`best ${formatClock(best)}`);
+  if (best != null) parts.push(`best ${timer(best)}`);
   return { line: parts.join(" · "), bestSec: best };
 }

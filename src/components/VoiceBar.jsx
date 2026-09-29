@@ -345,6 +345,12 @@ export default function VoiceBar() {
   const runPageCommand = useCallback(
     (command, { heard = null, interpreted = false } = {}) => {
       const spoken = command.run(command.match, command.spoken);
+      // A command whose outcome takes a moment (a download, the
+      // clipboard) answers with a promise of its line.
+      if (typeof spoken?.then === "function") {
+        spoken.then((line) => typeof line === "string" && say(line), () => {});
+        return;
+      }
       // Matched the words, but not the page's state: "I'm Zeina" when
       // both cooks have names. Let the goose read the whole sentence,
       // unless this already IS the goose's reading of it.

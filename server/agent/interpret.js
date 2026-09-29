@@ -16,21 +16,14 @@
 // Not the live cook's agent (agent/turn.js): there the model chooses
 // among tools over a run it can see. Here it only translates, and the
 // grammar stays the authority.
+import { chat } from "../llm.js";
 import { cleanReply, isAddressed } from "./turn.js";
 
-const GATEWAY = "https://llm-gateway.assemblyai.com/v1/chat/completions";
 const MAX_TOKENS = 200;
 const MAX_UTTERANCE_CHARS = 200;
 // Somebody is standing there waiting for an answer to a sentence the
 // app did not understand. Past this they have already said it again.
 const TIMEOUT_MS = 5000;
-
-export class InterpretError extends Error {
-  constructor(message, status) {
-    super(message);
-    this.status = status;
-  }
-}
 
 const TOOL = {
   type: "function",
@@ -112,36 +105,23 @@ export function parseInterpretation(choice) {
 
 /**
  * @returns {Promise<{utterance: string|null, reply: string, named: boolean, ms: number, model: string}>}
- * @throws {InterpretError}
+ * @throws {GatewayError}
  */
 export async function requestInterpretation({ apiKey, model, agentName, text, route, context, commands, destinations, history, timeoutMs = TIMEOUT_MS }) {
-  if (!apiKey) throw new InterpretError("ASSEMBLYAI_API_KEY is not set.", 503);
   const started = Date.now();
-  let upstream;
-  try {
-    upstream = await fetch(GATEWAY, {
-      method: "POST",
-      // Raw key, no "Bearer" -- see CLAUDE.md.
-      headers: { authorization: apiKey, "content-type": "application/json" },
-      signal: AbortSignal.timeout(timeoutMs),
-      body: JSON.stringify({
-        model,
-        max_tokens: MAX_TOKENS,
-        tools: [TOOL],
-        messages: [
-          { role: "system", content: buildInterpretPrompt(agentName) },
-          { role: "user", content: buildInterpretMessage({ text, route, context, commands, destinations, history }) },
-        ],
-      }),
-    });
-  } catch (err) {
-    if (err.name === "TimeoutError") throw new InterpretError(`The model took longer than ${timeoutMs}ms.`, 504);
-    throw new InterpretError(`Could not reach the gateway: ${err.message}`, 502);
-  }
-  const body = await upstream.json().catch(() => ({}));
-  if (!upstream.ok) throw new InterpretError(body.error?.message || body.error || `Gateway ${upstream.status}`, upstream.status);
+  const choice = await chat({
+    apiKey,
+    model,
+    maxTokens: MAX_TOKENS,
+    timeoutMs,
+    tools: [TOOL],
+    messages: [
+      { role: "system", content: buildInterpretPrompt(agentName) },
+      { role: "user", content: buildInterpretMessage({ text, route, context, commands, destinations, history }) },
+    ],
+  });
   return {
-    ...parseInterpretation(body.choices?.[0]),
+    ...parseInterpretation(choice),
     named: isAddressed(text, agentName, false),
     ms: Date.now() - started,
     model,

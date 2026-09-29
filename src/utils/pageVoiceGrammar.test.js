@@ -21,6 +21,8 @@ import {
   VOICE_BINDING_VOICE,
   RECORDING_VOICE,
   AVATAR_PICKER_VOICE,
+  SERVICE_DONE_VOICE,
+  COOK_CARD_VOICE,
 } from "./pageVoiceGrammar.js";
 
 function hear(phrases, transcript) {
@@ -341,4 +343,18 @@ test("Voice Binding page, recording layer, and avatar drawer match their command
   assertMatches(AVATAR_PICKER_VOICE.confirm, ["that's me", "confirm", "this one", "looks good", "save", "done", "close"]);
   assertMatches(AVATAR_PICKER_VOICE.random, ["random", "surprise", "surprise me", "roll the dice"]);
   assertMatches(AVATAR_PICKER_VOICE.cancel, ["cancel", "never mind", "go back"]);
+});
+
+test("service done: take the cook card, and ask who won", () => {
+  assertMatches(SERVICE_DONE_VOICE.takeCard, ["take the cook card", "show me the card", "save our card", "tear it off"]);
+  assertMatches(SERVICE_DONE_VOICE.results, ["who won", "how did we do", "what's the final score", "read the results"]);
+  assert.equal(hear(SERVICE_DONE_VOICE.takeCard, "the card game was fun"), null);
+});
+
+test("cook card: save, share, read aloud, results and the photo", () => {
+  assertMatches(COOK_CARD_VOICE.download, ["save the page", "download the card", "save this image"]);
+  assertMatches(COOK_CARD_VOICE.copyLink, ["copy the link", "share this link"]);
+  assertMatches(COOK_CARD_VOICE.readAloud, ["read it out", "read the story", "read it aloud", "read this to me"]);
+  assertMatches(COOK_CARD_VOICE.results, ["who won", "how did it go"]);
+  assertMatches(COOK_CARD_VOICE.addPhoto, ["add a photo", "change the picture"]);
 });

@@ -16,18 +16,20 @@ import { useAppState } from "../state/AppStateContext.jsx";
 import { useSessionRecipes } from "../state/useSessionRecipes.js";
 import { mergeRecipesForDisplay, cyclicDependencyIds, cloneGraph } from "../utils/graphLayout.js";
 import PlanChangesPanel from "../components/PlanChangesPanel.jsx";
-import { missingEquipment, EQUIPMENT_LABELS } from "../utils/scheduleLayout.js";
+import { missingEquipment } from "../utils/scheduleLayout.js";
+import { EQUIPMENT_GLYPHS, equipmentName } from "../data/dishes.js";
 import RecipeBoard from "../components/RecipeBoard.jsx";
 import AddStepPanel from "../components/AddStepPanel.jsx";
 import DeleteStepDialog from "../components/DeleteStepDialog.jsx";
 import ImpactList, { ImpactMark } from "../components/ImpactList.jsx";
-import Icon from "../components/Icon.jsx";
+import KpIcon from "../components/KpIcon.jsx";
 import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
 import ChefWorkingScreen from "../components/ChefWorkingScreen.jsx";
 import { devPreview } from "../dev/preview.js";
 import NodeEditorPanel from "../components/NodeEditorPanel.jsx";
 import { useStepEditing } from "../state/useStepEditing.js";
-import { buildInventory, formatClock, formatStepDuration, PHASE_LABELS } from "../utils/inventory.js";
+import { buildInventory, PHASE_LABELS } from "../utils/inventory.js";
+import { clock, timer } from "../utils/time.js";
 import { groupStepsByDish, dishPaper, SHARED_PAPER } from "../utils/ingredientGroups.js";
 import { categoryIconPaths } from "../utils/categoryIcons.js";
 import { GooseProfile } from "../components/GooseMarks.jsx";
@@ -41,6 +43,7 @@ import { useVoicePageState } from "../hooks/useVoicePageState.js";
 import { normalizeUtterance, CONFIRM_YES_PATTERN, CONFIRM_NO_PATTERN } from "../utils/navCommands.js";
 import { matchStepName } from "../utils/stepNameMatch.js";
 import { INVENTORY_VOICE, ingredientVoicePhrases, parseAddTaskSpeech } from "../utils/pageVoiceGrammar.js";
+import Mono from "../components/Mono.jsx";
 
 // One banner beside the title, whatever the dishes are. It replaces the
 // pair of dish marks: two illustrations competed with each other and
@@ -92,7 +95,6 @@ const ZOOM_STEP = 5;
 /** How far in the slider can go: half again over the fitted view. */
 const zoomCeiling = (fit) => Math.max(1.5, fit + 0.5);
 
-const EQUIPMENT_GLYPH = { wok: "wok", oven: "oven", pot: "pot", stove_burner: "burner", cutting_board: "cutting-board" };
 const withArticle = (label) => `${/^[aeiou]/i.test(label) ? "an" : "a"} ${label}`;
 
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -135,10 +137,6 @@ function numberRange(numbers) {
   return sorted.join(", ");
 }
 
-function Mono({ children }) {
-  return <span className="mono">{children}</span>;
-}
-
 function Checkbox({ checked, label, onChange, disabled = false }) {
   return (
     <button
@@ -175,7 +173,7 @@ function StepLine({ step, statusLine, delay }) {
         <span className="inv-step-label">{step.label}</span>
         <Mono>
           <span className={`inv-step-dur ${step.attended === false ? "is-unattended" : ""}`}>
-            {formatStepDuration(step.durationSec)}
+            {clock(step.durationSec)}
             {step.attended === false && " unattended"}
           </span>
         </Mono>
@@ -874,9 +872,9 @@ export default function InventoryPage() {
     // Hands-on time is the number that decides whether tonight is
     // manageable. The waiting is real but it is not work, and lumping
     // them together told people a 21-minute cook would take 96.
-    metaBits.push(<><Mono>{formatClock(inv.attendedSeconds)}</Mono> hands-on</>);
+    metaBits.push(<><Mono>{timer(inv.attendedSeconds)}</Mono> hands-on</>);
     if (inv.unattendedSeconds > 0) {
-      metaBits.push(<><Mono>{formatClock(inv.unattendedSeconds)}</Mono> waiting</>);
+      metaBits.push(<><Mono>{timer(inv.unattendedSeconds)}</Mono> waiting</>);
     }
   }
 
@@ -1119,11 +1117,11 @@ export default function InventoryPage() {
               {showEquipment && (
                 <div className="inv-equip" role="note">
                   <span className="inv-equip-glyph" aria-hidden="true">
-                    <Icon glyph={EQUIPMENT_GLYPH[lacking[0]] || "flame"} size={24} />
+                    <KpIcon glyph={EQUIPMENT_GLYPHS[lacking[0]] || "flame"} size={24} />
                   </span>
                   <div className="inv-equip-main">
                     <span className="inv-equip-title">
-                      Planned with {lacking.map((e) => withArticle(EQUIPMENT_LABELS[e] || e)).join(" and ")} you don&rsquo;t have
+                      Planned with {lacking.map((e) => withArticle(equipmentName(e).toLowerCase())).join(" and ")} you don&rsquo;t have
                     </span>
                     <span className="inv-equip-body">
                       {stepsNeedingLacking} {stepsNeedingLacking === 1 ? "step asks" : "steps ask"} for{" "}
@@ -1247,14 +1245,19 @@ export default function InventoryPage() {
                           saveNode(id, nodeDraft, { children });
                           closePanel();
                         }}
-                        onDelete={(id) => {
+                        onDelete={(id, { confirmed = false } = {}) => {
                           // Removing a step other steps wait on changes the
                           // plan's shape, so it asks where they go rather
-                          // than silently cutting the link.
+                          // than silently cutting the link. One nothing
+                          // waits on just needs a yes (voice already got one).
                           const dependents = boardNodes.filter((n) => (n.depends_on || []).includes(id));
-                          closePanel();
-                          if (dependents.length === 0) deleteNode(id);
-                          else setPendingDelete({ node: nodeById[id], dependents });
+                          if (dependents.length) {
+                            closePanel();
+                            setPendingDelete({ node: nodeById[id], dependents });
+                          } else if (confirmed || window.confirm("Remove this step?")) {
+                            closePanel();
+                            deleteNode(id);
+                          }
                         }}
                         materialsInfo={materialsInfo}
                         onRegisterMaterial={(materialDraft) => registerMaterial(materialDraft, materialsInfo, editingNode.id)}
@@ -1375,7 +1378,7 @@ export default function InventoryPage() {
           allNodes={boardNodes}
           onCancel={() => setPendingDelete(null)}
           onConfirm={(reattach) => {
-            deleteNode(pendingDelete.node.id, { confirm: false, reattach });
+            deleteNode(pendingDelete.node.id, { reattach });
             setPendingDelete(null);
           }}
         />

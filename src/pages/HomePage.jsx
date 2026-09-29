@@ -1,6 +1,4 @@
-// Home v4 — "Tonight's run". A planning surface in the Kitchen Path
-// Agent Design System (design/claude-design-home-*.md): the hero is
-// the run card (states A–F below), then the kitchens loadout and the
+// Home: "Tonight's run". The hero is the run card (states A–F below), then the kitchens loadout and the
 // run log. Everything shown is derived from data the backend already
 // returns — see src/utils/runStats.js for the derivations.
 import { useEffect, useMemo, useState } from "react";
@@ -10,7 +8,6 @@ import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
 import KpIcon from "../components/KpIcon.jsx";
 import welcomeBand from "../assets/home-welcome-band-trim.webp";
 import {
-  formatClock,
   formatShortDate,
   relativeTime,
   runFlames,
@@ -22,6 +19,7 @@ import {
   runTotalSeconds,
   summarizeRun,
 } from "../utils/runStats.js";
+import { timer } from "../utils/time.js";
 import StagePath from "../components/StagePath.jsx";
 import "./HomePage.css";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
@@ -587,7 +585,7 @@ export default function HomePage() {
           {hasSteps && (
             <>
               <div className="hp-stats">
-                <StatTile value={formatClock(totalSec)} label="total time" icon="timer" delay={320} />
+                <StatTile value={timer(totalSec)} label="total time" icon="timer" delay={320} />
                 <StatTile value={steps} label="steps" delay={380} />
                 {servings != null && <StatTile value={servings} label="servings" delay={440} />}
               </div>
@@ -812,7 +810,7 @@ export default function HomePage() {
                   </span>
                   {isAbandoned && <Footprints seed={r.id} />}
                   {r.durationSec != null && (
-                    <span className={`mono hp-duration ${r.status === "completed" ? "" : "is-muted"}`}>{formatClock(r.durationSec)}</span>
+                    <span className={`mono hp-duration ${r.status === "completed" ? "" : "is-muted"}`}>{timer(r.durationSec)}</span>
                   )}
                   {r.status === "completed" ? (
                     <Chip className="hp-chip-status hp-chip-done hp-pop" style={{ animationDelay: `${360 + i * 60}ms` }}>

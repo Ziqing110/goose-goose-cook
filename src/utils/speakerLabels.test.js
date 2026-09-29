@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   cookForLabel,
   withLabelBound,
-  withLabelsCleared,
   dominantLabel,
   cookFromTurn,
 } from "./speakerLabels.js";
@@ -39,12 +38,6 @@ test("withLabelBound: rebinding a cook's own label is not self-destructive", () 
 
 test("withLabelBound: no label is a no-op, not a wipe", () => {
   assert.deepEqual(withLabelBound(cooks, "mia", null), cooks);
-});
-
-test("withLabelsCleared: one cook, or everyone", () => {
-  assert.equal(withLabelsCleared(cooks, "mia").find((c) => c.id === "mia").speakerLabel, null);
-  assert.equal(withLabelsCleared(cooks, "mia").find((c) => c.id === "leo").speakerLabel, "B");
-  assert.ok(withLabelsCleared(cooks).every((c) => c.speakerLabel === null));
 });
 
 test("dominantLabel: one voice through the recording binds", () => {

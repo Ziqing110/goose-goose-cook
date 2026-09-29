@@ -16,7 +16,8 @@
 // for tokens or latency with a cook who actually asked for something,
 // and if it fails the kitchen is simply quiet, which is where it started.
 
-const GATEWAY = "https://llm-gateway.assemblyai.com/v1/chat/completions";
+import { chat } from "../llm.js";
+
 // One sentence. The cap is on characters after the fact as well, because
 // a model that ignores "short" costs a cook their attention, not tokens.
 const MAX_TOKENS = 120;
@@ -58,29 +59,20 @@ export function buildAsideMessage(snapshot) {
  *   means "say nothing", which is a normal outcome and not an error.
  */
 export async function requestAside({ apiKey, model, agentName, snapshot, timeoutMs = TIMEOUT_MS }) {
-  if (!apiKey) return { line: "", model: null };
-
-  const body = {
-    model,
-    messages: [
-      { role: "system", content: buildAsidePrompt(agentName) },
-      { role: "user", content: buildAsideMessage(snapshot) },
-    ],
-    max_tokens: MAX_TOKENS,
-  };
-
   // Every failure is the same failure: the kitchen stays quiet. There is
   // no error worth surfacing to a cook for a line nobody asked for.
   try {
-    const res = await fetch(GATEWAY, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs),
+    const choice = await chat({
+      apiKey,
+      model,
+      maxTokens: MAX_TOKENS,
+      timeoutMs,
+      messages: [
+        { role: "system", content: buildAsidePrompt(agentName) },
+        { role: "user", content: buildAsideMessage(snapshot) },
+      ],
     });
-    if (!res.ok) return { line: "", model: null };
-    const json = await res.json();
-    return { line: cleanAside(json?.choices?.[0]?.message?.content), model };
+    return { line: cleanAside(choice?.message?.content), model };
   } catch {
     return { line: "", model: null };
   }

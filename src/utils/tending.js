@@ -69,14 +69,21 @@ export function tendingOf(node) {
   return declared;
 }
 
-/** The initial/checkpoints/ending breakdown, or null on a hands_on step (or one never decomposed). */
-export const unattendedOf = (node) => node?.unattended || null;
+// What the screens call each tending kind. Hands-on is the default and
+// says nothing.
+const TENDING_LABELS = {
+  [TENDING.TENDED]: "Check on it",
+  [TENDING.TIMED]: "Timed",
+  [TENDING.SET_AND_FORGET]: "Leave it",
+};
+export const tendingLabel = (node) => TENDING_LABELS[tendingOf(node)] || null;
+
+/** "Start", "Check 2/4" or "Finish": one hands-on moment of an unattended step. */
+export const momentName = (moment, checkCount) =>
+  moment.kind === "initial" ? "Start" : moment.kind === "ending" ? "Finish" : `Check ${moment.index + 1}/${checkCount}`;
 
 /** Does this step occupy a cook for its whole duration? */
 export const isAttended = (node) => tendingOf(node) === TENDING.HANDS_ON;
-
-/** Does it run without a cook — either kind of unattended? */
-export const runsAlone = (node) => !isAttended(node);
 
 /**
  * Is being late on this step a failure?

@@ -1,94 +1,89 @@
-﻿import { Router } from "express";
-import { db } from "../db.js";
+// Sessions and what they own: an ordered list of recipe instances, and
+// steps shared across those recipes (one "mince garlic" feeding two
+// dishes). Recipes and shared steps each keep a draft, a working copy
+// and an approved copy.
+import { Router } from "express";
+import { db, rowMapper } from "../db.js";
+import { clientOf } from "../client.js";
 
 export const sessionsRouter = Router();
 
-const emptyConversation = () => ({ complete: false, transcript: [], answers: {}, understanding: {}, questionIndex: 0 });
+const now = () => new Date().toISOString();
 
-function recipeRowToApi(row) {
+const sessionFields = rowMapper([
+  ["kitchenProfileId", "kitchen_profile_id"],
+  ["status", "status"],
+  ["endedAt", "ended_at"],
+  ["conversation", "conversation_json", true],
+  ["selectedNodeId", "selected_node_id"],
+  ["cooks", "cooks_json", true],
+  ["mode", "mode"],
+  ["run", "run_json", true],
+  ["summary", "summary_json", true],
+  // Ingredients the cook marked "out" on the Inventory page.
+  ["outMaterialIds", "out_material_ids_json", true],
+  // { nodeId: { x, y } }: board layout, not recipe content.
+  ["nodePositions", "node_positions_json", true],
+]);
+const recipeFields = rowMapper([
+  ["working", "working_json", true],
+  ["approved", "approved_json", true],
+  ["custom_materials", "custom_materials_json", true],
+]);
+const sharedStepFields = rowMapper([
+  ["working", "working_json", true],
+  ["approved", "approved_json", true],
+]);
+
+const getSessionStmt = db.prepare("SELECT * FROM sessions WHERE id = ?");
+const getRecipesStmt = db.prepare("SELECT * FROM recipe_instances WHERE session_id = ? ORDER BY position ASC");
+const getSharedStepsStmt = db.prepare("SELECT * FROM shared_steps WHERE session_id = ? ORDER BY id ASC");
+const getRecipeStmt = db.prepare("SELECT * FROM recipe_instances WHERE id = ? AND session_id = ?");
+const getSharedStepStmt = db.prepare("SELECT * FROM shared_steps WHERE id = ? AND session_id = ?");
+
+const recipeToApi = (row) => ({
+  id: row.id,
+  templateId: row.template_id,
+  position: row.position,
+  draft: JSON.parse(row.draft_json),
+  ...recipeFields.fromRow(row),
+});
+const sharedStepToApi = (row) => ({ id: row.id, draft: JSON.parse(row.draft_json), ...sharedStepFields.fromRow(row) });
+
+function sessionToApi(row) {
   return {
     id: row.id,
-    templateId: row.template_id,
-    position: row.position,
-    draft: JSON.parse(row.draft_json),
-    working: JSON.parse(row.working_json),
-    approved: row.approved_json ? JSON.parse(row.approved_json) : null,
-    custom_materials: JSON.parse(row.custom_materials_json),
-  };
-}
-
-function sharedStepRowToApi(row) {
-  return {
-    id: row.id,
-    draft: JSON.parse(row.draft_json),
-    working: JSON.parse(row.working_json),
-    approved: row.approved_json ? JSON.parse(row.approved_json) : null,
-  };
-}
-
-function sessionRowToApi(row, recipeRows, sharedStepRows) {
-  return {
-    id: row.id,
-    kitchenProfileId: row.kitchen_profile_id,
-    status: row.status,
     startedAt: row.started_at,
-    endedAt: row.ended_at,
-    conversation: JSON.parse(row.conversation_json),
-    selectedNodeId: row.selected_node_id,
-    cooks: JSON.parse(row.cooks_json),
-    mode: row.mode,
-    run: row.run_json ? JSON.parse(row.run_json) : null,
-    // Ingredients the cook marked "out" on the Inventory page — the
-    // one input that page writes; the main line reads the same set.
-    outMaterialIds: JSON.parse(row.out_material_ids_json || "[]"),
-    // { nodeId: { x, y } } — board layout, not recipe content.
-    nodePositions: JSON.parse(row.node_positions_json || "{}"),
-    summary: row.summary_json ? JSON.parse(row.summary_json) : null,
-    recipes: recipeRows.map(recipeRowToApi),
-    sharedSteps: sharedStepRows.map(sharedStepRowToApi),
+    ...sessionFields.fromRow(row),
+    recipes: getRecipesStmt.all(row.id).map(recipeToApi),
+    sharedSteps: getSharedStepsStmt.all(row.id).map(sharedStepToApi),
   };
 }
 
-// Home's run log needs a title, a kitchen, a duration and a status —
-// not a whole session. Returning full rows there meant every past cook's
-// base64 photo and run transcript was downloaded just to render a list
-// of titles, so `?view=list` projects instead. json_extract does the
-// digging inside SQLite, so the big JSON columns never cross the wire.
-// The shape deliberately matches the compact row the client appends
-// locally when a run ends (see sessionSummary in AppStateContext).
-// DEMO ONLY. Which browser is asking. See the client_id note in db.js:
-// this is asserted by the client, not proven, so it separates honest
-// visitors from each other and nothing more. Never authorise on it.
-const clientOf = (req) => req.get("X-Kitchen-Client") || "";
-
-// Rows with no owner stay visible to everyone: that is what `npm run
-// seed` creates (it posts without the header), and seeded demo content
-// is meant to be shared. Only what a visitor makes is theirs alone.
-const OWNED_BY = "(client_id IS NULL OR client_id = '' OR client_id = ?)";
-
-function listSessionsStmt(statuses) {
-  return db.prepare(`
-    SELECT id, kitchen_profile_id, status, started_at, ended_at,
-           json_extract(conversation_json, '$.answers.dishIdea') AS dish_idea,
-           json_extract(conversation_json, '$.answers.servings') AS answer_servings,
-           json_extract(summary_json, '$.dish') AS summary_dish,
-           summary_json IS NOT NULL AS has_summary
-    FROM sessions
-    WHERE ${OWNED_BY}
-    ${statuses.length ? `AND status IN (${statuses.map(() => "?").join(",")})` : ""}
-    ORDER BY started_at DESC
-  `);
+/** Load a session or answer 404; handlers return early on undefined. */
+function findSession(req, res) {
+  const row = getSessionStmt.get(req.params.id);
+  if (!row) res.status(404).json({ error: "session not found" });
+  return row;
 }
 
+// Rows with no owner are visible to everyone: that is what `npm run seed`
+// creates, and seeded demo content is meant to be shared.
+const OWNED_BY = "(client_id IS NULL OR client_id = '' OR client_id = ?)";
+const statusFilter = (statuses) => (statuses.length ? `AND status IN (${statuses.map(() => "?").join(",")})` : "");
+
+// Home's run log needs a title, a kitchen, a duration and a status, not a
+// whole session with its photo and run transcript. json_extract digs in
+// SQLite so the big JSON columns never cross the wire.
 const listRecipeTitlesStmt = db.prepare(`
   SELECT json_extract(working_json, '$.title') AS title,
          json_extract(working_json, '$.servings') AS servings
   FROM recipe_instances WHERE session_id = ? ORDER BY position ASC
 `);
 
-function sessionRowToListApi(row) {
-  const recipeRows = listRecipeTitlesStmt.all(row.id);
-  const fromRecipes = recipeRows.map((r) => r.title).filter(Boolean).join(" + ");
+function sessionToListItem(row) {
+  const recipes = listRecipeTitlesStmt.all(row.id);
+  const fromRecipes = recipes.map((r) => r.title).filter(Boolean).join(" + ");
   return {
     id: row.id,
     kitchenProfileId: row.kitchen_profile_id,
@@ -96,297 +91,200 @@ function sessionRowToListApi(row) {
     startedAt: row.started_at,
     endedAt: row.ended_at,
     dish: row.summary_dish || fromRecipes || row.dish_idea || null,
-    servings: recipeRows[0]?.servings ?? (Number(row.answer_servings) || null),
+    servings: recipes[0]?.servings ?? (Number(row.answer_servings) || null),
     // Abandoned runs never froze a summary, so there's no card to open.
     hasSummary: Boolean(row.has_summary),
   };
 }
 
-const getSessionStmt = db.prepare("SELECT * FROM sessions WHERE id = ?");
-const getRecipesForSessionStmt = db.prepare("SELECT * FROM recipe_instances WHERE session_id = ? ORDER BY position ASC");
-const getSharedStepsForSessionStmt = db.prepare("SELECT * FROM shared_steps WHERE session_id = ? ORDER BY id ASC");
-const insertSessionStmt = db.prepare(`
-  INSERT INTO sessions (id, kitchen_profile_id, status, started_at, ended_at, conversation_json, selected_node_id, cooks_json, mode, run_json, summary_json, out_material_ids_json, node_positions_json, updated_at, client_id)
-  VALUES (@id, @kitchen_profile_id, @status, @started_at, @ended_at, @conversation_json, @selected_node_id, @cooks_json, @mode, @run_json, @summary_json, @out_material_ids_json, @node_positions_json, @updated_at, @client_id)
-`);
-const updateSessionStmt = db.prepare(`
-  UPDATE sessions SET kitchen_profile_id=@kitchen_profile_id, status=@status, ended_at=@ended_at,
-    conversation_json=@conversation_json, selected_node_id=@selected_node_id, cooks_json=@cooks_json,
-    mode=@mode, run_json=@run_json, summary_json=@summary_json, out_material_ids_json=@out_material_ids_json, node_positions_json=@node_positions_json, updated_at=@updated_at
-  WHERE id=@id
-`);
+sessionsRouter.get("/", (req, res) => {
+  const statuses = String(req.query.status || "").split(",").filter(Boolean);
+  const where = `WHERE ${OWNED_BY} ${statusFilter(statuses)} ORDER BY started_at DESC`;
+  const args = [clientOf(req), ...statuses];
+  if (req.query.view === "list") {
+    const rows = db.prepare(`
+      SELECT id, kitchen_profile_id, status, started_at, ended_at,
+             json_extract(conversation_json, '$.answers.dishIdea') AS dish_idea,
+             json_extract(conversation_json, '$.answers.servings') AS answer_servings,
+             json_extract(summary_json, '$.dish') AS summary_dish,
+             summary_json IS NOT NULL AS has_summary
+      FROM sessions ${where}
+    `).all(...args);
+    return res.json(rows.map(sessionToListItem));
+  }
+  res.json(db.prepare(`SELECT * FROM sessions ${where}`).all(...args).map(sessionToApi));
+});
 
-// The client resumes `activeSessions[0]` and silently drops the rest, so
-// a second active row is unreachable forever: it never resumes and never
-// reaches history. Starting a run therefore closes out any other active
-// session, making "at most one active" an invariant the API guarantees
-// rather than something the UI merely avoids tripping.
-// DEMO ONLY: scoped to one browser (@client_id). Unscoped, a second
-// visitor starting a cook would abandon the first visitor's run
-// mid-kitchen -- on one shared deployment that is not a stale-row
-// cleanup, it is one person's demo ending because someone else opened
-// the page.
+// Not scoped to the client, on purpose: ids are uuids, and a shared link
+// to one cook should keep working.
+sessionsRouter.get("/:id", (req, res) => {
+  const row = findSession(req, res);
+  if (row) res.json(sessionToApi(row));
+});
+
+// The client resumes only one active session, so a second active row
+// would be unreachable forever. Starting a session closes out any other
+// active one, scoped to this browser so one visitor never ends another's
+// run on the shared demo.
 const abandonOtherActiveStmt = db.prepare(
-  "UPDATE sessions SET status='abandoned', ended_at=@now, updated_at=@now WHERE status='active' AND id != @id AND ifnull(client_id, '') = @client_id"
+  "UPDATE sessions SET status='abandoned', ended_at=@now, updated_at=@now WHERE status='active' AND id != @id AND ifnull(client_id, '') = @client_id",
 );
+const insertSessionStmt = db.prepare(`
+  INSERT INTO sessions (id, kitchen_profile_id, status, started_at, conversation_json, updated_at, client_id)
+  VALUES (@id, @kitchen_profile_id, 'active', @started_at, @conversation_json, @started_at, @client_id)
+`);
+const emptyConversation = { complete: false, transcript: [], answers: {}, understanding: {}, questionIndex: 0 };
 
 sessionsRouter.post("/", (req, res) => {
   const { id, kitchenProfileId } = req.body;
   if (!id) return res.status(400).json({ error: "id is required" });
-  const now = new Date().toISOString();
   const client_id = clientOf(req);
-  abandonOtherActiveStmt.run({ id, now, client_id });
-  const row = {
-    id,
-    kitchen_profile_id: kitchenProfileId ?? null,
-    status: "active",
-    started_at: now,
-    ended_at: null,
-    conversation_json: JSON.stringify(emptyConversation()),
-    selected_node_id: null,
-    cooks_json: JSON.stringify([]),
-    mode: null,
-    run_json: null,
-    out_material_ids_json: JSON.stringify([]),
-    node_positions_json: JSON.stringify({}),
-    summary_json: null,
-    updated_at: now,
-    client_id,
-  };
-  insertSessionStmt.run(row);
-  res.status(201).json(sessionRowToApi(row, [], []));
+  const started_at = now();
+  db.transaction(() => {
+    abandonOtherActiveStmt.run({ id, now: started_at, client_id });
+    insertSessionStmt.run({
+      id,
+      kitchen_profile_id: kitchenProfileId ?? null,
+      started_at,
+      conversation_json: JSON.stringify(emptyConversation),
+      client_id,
+    });
+  })();
+  res.status(201).json(sessionToApi(getSessionStmt.get(id)));
 });
 
-sessionsRouter.get("/", (req, res) => {
-  const statuses = (req.query.status || "").split(",").filter(Boolean);
-  const client = clientOf(req);
-  if (req.query.view === "list") {
-    return res.json(listSessionsStmt(statuses).all(client, ...statuses).map(sessionRowToListApi));
-  }
-  const rows = db
-    .prepare(`
-      SELECT * FROM sessions
-      WHERE ${OWNED_BY}
-      ${statuses.length ? `AND status IN (${statuses.map(() => "?").join(",")})` : ""}
-      ORDER BY started_at DESC
-    `)
-    .all(client, ...statuses);
-  res.json(rows.map((row) => sessionRowToApi(row, getRecipesForSessionStmt.all(row.id), getSharedStepsForSessionStmt.all(row.id))));
-});
-
-// Not scoped, on purpose: ids are uuids, so nothing enumerates them, and
-// a shared link to one cook should keep working. It does mean anyone
-// holding an id can read that session -- acceptable for a demo whose
-// data is dish names and timings, and another reason client_id is not a
-// security boundary.
-sessionsRouter.get("/:id", (req, res) => {
-  const row = getSessionStmt.get(req.params.id);
-  if (!row) return res.status(404).json({ error: "session not found" });
-  res.json(sessionRowToApi(row, getRecipesForSessionStmt.all(row.id), getSharedStepsForSessionStmt.all(row.id)));
-});
+const updateSessionStmt = db.prepare(`UPDATE sessions SET ${sessionFields.assignments}, updated_at=@updated_at WHERE id=@id`);
 
 sessionsRouter.patch("/:id", (req, res) => {
-  const existing = getSessionStmt.get(req.params.id);
-  if (!existing) return res.status(404).json({ error: "session not found" });
-
-  const { kitchenProfileId, status, endedAt, conversation, selectedNodeId, cooks, mode, run, summary, outMaterialIds, nodePositions } = req.body;
-  const row = {
-    id: existing.id,
-    kitchen_profile_id: kitchenProfileId !== undefined ? kitchenProfileId : existing.kitchen_profile_id,
-    status: status !== undefined ? status : existing.status,
-    ended_at: endedAt !== undefined ? endedAt : existing.ended_at,
-    conversation_json: conversation !== undefined ? JSON.stringify(conversation) : existing.conversation_json,
-    selected_node_id: selectedNodeId !== undefined ? selectedNodeId : existing.selected_node_id,
-    cooks_json: cooks !== undefined ? JSON.stringify(cooks) : existing.cooks_json,
-    mode: mode !== undefined ? mode : existing.mode,
-    run_json: run !== undefined ? (run ? JSON.stringify(run) : null) : existing.run_json,
-    summary_json: summary !== undefined ? (summary ? JSON.stringify(summary) : null) : existing.summary_json,
-    out_material_ids_json: outMaterialIds !== undefined ? JSON.stringify(outMaterialIds) : existing.out_material_ids_json,
-    node_positions_json: nodePositions !== undefined ? JSON.stringify(nodePositions) : existing.node_positions_json,
-    updated_at: new Date().toISOString(),
-  };
-  updateSessionStmt.run(row);
-  res.json(sessionRowToApi(getSessionStmt.get(existing.id), getRecipesForSessionStmt.all(existing.id), getSharedStepsForSessionStmt.all(existing.id)));
+  const existing = findSession(req, res);
+  if (!existing) return;
+  updateSessionStmt.run({ ...sessionFields.toRow(req.body, existing), id: existing.id, updated_at: now() });
+  res.json(sessionToApi(getSessionStmt.get(existing.id)));
 });
 
-// Without this a run could never leave the log — every test cook and
-// misfire stayed on Home permanently. There are no FK cascades on these
-// tables, so the children go first, in one transaction.
-const deleteRecipesForSessionStmt = db.prepare("DELETE FROM recipe_instances WHERE session_id = ?");
-const deleteSharedStepsForSessionStmt = db.prepare("DELETE FROM shared_steps WHERE session_id = ?");
+// There are no FK cascades on these tables, so children are deleted
+// explicitly, in one transaction.
+const deleteRecipesStmt = db.prepare("DELETE FROM recipe_instances WHERE session_id = ?");
+const deleteSharedStepsStmt = db.prepare("DELETE FROM shared_steps WHERE session_id = ?");
 const deleteSessionStmt = db.prepare("DELETE FROM sessions WHERE id = ?");
-const deleteSessionCascade = db.transaction((id) => {
-  deleteSharedStepsForSessionStmt.run(id);
-  deleteRecipesForSessionStmt.run(id);
-  deleteSessionStmt.run(id);
+const clearPlan = db.transaction((id) => {
+  deleteSharedStepsStmt.run(id);
+  deleteRecipesStmt.run(id);
 });
 
 sessionsRouter.delete("/:id", (req, res) => {
-  const existing = getSessionStmt.get(req.params.id);
-  if (!existing) return res.status(404).json({ error: "session not found" });
-  deleteSessionCascade(existing.id);
+  const existing = findSession(req, res);
+  if (!existing) return;
+  db.transaction(() => {
+    clearPlan(existing.id);
+    deleteSessionStmt.run(existing.id);
+  })();
   res.status(204).end();
 });
 
-// Everything the conversation produced, without ending the session.
-//
-// Starting the conversation over has to discard the plan too: recipes
-// are generated from the answers once, and the client will not generate
-// again while any exist. Clearing them in the browser alone was not
-// enough — the rows stayed here, so a reload brought the old menu back
-// and a freshly generated one would have sat alongside it. The session,
-// its kitchen and its cooks all survive; only what the answers made goes.
-const clearPlanForSession = db.transaction((id) => {
-  deleteSharedStepsForSessionStmt.run(id);
-  deleteRecipesForSessionStmt.run(id);
-});
-
+// Starting the conversation over discards the plan it produced, but keeps
+// the session, its kitchen and its cooks. Recipes are generated from the
+// answers once, so stale rows would otherwise come back on reload.
 sessionsRouter.delete("/:id/plan", (req, res) => {
-  const existing = getSessionStmt.get(req.params.id);
-  if (!existing) return res.status(404).json({ error: "session not found" });
-  clearPlanForSession(existing.id);
+  const existing = findSession(req, res);
+  if (!existing) return;
+  clearPlan(existing.id);
   res.status(204).end();
 });
+
+// --- recipe instances ---------------------------------------------------
 
 const insertRecipeStmt = db.prepare(`
   INSERT INTO recipe_instances (id, session_id, template_id, position, draft_json, working_json, approved_json, custom_materials_json, updated_at)
-  VALUES (@id, @session_id, @template_id, @position, @draft_json, @working_json, @approved_json, @custom_materials_json, @updated_at)
+  VALUES (@id, @session_id, @template_id, @position, @draft_json, @working_json, NULL, @custom_materials_json, @updated_at)
 `);
-const getRecipeStmt = db.prepare("SELECT * FROM recipe_instances WHERE id = ? AND session_id = ?");
-const updateRecipeStmt = db.prepare(`
-  UPDATE recipe_instances SET working_json=@working_json, approved_json=@approved_json,
-    custom_materials_json=@custom_materials_json, updated_at=@updated_at
-  WHERE id=@id AND session_id=@session_id
-`);
+const updateRecipeStmt = db.prepare(
+  `UPDATE recipe_instances SET ${recipeFields.assignments}, updated_at=@updated_at WHERE id=@id AND session_id=@session_id`,
+);
 
 sessionsRouter.post("/:id/recipes", (req, res) => {
-  const session = getSessionStmt.get(req.params.id);
-  if (!session) return res.status(404).json({ error: "session not found" });
-
+  const session = findSession(req, res);
+  if (!session) return;
   const { id, templateId, draft, working, custom_materials } = req.body;
   if (!id || !draft || !working) return res.status(400).json({ error: "id, draft, and working are required" });
 
-  const position = getRecipesForSessionStmt.all(session.id).length;
-  const now = new Date().toISOString();
-  const row = {
+  insertRecipeStmt.run({
     id,
     session_id: session.id,
     template_id: templateId ?? null,
-    position,
+    position: getRecipesStmt.all(session.id).length,
     draft_json: JSON.stringify(draft),
     working_json: JSON.stringify(working),
-    approved_json: null,
     custom_materials_json: JSON.stringify(custom_materials || {}),
-    updated_at: now,
-  };
-  insertRecipeStmt.run(row);
-  res.status(201).json(recipeRowToApi(row));
+    updated_at: now(),
+  });
+  res.status(201).json(recipeToApi(getRecipeStmt.get(id, session.id)));
 });
 
 sessionsRouter.patch("/:id/recipes/:recipeId", (req, res) => {
   const existing = getRecipeStmt.get(req.params.recipeId, req.params.id);
   if (!existing) return res.status(404).json({ error: "recipe instance not found" });
-
-  const { working, approved, custom_materials } = req.body;
-  const row = {
-    id: existing.id,
-    session_id: existing.session_id,
-    working_json: working !== undefined ? JSON.stringify(working) : existing.working_json,
-    approved_json: approved !== undefined ? (approved ? JSON.stringify(approved) : null) : existing.approved_json,
-    custom_materials_json: custom_materials !== undefined ? JSON.stringify(custom_materials) : existing.custom_materials_json,
-    updated_at: new Date().toISOString(),
-  };
-  updateRecipeStmt.run(row);
-  res.json(recipeRowToApi(getRecipeStmt.get(existing.id, existing.session_id)));
+  updateRecipeStmt.run({ ...recipeFields.toRow(req.body, existing), id: existing.id, session_id: existing.session_id, updated_at: now() });
+  res.json(recipeToApi(getRecipeStmt.get(existing.id, existing.session_id)));
 });
 
-const getSharedStepStmt = db.prepare("SELECT * FROM shared_steps WHERE id = ? AND session_id = ?");
+// --- shared steps -------------------------------------------------------
+
 const insertSharedStepStmt = db.prepare(`
   INSERT INTO shared_steps (id, session_id, draft_json, working_json, approved_json, updated_at)
-  VALUES (@id, @session_id, @draft_json, @working_json, @approved_json, @updated_at)
+  VALUES (@id, @session_id, @draft_json, @working_json, NULL, @updated_at)
 `);
-const updateSharedStepStmt = db.prepare(`
-  UPDATE shared_steps SET working_json=@working_json, approved_json=@approved_json, updated_at=@updated_at
-  WHERE id=@id AND session_id=@session_id
-`);
+const updateSharedStepStmt = db.prepare(
+  `UPDATE shared_steps SET ${sharedStepFields.assignments}, updated_at=@updated_at WHERE id=@id AND session_id=@session_id`,
+);
 const deleteSharedStepStmt = db.prepare("DELETE FROM shared_steps WHERE id = ? AND session_id = ?");
 
 sessionsRouter.post("/:id/shared-steps", (req, res) => {
-  const session = getSessionStmt.get(req.params.id);
-  if (!session) return res.status(404).json({ error: "session not found" });
-
+  const session = findSession(req, res);
+  if (!session) return;
   const { id, draft, working } = req.body;
   if (!id || !draft || !working) return res.status(400).json({ error: "id, draft, and working are required" });
 
-  const now = new Date().toISOString();
-  const row = {
+  insertSharedStepStmt.run({
     id,
     session_id: session.id,
     draft_json: JSON.stringify(draft),
     working_json: JSON.stringify(working),
-    approved_json: null,
-    updated_at: now,
-  };
-  insertSharedStepStmt.run(row);
-  res.status(201).json(sharedStepRowToApi(row));
+    updated_at: now(),
+  });
+  res.status(201).json(sharedStepToApi(getSharedStepStmt.get(id, session.id)));
 });
 
 sessionsRouter.patch("/:id/shared-steps/:stepId", (req, res) => {
   const existing = getSharedStepStmt.get(req.params.stepId, req.params.id);
   if (!existing) return res.status(404).json({ error: "shared step not found" });
-
-  const { working, approved } = req.body;
-  const row = {
-    id: existing.id,
-    session_id: existing.session_id,
-    working_json: working !== undefined ? JSON.stringify(working) : existing.working_json,
-    approved_json: approved !== undefined ? (approved ? JSON.stringify(approved) : null) : existing.approved_json,
-    updated_at: new Date().toISOString(),
-  };
-  updateSharedStepStmt.run(row);
-  res.json(sharedStepRowToApi(getSharedStepStmt.get(existing.id, existing.session_id)));
+  updateSharedStepStmt.run({ ...sharedStepFields.toRow(req.body, existing), id: existing.id, session_id: existing.session_id, updated_at: now() });
+  res.json(sharedStepToApi(getSharedStepStmt.get(existing.id, existing.session_id)));
 });
 
-// Deleting a shared step can leave dangling depends_on references in any
-// recipe instance or other shared step that pointed at it â€” unlike a
-// plain per-recipe node delete (scoped to one recipe's own array), a
-// shared step can be a dependency across recipe boundaries, so the
-// scrub has to run over every recipe instance + every other shared step
+// A shared step can be a dependency across recipe boundaries, so
+// deleting one scrubs it from every recipe and every other shared step
 // in the session, atomically.
+const withoutDependency = (node, stepId) => ({ ...node, depends_on: (node.depends_on || []).filter((d) => d !== stepId) });
+
+const deleteSharedStep = db.transaction((sessionId, stepId) => {
+  deleteSharedStepStmt.run(stepId, sessionId);
+  const updated_at = now();
+  for (const row of getRecipesStmt.all(sessionId)) {
+    const working = JSON.parse(row.working_json);
+    const nodes = working.nodes.map((n) => withoutDependency(n, stepId));
+    updateRecipeStmt.run({ ...recipeFields.toRow({ working: { ...working, nodes } }, row), id: row.id, session_id: sessionId, updated_at });
+  }
+  for (const row of getSharedStepsStmt.all(sessionId)) {
+    const working = withoutDependency(JSON.parse(row.working_json), stepId);
+    updateSharedStepStmt.run({ ...sharedStepFields.toRow({ working }, row), id: row.id, session_id: sessionId, updated_at });
+  }
+});
+
 sessionsRouter.delete("/:id/shared-steps/:stepId", (req, res) => {
-  const session = getSessionStmt.get(req.params.id);
-  if (!session) return res.status(404).json({ error: "session not found" });
-  const existing = getSharedStepStmt.get(req.params.stepId, req.params.id);
-  if (!existing) return res.status(404).json({ error: "shared step not found" });
-
-  const scrub = db.transaction((sessionId, stepId) => {
-    deleteSharedStepStmt.run(stepId, sessionId);
-
-    getRecipesForSessionStmt.all(sessionId).forEach((r) => {
-      const working = JSON.parse(r.working_json);
-      const nodes = working.nodes.map((n) => ({ ...n, depends_on: (n.depends_on || []).filter((d) => d !== stepId) }));
-      updateRecipeStmt.run({
-        id: r.id,
-        session_id: sessionId,
-        working_json: JSON.stringify({ ...working, nodes }),
-        approved_json: r.approved_json,
-        custom_materials_json: r.custom_materials_json,
-        updated_at: new Date().toISOString(),
-      });
-    });
-
-    getSharedStepsForSessionStmt.all(sessionId).forEach((s) => {
-      const working = JSON.parse(s.working_json);
-      updateSharedStepStmt.run({
-        id: s.id,
-        session_id: sessionId,
-        working_json: JSON.stringify({ ...working, depends_on: (working.depends_on || []).filter((d) => d !== stepId) }),
-        approved_json: s.approved_json,
-        updated_at: new Date().toISOString(),
-      });
-    });
-  });
-
-  scrub(req.params.id, req.params.stepId);
+  if (!getSharedStepStmt.get(req.params.stepId, req.params.id)) {
+    return res.status(404).json({ error: "shared step not found" });
+  }
+  deleteSharedStep(req.params.id, req.params.stepId);
   res.status(204).end();
 });

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { db } from "../db.js";
+import { clientOf } from "../client.js";
 
 export const kitchensRouter = Router();
 
@@ -37,26 +38,35 @@ kitchensRouter.get("/", (req, res) => {
   res.json(listStmt.all().map(toApi));
 });
 
-kitchensRouter.post("/", (req, res) => {
-  const { name, burners, hasWok, hasOven, cuttingBoards, pots } = req.body;
-  if (!name || typeof name !== "string" || !name.trim()) {
-    return res.status(400).json({ error: "name is required" });
-  }
-  if (nameIsTaken(name)) {
-    return res.status(409).json({ error: `You already have a kitchen called “${name.trim()}”.` });
-  }
-  const now = new Date().toISOString();
-  const row = {
-    id: randomUUID(),
-    name: name.trim(),
-    burners: Number(burners) || 0,
-    hasWok: hasWok ? 1 : 0,
-    hasOven: hasOven ? 1 : 0,
-    cuttingBoards: Number(cuttingBoards) || 0,
-    pots: Number(pots) || 0,
-    createdAt: now,
-    updatedAt: now,
+const count = (value) => Math.max(0, Math.round(Number(value)) || 0);
+const flag = (value) => (value ? 1 : 0);
+
+/** The body's fields over `existing`'s, normalized for the table. */
+function kitchenFields(body, existing = {}) {
+  const pick = (key, normalize) => (body[key] !== undefined ? normalize(body[key]) : existing[key]);
+  return {
+    name: pick("name", (name) => String(name).trim()),
+    burners: pick("burners", count),
+    hasWok: pick("hasWok", flag),
+    hasOven: pick("hasOven", flag),
+    cuttingBoards: pick("cuttingBoards", count),
+    pots: pick("pots", count),
   };
+}
+
+/** Why `name` cannot be used, or null. */
+function nameProblem(name, selfId) {
+  if (!name) return { status: 400, error: "name is required" };
+  if (nameIsTaken(name, selfId)) return { status: 409, error: `You already have a kitchen called “${name}”.` };
+  return null;
+}
+
+kitchensRouter.post("/", (req, res) => {
+  const fields = kitchenFields({ burners: 0, hasWok: false, hasOven: false, cuttingBoards: 0, pots: 0, ...req.body });
+  const problem = nameProblem(fields.name);
+  if (problem) return res.status(problem.status).json({ error: problem.error });
+  const now = new Date().toISOString();
+  const row = { id: randomUUID(), ...fields, createdAt: now, updatedAt: now };
   insertStmt.run(row);
   res.status(201).json(toApi(row));
 });
@@ -64,23 +74,11 @@ kitchensRouter.post("/", (req, res) => {
 kitchensRouter.put("/:id", (req, res) => {
   const existing = getStmt.get(req.params.id);
   if (!existing) return res.status(404).json({ error: "kitchen not found" });
-
-  const { name, burners, hasWok, hasOven, cuttingBoards, pots } = req.body;
-  if (name !== undefined && nameIsTaken(String(name), existing.id)) {
-    return res.status(409).json({ error: `You already have a kitchen called “${String(name).trim()}”.` });
-  }
-  const row = {
-    id: existing.id,
-    name: name !== undefined ? String(name).trim() : existing.name,
-    burners: burners !== undefined ? Number(burners) : existing.burners,
-    hasWok: hasWok !== undefined ? (hasWok ? 1 : 0) : existing.hasWok,
-    hasOven: hasOven !== undefined ? (hasOven ? 1 : 0) : existing.hasOven,
-    cuttingBoards: cuttingBoards !== undefined ? Number(cuttingBoards) : existing.cuttingBoards,
-    pots: pots !== undefined ? Number(pots) : existing.pots,
-    updatedAt: new Date().toISOString(),
-  };
-  updateStmt.run(row);
-  res.json(toApi(getStmt.get(req.params.id)));
+  const fields = kitchenFields(req.body, existing);
+  const problem = nameProblem(fields.name, existing.id);
+  if (problem) return res.status(problem.status).json({ error: problem.error });
+  updateStmt.run({ id: existing.id, ...fields, updatedAt: new Date().toISOString() });
+  res.json(toApi(getStmt.get(existing.id)));
 });
 
 // Deleting the kitchen a live run is using used to succeed silently:
@@ -106,7 +104,7 @@ const countActiveSessionsStmt = db.prepare(
 kitchensRouter.delete("/:id", (req, res) => {
   const existing = getStmt.get(req.params.id);
   if (!existing) return res.status(404).json({ error: "kitchen not found" });
-  if (countActiveSessionsStmt.get(req.params.id, req.get("X-Kitchen-Client") || "").n > 0) {
+  if (countActiveSessionsStmt.get(req.params.id, clientOf(req)).n > 0) {
     return res.status(409).json({ error: `"${existing.name}" is in use by the run you have in progress. Finish or abandon that run first.` });
   }
   deleteStmt.run(req.params.id);

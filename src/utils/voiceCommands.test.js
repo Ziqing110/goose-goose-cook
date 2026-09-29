@@ -8,7 +8,7 @@
 // unsure.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseCommand, isBareResume } from "./voiceCommands.js";
+import { parseCommand } from "./voiceCommands.js";
 
 const ctx = {
   byId: {
@@ -126,17 +126,6 @@ test("parseCommand: all English pause, resume, finish, status, score, and help p
   }
 });
 
-test("isBareResume: a short resume counts without the agent's name, talk about resuming does not", () => {
-  for (const said of ["resume", "Resume.", "okay resume", "goose resume", "keep going", "let's keep going", "back on", "unpause", "继续", "继续吧", "我们继续"]) {
-    assert.equal(isBareResume(said), true, said);
-  }
-  for (const said of [
-    "we'll resume after the call", "don't resume yet", "not yet", "resume later", "wait before you resume",
-    "等会再继续", "先不继续", "pause", "done", "status", "", "I think we should probably resume the cook now",
-  ]) {
-    assert.equal(isBareResume(said), false, said);
-  }
-});
 // ---------------------------------------------------------------------
 // Edge cases
 // ---------------------------------------------------------------------

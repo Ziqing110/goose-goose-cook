@@ -8,13 +8,11 @@
 import { useLayoutEffect, useRef } from "react";
 import { chefAvatar } from "../utils/cooks.js";
 import { playerRing } from "../utils/playerColors.js";
-import { clock, isOnPlan, longestStep, planDelta, playerKey } from "../utils/serviceResults.js";
+import { isOnPlan, longestStep, planDelta, playerKey } from "../utils/serviceResults.js";
+import { clock } from "../utils/time.js";
 import { GoosePrint } from "./GooseMarks.jsx";
+import Mono from "./Mono.jsx";
 import "./ServiceResults.css";
-
-function Mono({ children, className = "" }) {
-  return <span className={`mono ${className}`}>{children}</span>;
-}
 
 // The chef bird the player picked on the Cooks page, ringed in that
 // bird's own colour (--ring, utils/playerColors.js) rather than the fixed

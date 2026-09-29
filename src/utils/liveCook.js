@@ -575,10 +575,7 @@ export function runOutcome(run, nodes, cooks) {
           };
         })
         .sort((a, b) => a._startedAt - b._startedAt || a._order - b._order)
-        .map((s) => {
-          const { _startedAt: _s, _order: _o, ...rest } = s; // eslint-disable-line no-unused-vars
-          return rest;
-        });
+        .map(({ _startedAt, _order, ...rest }) => rest);
     })(),
   };
 }
@@ -733,12 +730,6 @@ export function replan({ nodes, run, cooks, kitchenProfile }) {
 // ---------------------------------------------------------------------
 
 /**
- * A cook holding an unfinished step cannot claim another one. That check
- * lives here rather than in the UI so the voice path, the claim buttons
- * and any future caller all hit the same wall — there is deliberately no
- * "drop this and take that" shortcut anywhere.
- */
-/**
  * Is a piece of equipment this step needs already fully in use?
  *
  * Returns the equipment type that is short, or null. Counts only steps
@@ -761,6 +752,12 @@ export function equipmentShortage({ run, nodes, stepId, kitchenProfile }) {
   return null;
 }
 
+/**
+ * Whether a claim goes through, and if not, why. A cook holding an
+ * unfinished step cannot claim another one. The check lives here rather
+ * than in the UI so the voice path, the claim buttons and any future
+ * caller all hit the same wall.
+ */
 export function arbitrateClaim({ run, nodes, cooks, stepId, cookId, at, kitchenProfile }) {
   const record = run.steps[stepId];
   if (!record) return { ok: false, code: "unknown_step" };
@@ -849,7 +846,6 @@ export function claimSuggestions({ nodes, run, cookId, limit = 3 }) {
     .slice(0, limit);
 }
 
-
 // ---------------------------------------------------------------------
 // Transitions — all pure, all return a new run
 // ---------------------------------------------------------------------
@@ -900,12 +896,13 @@ export function applyDrop({ run, stepId, cookId, at, source = "tap" }) {
  *  nothing downstream has started on the back of it. */
 export function applyUndo({ run, nodes, cookId, at }) {
   const undoable = ["start", "done", "skip"];
+  const undone = new Set(run.events.filter((e) => e.type === "undo").map((e) => e.meta?.eventId));
   // Yours to undo if it was your step or you were the one who said it:
   // somebody who wrongly reported another cook's step done has to be
-  // able to take it back.
+  // able to take it back. Each action is undone at most once.
   const last = [...run.events]
     .reverse()
-    .find((e) => (e.cookId === cookId || e.reportedBy === cookId) && undoable.includes(e.type));
+    .find((e) => (e.cookId === cookId || e.reportedBy === cookId) && undoable.includes(e.type) && !undone.has(e.id));
   if (!last) return { run, rejected: "nothing" };
   if (Date.parse(at) - Date.parse(last.at) > UNDO_WINDOW_MS) return { run, rejected: "too_late" };
 
@@ -924,7 +921,7 @@ export function applyUndo({ run, nodes, cookId, at }) {
     next = patchStep(run, last.stepId, { status: "pending", cookId: null, startedAt: null, source: null });
   }
   return {
-    run: pushEvent(next, { at, type: "undo", cookId, stepId: last.stepId, meta: { undid: last.type } }),
+    run: pushEvent(next, { at, type: "undo", cookId, stepId: last.stepId, meta: { undid: last.type, eventId: last.id } }),
     undid: last,
     label: byId[last.stepId]?.label,
   };
@@ -936,8 +933,6 @@ export function canUndo({ run, nodes, cookId, at }) {
   return !applyUndo({ run, nodes, cookId, at }).rejected;
 }
 
-/** Freeze the run. Anything still pending is swept to skipped so the
- *  summary accounts for every step. */
 export function isPaused(run) {
   return Boolean(run?.pausedAt);
 }
@@ -963,6 +958,8 @@ export function applyResume({ run, at }) {
   return pushEvent(next, { at, type: "run_resume", cookId: null, stepId: null });
 }
 
+/** Freeze the run. Anything unfinished is swept to skipped so the
+ *  summary accounts for every step. */
 export function endRun({ run, nodes, at }) {
   // Finishing while paused would otherwise bank the whole break as
   // cooking time, so close the open pause first.

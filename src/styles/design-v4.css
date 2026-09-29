@@ -1,17 +1,11 @@
 /* ---------------------------------------------------------------
    Kitchen Path design system v4 (reference: "Kitchen Path Home v4").
 
-   Scoped under `.app-shell.ds-v4`, which AppShell adds only on the
-   routes in utils/designV4.js, so the shell chrome outside the routed
-   page (topbar, SessionProgress) re-themes together with it while
-   every other route keeps the tokens.css look. The VoiceBar is the
-   exception: it already renders one way site-wide (VoiceBar.css).
-
-   TODO(design discussion): scoping shared chrome (topbar, buttons,
-   SessionProgress) to one route is deliberate and temporary.
-   Shared components should be styled the same across the entire site;
-   once a single design is agreed, move these rules to global styles and
-   remove the .ds-v4 scope (see utils/designV4.js).
+   Scoped under `.app-shell.ds-v4`, which AppShell adds on the session
+   stages and the cook card, so the shell chrome outside the routed
+   page (topbar, SessionProgress) re-themes together with it while Home
+   keeps the tokens.css look. The VoiceBar renders one way site-wide
+   (VoiceBar.css).
 
    Flat by rule: panels have no border, controls have no border or
    shadow. Hierarchy comes from the surface ladder — page white,

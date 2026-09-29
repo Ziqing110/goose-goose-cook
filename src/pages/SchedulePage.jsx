@@ -1,6 +1,4 @@
-// Schedule — session step 6 of 7, the game plan before going live
-// (design/claude-design-schedule-prompt.md, "Kitchen Path - Schedule").
-// The player's job, in order: pick a mode, read the plan the agent made
+// Schedule: the game plan before going live. The player's job, in order: pick a mode, read the plan the agent made
 // for it, go live. Nothing here is authored by hand — the plan is
 // computed by utils/scheduleLayout.js from the approved main line, the
 // two players and the kitchen; this page only renders it. Mode is
@@ -19,19 +17,19 @@ import {
   equipmentLanes,
   unattendedEvents,
   cookFreeWindows,
-  isAttended,
-  EQUIPMENT_LABELS,
 } from "../utils/scheduleLayout.js";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 import { useVoicePageState } from "../hooks/useVoicePageState.js";
 import { CONFIRM_YES_PATTERN, CONFIRM_NO_PATTERN } from "../utils/navCommands.js";
 import { matchStepName } from "../utils/stepNameMatch.js";
 import { SCHEDULE_VOICE } from "../utils/pageVoiceGrammar.js";
-import { tendingOf, TENDING } from "../utils/tending.js";
-import { formatClock } from "../utils/inventory.js";
+import { isAttended, isOneShot, momentName, tendingLabel } from "../utils/tending.js";
+import { DIFFICULTY_FLAMES, EQUIPMENT_GLYPHS, equipmentName } from "../data/dishes.js";
+import { timer } from "../utils/time.js";
 import { chefAvatar } from "../utils/cooks.js";
 import { playerRing } from "../utils/playerColors.js";
 import KpIcon from "../components/KpIcon.jsx";
+import Mono from "../components/Mono.jsx";
 import Modal from "../components/Modal.jsx";
 import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
 import ChefWorkingScreen from "../components/ChefWorkingScreen.jsx";
@@ -116,45 +114,16 @@ function fitLabel(label, widthPx) {
 // An unattended step's hands-on moments are much narrower than a step
 // block, so they degrade on their own ladder: "Check 1/2" → "1/2" → the
 // mono duration → a bare bar. The 10px floor keeps a 20-second check
-// visible at Fit zoom (design/claude-design-schedule-v2-unattended.md §2).
+// visible at Fit zoom.
 const MOMENT_MIN_PX = 10;
 const MOMENT_LABEL_PX_PER_CHAR = 6.8;
 const MOMENT_MONO_PX_PER_CHAR = 8.3;
 const RAIL_LABEL_MIN_PX = 44;
 const RAIL_LABEL_PX_PER_CHAR = 6.4;
 
-// What the page calls each tending kind. Hands-on is the default and
-// says nothing; the rail is the signal, the chip only names it.
-const TENDING_LABELS = {
-  [TENDING.TENDED]: "Check on it",
-  [TENDING.TIMED]: "Timed",
-  [TENDING.SET_AND_FORGET]: "Leave it",
-};
-const tendingLabel = (node) => TENDING_LABELS[tendingOf(node)] || null;
-
-// Equipment lane glyphs come from the 14-glyph sheet only; the lane for
-// steps that need no equipment (resting, chilling) borrows the timer.
-const EQUIPMENT_GLYPHS = {
-  cutting_board: "cutting-board",
-  stove_burner: "burner",
-  wok: "wok",
-  pot: "pot",
-  oven: "oven",
-  __unattended__: "timer",
-};
-
-const momentName = (m, count) => (m.kind === "initial" ? "Start" : m.kind === "ending" ? "Finish" : `Check ${m.index + 1}/${count}`);
 const momentShort = (m, count) => (m.kind === "initial" ? "Start" : m.kind === "ending" ? "Finish" : `${m.index + 1}/${count}`);
 
-const DIFFICULTY_FLAMES = { low: 1, medium: 2, high: 3 };
-
-const capitalize = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
-const equipmentLabel = (type) => capitalize(EQUIPMENT_LABELS[type] || type);
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
-
-function Mono({ children, className = "" }) {
-  return <span className={`mono ${className}`}>{children}</span>;
-}
 
 // System Chip, neutral: names the tending kind wherever a step is listed
 // off the timeline (detail panel, Versus rows). Renders nothing for
@@ -232,7 +201,7 @@ export default function SchedulePage() {
     return recipes.find((r) => r.id === node._recipeId)?.working.title || null;
   };
 
-  const finish = formatClock(schedule.makespanSec);
+  const finish = timer(schedule.makespanSec);
   const isCoop = mode === "cooperation";
   const isVersus = mode === "competition";
   const hasLoop = schedule.unscheduledIds.length > 0;
@@ -330,7 +299,7 @@ export default function SchedulePage() {
       const holderStep = cause.refStepId ? stepById[cause.refStepId] : null;
       const holderCook = holderStep ? cookById[holderStep.cookId] : null;
       const holder = !holderCook ? "" : holderCook.id === cookId ? ` — your “${byId[holderStep.id]?.label || holderStep.id}” has it` : ` — ${holderCook.name} has it`;
-      return `Waiting · ${EQUIPMENT_LABELS[cause.equipmentType] || cause.equipmentType}${holder}`;
+      return `Waiting · ${equipmentName(cause.equipmentType).toLowerCase()}${holder}`;
     }
     if (cause.type === "dependency" && cause.refStepId) {
       return `Waiting on “${byId[cause.refStepId]?.label || cause.refStepId}”`;
@@ -597,7 +566,7 @@ export default function SchedulePage() {
               ).slice(0, 3);
               if (!windows.length) return null;
               const spans = windows
-                .map((w) => `${formatClock(w.startSec)}–${formatClock(w.endSec)} while “${byId[w.stepIds[0]]?.label}” cooks`)
+                .map((w) => `${timer(w.startSec)}–${timer(w.endSec)} while “${byId[w.stepIds[0]]?.label}” cooks`)
                 .join(", ");
               return `${cook.name}: ${spans}`;
             })
@@ -778,7 +747,7 @@ export default function SchedulePage() {
           {lacking.length > 0 && (
             <div className="sch-notice is-warning" role="status">
               <span>
-                Planned with {lacking.map((e) => `a ${EQUIPMENT_LABELS[e] || e}`).join(" and ")} {kitchenProfile?.name || "this kitchen"} doesn&rsquo;t
+                Planned with {lacking.map((e) => `a ${equipmentName(e).toLowerCase()}`).join(" and ")} {kitchenProfile?.name || "this kitchen"} doesn&rsquo;t
                 have — timings assume you&rsquo;ll manage one. Real waits will be longer.
               </span>
               {kitchenProfile && (
@@ -823,7 +792,7 @@ export default function SchedulePage() {
                   </div>
                   {schedule.savedSec > 0 && (
                     <div className="sch-tile sch-tile-highlight sch-roll" style={{ animationDelay: "60ms" }}>
-                      <Mono className="sch-tile-value sch-tile-value-hot">{formatClock(schedule.savedSec)}</Mono>
+                      <Mono className="sch-tile-value sch-tile-value-hot">{timer(schedule.savedSec)}</Mono>
                       <span className="sch-tile-label">faster than solo</span>
                       <span className="sch-stamp sch-stamp-honk" aria-hidden="true">HONK</span>
                     </div>
@@ -863,7 +832,7 @@ export default function SchedulePage() {
               <Mono className="sch-footer-sub">
                 {isCoop
                   ? firstPot
-                    ? `${cookById[firstPot.cookId]?.name || "Someone"} puts “${byId[firstPot.id].label}” on at ${formatClock(firstPot.startSec)}. I'll call it out.`
+                    ? `${cookById[firstPot.cookId]?.name || "Someone"} puts “${byId[firstPot.id].label}” on at ${timer(firstPot.startSec)}. I'll call it out.`
                     : "Say “done” and I'll deal you the next one."
                   : dealtCount
                     ? `${dealtCount} dealt, the rest go to whoever says it first.`
@@ -918,7 +887,7 @@ export default function SchedulePage() {
           <span className="sch-modal-title">Abandon this cook?</span>
           <p className="sch-modal-body">
             You lose <Mono className="sch-modal-num">{progress.done}</Mono> completed {progress.done === 1 ? "step" : "steps"} and{" "}
-            <Mono className="sch-modal-num">{formatClock(progress.elapsedSec)}</Mono> on the clock. This can&rsquo;t be undone.
+            <Mono className="sch-modal-num">{timer(progress.elapsedSec)}</Mono> on the clock. This can&rsquo;t be undone.
           </p>
           <div className="sch-modal-actions">
             <button type="button" className="btn btn-ghost sch-btn-keep" onClick={() => setConfirmAbandon(false)}>
@@ -1127,7 +1096,7 @@ function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepId
               <span className="sch-lane-label-text">
                 <span className="sch-lane-name">{cook.name}</span>
                 <Mono className="sch-lane-busy">
-                  {formatClock(busySec)}
+                  {timer(busySec)}
                   <span className="sch-long"> busy</span>
                 </Mono>
               </span>
@@ -1142,7 +1111,7 @@ function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepId
           {gearLanesShown.map((lane) => (
             <div className="sch-lane-label is-equipment" key={`${lane.type}-${lane.index}`} title={lane.label}>
               <KpIcon glyph={EQUIPMENT_GLYPHS[lane.type] || "timer"} size={20} className="sch-lane-glyph" />
-              <span className="sch-lane-name sch-long">{capitalize(lane.label)}</span>
+              <span className="sch-lane-name sch-long">{lane.label}</span>
               {/* Glyph-only on a phone: two burners still need telling apart. */}
               {/\d$/.test(lane.label) && <Mono className="sch-lane-index sch-short">{lane.index}</Mono>}
             </div>
@@ -1154,11 +1123,11 @@ function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepId
             <div className="sch-ruler">
               {ticks.map((m) => (
                 <span className="mono sch-tick" key={m} style={{ left: Math.round(pxFor(m * 60)) }}>
-                  {formatClock(m * 60)}
+                  {timer(m * 60)}
                 </span>
               ))}
               <span className="mono sch-tick is-end" style={{ left: Math.round(pxFor(makespanSec)) }}>
-                {formatClock(makespanSec)}
+                {timer(makespanSec)}
               </span>
             </div>
             {/* DINNER anchor at the makespan — a small dark pill and a
@@ -1189,9 +1158,9 @@ function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepId
                         className={`sch-block is-wait ${width < 96 ? "is-narrow" : ""} ${width < 64 ? "is-tight" : ""}`}
                         key={b.id}
                         style={style}
-                        title={`${b.label} · ${formatClock(durationSec)}`}
+                        title={`${b.label} · ${timer(durationSec)}`}
                         role="img"
-                        aria-label={`${b.label} · ${formatClock(durationSec)}`}
+                        aria-label={`${b.label} · ${timer(durationSec)}`}
                       >
                         {/* Just the goose's footprints — the wait
                             duration lives in the tooltip and aria-label
@@ -1236,19 +1205,19 @@ function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepId
                       } ${width < 96 ? "is-narrow" : ""} ${width < 64 ? "is-tight" : ""}`}
                       key={b.id}
                       style={style}
-                      title={`${b.node?.label} · ${formatClock(durationSec)}`}
-                      aria-label={`${b.node?.label} · ${formatClock(durationSec)}`}
+                      title={`${b.node?.label} · ${timer(durationSec)}`}
+                      aria-label={`${b.node?.label} · ${timer(durationSec)}`}
                       aria-pressed={isSelected}
                       onClick={() => onSelect(b.id)}
                     >
                       {(rung === "full" || rung === "name") && <span className="sch-block-label">{fitLabel(b.node?.label, width)}</span>}
                       {rung === "full" && (
                         <Mono className="sch-block-meta">
-                          {formatClock(durationSec)}
-                          {equipment && ` · ${equipmentLabel(equipment)}`}
+                          {timer(durationSec)}
+                          {equipment && ` · ${equipmentName(equipment)}`}
                         </Mono>
                       )}
-                      {rung === "dur" && <Mono className="sch-block-meta">{formatClock(durationSec)}</Mono>}
+                      {rung === "dur" && <Mono className="sch-block-meta">{timer(durationSec)}</Mono>}
                     </button>
                   );
                 })}
@@ -1275,12 +1244,12 @@ function Timeline({ lanes, gearLanes, cookIndexById, makespanSec, criticalStepId
                       key={s.id}
                       className={`sch-block is-equipment is-${owner} ${width < 96 ? "is-narrow" : ""} ${width < 64 ? "is-tight" : ""}`}
                       style={{ left, width, animationDelay: `${i * 40}ms` }}
-                      title={`${s.node?.label} · ${formatClock(durationSec)}${s.attended ? "" : " · runs on its own"}`}
+                      title={`${s.node?.label} · ${timer(durationSec)}${s.attended ? "" : " · runs on its own"}`}
                       role="img"
-                      aria-label={`${s.node?.label} · ${formatClock(durationSec)}${s.attended ? "" : ", cooking on its own"}`}
+                      aria-label={`${s.node?.label} · ${timer(durationSec)}${s.attended ? "" : ", cooking on its own"}`}
                     >
                       {rung === "name" && <span className="sch-block-label">{fitLabel(s.node?.label, width)}</span>}
-                      {rung === "dur" && <Mono className="sch-block-meta">{formatClock(durationSec)}</Mono>}
+                      {rung === "dur" && <Mono className="sch-block-meta">{timer(durationSec)}</Mono>}
                       {s.moments.map((m) => (
                         <span
                           key={`${m.kind}-${m.index}`}
@@ -1341,10 +1310,10 @@ function UnattendedStep({ block, player, pxFor, delay, isCritical, isSelected, o
 
   // The rail carries the step name; the longer "· runs on its own 8:30"
   // form only when it fits outright.
-  const railText = `${node?.label} · runs on its own ${formatClock(durationSec)}`;
+  const railText = `${node?.label} · runs on its own ${timer(durationSec)}`;
   const railLabel = railWidth - 16 >= railText.length * RAIL_LABEL_PX_PER_CHAR ? railText : node?.label;
-  const aria = `${node?.label} · ${tending || "unattended"} · ${formatClock(durationSec)}, hands-on at ${
-    moments.map((m) => `${momentName(m, checkCount)} ${formatClock(m.atSec)}`).join(", ") || "no set moments"
+  const aria = `${node?.label} · ${tending || "unattended"} · ${timer(durationSec)}, hands-on at ${
+    moments.map((m) => `${momentName(m, checkCount)} ${timer(m.atSec)}`).join(", ") || "no set moments"
   }`;
   const stateClass = `is-${player} ${isCritical ? "is-critical" : ""} ${isSelected ? "is-selected" : ""}`;
 
@@ -1368,7 +1337,7 @@ function UnattendedStep({ block, player, pxFor, delay, isCritical, isSelected, o
         const avail = width - 2 * pad;
         const name = momentName(m, checkCount);
         const short = momentShort(m, checkCount);
-        const dur = formatClock(m.endSec - m.atSec);
+        const dur = timer(m.endSec - m.atSec);
         const fits = (text) => text.length * MOMENT_LABEL_PX_PER_CHAR + 2 <= avail;
         const fitsDur = dur.length * MOMENT_MONO_PX_PER_CHAR + 1 <= avail;
         const label = fits(name) ? name : fits(short) ? short : null;
@@ -1382,7 +1351,7 @@ function UnattendedStep({ block, player, pxFor, delay, isCritical, isSelected, o
               aria-hidden="true"
               className={`sch-block is-task is-moment is-${m.kind} ${label ? "" : "is-bare"} ${stateClass} ${width < 110 ? "is-narrow" : ""} ${width < 64 ? "is-tight" : ""}`}
               style={{ left, width, animationDelay: delay }}
-              title={`${name} · ${formatClock(m.atSec)} · ${dur}`}
+              title={`${name} · ${timer(m.atSec)} · ${dur}`}
               onClick={onSelect}
             >
               {label && <span className="sch-moment-label">{label}</span>}
@@ -1469,17 +1438,17 @@ function TaskDetail({ step, node, dish, cook, cookIndex, isCritical, waitLabel, 
               <span className="sch-moment-item" key={`${m.kind}-${m.index}`}>
                 <span className="sch-moment-item-name">{momentName(m, checkCount)}</span>
                 <span className="sch-moment-item-dot">·</span>
-                <Mono>{formatClock(m.atSec)}</Mono>
+                <Mono>{timer(m.atSec)}</Mono>
                 <span className="sch-moment-item-dot">·</span>
-                <Mono className="sch-moment-item-dur">{formatClock(m.endSec - m.atSec)}</Mono>
+                <Mono className="sch-moment-item-dur">{timer(m.endSec - m.atSec)}</Mono>
               </span>
             ))}
           </span>
-          {tendingOf(node) === TENDING.SET_AND_FORGET ? (
+          {isOneShot(node) ? (
             <span className="sch-meta">Runs on its own — nothing to come back for.</span>
           ) : (
             <span className="sch-meta">
-              Runs on its own for <Mono className="sch-detail-free">{formatClock(freeSec)}</Mono> — you&rsquo;re free in between.
+              Runs on its own for <Mono className="sch-detail-free">{timer(freeSec)}</Mono> — you&rsquo;re free in between.
             </span>
           )}
         </div>
@@ -1487,15 +1456,15 @@ function TaskDetail({ step, node, dish, cook, cookIndex, isCritical, waitLabel, 
       <div className="sch-detail-grid">
         <div>
           <span className="sch-eyebrow">Starts</span>
-          <Mono className="sch-detail-value">{formatClock(step.startSec)}</Mono>
+          <Mono className="sch-detail-value">{timer(step.startSec)}</Mono>
         </div>
         <div>
           <span className="sch-eyebrow">Ends</span>
-          <Mono className="sch-detail-value">{formatClock(step.endSec)}</Mono>
+          <Mono className="sch-detail-value">{timer(step.endSec)}</Mono>
         </div>
         <div>
           <span className="sch-eyebrow">Takes</span>
-          <Mono className="sch-detail-value">{formatClock(durationSec)}</Mono>
+          <Mono className="sch-detail-value">{timer(durationSec)}</Mono>
         </div>
         <div>
           <span className="sch-eyebrow">Player</span>
@@ -1507,7 +1476,7 @@ function TaskDetail({ step, node, dish, cook, cookIndex, isCritical, waitLabel, 
         <div>
           <span className="sch-eyebrow">Equipment</span>
           <span className="sch-detail-text">
-            {step.requiredEquipment.length ? step.requiredEquipment.map(equipmentLabel).join(", ") : "None"}
+            {step.requiredEquipment.length ? step.requiredEquipment.map(equipmentName).join(", ") : "None"}
           </span>
         </div>
         <div>
@@ -1546,7 +1515,7 @@ function OpeningHand({ opening, cooks, byId, dishOf, headerTiles }) {
       <div className="sch-card-head">
         <span className="sch-card-title">The opening hand</span>
         <div className="sch-card-head-right">
-          {!contested && skewSec > 0 && <Mono className="sch-card-meta">{formatClock(skewSec)} apart at the start</Mono>}
+          {!contested && skewSec > 0 && <Mono className="sch-card-meta">{timer(skewSec)} apart at the start</Mono>}
           {headerTiles}
         </div>
       </div>
@@ -1573,7 +1542,7 @@ function OpeningHand({ opening, cooks, byId, dishOf, headerTiles }) {
                   <div className="sch-bundle-head">
                     <PlayerAvatar cook={cook} index={index} size={32} />
                     <span className="sch-bundle-name">{cook?.name}</span>
-                    <Mono className="sch-bundle-total">{formatClock(bundle.totalSec)} hands-on to open</Mono>
+                    <Mono className="sch-bundle-total">{timer(bundle.totalSec)} hands-on to open</Mono>
                   </div>
                   {bundle.stepIds.map((id) => (
                     // "hands-on to open" counts attended time only, so a
@@ -1589,7 +1558,7 @@ function OpeningHand({ opening, cooks, byId, dishOf, headerTiles }) {
                         </span>
                         {dishOf(id) && <span className="sch-bundle-row-dish">{dishOf(id)}</span>}
                       </span>
-                      <Mono className="sch-bundle-row-dur">{formatClock(durationOf(id))}</Mono>
+                      <Mono className="sch-bundle-row-dur">{timer(durationOf(id))}</Mono>
                     </div>
                   ))}
                 </div>
@@ -1602,7 +1571,7 @@ function OpeningHand({ opening, cooks, byId, dishOf, headerTiles }) {
       <div className="sch-grabs">
         <div className="sch-grabs-head">
           <span className="sch-card-title">
-            Up for grabs · <Mono className="sch-grabs-total">{formatClock(grabsTotalSec)}</Mono>
+            Up for grabs · <Mono className="sch-grabs-total">{timer(grabsTotalSec)}</Mono>
           </span>
           <span className="sch-meta">
             {poolIds.length} ready now · {lockedIds.length} not yet · claim by voice
@@ -1617,7 +1586,7 @@ function OpeningHand({ opening, cooks, byId, dishOf, headerTiles }) {
               <span className="sch-chip is-ready" key={id}>
                 {byId[id]?.label}
                 <TendingChip node={byId[id]} className="is-inset" />
-                <Mono className="sch-chip-dur">{formatClock(durationOf(id))}</Mono>
+                <Mono className="sch-chip-dur">{timer(durationOf(id))}</Mono>
               </span>
             ))}
           </div>

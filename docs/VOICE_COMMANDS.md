@@ -272,9 +272,28 @@ plausibly act on.
 
 Intents are tried in that priority order, so "we're done" never counts as one step's "done".
 
+## Service done (Live cook, once the run has ended)
+
+The live cook stops taking every turn once the run ends, so these are ordinary page commands and navigation works again.
+
+| Say | Does |
+|---|---|
+| "who won", "how did we do", "what's the final score", "read the results" | Says the result: the winner and score in Versus, or the time against the plan in co-op |
+| "take the cook card", "show me the card", "tear it off" | Saves the cook and opens its cook card (same as the button) |
+
+## Cook card
+
+| Say | Does |
+|---|---|
+| "read it out", "read the story" | Reads the goose's story of the night, or the headline and result if there is no story |
+| "who won", "how did it go" | Says the result, as on Service done |
+| "save the page", "download the card" | Downloads the card as an image, then says whether it worked |
+| "copy the link", "share the link" | Copies the card's link, then says whether it worked |
+| "add a photo" | Explains it needs a tap: browsers only open the photo picker from one |
+
 ## Other pages
 
-**Pick a kitchen** (only reached when the session's kitchen was deleted): say a kitchen's name, or one word only it has, to use it and continue to Conversation. Cook Summary registers no voice commands beyond navigation.
+**Pick a kitchen** (only reached when the session's kitchen was deleted): say a kitchen's name, or one word only it has, to use it and continue to Conversation.
 
 ## Known gaps
 

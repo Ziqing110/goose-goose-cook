@@ -1,44 +1,24 @@
-// Live cook — session step 7 of 7, the run in play (design/
-// claude-design-live-cook-prompt.md, "Kitchen Path Live Cook"). The one
-// play surface: two PlayerFocusCards, big mono numbers, one agent.
+// Live cook: the run in play. The one play surface, propped on the
+// counter and shared by both cooks: two station cards, a scoreboard strip
+// and one agent. Read from a metre and a half with wet hands, so big type,
+// big targets and nothing that depends on hover.
 //
-// This screen is propped on the counter and shared by both players,
-// read from ~1.5m with wet hands: big type, 64px primaries, nothing
-// that depends on hover. Every voice command has a button next to the
-// thing it acts on, and both paths call the same handlers — parity is
-// structural, not a discipline.
+// Every voice command has a button next to the thing it acts on, and both
+// paths call the same handlers (doStart, doDone, ...), so voice and touch
+// cannot drift apart. What was said and done lives in the shell's
+// conversation rail, not on this page.
 //
-// The shell's VoiceBar stays the shared one (it only carries the hint
-// line); the record of what was said and done, and the speaker toggle,
-// live in the shell's conversation rail, floating beside the page, so
-// on a 1280 counter screen the cards never scroll away behind either.
-// There is no typed box: a cook whose voice is not getting through uses
-// the cards' buttons, which do everything a spoken command does.
-//
-// The look (design: "Kitchen Path Live Cook v7 — the hand, played"):
-// the Schedule's Versus opening-hand tickets scaled up into live
-// stations — cream paper, punch holes, a player-coloured rule — on a
-// white page under a light scoreboard strip. Every card state fills the
-// same four zones, so the two tickets line up whatever either is doing.
-// Text still sits on paper; the colour goes around it. Shared chrome
-// (topbar, SessionProgress, VoiceBar, the system buttons) keeps its
-// site-wide look.
-//
-// Sub-components live in this file rather than their own (same pattern
-// as Schedule) since none of them is used elsewhere.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+// The cards, the Versus board and the results screen are in ./liveCook/.
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
-import { mergeRecipesForDisplay, formatDuration } from "../utils/graphLayout.js";
-import { EQUIPMENT_LABELS, unattendedEvents } from "../utils/scheduleLayout.js";
-import { hasDeadline, isOneShot, isAttended, tendingOf, TENDING } from "../utils/tending.js";
+import { mergeRecipesForDisplay } from "../utils/graphLayout.js";
+import { hasDeadline, isAttended } from "../utils/tending.js";
 import {
   reconcileRun, isReady, readyStepIds, blockedStepIds, activeStepFor, stepVariance, unattendedPhaseNow,
   runProgress, isRunComplete, scoreboard, runOutcome, resolveAssignments, replan,
-  arbitrateClaim, claimSuggestions, applyStart, applyDone, applySkip, applyDrop, passiveStepsFor,
-  selfFinishingIds,
-  applyUndo, canUndo, endRun, versusWaiting, appendTranscript, scoreStep, DIFFICULTY_POINTS,
-  isPaused, applyPause, applyResume,
+  arbitrateClaim, claimSuggestions, applyStart, applyDone, applySkip, applyDrop, selfFinishingIds,
+  applyUndo, endRun, appendTranscript, scoreStep, isPaused, applyPause, applyResume,
 } from "../utils/liveCook.js";
 import { parseCommand, HELP_TEXT } from "../utils/voiceCommands.js";
 import { matchConfirmation, hasSubject, normalizeUtterance } from "../utils/navCommands.js";
@@ -48,65 +28,46 @@ import { findSelfIntro } from "../utils/selfIntro.js";
 import { joinSpelledLetters, impliedAssignee, resolveCookRef } from "../utils/cookVoice.js";
 import { opensFollowUp } from "../utils/followUp.js";
 import { rejectionLines } from "../utils/agentRejection.js";
-import { voiceLog } from "../voice/voiceLog.js";
-import { speakerSelection, resolveSpeaker } from "../voice/speakerSelection.js";
-import { registerVoiceDictation } from "../utils/voicePageCommands.js";
+import { registerVoiceCommands, registerVoiceDictation } from "../utils/voicePageCommands.js";
+import { SERVICE_DONE_VOICE } from "../utils/pageVoiceGrammar.js";
 import { buildAgentSnapshot } from "../utils/agentSnapshot.js";
-import { agentTurn, agentAside, agentBanter, collectAnswer } from "../api/agent.js";
 import { shouldCommentate } from "../utils/commentary.js";
 import { recentRoomTalk, shouldBanter } from "../utils/banter.js";
-
-// Often enough that a lull is noticed while it is still a lull, rarely
-// enough to be free -- the decision it drives is pure and local. Module
-// scope because the interval is set up before this component's early
-// return, and a const declared after that would be in its TDZ.
-const ASIDE_CHECK_MS = 5000;
-import { AGENT_NAME, speak, takeInterrupted } from "../voice/agentVoice.js";
 import { explainStep } from "../utils/stepExplain.js";
 import { availableLine, checkupLine, kitchenAnswer, matchKitchenQuestion, newlyOpenLine, whereLine } from "../utils/kitchenReport.js";
-import { audioTap } from "../voice/audioTap.js";
-import { identifySpeaker, learnVoice, SPEAKER_SERVICE } from "../api/speaker.js";
 import { decideSpeaker, hasHandover, shouldLearn } from "../utils/speakerMatch.js";
 import { cookFromTurn } from "../utils/speakerLabels.js";
 import { isNameOnlyTurn } from "../utils/addressing.js";
 import { buildSummary } from "../utils/summaryCard.js";
-import { clock, playerKey, resultPlayers } from "../utils/serviceResults.js";
-import { chefAvatar, CHEF_AVATARS } from "../utils/cooks.js";
-import { CoopResult, PlayerAvatar, Stamp, StepReceipt, VersusResults } from "../components/ServiceResults.jsx";
+import { playerKey, resultLine } from "../utils/serviceResults.js";
+import { clock } from "../utils/time.js";
+import { equipmentName } from "../data/dishes.js";
+import { agentTurn, agentAside, agentBanter, collectAnswer } from "../api/agent.js";
+import { identifySpeaker, learnVoice, SPEAKER_SERVICE } from "../api/speaker.js";
+import { AGENT_NAME, speak, takeInterrupted } from "../voice/agentVoice.js";
+import { audioTap } from "../voice/audioTap.js";
+import { voiceLog } from "../voice/voiceLog.js";
+import { speakerSelection, resolveSpeaker } from "../voice/speakerSelection.js";
+import { PlayerAvatar } from "../components/ServiceResults.jsx";
 import KpIcon from "../components/KpIcon.jsx";
-import { GoosePrint, GooseTracks } from "../components/GooseMarks.jsx";
+import { GoosePrint } from "../components/GooseMarks.jsx";
 import Modal from "../components/Modal.jsx";
 import BabyGoose from "../components/BabyGoose.jsx";
-import summaryVersusArt from "../assets/summary-versus-v2-blue.png";
-import summaryCoopArt from "../assets/summary-coop-v2-blue.png";
+import Mono from "../components/Mono.jsx";
+import PlayerFocusCard, { cardFocus } from "./liveCook/PlayerFocusCard.jsx";
+import TaskPoolBoard from "./liveCook/TaskPoolBoard.jsx";
+import ServiceDone from "./liveCook/ServiceDone.jsx";
+import ScoreFly from "./liveCook/ScoreFly.jsx";
+import { GOOSE } from "./liveCook/parts.jsx";
 import "./LiveCookPage.css";
 
-const EQUIPMENT_GLYPHS = { cutting_board: "cutting-board", stove_burner: "burner", pot: "pot", wok: "wok", oven: "oven" };
-
-// Copy that is the engine's own — reproduced verbatim on the card.
-const EYEBROW = {
-  active: "On it",
-  assigned: "Up next",
-  idle_fill: "Free hands? Take this",
-  waiting: "Waiting",
-  finished: "Done for the night",
-  grabs: "Up for grabs",
-  paused: "Paused",
-};
-
-// The Schedule's vocabulary for tending kinds and moments, reused
-// exactly (design/claude-design-live-cook-v2-unattended.md §1).
-const TENDING_LABELS = {
-  [TENDING.TENDED]: "Check on it",
-  [TENDING.TIMED]: "Timed",
-  [TENDING.SET_AND_FORGET]: "Leave it",
-};
-const tendingLabel = (node) => TENDING_LABELS[tendingOf(node)] || null;
-const momentName = (m, count) => (m.kind === "initial" ? "Start" : m.kind === "ending" ? "Finish" : `Check ${m.index + 1}/${count}`);
-
-// A finish that has sat open this long reads as a count-up, not a
-// countdown (§3, "Late").
-const LATE_AFTER_SEC = 60;
+// How often the page asks whether a quiet kitchen has earned an aside.
+// Cheap: the decision it drives is pure and local.
+const ASIDE_CHECK_MS = 5000;
+// How long the receiving goose holds the handoff after "Pass to".
+const HANDOFF_MS = 1600;
+// How long a refused claim's answer stays on the tile it was tapped on.
+const CLAIM_NOTE_MS = 3500;
 
 // How long after the agent speaks that an answer needs no name, and the
 // word confidence below which a spoken turn is not acted on. From the
@@ -147,16 +108,6 @@ const MANDARIN_KEYTERMS = [
 // kitchen recordings the gap between "Goose." and the command ran 2-3s.
 const NAME_CARRY_MS = 5_000;
 
-/**
- * Hook point for the voice API: fired once per moment as it becomes
- * due (a check opening, the finish window opening). Nothing is wired
- * yet — the transcript line beside it is the design of what will be
- * said (UNATTENDED_TASK_FRONTEND.md §6, "do not wire voice into this
- * pass").
- */
-// eslint-disable-next-line no-unused-vars
-function onMomentDue(stepId, phase, index) {}
-
 // How to say a step verb with the step in it, for when the goose cannot
 // tell which step was meant. Said as a whole command, so the answer is
 // heard like any other turn and nothing has to be held open waiting for
@@ -164,8 +115,6 @@ function onMomentDue(stepId, phase, index) {}
 // requestTurn), and asking for it taught cooks a rule that isn't there.
 const NAMED_FORM = { done: "done with", start: "start", claim: "I'll take", skip: "skip", drop: "put back" };
 const sayWithStep = (intent) => `Say “${NAMED_FORM[intent] || intent}” and the step.`;
-
-const capitalize = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /** One clock for the page — not one per card. */
 function useNow(paused) {
@@ -178,73 +127,6 @@ function useNow(paused) {
   return now;
 }
 
-/**
- * Everything the card and the "cooking on its own" row need to know
- * about one running unattended step, derived per tick from the step's
- * real start — the same numbers unattendedPhaseNow reads, plus the
- * moments laid out from 0 so a time axis can be drawn.
- */
-function momentState(node, record, now) {
-  const moments = unattendedEvents(node, 0);
-  const checkCount = moments.filter((m) => m.kind === "checkpoint").length;
-  const { phase, index } = unattendedPhaseNow(node, record, now);
-  const elapsedSec = stepVariance(node, record, now).actualSec;
-  const estSec = node.estimated_duration_sec || 0;
-  const current =
-    phase === "initial"
-      ? moments.find((m) => m.kind === "initial")
-      : phase === "checkpoint"
-        ? moments.find((m) => m.kind === "checkpoint" && m.index === index)
-        : phase === "ending"
-          ? moments.find((m) => m.kind === "ending")
-          : null;
-  const from = current ? current.endSec : elapsedSec;
-  const next = phase === "ending" ? null : moments.find((m) => m !== current && m.atSec >= from) || null;
-  // The finish window stays open until Done; past LATE_AFTER_SEC it is
-  // a count-up in warning text, never red.
-  const lateSec = current?.kind === "ending" ? elapsedSec - current.atSec : 0;
-  return {
-    moments,
-    checkCount,
-    phase,
-    current,
-    next,
-    elapsedSec,
-    estSec,
-    inMoment: Boolean(current),
-    countdownSec: current ? Math.max(0, current.endSec - elapsedSec) : null,
-    nextInSec: next ? next.atSec - elapsedSec : null,
-    late: lateSec > LATE_AFTER_SEC,
-    lateSec,
-    // Leave it: nothing to come back for, just a moment it becomes usable.
-    readyInSec: Math.max(0, estSec - elapsedSec),
-    handsOnSec: moments.reduce((sum, m) => sum + (m.endSec - m.atSec), 0),
-  };
-}
-
-function Mono({ children, className = "" }) {
-  return <span className={`mono ${className}`}>{children}</span>;
-}
-
-// The goose posture sheet, one per card state (design §05), from the
-// approved baby-goose set (assets/baby-goose-final/animated). The
-// drawn goose is never recoloured; the player's colour stays on the
-// avatar, rail and chip.
-const GOOSE = {
-  active: "g1-on-it",
-  assigned: "g2-up-next",
-  waiting: "g3-waiting",
-  idle_fill: "g4-free-hands",
-  finished: "g5-done-for-the-night",
-  grabs: "g6-eyeing-the-offer",
-  due: "g7-due-honk",
-  victory: "g9-victory",
-  defeat: "g14-defeat-good-game",
-  onTheMove: "g10-walking",
-  handoff: "g11-handoff",
-  behind: "g12-behind-plan",
-};
-
 // The strip's one sentence about the score: "Mia leads by 20", or
 // "Level — 45 each". Nothing else on the page duplicates it.
 function leadLine(board, cooks) {
@@ -255,96 +137,6 @@ function leadLine(board, cooks) {
   if (a === b) return { text: `Level — ${a} each`, lead: null };
   const lead = a > b ? 0 : 1;
   return { text: `${cooks[lead]?.name || "Someone"} leads by ${Math.abs(a - b)}`, lead: playerKey(lead) };
-}
-
-// The goose reacting at the card's bottom-right corner, under the text
-// (z-index below the content, above the panel fill). The card's action
-// block leaves room for it. `motion` is the wrapper's loop — bob,
-// honk, or none — layered on the sprite's own frame cycle.
-export function CardGoose({ pose, size = 128, paused, motion = "bob" }) {
-  return (
-    <span className={`lc-goose is-${motion}`} aria-hidden="true">
-      <BabyGoose pose={pose} size={size} paused={paused} decorative />
-    </span>
-  );
-}
-
-// The score moment (design §07): "+20" rises out of the card toward the
-// player's score — the 44px counter in the card's head on desktop, the
-// strip's pill on mobile; whichever is on screen — 600 ms on the
-// spring, then the counter rolls. Positions are measured once on mount
-// from the elements the page hands over — the flight is a transform,
-// so nothing reflows.
-function ScoreFly({ fly, fromEl, toEls, onDone }) {
-  const ref = useRef(null);
-  const doneRef = useRef(onDone);
-  doneRef.current = onDone;
-  const toEl = toEls.find((el) => el && el.getClientRects().length > 0) || null;
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el || !fromEl || !toEl) return undefined;
-    // Leaves from the card's title, lands on the middle of the counter.
-    const from = fromEl.getBoundingClientRect();
-    const to = toEl.getBoundingClientRect();
-    const fx = from.left + 28;
-    const fy = from.top + 72;
-    el.style.setProperty("--fx", `${fx}px`);
-    el.style.setProperty("--fy", `${fy}px`);
-    el.style.setProperty("--dx", `${to.left + to.width / 2 - fx}px`);
-    el.style.setProperty("--dy", `${to.top + to.height / 2 - fy}px`);
-    // Outlives the flight so the counter's pop (600 ms in) can finish.
-    const t = setTimeout(() => doneRef.current(), 1000);
-    return () => clearTimeout(t);
-  }, [fly, fromEl, toEl]);
-  if (!fromEl || !toEl) return null;
-  return (
-    <span ref={ref} className={`mono lc-fly is-${fly.player}`} aria-hidden="true">
-      +{fly.pts}
-    </span>
-  );
-}
-
-function EquipmentChip({ type }) {
-  const glyph = EQUIPMENT_GLYPHS[type];
-  return (
-    <span className="lc-chip">
-      {glyph && <KpIcon glyph={glyph} size={14} />}
-      {capitalize(EQUIPMENT_LABELS[type] || type)}
-    </span>
-  );
-}
-
-function TendingChip({ node, className = "" }) {
-  const label = tendingLabel(node);
-  if (!label) return null;
-  return <span className={`lc-tending-chip ${className}`}>{label}</span>;
-}
-
-// The Schedule's rail-and-moments drawing, scaled to a row and made
-// live: a 6px rail 0 → est with the elapsed part filled in the player's
-// color, a block per moment standing on it (past ones drop to the
-// tint), and a 2px now marker.
-function MomentAxis({ state, player, compact = false }) {
-  const { moments, elapsedSec, estSec } = state;
-  const pct = (sec) => (estSec > 0 ? Math.min(100, Math.max(0, (sec / estSec) * 100)) : 0);
-  return (
-    <div className={`lc-axis is-${player} ${compact ? "is-compact" : ""}`} aria-hidden="true">
-      {!compact && <Mono className="lc-axis-end">0:00</Mono>}
-      <div className="lc-axis-track">
-        <span className="lc-axis-rail" />
-        <span className="lc-axis-fill" style={{ width: `${pct(elapsedSec)}%` }} />
-        {moments.map((m) => (
-          <span
-            key={`${m.kind}-${m.index}`}
-            className={`lc-axis-moment ${m.endSec <= elapsedSec ? "is-past" : ""}`}
-            style={{ left: `${pct(m.atSec)}%`, width: `max(10px, ${pct(m.endSec - m.atSec)}%)` }}
-          />
-        ))}
-        <span className="lc-axis-now" style={{ left: `${pct(elapsedSec)}%` }} />
-      </div>
-      {!compact && <Mono className="lc-axis-end">{clock(estSec)}</Mono>}
-    </div>
-  );
 }
 
 export default function LiveCookPage() {
@@ -427,7 +219,7 @@ export default function LiveCookPage() {
   useEffect(() => {
     if (!run) return undefined;
     const hint = finished
-      ? { line: "Service done — see the cook card when you're ready.", sub: null }
+      ? { line: "Service done — say “who won”, or “take the cook card”.", sub: null }
       : paused
         ? { line: "Paused — say “resume” to pick it back up.", sub: "Or say “back to the schedule”." }
         : {
@@ -455,8 +247,10 @@ export default function LiveCookPage() {
   );
   const keytermsKey = keyterms.join("|");
   const hasRun = Boolean(run);
+  // While the cook runs, the page owns every turn. Once it is over the
+  // results screen takes ordinary page commands instead (below).
   useEffect(() => {
-    if (!hasRun) return undefined;
+    if (!hasRun || finished) return undefined;
     return registerVoiceDictation({
       route: "/session/live-cook",
       takeover: true,
@@ -465,7 +259,18 @@ export default function LiveCookPage() {
     });
     // keyterms is keyed by content so a re-render doesn't re-register.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasRun, keytermsKey]);
+  }, [hasRun, finished, keytermsKey]);
+
+  // The results screen's commands. The work is declared after the early
+  // return below, so it is reached through a ref, like voiceHandlerRef.
+  const serviceDoneRef = useRef(null);
+  useEffect(() => {
+    if (!finished) return undefined;
+    return registerVoiceCommands([
+      { phrases: SERVICE_DONE_VOICE.takeCard, run: () => serviceDoneRef.current?.takeCard() },
+      { phrases: SERVICE_DONE_VOICE.results, run: () => serviceDoneRef.current?.results() },
+    ]);
+  }, [finished]);
 
   // Rice closes itself. Nobody finishes a set-and-forget step — the end
   // of it belongs to whatever plates it — so once its time is up it
@@ -531,7 +336,6 @@ export default function LiveCookPage() {
       const who = cooks.find((c) => c.id === run.steps[stepId].cookId)?.name || "Someone";
       const count = node.unattended?.checkpoints?.count || 0;
       const text = phase === "checkpoint" ? `${who} — check on “${node.label}”. ${Number(index) + 1} of ${count}.` : `${who} — finish “${node.label}” now.`;
-      onMomentDue(stepId, phase, Number(index));
       next = appendTranscript(next, { at: new Date().toISOString(), speaker: "agent", text });
       cues.push(text);
       fired = true;
@@ -623,7 +427,11 @@ export default function LiveCookPage() {
   // nobody may notice until it matters. Skipped when the step is
   // already this cook's dealt ticket: the plan and the guess agree.
   const WHO_CHECKED = new Set(["claim", "start"]);
-  const guessMatchesPlan = (stepId, cookId) => assignments?.byCook?.[cookId]?.stepId === stepId;
+  // Who the plan deals each step to, on whichever run is being built on:
+  // a voice turn lands after an await, when the render's run is stale.
+  const assignmentsFor = (base) =>
+    base === run || isVersus ? assignments : resolveAssignments({ nodes, run: base, cooks, now: Date.now() });
+  const guessMatchesPlan = (stepId, cookId, base = run) => assignmentsFor(base)?.byCook?.[cookId]?.stepId === stepId;
   const askWho = (base, cookId, actions) => {
     setPendingConfirm({ who: true, cookId, actions });
     askAloud(base, `Are you ${name(cookId)}? Say yes or no.`);
@@ -641,7 +449,7 @@ export default function LiveCookPage() {
     if (activeStepFor(cookId, base, nodes)) return;
     const at = new Date().toISOString();
     let next = applyStart({ run: base, stepId, cookId, at, source });
-    next = say(next, `Timer running on ${byId[stepId].label}. Est ${formatDuration(byId[stepId].estimated_duration_sec)}.`);
+    next = say(next, `Timer running on ${byId[stepId].label}. Est ${clock(byId[stepId].estimated_duration_sec)}.`);
     commit(next);
   };
 
@@ -656,7 +464,7 @@ export default function LiveCookPage() {
     // that cook rather than whoever said it.
     const unstarted = base.steps[stepId]?.status === "pending";
     if (unstarted) {
-      const owner = Object.entries(assignments?.byCook || {}).find(([, a]) => a?.stepId === stepId && a.reason === "assigned")?.[0];
+      const owner = Object.entries(assignmentsFor(base)?.byCook || {}).find(([, a]) => a?.stepId === stepId && a.reason === "assigned")?.[0];
       if (!owner) return;
       base = applyStart({ run: base, stepId, cookId: owner, at, source });
     }
@@ -741,7 +549,7 @@ export default function LiveCookPage() {
         already_done: "That one's already finished.",
         noop: "You've already got that one.",
         unknown_step: "I don't know that step.",
-        no_equipment: `No ${EQUIPMENT_LABELS[verdict.equipmentType] || verdict.equipmentType} free — something else is on it.`,
+        no_equipment: `No ${equipmentName(verdict.equipmentType).toLowerCase()} free — something else is on it.`,
       }[verdict.code];
       setClaimNote({ stepId, cookId, text, key: at });
       commit(say(base, text));
@@ -760,7 +568,7 @@ export default function LiveCookPage() {
     const verdict = arbitrateClaim({ run, nodes, cooks, stepId, cookId, at: new Date(clockNow).toISOString(), kitchenProfile });
     if (verdict.ok) return null;
     if (verdict.code === "busy") return `${name(cookId)} is still on something`;
-    if (verdict.code === "no_equipment") return `No ${EQUIPMENT_LABELS[verdict.equipmentType] || verdict.equipmentType} free`;
+    if (verdict.code === "no_equipment") return `No ${equipmentName(verdict.equipmentType).toLowerCase()} free`;
     return null;
   };
 
@@ -838,6 +646,15 @@ export default function LiveCookPage() {
       setSaving(false);
       setSaveError(err.message || "Couldn't save the page.");
     }
+  };
+
+  serviceDoneRef.current = {
+    takeCard: () => {
+      if (saving) return "Saving it now.";
+      saveAndSeeCard();
+      return "Saving the cook. Here's your card.";
+    },
+    results: () => resultLine(runOutcome(run, nodes, cooks), { versus: isVersus }),
   };
 
   // --- voice: parse, then call the exact same handlers ---
@@ -987,7 +804,7 @@ export default function LiveCookPage() {
       // is never asked about, even when the model left cook_name out
       // because the toggle already said Toni.
       const saidWho = resolveCookRef(text, cooks)?.id === actor;
-      if (guessed && WHO_CHECKED.has(call.name) && !named && !saidWho && !impliedCookId && !guessMatchesPlan(stepId, actor)) {
+      if (guessed && WHO_CHECKED.has(call.name) && !named && !saidWho && !impliedCookId && !guessMatchesPlan(stepId, actor, cur)) {
         unsure.push({ intent: call.name, stepId });
         return;
       }
@@ -1025,7 +842,7 @@ export default function LiveCookPage() {
           // what the plan actually says.
           const line = explainStep(byId[stepId], {
             skill: state.session.conversation?.answers?.skill,
-            equipmentLabel: (type) => EQUIPMENT_LABELS[type] || type,
+            equipmentLabel: (type) => equipmentName(type).toLowerCase(),
           });
           if (!line) return undefined;
           spoken.push(line);
@@ -1568,6 +1385,10 @@ export default function LiveCookPage() {
     // introduced themselves -- it is state, and this runs in the same
     // turn -- so who they are is passed in rather than read back.
     const cookId = saidBy ?? speaker;
+    // The newest run, not the render's: this also runs as the fallback
+    // after an agent request failed, seconds after that render, and
+    // building on the stale run would drop everything logged since.
+    const base = latestRunRef.current;
 
     // A question is pending: this utterance is the answer, not a new
     // command. Anything that isn't clearly yes or no abandons the
@@ -1576,7 +1397,7 @@ export default function LiveCookPage() {
     if (pendingConfirm) {
       const answer = matchConfirmation(text);
       if (answer === "yes" || answer === "no") {
-        const heard = appendTranscript(run, { at: new Date().toISOString(), speaker: pendingConfirm.cookId, text });
+        const heard = appendTranscript(base, { at: new Date().toISOString(), speaker: pendingConfirm.cookId, text });
         return resolvePendingConfirm(answer, heard);
       }
       setPendingConfirm(null);
@@ -1584,21 +1405,21 @@ export default function LiveCookPage() {
       // other utterance.
     }
 
-    const activeStepId = activeStepFor(cookId, run, nodes);
+    const activeStepId = activeStepFor(cookId, base, nodes);
     const ownQueue = isVersus
-      ? claimSuggestions({ nodes, run, cookId })
-      : [assignments?.byCook[cookId]?.stepId].filter(Boolean);
-    const result = parseCommand(text, { byId, activeStepId, claimable: ready, ownQueue, agentName: AGENT_NAME, cooks });
+      ? claimSuggestions({ nodes, run: base, cookId })
+      : [assignmentsFor(base)?.byCook[cookId]?.stepId].filter(Boolean);
+    const result = parseCommand(text, { byId, activeStepId, claimable: readyStepIds(nodes, base), ownQueue, agentName: AGENT_NAME, cooks });
     // "Zoe will take the garlic", with no model in the loop. Same rule
     // as the agent path: a name only ever redirects taking work on.
     const actor = result.cookId ?? cookId;
 
-    const heard = appendTranscript(run, { at: new Date().toISOString(), speaker: cookId, text });
+    const heard = appendTranscript(base, { at: new Date().toISOString(), speaker: cookId, text });
 
     // While paused only "resume" and heading back to the plan do
     // anything -- nothing is running, so leaving is safe; everything
     // else is logged and answered, never acted on.
-    if (paused) {
+    if (isPaused(base)) {
       if (result.intent === "resume") return togglePause(heard);
       if (result.intent === "schedule") {
         commit(heard);
@@ -1623,7 +1444,7 @@ export default function LiveCookPage() {
 
     // Same check as the model path: nobody named, nobody introduced
     // themselves, and the toggle is all this has to go on.
-    if (WHO_CHECKED.has(result.intent) && result.stepId && cooks.length > 1 && !saidBy && !result.cookId && !guessMatchesPlan(result.stepId, actor)) {
+    if (WHO_CHECKED.has(result.intent) && result.stepId && cooks.length > 1 && !saidBy && !result.cookId && !guessMatchesPlan(result.stepId, actor, base)) {
       return askWho(heard, actor, [{ intent: result.intent, stepId: result.stepId }]);
     }
 
@@ -1652,7 +1473,7 @@ export default function LiveCookPage() {
       case "score":
         return commit(say(heard, scoreLine()));
       case "status":
-        return commit(say(heard, statusLine(run)));
+        return commit(say(heard, statusLine(base)));
       case "help":
         return commit(say(heard, HELP_TEXT));
       default:
@@ -1969,658 +1790,5 @@ export default function LiveCookPage() {
       )}
 
     </section>
-  );
-}
-
-// ---------------------------------------------------------------------
-
-// What a cook's card is about right now, shared by the card and the page
-// (which needs to know whether ANY card has a pot going, so both cards
-// reserve the "on its own" slot together). The engine says who is
-// occupied by what. If a check comes due while the cook is mid-chop,
-// both steps occupy them and the engine's pick is by record order — the
-// card keeps the hands-on step so it does not flip under a working
-// cook; the due check is the row's alarm. Only with no hands-on step
-// does an unattended moment lead.
-function cardFocus(cookId, run, byId, now) {
-  const handsOnId = Object.entries(run.steps).find(([id, r]) => r.status === "active" && r.cookId === cookId && isAttended(byId[id]))?.[0] || null;
-  const activeId = handsOnId || activeStepFor(cookId, run, byId, now);
-  const node = activeId ? byId[activeId] : null;
-  // The card is "On it" on an unattended step only while it is in a
-  // moment — the engine never makes a merely-waiting pot anyone's focus.
-  const focusMoment = node && !isAttended(node) ? momentState(node, run.steps[activeId], now) : null;
-  // Every unattended step this cook has going, soonest moment first.
-  // A pot stays listed even while its check is the card's focus, so the
-  // row and the card agree — except during Start: the cook is standing
-  // at that pot getting it going, and there is nothing to come back to.
-  const cooking = passiveStepsFor(cookId, run, byId)
-    .filter((id) => !(id === activeId && focusMoment?.phase === "initial"))
-    .map((id) => ({ id, node: byId[id], state: momentState(byId[id], run.steps[id], now) }))
-    .sort((a, b) => (a.state.nextInSec ?? -1) - (b.state.nextInSec ?? -1));
-  return { activeId, node, focusMoment, cooking };
-}
-
-// What a step is worth, as a dashed tag pinned to the ticket's corner.
-function PointsTag({ pts, player }) {
-  return <span className={`lc-pts-tag ${player ? `is-${player}` : ""}`}>+{pts}</span>;
-}
-
-// Coop's head stamp, one per state.
-const STAMP = {
-  active: "On it",
-  assigned: "Up next",
-  idle_fill: "Free hands",
-  waiting: "Waiting",
-  finished: "Done",
-};
-
-// The station ticket (design: "Live cook v7"): the Schedule's opening-
-// hand paper scaled up. Four zones in a fixed order on every state —
-// head, the order, the action block, the pots cooking on their own —
-// and both cards share the row tracks, so like sits level with like
-// whatever state either card is in. A state may leave a zone quiet; it
-// never removes one.
-function PlayerFocusCard({ cardRef, scoreRef, cook, index, cooks, run, nodes, byId, now, isVersus, paused, assignment, points, doneCount, dishOf, ownSlot, landing, handoff, claimNote, claimBlock, onStart, onDone, onSkip, onDrop, onClaim, onPass, onUndo }) {
-  const key = playerKey(index);
-  const other = cooks.find((c) => c.id !== cook.id) || null;
-  const { activeId, node, focusMoment, cooking } = cardFocus(cook.id, run, byId, now);
-  const variance = node ? stepVariance(node, run.steps[activeId], now) : null;
-  const inFinish = focusMoment?.phase === "ending";
-
-  // Versus has no plan: with nothing in hand the card offers the top
-  // suggestion and points at the board for the rest. "Not now" moves
-  // to the next one; once every suggestion has been waved off the
-  // first comes round again — the board is still there for the rest.
-  const [waved, setWaved] = useState(() => new Set());
-  const suggestions = isVersus && !activeId ? claimSuggestions({ nodes, run, cookId: cook.id, limit: 6 }) : [];
-  const suggestion = suggestions.find((id) => !waved.has(id)) ?? suggestions[0] ?? null;
-  const notNow = () => {
-    if (!suggestion) return;
-    const next = new Set(waved).add(suggestion);
-    setWaved(suggestions.every((id) => next.has(id)) ? new Set([suggestion]) : next);
-  };
-  const otherBusy = other ? Boolean(activeStepFor(other.id, run, byId, now)) : true;
-  // Versus: nothing to grab is waiting, not finished, while anything is
-  // still open -- "Done for the night" mid-run read as being sent home.
-  const versusWait = isVersus && !activeId && !suggestion ? versusWaiting(run, nodes, now) : null;
-  const reason = activeId ? "active" : isVersus ? (suggestion ? "grabs" : versusWait ? "waiting" : "finished") : assignment?.reason || "waiting";
-  const waitInfo = isVersus ? versusWait : assignment;
-  const offeredId = reason === "grabs" ? suggestion : reason === "assigned" || reason === "idle_fill" ? assignment?.stepId : null;
-  const offered = offeredId ? byId[offeredId] : null;
-  // Versus: the offer greys out for the same reasons a board tile would.
-  const offerBlock = reason === "grabs" && offeredId && claimBlock ? claimBlock(offeredId, cook.id) : null;
-  const undoable = !paused && canUndo({ run, nodes, cookId: cook.id, at: new Date(now).toISOString() });
-
-  const waitingOn = waitInfo?.waitingOnStepId ? byId[waitInfo.waitingOnStepId] : null;
-  const waitingCookIndex = waitInfo?.waitingOnCookId ? cooks.findIndex((c) => c.id === waitInfo.waitingOnCookId) : -1;
-
-  // Due: a check or the finish is open on something this cook has going
-  // — the card's own focus or a pot in the row below. The card shakes
-  // once (the class change starts it), the goose honks until it's handled.
-  const isDue = (m, n) => Boolean(m?.current) && hasDeadline(n) && (m.phase === "checkpoint" || m.phase === "ending");
-  const due = !paused && ((focusMoment && isDue(focusMoment, node)) || cooking.some((c) => isDue(c.state, c.node)));
-
-  const phaseLabel = focusMoment?.current ? momentName(focusMoment.current, focusMoment.checkCount) : null;
-  const eyebrowText = paused ? EYEBROW.paused : EYEBROW[reason];
-  const stampText = paused ? "Paused" : due ? "Due" : STAMP[reason];
-
-  const silhouette = due ? "due" : reason;
-  // The head band fills with the player's tint while their hands are on
-  // something — "this is my station" at a glance.
-  const active = reason === "active" || due;
-  const goosePose = due ? GOOSE.due : handoff && reason === "active" ? GOOSE.handoff : GOOSE[reason] || GOOSE.waiting;
-  const gooseMotion = due ? "honk" : reason === "waiting" ? "none" : "bob";
-  // The rail fills to est, then turns amber (the "is-over" tint).
-  const heatPct = variance ? Math.min(100, variance.estSec > 0 ? (variance.actualSec / variance.estSec) * 100 : 100) : 0;
-  const bodyNode = node || offered;
-  // The ticket number: this cook's how-many-th ticket tonight. It used to
-  // be the step's index in the recipe data over the step count, which
-  // read as progress — and put "#13 / 20" on the first card of the night.
-  const ticketNo = bodyNode ? `Ticket ${String(doneCount + 1).padStart(2, "0")}` : `${doneCount} done`;
-
-  const secondary = (
-    <>
-      {focusMoment && !inFinish && (
-        // Mid-moment the banner holds the slot; this ends the whole step,
-        // not just the moment, so it says so.
-        <button type="button" className="btn btn-ghost" disabled={paused} onClick={() => onDone(activeId)}>
-          Done early
-        </button>
-      )}
-      <button type="button" className="btn btn-ghost" disabled={paused} onClick={() => onSkip(activeId)}>
-        Skip
-      </button>
-      {isVersus && (
-        <button type="button" className="btn btn-ghost" disabled={paused} onClick={() => onDrop(activeId)}>
-          Put it back
-        </button>
-      )}
-      <button type="button" className="btn btn-ghost lc-btn-undo" disabled={!undoable} onClick={onUndo}>
-        Undo
-      </button>
-    </>
-  );
-
-  return (
-    <article
-      ref={cardRef}
-      className={`lc-card is-${key} is-state-${silhouette} ${active ? "is-active" : ""} ${reason === "grabs" ? "is-offer" : ""} ${paused ? "is-paused" : ""}`}
-      aria-label={`${cook.name} — ${eyebrowText}`}
-    >
-      {/* A — the ticket head: who, which ticket, and (Versus) the score
-          roundel where "+20" lands, or (Co-op) the state as a stamp. */}
-      <header className="lc-card-head">
-        <PlayerAvatar cook={cook} index={index} size={44} />
-        <span className="lc-card-id">
-          <span className="lc-card-name">{cook.name}</span>
-          <Mono className="lc-card-ticket">{ticketNo}</Mono>
-        </span>
-        {isVersus ? (
-          <span className="lc-card-score" ref={scoreRef}>
-            <span className={`lc-card-points ${landing ? "is-landing" : "lc-roll"}`} key={points}>
-              {points}
-            </span>
-            <span className="lc-card-pts">pts</span>
-          </span>
-        ) : (
-          <Stamp key={stampText} tone={due ? "due" : key}>
-            {stampText}
-          </Stamp>
-        )}
-      </header>
-
-      {/* B — the order: what it is, what it needs, what to do with your
-          hands, and the clock pinned to the bottom of the zone. */}
-      <div className="lc-card-body">
-        {bodyNode && (
-          <>
-            <div className="lc-order-brow">
-              {due && (
-                <span className="lc-chip is-due">
-                  <KpIcon glyph="timer" size={14} />
-                  {phaseLabel ? `${phaseLabel} — now` : "Due now"}
-                </span>
-              )}
-              {!due && phaseLabel && <span className={`lc-chip is-phase is-${key}`}>{phaseLabel}</span>}
-              {dishOf(bodyNode) && <span className="lc-order-dish">{dishOf(bodyNode)}</span>}
-              {(bodyNode.required_equipment || []).map((e) => (
-                <EquipmentChip key={e} type={e} />
-              ))}
-              <TendingChip node={bodyNode} />
-            </div>
-            {isVersus && <PointsTag pts={DIFFICULTY_POINTS[bodyNode.difficulty]} player={key} />}
-            <h2 className="lc-step-title">{bodyNode.label}</h2>
-            {/* The description is the instruction — the one thing on the
-                card that says what to do with your hands. */}
-            {bodyNode.description && <p className="lc-step-desc">{bodyNode.description}</p>}
-            {node && focusMoment?.current?.kind === "initial" && isOneShot(node) && (
-              <p className="lc-meta">Then it runs on its own — nothing to come back for.</p>
-            )}
-            {claimNote?.stepId === offeredId && offeredId && (
-              <p key={claimNote.key} className="lc-claim-note" role="status">
-                {claimNote.text}
-              </p>
-            )}
-            <span className="lc-order-spacer" />
-            {node ? (
-              // Elapsed against est. Past est the rail turns amber and the
-              // right end says by how much.
-              <div className={`lc-step-rail is-${key} ${variance.over ? "is-over" : ""}`}>
-                <Mono className="lc-timer-value">{clock(variance.actualSec)}</Mono>
-                <span className="lc-step-rail-track" aria-hidden="true">
-                  <span className="lc-step-rail-fill" style={{ width: `${heatPct.toFixed(1)}%` }} />
-                </span>
-                <Mono className="lc-timer-est">{variance.over ? `${clock(variance.deltaSec)} over` : clock(variance.estSec)}</Mono>
-              </div>
-            ) : reason === "grabs" ? (
-              <div className="lc-step-rail is-offer">
-                <Mono className="lc-timer-value">{clock(offered.estimated_duration_sec)}</Mono>
-                <span className="lc-meta">if you take it</span>
-                <Stamp tone={key} className="lc-offer-stamp">
-                  Up for grabs
-                </Stamp>
-              </div>
-            ) : (
-              <div className={`lc-step-rail is-${key}`}>
-                <Mono className="lc-timer-value is-idle">0:00</Mono>
-                <span className="lc-step-rail-track" aria-hidden="true" />
-                <Mono className="lc-timer-est">{clock(offered.estimated_duration_sec)}</Mono>
-              </div>
-            )}
-          </>
-        )}
-
-        {reason === "waiting" && (
-          // Hands free: the countdown takes the title's place, big — it
-          // is the one thing a waiting cook wants to know.
-          <>
-            <div className="lc-order-brow">
-              <span className="lc-order-dish">Hands free</span>
-            </div>
-            {waitInfo?.etaSec != null ? (
-              <div className="lc-wait">
-                <span className="lc-wait-num">{clock(waitInfo.etaSec)}</span>
-                <span className="lc-wait-unit">left</span>
-              </div>
-            ) : (
-              <h2 className="lc-step-title is-quiet">Nothing to do yet</h2>
-            )}
-            <p className="lc-step-desc lc-waiting-copy">
-              {waitingOn ? (
-                <>
-                  Waiting on &ldquo;{waitingOn.label}&rdquo;
-                  {waitingCookIndex === index ? (
-                    // Your own pot is what everything waits on.
-                    <>{" "}&mdash; yours, cooking on its own</>
-                  ) : waitingCookIndex >= 0 && (
-                    <>
-                      {" "}&mdash; {cooks[waitingCookIndex].name} has it
-                      <PlayerAvatar cook={cooks[waitingCookIndex]} index={waitingCookIndex} size={20} />
-                    </>
-                  )}
-                  .
-                </>
-              ) : (
-                isVersus ? "Nothing open to grab yet." : "Waiting on the other player."
-              )}
-            </p>
-            <GooseTracks variant="up" />
-          </>
-        )}
-
-        {reason === "finished" && (
-          <div className="lc-rest">
-            <BabyGoose pose={GOOSE.finished} size={96} paused={paused} decorative />
-            <span className="lc-rest-copy">
-              <h2 className="lc-step-title">Done for the night</h2>
-              <span className="lc-rest-tally">
-                <Mono>{doneCount}</Mono> done
-                {isVersus && (
-                  <>
-                    {" "}· <Mono className="lc-rest-pts">{points}</Mono> pts
-                  </>
-                )}
-              </span>
-              <span className="lc-meta">Nothing left for you.</span>
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* C — the action block: two fixed slots, a 56px primary and a
-          row of quiet ghosts, on every state whether or not it fills
-          them. The goose lives in the reserved right margin. */}
-      <div className="lc-card-actions">
-        {reason !== "finished" && <CardGoose pose={goosePose} size={100} paused={paused} motion={paused ? "none" : gooseMotion} />}
-        <div className="lc-primary-slot">
-          {node &&
-            (focusMoment && !inFinish ? (
-              // Start / Check: the moment's instruction and countdown take
-              // the primary's slot — "do the thing, then walk away".
-              <MomentInstruction state={focusMoment} />
-            ) : (
-              <button
-                type="button"
-                // Finish: the primary IS the Done, and it springs once
-                // when the window opens.
-                className={`btn lc-btn-xl lc-btn-done ${inFinish ? "lc-attend" : ""}`}
-                key={inFinish ? "finish" : "done"}
-                disabled={paused}
-                onClick={() => onDone(activeId)}
-              >
-                {inFinish ? "Checked it" : "Done"}
-              </button>
-            ))}
-          {offered && (
-            <button
-              type="button"
-              // The offer pulses once every 4 s — the only loop on this card.
-              className={`btn lc-btn-xl lc-btn-go ${reason === "grabs" && !paused && !offerBlock ? "lc-offer-pulse" : ""}`}
-              disabled={paused || Boolean(offerBlock)}
-              title={offerBlock || undefined}
-              onClick={() => (reason === "grabs" ? onClaim(offeredId) : onStart(offeredId))}
-            >
-              {reason === "assigned" ? "Start" : reason === "idle_fill" ? "Take this" : "Take it"}
-            </button>
-          )}
-        </div>
-        {/* Always rendered, so the primary above it sits at the same
-            height on both cards. A player's last Done/Skip stays
-            undoable for 60s even after their card has moved on. */}
-        <div className="lc-card-secondary">
-          {node ? (
-            secondary
-          ) : (
-            <>
-              {reason === "grabs" && (
-                <>
-                  <button type="button" className="btn btn-ghost" disabled={paused || suggestions.length < 2} onClick={notNow}>
-                    Not now
-                  </button>
-                  {other && (
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      disabled={paused || otherBusy}
-                      title={otherBusy ? `${other.name} is still on something` : undefined}
-                      onClick={() => onPass(offeredId, other.id)}
-                    >
-                      Pass to {other.name}
-                    </button>
-                  )}
-                </>
-              )}
-              {undoable && (
-                <button type="button" className="btn btn-ghost lc-btn-undo" onClick={onUndo}>
-                  Undo
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* D — every pot this cook has going, its next moment counting
-          down. When either card has one, both reserve the slot, so the
-          cards stay one height; the empty one says so quietly. */}
-      {cooking.length > 0 ? (
-        <div className="lc-cooking">
-          {cooking.map(({ id, node: cNode, state }) => (
-            <CookingRow
-              key={id}
-              node={cNode}
-              state={state}
-              player={key}
-              paused={paused}
-              // Done never appears twice in one card: the row's Done is
-              // suppressed only when this same step is the card's
-              // primary (its Finish-phase card).
-              showDone={!isOneShot(cNode) && state.phase === "ending" && !(activeId === id && inFinish)}
-              onDone={() => onDone(id)}
-            />
-          ))}
-        </div>
-      ) : (
-        ownSlot && (
-          <div className="lc-cooking-empty">
-            <GoosePrint depth="mid" size={12} />
-            <span className="lc-own-eyebrow">On its own</span>
-            <span>Nothing on the burner</span>
-          </div>
-        )
-      )}
-    </article>
-  );
-}
-
-// The moment banner, in the action block's primary slot: what to do
-// and this moment's countdown. The whole step's clock is the rail.
-function MomentInstruction({ state }) {
-  const { current, countdownSec } = state;
-  const verb = current.kind === "initial" ? "Get it going" : current.kind === "checkpoint" ? "Check on it" : "Pull it off";
-  return (
-    <div className="lc-moment" role="timer">
-      <KpIcon glyph="timer" size={22} />
-      {/* The countdown beside it is the time; repeating the moment's
-          length here made three clocks on one card. */}
-      <span className="lc-moment-instruction">{verb}{current.kind === "ending" ? " — now." : "."}</span>
-      {current.kind !== "ending" && <Mono className="lc-moment-countdown">{clock(countdownSec)}</Mono>}
-    </div>
-  );
-}
-
-// One "on its own" row: the pot, its live axis, and the next moment.
-// Quiet while running; the system's "needs you" treatment (warning
-// tint, one pop) when a check or the finish is due.
-function CookingRow({ node, state, player, paused, showDone, onDone }) {
-  const { phase, current, next, checkCount, countdownSec, late, lateSec, readyInSec } = state;
-  const due = hasDeadline(node) && (phase === "checkpoint" || phase === "ending");
-  let label = "";
-  let value = "";
-  if (due) {
-    label = `${momentName(current, checkCount)} — now`;
-    value = late ? `+${clock(lateSec)}` : clock(countdownSec);
-  } else if (isOneShot(node)) {
-    label = readyInSec > 0 ? "Ready in" : "";
-    value = readyInSec > 0 ? clock(readyInSec) : "Ready";
-  } else if (next) {
-    label = `${momentName(next, checkCount)} in`;
-    value = clock(state.nextInSec);
-  } else if (phase === "initial" && current) {
-    label = "Starting";
-    value = clock(countdownSec);
-  }
-  return (
-    <div className={`lc-cooking-row is-${player} ${due ? "is-due" : ""}`} key={due ? `${phase}-${current?.index}` : "running"}>
-      <KpIcon glyph="pot" size={14} />
-      <span className="lc-own-eyebrow">On its own</span>
-      <span className="lc-cooking-row-label">{node.label}</span>
-      <MomentAxis state={state} player={player} compact />
-      <span className="lc-cooking-row-next">
-        {label && <span className="lc-cooking-row-next-label">{label}</span>}
-        <Mono className="lc-cooking-row-next-value">{value}</Mono>
-      </span>
-      {showDone && (
-        <button type="button" className="btn lc-cooking-row-done" disabled={paused} onClick={onDone}>
-          Done
-        </button>
-      )}
-    </div>
-  );
-}
-
-// A claim reads as "Leo took it" for this long, then the tile settles
-// into its running state.
-const CLAIM_FLASH_MS = 4000;
-// How long the receiving goose holds the handoff after "Pass to".
-const HANDOFF_MS = 1600;
-// How long a refused claim's answer stays on the tile it was tapped on.
-const CLAIM_NOTE_MS = 3500;
-
-// The board (design v7): small paper tickets on a bg-secondary panel —
-// the station ticket's language at tile size. Every tile has the same
-// rows (title + points, facts, a tool row that is always reserved, the
-// claim halves pinned to the bottom), so a row of tiles shares its
-// edges whatever each one holds. A claim stamps the tile with who took
-// it, then it settles to the holder and their next moment.
-function TaskPoolBoard({ ready, blocked, run, byId, cooks, now, paused, dishOf, claimBlock, claimNote, onClaim }) {
-  const taken = Object.entries(run.steps).filter(([, r]) => r.status === "active");
-  return (
-    <section className="lc-pool" aria-label="Up for grabs">
-      <header className="lc-pool-head">
-        <h2 className="lc-eyebrow-label">Up for grabs</h2>
-        <span className="lc-meta">
-          <Mono>{ready.length}</Mono> ready · <Mono>{blocked.length}</Mono> not yet
-        </span>
-      </header>
-      <div className="lc-pool-grid">
-        {/* One button per player rather than a single "Claim" that scores
-            for whoever the speaker toggle happened to be left on. On a
-            screen two people share, a tap has to say who tapped. */}
-        {ready.map((id) => {
-          const tNode = byId[id];
-          // What a claim actually costs: an unattended step is mostly
-          // waiting, so the tile says its hands-on total, not its span.
-          const handsOnSec = isAttended(tNode) ? null : unattendedEvents(tNode, 0).reduce((sum, m) => sum + (m.endSec - m.atSec), 0);
-          return (
-            <div key={id} className="lc-tile is-claimable">
-              <div className="lc-tile-top">
-                <span className="lc-tile-label">{tNode.label}</span>
-                <PointsTag pts={DIFFICULTY_POINTS[tNode.difficulty]} />
-              </div>
-              <span className="lc-tile-meta">
-                <Mono>{clock(handsOnSec ?? tNode.estimated_duration_sec)}</Mono>
-                {handsOnSec != null && <> hands-on of <Mono>{clock(tNode.estimated_duration_sec)}</Mono></>}
-                {dishOf(tNode) && <> · {dishOf(tNode)}</>}
-              </span>
-              {/* What the claim needs from the kitchen: a step's burner or
-                  board is what most often refuses a claim, so it's on the
-                  tile rather than discovered by tapping. */}
-              <div className="lc-chips lc-tile-chips">
-                {(tNode.required_equipment || []).map((e) => (
-                  <EquipmentChip key={e} type={e} />
-                ))}
-                <TendingChip node={tNode} />
-              </div>
-              {claimNote?.stepId === id && (
-                <p key={claimNote.key} className="lc-claim-note" role="status">
-                  {claimNote.text}
-                </p>
-              )}
-              <div className="lc-tile-claims">
-                {cooks.map((cook, i) => {
-                  // Greyed for whatever would refuse it — hands full, or
-                  // the equipment it needs is on something else.
-                  const block = claimBlock(id, cook.id);
-                  const why = block ? (block.startsWith("No ") ? block.replace(/^No (.*) free$/, "no $1").toLowerCase() : "busy") : null;
-                  // The half wears whichever bird this cook picked, so it
-                  // matches the avatar inside it whatever the pair is —
-                  // green against purple reads as well as blue against
-                  // amber. A cook who never picked one borrows the bird
-                  // at their seat rather than the unclaimed grey, which
-                  // is what "can't claim" already looks like.
-                  const bird = (cook.avatar && chefAvatar(cook.avatar)) || CHEF_AVATARS[i % CHEF_AVATARS.length];
-                  return (
-                    <button
-                      key={cook.id}
-                      type="button"
-                      className={`btn lc-claim is-${playerKey(i)}`}
-                      style={{ "--claim": bird.bg, "--claim-ink": bird.ink }}
-                      onClick={() => onClaim(id, cook.id)}
-                      disabled={paused || Boolean(block)}
-                      title={block || undefined}
-                      aria-label={`${cook.name} takes ${tNode.label}`}
-                    >
-                      <PlayerAvatar cook={cook} index={i} size={20} />
-                      <span className="lc-claim-name">
-                        {cook.name}
-                        {why && <span className="lc-claim-why"> · {why}</span>}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-        {taken.map(([id, record]) => {
-          const i = cooks.findIndex((c) => c.id === record.cookId);
-          const tNode = byId[id];
-          // An unattended step's tile says its next moment, never a plain
-          // running time — the same copy as the card's pot row.
-          const ms = tNode && !isAttended(tNode) ? momentState(tNode, record, now) : null;
-          let moment = null;
-          if (ms) {
-            if (ms.current?.kind === "initial") moment = "Starting";
-            else if (ms.current && hasDeadline(tNode)) moment = `${momentName(ms.current, ms.checkCount)} — now`;
-            else if (ms.next) moment = `${momentName(ms.next, ms.checkCount)} in ${clock(ms.nextInSec)}`;
-            else if (isOneShot(tNode)) moment = ms.readyInSec > 0 ? `Ready in ${clock(ms.readyInSec)}` : "Ready";
-          }
-          const fresh = record.startedAt && now - Date.parse(record.startedAt) < CLAIM_FLASH_MS;
-          return (
-            <div key={id} className={`lc-tile is-taken is-${playerKey(i)} ${fresh ? "is-fresh" : ""}`}>
-              <div className="lc-tile-top">
-                <span className="lc-tile-label">{tNode?.label}</span>
-                <PointsTag pts={DIFFICULTY_POINTS[tNode.difficulty]} player={playerKey(i)} />
-              </div>
-              <span className="lc-tile-meta">
-                <Mono>{clock(tNode.estimated_duration_sec)}</Mono>
-                {dishOf(tNode) && <> · {dishOf(tNode)}</>}
-              </span>
-              {fresh ? (
-                <Stamp tone={playerKey(i)} className="lc-tile-took">
-                  {cooks[i]?.name} took it
-                </Stamp>
-              ) : (
-                <span className="lc-tile-holder">
-                  <PlayerAvatar cook={cooks[i]} index={i} size={20} />
-                  {cooks[i]?.name}
-                  {moment ? <Mono className={ms.current ? "is-due" : ""}>{moment}</Mono> : <Mono>{clock(stepVariance(tNode, record, now).actualSec)}</Mono>}
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      {/* What's not ready yet is a row of locked chips (Schedule's NOT
-          YET), not tiles: the board is for what can be taken. Each one
-          carries what it's waiting on. */}
-      {blocked.length > 0 && (
-        <div className="lc-pool-notyet">
-          <span className="lc-eyebrow-label">Not yet</span>
-          {blocked.map((id, i) => {
-            const waiting = (byId[id].depends_on || []).filter((d) => byId[d] && !["done", "skipped"].includes(run.steps[d]?.status));
-            // Same tilt as the step's chip on Schedule (hashed from its id),
-            // on its own beat, so the row reads as steps waiting their turn.
-            const hash = String(id).split("").reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 5381);
-            const tiltDeg = ((hash % 26) - 13) / 10;
-            return (
-              <span
-                key={id}
-                className="lc-notyet-chip"
-                title={`needs ${waiting.map((d) => byId[d]?.label).join(", ")}`}
-                style={{ "--lc-locked-index": i, "--lc-locked-tilt": `${tiltDeg}deg` }}
-              >
-                {byId[id].label}
-              </span>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
-}
-
-// Service done (design v7): a results screen, not a summary. The
-// illustration across the top, then — Versus — the two players' tickets
-// either side of the final score, the winner marked by a banner and a
-// tinted head, never by being bigger; — Co-op — how the night went
-// against the plan and one shared bar of who did what. The receipt on
-// the right is every step, in the order the night went.
-function ServiceDone({ outcome, cooks, isVersus, title, byId, dishOf, onExit, saving, saveError }) {
-  const players = resultPlayers({ outcome, cooks, dishOfStep: (s) => dishOf(byId[s.id]) });
-
-  return (
-    <div className={`lc-service ${isVersus ? "is-versus" : "is-coop"}`}>
-      <div className="lc-service-main">
-        <div className="lc-service-top">
-          <span className="lc-eyebrow-label">Service done · {isVersus ? "Versus" : "Co-op"}</span>
-          <span className="lc-meta">
-            <Mono className="lc-service-clock">{clock(outcome.totalSec)}</Mono> on the clock
-          </span>
-        </div>
-        <img className="lc-service-art" src={isVersus ? summaryVersusArt : summaryCoopArt} alt="" />
-
-        {isVersus ? (
-          <VersusResults players={players} winnerCookIds={outcome.winnerCookIds} />
-        ) : (
-          <CoopResult outcome={outcome} players={players} />
-        )}
-      </div>
-
-      {/* The receipt is as tall as the column beside it and scrolls
-          inside — the cell is the grid item, the roll is taken out of
-          flow, so twenty rows never stretch the page past the results.
-          The way on is the receipt's own tear-off stub: the receipt is
-          what becomes the cook card, so taking it is the handoff. */}
-      <div className="lc-service-steps-cell">
-        <div className="lc-receipt-roll">
-        <StepReceipt outcome={outcome} cooks={cooks} players={players} isVersus={isVersus} title={title} />
-        <div className={`lc-receipt-stub ${saving ? "is-tearing" : ""}`}>
-          <span className="lc-perforation" aria-hidden="true">
-            <span>Tear here</span>
-          </span>
-          <button type="button" className="btn lc-btn-xl lc-btn-go lc-service-cta" onClick={onExit} disabled={saving}>
-            {saving ? "Saving…" : saveError ? "Try again" : "Take the cook card →"}
-          </button>
-          {saveError && (
-            <p className="lc-service-error" role="alert">
-              {saveError} Nothing is lost — try again.
-            </p>
-          )}
-        </div>
-        </div>
-      </div>
-    </div>
   );
 }

@@ -459,7 +459,7 @@ try {
       "--use-file-for-fake-audio-capture=" + WAV_PATH,
     ],
   });
-  context = await browser.newContext({ permissions: ["microphone"], reducedMotion: "reduce" });
+  context = await browser.newContext({ permissions: ["microphone", "clipboard-read", "clipboard-write"], reducedMotion: "reduce" });
   // On macOS the fake capture device still waits on the system microphone
   // permission of whatever launched the browser, and getUserMedia hangs
   // forever when that app was never granted it. E2E_SYNTH_MIC=1 swaps in
@@ -1631,6 +1631,30 @@ try {
     await dialog.waitFor({ state: "visible" });
     await contest.stream.say("call it early");
     await contest.page.locator(".live-cook-page.is-finished").waitFor({ state: "visible" });
+  });
+  await checkVoiceBehavior("Service done: ‘who won’ reads the result out", async () => {
+    await contest.stream.say("who won");
+    await waitForPageCondition(contest.page, () => /Dinner took/.test(document.querySelector(".goose-bubble-line")?.textContent || ""));
+  });
+  await checkVoiceBehavior("Service done: ‘take the cook card’ saves the cook and opens its card", async () => {
+    await contest.stream.say("take the cook card");
+    await contest.page.waitForURL("**/cook/**", { timeout: 5_000 });
+    await contest.page.locator(".cook-card-page").waitFor({ state: "visible" });
+  });
+  await checkVoiceBehavior("Cook card: ‘read it out’ and ‘who won’ answer from the saved card", async () => {
+    await contest.stream.say("read it out");
+    await waitForPageCondition(contest.page, () => /Dinner took/.test(document.querySelector(".goose-bubble-line")?.textContent || ""));
+    await contest.stream.say("who won");
+    await waitForPageCondition(contest.page, () => /Mia|Leo|tie|Nobody/.test(document.querySelector(".goose-bubble-line")?.textContent || ""));
+  });
+  await checkVoiceBehavior("Cook card: ‘copy the link’ copies it and says so", async () => {
+    await contest.stream.say("copy the link");
+    await waitForPageCondition(contest.page, () => /Link copied/.test(document.querySelector(".goose-bubble-line")?.textContent || ""));
+    assert.match(await contest.page.evaluate(() => navigator.clipboard.readText()), /\/cook\//);
+  });
+  await checkVoiceBehavior("Cook card: ‘add a photo’ explains it needs a tap", async () => {
+    await contest.stream.say("add a photo");
+    await waitForPageCondition(contest.page, () => /Tap/.test(document.querySelector(".goose-bubble-line")?.textContent || ""));
   });
   await contest.page.close();
 

@@ -309,7 +309,7 @@ export default function NodeEditorPanel({
         phrases: EDIT_STEP_VOICE.delete,
         confirm: "Delete this step? Say yes or no.",
         run: () => {
-          actionsRef.current.onDelete(node.id);
+          actionsRef.current.onDelete(node.id, { confirmed: true });
           return null;
         },
       },

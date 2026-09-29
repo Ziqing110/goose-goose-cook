@@ -236,21 +236,29 @@ const SKILL_LABELS = {
   confident: "Just the essentials",
 };
 
+// First match wins. No \b around the Chinese: it never matches next to
+// Chinese characters.
+const SKILL_KEYWORDS = [
+  ["beginner", /\b(beginner|new|never|first time|learning|explain everything|no idea|novice)\b/],
+  ["confident", /\b(confident|experienced|expert|pro|chef|essentials|skip|brief|terse)\b/],
+  ["regular", /\b(regular|normal|some|average|fine|okay|ok|decent|standard)\b/],
+  ["beginner", /新手|第一次|不太会|不会做|没做过|详细|仔细|多讲|讲清楚|全部讲/],
+  ["confident", /熟练|老手|简单点|简略|要点|简短|别太啰嗦|不用讲/],
+  ["regular", /正常|一般|普通|适中|中等/],
+];
+
+/**
+ * The skill level a keyword in `raw` names, or null. Shared with the
+ * server's LLM reader, which lets an explicit keyword overrule the model.
+ */
+export function skillKeyword(raw) {
+  const text = normalize(String(raw ?? ""));
+  return SKILL_KEYWORDS.find(([, pattern]) => pattern.test(text))?.[0] ?? null;
+}
+
 function readSkill(raw, { alreadyAsked } = {}) {
-  const text = normalize(raw);
-  if (/\b(beginner|new|never|first time|learning|explain everything|no idea|novice)\b/.test(text)) {
-    return confirmed("beginner", SKILL_LABELS.beginner);
-  }
-  if (/\b(confident|experienced|expert|pro|chef|essentials|skip|brief|terse)\b/.test(text)) {
-    return confirmed("confident", SKILL_LABELS.confident);
-  }
-  if (/\b(regular|normal|some|average|fine|okay|ok|decent|standard)\b/.test(text)) {
-    return confirmed("regular", SKILL_LABELS.regular);
-  }
-  // No \b around these: it never matches next to Chinese characters.
-  if (/新手|第一次|不太会|不会做|没做过|详细|仔细|多讲|讲清楚|全部讲/.test(text)) return confirmed("beginner", SKILL_LABELS.beginner);
-  if (/熟练|老手|简单点|简略|要点|简短|别太啰嗦|不用讲/.test(text)) return confirmed("confident", SKILL_LABELS.confident);
-  if (/正常|一般|普通|适中|中等/.test(text)) return confirmed("regular", SKILL_LABELS.regular);
+  const level = skillKeyword(raw);
+  if (level) return confirmed(level, SKILL_LABELS[level]);
   return askAgain(
     raw,
     alreadyAsked
@@ -641,14 +649,6 @@ const ECHO_PREFIX = "I took that as";
 /** The agent's echo for a read it isn't sure of, prepended to its next turn. */
 export function echoFor(reading) {
   return `${ECHO_PREFIX} ${reading.display} — it's on the right if you want to check it.`;
-}
-
-/** True for an agent line that opens with an echo of an unsure reading.
- * The transcript stores the finished sentence rather than its parts, so
- * this is how the page spots the turn that asks you to check a reading
- * (see the HONK pill in ConversationPage). */
-export function isEchoLine(text = "") {
-  return text.startsWith(ECHO_PREFIX);
 }
 
 /** True for a slot that holds an answer, sure or not. */

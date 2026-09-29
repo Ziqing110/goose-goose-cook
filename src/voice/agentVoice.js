@@ -1,4 +1,4 @@
-// The agent's voice: Kokoro-82M on WebGPU, chosen by ear in tts-lab/.
+// The agent's voice: Kokoro-82M on WebGPU, chosen by ear.
 //
 // Free and local: the model runs in the browser on the user's GPU, so no
 // paid TTS and nothing leaves the machine. Kokoro can't shift pitch, so
@@ -13,9 +13,8 @@
 import { createSpanLog } from "../utils/speechSpans.js";
 
 // What the cook calls the agent. It answers only when addressed by this.
-// A placeholder until the real name is chosen; it is also sent to the
-// server, which does the addressing check, so this is the one place to
-// change it.
+// It is also sent to the server, which does the addressing check, so
+// this is the one place to change it.
 export const AGENT_NAME = "Goose";
 
 export const AGENT_VOICE = {
@@ -27,7 +26,7 @@ export const AGENT_VOICE = {
 };
 
 const MODEL = "onnx-community/Kokoro-82M-v1.0-ONNX";
-// Loaded from a CDN, as in the lab, so the bundler never has to deal with
+// Loaded from a CDN so the bundler never has to deal with
 // onnxruntime-web. The weights come from Hugging Face on first use and are
 // then cached by the browser.
 const KOKORO_JS = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm";
@@ -73,8 +72,6 @@ export function setVoiceEnabled(next) {
   voiceEnabled = Boolean(next);
   if (!voiceEnabled) stop();
 }
-
-export const isVoiceEnabled = () => voiceEnabled;
 
 /** Subscribe to speaking changes. Returns an unsubscribe function. */
 export function onSpeakingChange(fn) {

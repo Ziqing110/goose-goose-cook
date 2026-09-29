@@ -116,6 +116,11 @@
   text-transform: uppercase;
   white-space: nowrap;
 }
+.goose-bubble-tab.is-idle { background: var(--kp-text); color: var(--kp-bg); }
+.goose-bubble-tab.is-listening { background: var(--kp-agent-listening); color: #fff; }
+.goose-bubble-tab.is-thinking { background: var(--kp-agent-thinking); color: var(--kp-text); }
+.goose-bubble-tab.is-speaking { background: var(--kp-accent); color: #fff; }
+.goose-bubble-tab.is-warning { background: var(--kp-agent-warning); color: #fff; }
 .goose-bubble-tail {
   position: absolute;
   top: 22px;
