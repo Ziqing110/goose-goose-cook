@@ -15,7 +15,8 @@ import sHead from "../assets/brand/s-head-64.png";
 import { chefAvatar } from "./cooks.js";
 import { playerBird, playerRing } from "./playerColors.js";
 import { PRINT_DEPTHS, PRINT_PATH } from "./gooseMarks.js";
-import { clock, planDelta } from "./serviceResults.js";
+import { planDelta } from "./serviceResults.js";
+import { clock } from "./time.js";
 import { wordmarkGeometry } from "./wordmark.js";
 
 const CARD_W = 1080;

@@ -9,12 +9,6 @@
 const PLAYER_KEYS = ["a", "b"];
 export const playerKey = (index) => PLAYER_KEYS[index % PLAYER_KEYS.length];
 
-/** "12:48" — every clock on the play surface. */
-export const clock = (sec) => {
-  const s = Math.max(0, Math.round(sec));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-};
-
 const longestOf = (steps) => steps.reduce((best, s) => (!best || s.actualSec > best.actualSec ? s : best), null);
 
 /** The longest finished step of the night, or null. */

@@ -27,7 +27,8 @@ import ChefWorkingScreen from "../components/ChefWorkingScreen.jsx";
 import { devPreview } from "../dev/preview.js";
 import NodeEditorPanel from "../components/NodeEditorPanel.jsx";
 import { useStepEditing } from "../state/useStepEditing.js";
-import { buildInventory, formatClock, formatStepDuration, PHASE_LABELS } from "../utils/inventory.js";
+import { buildInventory, PHASE_LABELS } from "../utils/inventory.js";
+import { clock, timer } from "../utils/time.js";
 import { groupStepsByDish, dishPaper, SHARED_PAPER } from "../utils/ingredientGroups.js";
 import { categoryIconPaths } from "../utils/categoryIcons.js";
 import { GooseProfile } from "../components/GooseMarks.jsx";
@@ -175,7 +176,7 @@ function StepLine({ step, statusLine, delay }) {
         <span className="inv-step-label">{step.label}</span>
         <Mono>
           <span className={`inv-step-dur ${step.attended === false ? "is-unattended" : ""}`}>
-            {formatStepDuration(step.durationSec)}
+            {clock(step.durationSec)}
             {step.attended === false && " unattended"}
           </span>
         </Mono>
@@ -874,9 +875,9 @@ export default function InventoryPage() {
     // Hands-on time is the number that decides whether tonight is
     // manageable. The waiting is real but it is not work, and lumping
     // them together told people a 21-minute cook would take 96.
-    metaBits.push(<><Mono>{formatClock(inv.attendedSeconds)}</Mono> hands-on</>);
+    metaBits.push(<><Mono>{timer(inv.attendedSeconds)}</Mono> hands-on</>);
     if (inv.unattendedSeconds > 0) {
-      metaBits.push(<><Mono>{formatClock(inv.unattendedSeconds)}</Mono> waiting</>);
+      metaBits.push(<><Mono>{timer(inv.unattendedSeconds)}</Mono> waiting</>);
     }
   }
 

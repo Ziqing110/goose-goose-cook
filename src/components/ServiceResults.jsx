@@ -8,7 +8,8 @@
 import { useLayoutEffect, useRef } from "react";
 import { chefAvatar } from "../utils/cooks.js";
 import { playerRing } from "../utils/playerColors.js";
-import { clock, isOnPlan, longestStep, planDelta, playerKey } from "../utils/serviceResults.js";
+import { isOnPlan, longestStep, planDelta, playerKey } from "../utils/serviceResults.js";
+import { clock } from "../utils/time.js";
 import { GoosePrint } from "./GooseMarks.jsx";
 import "./ServiceResults.css";
 

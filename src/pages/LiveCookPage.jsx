@@ -29,7 +29,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "../state/AppStateContext.jsx";
-import { mergeRecipesForDisplay, formatDuration } from "../utils/graphLayout.js";
+import { mergeRecipesForDisplay } from "../utils/graphLayout.js";
 import { EQUIPMENT_LABELS, unattendedEvents } from "../utils/scheduleLayout.js";
 import { hasDeadline, isOneShot, isAttended, tendingOf, TENDING } from "../utils/tending.js";
 import {
@@ -70,7 +70,8 @@ import { decideSpeaker, hasHandover, shouldLearn } from "../utils/speakerMatch.j
 import { cookFromTurn } from "../utils/speakerLabels.js";
 import { isNameOnlyTurn } from "../utils/addressing.js";
 import { buildSummary } from "../utils/summaryCard.js";
-import { clock, playerKey, resultPlayers } from "../utils/serviceResults.js";
+import { playerKey, resultPlayers } from "../utils/serviceResults.js";
+import { clock } from "../utils/time.js";
 import { chefAvatar, CHEF_AVATARS } from "../utils/cooks.js";
 import { CoopResult, PlayerAvatar, Stamp, StepReceipt, VersusResults } from "../components/ServiceResults.jsx";
 import KpIcon from "../components/KpIcon.jsx";
@@ -641,7 +642,7 @@ export default function LiveCookPage() {
     if (activeStepFor(cookId, base, nodes)) return;
     const at = new Date().toISOString();
     let next = applyStart({ run: base, stepId, cookId, at, source });
-    next = say(next, `Timer running on ${byId[stepId].label}. Est ${formatDuration(byId[stepId].estimated_duration_sec)}.`);
+    next = say(next, `Timer running on ${byId[stepId].label}. Est ${clock(byId[stepId].estimated_duration_sec)}.`);
     commit(next);
   };
 

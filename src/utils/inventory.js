@@ -16,19 +16,6 @@ import { isAttended } from "./tending.js";
 
 export const PHASE_LABELS = { prep: "Prep", cook: "Cook", plate: "Plate" };
 
-/** "42:00" from seconds — mm:ss, minutes unpadded past 99. */
-export function formatClock(totalSeconds) {
-  const s = Math.max(0, Math.round(totalSeconds || 0));
-  const m = Math.floor(s / 60);
-  return `${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-}
-
-/** "3:00" — the per-step duration format used in step detail lines. */
-export function formatStepDuration(sec) {
-  const s = Math.max(0, Math.round(sec || 0));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-}
-
 /** "4 min" (or "45 s" under a minute) — the glanceable format on board cards and the impact list. */
 export function formatMinutes(sec) {
   const s = Math.max(0, Math.round(sec || 0));

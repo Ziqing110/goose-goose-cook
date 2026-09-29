@@ -4,6 +4,7 @@
 // backend already returns (see AppStateContext.jsx) — no new fields.
 import { sessionStageStates } from "./sessionSteps.js";
 import { isAttended } from "./tending.js";
+import { timer } from "./time.js";
 
 const DIFFICULTY_FLAMES = { low: 1, medium: 2, high: 3 };
 
@@ -66,14 +67,6 @@ export function runStages(session) {
   return sessionStageStates(session).map(({ key, label, state, count }) => ({ id: key, label, state, count }));
 }
 
-/** "42:00" — always mm:ss, minutes unpadded past 99. */
-export function formatClock(totalSeconds) {
-  const s = Math.max(0, Math.round(totalSeconds || 0));
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
-}
-
 /** "started 2h ago" — coarse relative time from an ISO string. */
 export function relativeTime(iso, now = Date.now()) {
   const diffSec = Math.max(0, Math.round((now - new Date(iso).getTime()) / 1000));
@@ -129,6 +122,6 @@ export function runLogRecord(rows) {
   const done = rows.filter((r) => r.status === "completed");
   const best = done.filter((r) => r.durationSec != null).reduce((b, r) => (b == null || r.durationSec < b ? r.durationSec : b), null);
   const parts = [`${rows.length} ${rows.length === 1 ? "run" : "runs"}`, `${done.length} done`];
-  if (best != null) parts.push(`best ${formatClock(best)}`);
+  if (best != null) parts.push(`best ${timer(best)}`);
   return { line: parts.join(" · "), bestSec: best };
 }
