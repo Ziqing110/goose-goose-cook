@@ -1,13 +1,11 @@
 // Shared app state, React-context style.
 //
-// `kitchenProfiles` mirrors the backend (src/api/kitchens.js). `session`
-// and `sessionHistory` now also live in the backend (src/api/sessions.js)
-// instead of localStorage — a session owns an ordered list of recipe
-// instances (`session.recipes`) rather than one embedded graph, which is
-// what lets a session eventually hold more than one dish. The reducer
-// stays synchronous/optimistic throughout: dispatches update local state
-// immediately, and a debounced effect below quietly persists the
-// session (+ its recipes) to the server in the background.
+// `kitchenProfiles`, `session` and `sessionHistory` mirror the backend
+// (src/api/). A session owns an ordered list of recipe instances and the
+// steps shared between them. The reducer is synchronous and optimistic:
+// dispatches update local state at once, and a debounced effect below
+// persists the session, and whichever recipes and shared steps changed,
+// in the background.
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useReducer } from "react";
 import * as kitchensApi from "../api/kitchens.js";
 import * as sessionsApi from "../api/sessions.js";
@@ -189,6 +187,30 @@ function reducer(state, action) {
         },
       };
 
+    // An edit arrives as a function and is applied to the state it lands
+    // on, so edits dispatched in the same tick compose rather than each
+    // overwriting the last with a copy taken at render (useStepEditing).
+    case "session/recipes/edit":
+      if (!state.session) return state;
+      return {
+        ...state,
+        session: {
+          ...state.session,
+          recipes: state.session.recipes.map((r) => (r.id === action.payload.recipeId ? action.payload.edit(r) : r)),
+        },
+      };
+    case "session/sharedSteps/edit":
+      if (!state.session) return state;
+      return {
+        ...state,
+        session: {
+          ...state.session,
+          sharedSteps: state.session.sharedSteps.map((s) =>
+            s.id === action.payload.sharedStepId ? { ...s, working: action.payload.edit(s.working) } : s
+          ),
+        },
+      };
+
     case "session/sharedSteps/add":
       if (!state.session) return state;
       return {
@@ -249,18 +271,26 @@ const AppStateContext = createContext(null);
 
 export function AppStateProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  // Recipes and shared steps the server has created. One still being
+  // POSTed is left out, so the debounced sync never PATCHes it first.
   const [recipesSyncedIds, setRecipesSyncedIds] = useState(() => new Set());
   const [sharedStepsSyncedIds, setSharedStepsSyncedIds] = useState(() => new Set());
+  // The object last sent for each recipe or shared step, by id. The sync
+  // only PATCHes what changed since; a run action touches neither.
+  const lastSentRef = useRef(new Map());
   const debounceRef = useRef(null);
 
-  // Kitchens live in the backend — hydrate the mirror once on mount.
-  useEffect(() => {
+  const refetchKitchens = useCallback(() => {
     dispatch({ type: "kitchenProfiles/loading" });
-    kitchensApi
+    return kitchensApi
       .listKitchens()
       .then((profiles) => dispatch({ type: "kitchenProfiles/hydrate", payload: { profiles } }))
       .catch((err) => dispatch({ type: "kitchenProfiles/error", payload: { error: err.message } }));
   }, []);
+
+  useEffect(() => {
+    refetchKitchens();
+  }, [refetchKitchens]);
 
   // Sessions live in the backend too — resume an in-progress one (if
   // any) and load history for Home's "recent sessions" list.
@@ -274,6 +304,7 @@ export function AppStateProvider({ children }) {
         if (active) {
           setRecipesSyncedIds(new Set(active.recipes.map((r) => r.id)));
           setSharedStepsSyncedIds(new Set((active.sharedSteps || []).map((s) => s.id)));
+          [...active.recipes, ...(active.sharedSteps || [])].forEach((item) => lastSentRef.current.set(item.id, item));
         }
         dispatch({ type: "session/hydrate", payload: { session: active } });
         dispatch({ type: "sessionHistory/hydrate", payload: { history } });
@@ -285,11 +316,11 @@ export function AppStateProvider({ children }) {
     loadSessions();
   }, [loadSessions]);
 
-  // Debounced background sync: whenever the session changes, quietly
-  // PATCH its top-level fields and any already-created recipe instance
-  // to the server. Brand-new recipes are created explicitly (see
-  // addRecipeToSession below) — this effect only ever PATCHes, never
-  // creates, so it never races a recipe's initial POST.
+  // Debounced background sync: whenever the session changes, PATCH its
+  // top-level fields and any created recipe or shared step that changed.
+  // New ones are created explicitly (addRecipeToSession and
+  // addSharedStepToSession); this only ever PATCHes, so it never races a
+  // creation.
   const sessionPatch = (session) => ({
     kitchenProfileId: session.kitchenProfileId,
     conversation: session.conversation,
@@ -316,22 +347,34 @@ export function AppStateProvider({ children }) {
         .updateSession(session.id, sessionPatch(session))
         .catch((err) => console.error("Failed to sync session:", err));
 
+      const changed = (item, syncedIds) => {
+        if (!syncedIds.has(item.id) || lastSentRef.current.get(item.id) === item) return false;
+        lastSentRef.current.set(item.id, item);
+        return true;
+      };
+
       session.recipes.forEach((recipe) => {
-        if (!recipesSyncedIds.has(recipe.id)) return; // still being created — see addRecipeToSession
+        if (!changed(recipe, recipesSyncedIds)) return;
         sessionsApi
           .updateRecipeInstance(session.id, recipe.id, {
             working: recipe.working,
             approved: recipe.approved,
             custom_materials: recipe.custom_materials,
           })
-          .catch((err) => console.error("Failed to sync recipe instance:", err));
+          .catch((err) => {
+            lastSentRef.current.delete(recipe.id); // retried on the next change
+            console.error("Failed to sync recipe instance:", err);
+          });
       });
 
       (session.sharedSteps || []).forEach((step) => {
-        if (!sharedStepsSyncedIds.has(step.id)) return; // still being created — see addSharedStepToSession
+        if (!changed(step, sharedStepsSyncedIds)) return;
         sessionsApi
           .updateSharedStep(session.id, step.id, { working: step.working, approved: step.approved })
-          .catch((err) => console.error("Failed to sync shared step:", err));
+          .catch((err) => {
+            lastSentRef.current.delete(step.id); // retried on the next change
+            console.error("Failed to sync shared step:", err);
+          });
       });
     }, 600);
     return () => clearTimeout(debounceRef.current);
@@ -349,14 +392,6 @@ export function AppStateProvider({ children }) {
     window.addEventListener("pagehide", flush);
     return () => window.removeEventListener("pagehide", flush);
   }, []);
-
-  const refetchKitchens = () => {
-    dispatch({ type: "kitchenProfiles/loading" });
-    return kitchensApi
-      .listKitchens()
-      .then((profiles) => dispatch({ type: "kitchenProfiles/hydrate", payload: { profiles } }))
-      .catch((err) => dispatch({ type: "kitchenProfiles/error", payload: { error: err.message } }));
-  };
 
   const addKitchenProfile = async (draft) => {
     const profile = await kitchensApi.createKitchen(draft);
@@ -410,6 +445,7 @@ export function AppStateProvider({ children }) {
         working: recipe.working,
         custom_materials: recipe.custom_materials,
       });
+      lastSentRef.current.set(recipe.id, recipe);
       setRecipesSyncedIds((prev) => new Set(prev).add(recipe.id));
     } catch (err) {
       console.error("Failed to persist new recipe instance:", err);
@@ -425,6 +461,7 @@ export function AppStateProvider({ children }) {
     const sessionId = state.session.id;
     dispatch({ type: "session/conversation/reset" });
     setRecipesSyncedIds(new Set());
+    setSharedStepsSyncedIds(new Set());
     try {
       await sessionsApi.clearSessionPlan(sessionId);
     } catch (err) {
@@ -443,6 +480,7 @@ export function AppStateProvider({ children }) {
     dispatch({ type: "session/sharedSteps/add", payload: { sharedStep } });
     try {
       await sessionsApi.createSharedStep(state.session.id, { id: sharedStep.id, draft: sharedStep.draft, working: sharedStep.working });
+      lastSentRef.current.set(sharedStep.id, sharedStep);
       setSharedStepsSyncedIds((prev) => new Set(prev).add(sharedStep.id));
     } catch (err) {
       console.error("Failed to persist new shared step:", err);

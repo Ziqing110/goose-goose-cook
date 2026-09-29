@@ -1246,14 +1246,19 @@ export default function InventoryPage() {
                           saveNode(id, nodeDraft, { children });
                           closePanel();
                         }}
-                        onDelete={(id) => {
+                        onDelete={(id, { confirmed = false } = {}) => {
                           // Removing a step other steps wait on changes the
                           // plan's shape, so it asks where they go rather
-                          // than silently cutting the link.
+                          // than silently cutting the link. One nothing
+                          // waits on just needs a yes (voice already got one).
                           const dependents = boardNodes.filter((n) => (n.depends_on || []).includes(id));
-                          closePanel();
-                          if (dependents.length === 0) deleteNode(id);
-                          else setPendingDelete({ node: nodeById[id], dependents });
+                          if (dependents.length) {
+                            closePanel();
+                            setPendingDelete({ node: nodeById[id], dependents });
+                          } else if (confirmed || window.confirm("Remove this step?")) {
+                            closePanel();
+                            deleteNode(id);
+                          }
                         }}
                         materialsInfo={materialsInfo}
                         onRegisterMaterial={(materialDraft) => registerMaterial(materialDraft, materialsInfo, editingNode.id)}
@@ -1374,7 +1379,7 @@ export default function InventoryPage() {
           allNodes={boardNodes}
           onCancel={() => setPendingDelete(null)}
           onConfirm={(reattach) => {
-            deleteNode(pendingDelete.node.id, { confirm: false, reattach });
+            deleteNode(pendingDelete.node.id, { reattach });
             setPendingDelete(null);
           }}
         />

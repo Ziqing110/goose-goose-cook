@@ -1,21 +1,19 @@
-// Editing a step, independent of what's rendering it. Lifted out of
-// RecipeGraphPage so the board on the Inventory page can offer the same
-// operations without a second copy of the rules — the awkward parts
-// (shared steps belong to the session, not a dish; a shared step's
-// dependents live in other dishes) are easy to get subtly wrong twice.
+// Editing steps on the recipe graph, whichever component asks.
+//
+// A step lives either in one dish (a recipe instance's working graph) or,
+// when two dishes share it, in the session's shared steps, and a
+// dependency can cross between the two. Every edit here is dispatched as
+// a function the reducer applies to the state it lands on, so several
+// edits in one tick (a step and the steps that wait on it) all survive
+// instead of each overwriting the last with a stale copy.
 import { useAppState } from "./AppStateContext.jsx";
-import { cloneGraph } from "../utils/graphLayout.js";
 import { nextNodeId, slugifyMaterialId } from "../data/dishes.js";
 
-// The merged view tags every node with the recipe instance it came from
-// (or _shared for a session-owned shared step) for rendering; strip
-// those back off before persisting a node.
-export function stripRecipeTag(node) {
-  const clean = { ...node };
-  delete clean._recipeId;
-  delete clean._shared;
-  return clean;
-}
+// The merged view tags nodes with where they came from; those tags are
+// for rendering and never persisted.
+const untagged = ({ _recipeId, _shared, ...node }) => node;
+
+const unique = (ids) => [...new Set(ids)];
 
 export function useStepEditing() {
   const { state, dispatch, deleteSharedStepFromSession } = useAppState();
@@ -24,84 +22,42 @@ export function useStepEditing() {
   const findRecipeForNode = (nodeId) => recipes.find((r) => r.working.nodes.some((n) => n.id === nodeId));
   const findSharedStep = (nodeId) => sharedSteps.find((s) => s.working.id === nodeId);
 
-  // A dependency can cross into another dish or a shared step, so
-  // rewiring one has to search everywhere, not just the recipe the new
-  // node is landing in.
-  const findAnyNode = (nodeId) => {
-    const recipe = findRecipeForNode(nodeId);
-    if (recipe) return { node: recipe.working.nodes.find((n) => n.id === nodeId), recipeId: recipe.id, shared: null };
+  const editRecipe = (recipeId, edit) => dispatch({ type: "session/recipes/edit", payload: { recipeId, edit } });
+  const editNodes = (recipeId, edit) => editRecipe(recipeId, (r) => ({ ...r, working: { ...r.working, nodes: edit(r.working.nodes) } }));
+  const editSharedStep = (sharedStepId, edit) => dispatch({ type: "session/sharedSteps/edit", payload: { sharedStepId, edit } });
+
+  /** Apply `edit` to one step, wherever it lives. */
+  const editNode = (nodeId, edit) => {
     const shared = findSharedStep(nodeId);
-    if (shared) return { node: shared.working, recipeId: null, shared };
-    return null;
+    if (shared) return editSharedStep(shared.id, edit);
+    const recipe = findRecipeForNode(nodeId);
+    if (recipe) editNodes(recipe.id, (nodes) => nodes.map((n) => (n.id === nodeId ? edit(n) : n)));
   };
 
-  const setNodeDeps = (nodeId, nextDeps) => {
-    const found = findAnyNode(nodeId);
-    if (!found) return;
-    const deps = [...new Set(nextDeps.filter((d) => d !== nodeId))];
-    if (found.shared) {
-      dispatch({
-        type: "session/sharedSteps/updateOne",
-        payload: { sharedStepId: found.shared.id, patch: { working: { ...found.shared.working, depends_on: deps } } },
-      });
-      return;
-    }
-    updateRecipeWorking(found.recipeId, (w) => {
-      const index = w.nodes.findIndex((n) => n.id === nodeId);
-      if (index !== -1) w.nodes[index] = { ...w.nodes[index], depends_on: deps };
-    });
-  };
-
-  const updateRecipeWorking = (recipeId, mutateFn) => {
-    const recipe = recipes.find((r) => r.id === recipeId);
-    if (!recipe) return;
-    const nextWorking = cloneGraph(recipe.working);
-    mutateFn(nextWorking);
-    dispatch({ type: "session/recipes/updateOne", payload: { recipeId, patch: { working: nextWorking } } });
-  };
+  /** Rewrite one step's dependencies from its current ones. */
+  const updateDeps = (nodeId, next) =>
+    editNode(nodeId, (n) => ({ ...n, depends_on: unique(next(n.depends_on || [])).filter((d) => d !== nodeId) }));
 
   /**
-   * A new step belongs to exactly one dish, so the target is explicit.
-   * So is the duration: the scheduler treats estimated_duration_sec as
-   * fact, so a step that quietly defaulted to a minute would shorten
-   * the plan by however long the task really takes.
+   * A new step in one dish. The duration is explicit because the
+   * scheduler treats it as fact.
    *
-   * `dependsOn` alone only wires the new step's own predecessors — it
-   * says nothing about anything that already depended on those same
-   * steps. Inserting "before X" or "between X and Y" needs a SECOND
-   * edit: X (or Y) has to be repointed at the new step, or it keeps
-   * running exactly when it always did, oblivious to the thing that was
-   * supposed to land in front of it.
+   * `dependsOn` wires the new step's own predecessors. `runsBefore` is the
+   * other half of inserting "before X" or "between X and Y": each of those
+   * steps now waits on the new one, and drops any predecessor it shared
+   * with it, so X -> Y becomes X -> new -> Y rather than both.
    *
-   * `runsBefore` is that second edit, done in the same call so the
-   * insertion can't be left half-finished. For each id in it, any of
-   * ITS current dependencies that this new step also depends on are now
-   * redundant — X -> Y becomes X -> new -> Y, not X -> Y stacked next to
-   * X -> new -> Y — so those are dropped and the new step's id takes
-   * their place. Anything it depends on that this step does NOT share
-   * is left alone: "before X" without a specific predecessor just adds
-   * one more gate on X rather than guessing which of X's other
-   * dependencies it was meant to replace.
+   * @returns {string|null} the new step's id
    */
   const addNode = (
     recipeId,
-    { phase = "prep", dependsOn = [], runsBefore = [], label = "New step", durationSec, difficulty = "low", equipment = [], materials = [], materialUsage = {} } = {}
+    { phase = "prep", dependsOn = [], runsBefore = [], label = "New step", durationSec, difficulty = "low", equipment = [], materials = [], materialUsage = {} } = {},
   ) => {
-    const recipe = recipes.find((r) => r.id === recipeId);
-    if (!recipe) return null;
+    if (!recipes.some((r) => r.id === recipeId)) return null;
     const id = nextNodeId("step");
-    // The new step and the links that point at it go in ONE pass, for
-    // the reason spelled out on deleteNode below: two
-    // updateRecipeWorking calls in the same tick both read `recipes`
-    // from the render closure, so the second silently overwrites the
-    // first. Here that cost the new step itself — adding a task that
-    // "runs before boil water" rewired a graph that predated the step,
-    // and dispatching it put the board back exactly as it had been.
-    // Targets in another recipe, or a shared step, dispatch somewhere
-    // else and so cannot clobber this one.
-    const elsewhere = [];
-    updateRecipeWorking(recipe.id, (w) => {
-      w.nodes.push({
+    editNodes(recipeId, (nodes) => [
+      ...nodes,
+      {
         id,
         label,
         description: "",
@@ -113,236 +69,84 @@ export function useStepEditing() {
         depends_on: dependsOn,
         status: "pending",
         phase,
-      });
-
-      runsBefore.forEach((targetId) => {
-        if (targetId === id) return;
-        const target = w.nodes.find((n) => n.id === targetId);
-        if (!target) {
-          elsewhere.push(targetId);
-          return;
-        }
-        const current = target.depends_on || [];
-        const redundant = current.filter((d) => dependsOn.includes(d));
-        target.depends_on = [...new Set([...current.filter((d) => !redundant.includes(d)), id])];
-      });
-    });
-
-    elsewhere.forEach((targetId) => {
-      const found = findAnyNode(targetId);
-      if (!found) return;
-      const current = found.node.depends_on || [];
-      const redundant = current.filter((d) => dependsOn.includes(d));
-      setNodeDeps(targetId, [...current.filter((d) => !redundant.includes(d)), id]);
-    });
-
+      },
+    ]);
+    runsBefore.forEach((targetId) => updateDeps(targetId, (deps) => [...deps.filter((d) => !dependsOn.includes(d)), id]));
     return id;
   };
 
-  // Deleting a shared step has to scrub depends_on across every recipe
-  // instance and every other shared step, since it can be a dependency
-  // across dish boundaries — deleteSharedStepFromSession owns that full
-  // scrub, locally and server-side. A plain per-recipe node only ever
-  // needs scrubbing within its own recipe.
   /**
-   * Removes a step. `reattach` maps each dependent to what it should
-   * wait on instead — without it, dependents silently lose the link and
-   * become startable immediately, which shortens the plan for a reason
-   * nobody chose.
-   *
-   * The reattach and the removal are applied in ONE pass per recipe.
-   * Two updateRecipeWorking calls in the same tick both read `recipes`
-   * from the render closure, so the second silently overwrote the
-   * first — the dependents' new links were lost the moment the step
-   * itself went.
+   * Remove steps. Whatever waited on them loses the link, unless
+   * `reattach` maps that dependent to what it should wait on instead.
    */
-  const deleteNode = (nodeId, { confirm = true, reattach = null } = {}) => {
-    if (confirm && !window.confirm("Remove this step? Any step depending on it will lose that dependency.")) return;
-
-    // A step can't be made to wait on itself or on the step being cut.
-    const depsFor = (id, current) => {
-      const next = reattach?.[id] ?? current;
-      return [...new Set(next.filter((d) => d !== nodeId && d !== id))];
-    };
-
-    const shared = findSharedStep(nodeId);
-
-    // Shared steps are session-owned; their delete scrubs depends_on
-    // everywhere through the reducer, so reattaching one is a separate
-    // dispatch target and can't clobber.
-    sharedSteps.forEach((step) => {
-      if (step.working.id === nodeId || !reattach?.[step.working.id]) return;
-      dispatch({
-        type: "session/sharedSteps/updateOne",
-        payload: {
-          sharedStepId: step.id,
-          patch: { working: { ...step.working, depends_on: depsFor(step.working.id, step.working.depends_on || []) } },
-        },
-      });
-    });
-
-    recipes.forEach((recipe) => {
-      const touched =
-        recipe.working.nodes.some((n) => n.id === nodeId) ||
-        recipe.working.nodes.some((n) => reattach?.[n.id] || (n.depends_on || []).includes(nodeId));
-      if (!touched) return;
-      updateRecipeWorking(recipe.id, (w) => {
-        w.nodes = w.nodes
-          .filter((n) => n.id !== nodeId)
-          .map((n) => ({ ...n, depends_on: depsFor(n.id, n.depends_on || []) }));
-      });
-    });
-
-    if (shared) deleteSharedStepFromSession(shared.id);
-  };
-
-  /** Removes several steps from the same state snapshot. */
-  const deleteNodes = (nodeIds) => {
+  const deleteNodes = (nodeIds, reattach = {}) => {
     const ids = new Set(nodeIds);
     if (!ids.size) return;
-
-    recipes.forEach((recipe) => {
-      const touched = recipe.working.nodes.some(
-        (node) => ids.has(node.id) || (node.depends_on || []).some((dependencyId) => ids.has(dependencyId))
-      );
-      if (!touched) return;
-      updateRecipeWorking(recipe.id, (working) => {
-        working.nodes = working.nodes
-          .filter((node) => !ids.has(node.id))
-          .map((node) => ({
-            ...node,
-            depends_on: (node.depends_on || []).filter((dependencyId) => !ids.has(dependencyId)),
-          }));
-      });
+    const rewired = (n) => ({
+      ...n,
+      depends_on: unique(reattach[n.id] ?? n.depends_on ?? []).filter((d) => !ids.has(d) && d !== n.id),
     });
+    const touched = (n) => ids.has(n.id) || n.id in reattach || (n.depends_on || []).some((d) => ids.has(d));
 
-    sharedSteps
-      .filter((step) => ids.has(step.working.id))
-      .forEach((step) => deleteSharedStepFromSession(step.id));
+    recipes
+      .filter((r) => r.working.nodes.some(touched))
+      .forEach((r) => editNodes(r.id, (nodes) => nodes.filter((n) => !ids.has(n.id)).map(rewired)));
+    // Deleting a shared step scrubs it from every dish and shared step.
+    sharedSteps.forEach((s) => {
+      if (ids.has(s.working.id)) deleteSharedStepFromSession(s.id);
+      else if (s.working.id in reattach) editSharedStep(s.id, rewired);
+    });
   };
 
-  /** Commits a step's staged edits (from the drawer) in one go and closes it. */
+  const deleteNode = (nodeId, { reattach } = {}) => deleteNodes([nodeId], reattach);
+
   /**
-   * Save one step, and — when `children` is given — make exactly those
-   * steps the ones that wait on it.
-   *
-   * The two happen together on purpose. A step and the steps that wait
-   * on it often live in the same recipe, and each dispatch builds its
-   * payload from the recipe as it stood when this render ran; saving the
-   * node and then rewiring a sibling would write two clones of the same
-   * stale recipe, and the second would silently undo the first. So every
-   * change to a recipe is folded into a single pass over it.
+   * Save one step's edits, and when `children` is given, make exactly
+   * those steps the ones that wait on it.
    */
   const saveNode = (nodeId, draftNode, { children } = {}) => {
-    const everyNode = [...recipes.flatMap((r) => r.working.nodes), ...sharedSteps.map((s) => s.working)];
-    // id -> the deps it should end up with, for anything the link
-    // rewiring touches.
-    const nextDeps = new Map();
-    if (children) {
-      const wanted = new Set(children);
-      everyNode.forEach((x) => {
-        if (x.id === nodeId) return;
-        const has = (x.depends_on || []).includes(nodeId);
-        const want = wanted.has(x.id);
-        if (has === want) return;
-        nextDeps.set(x.id, want ? [...(x.depends_on || []), nodeId] : (x.depends_on || []).filter((d) => d !== nodeId));
-      });
-    }
-
-    const shared = findSharedStep(nodeId);
-    if (shared) {
-      dispatch({
-        type: "session/sharedSteps/updateOne",
-        payload: { sharedStepId: shared.id, patch: { working: stripRecipeTag(draftNode) } },
-      });
-    }
-    // Shared steps are separate records, so one dispatch each is safe.
-    sharedSteps.forEach((s) => {
-      if (s.working.id === nodeId || !nextDeps.has(s.working.id)) return;
-      dispatch({
-        type: "session/sharedSteps/updateOne",
-        payload: { sharedStepId: s.id, patch: { working: { ...s.working, depends_on: nextDeps.get(s.working.id) } } },
-      });
-    });
-
-    const ownRecipe = shared ? null : findRecipeForNode(nodeId);
-    const touched = new Set([...(ownRecipe ? [ownRecipe.id] : [])]);
-    recipes.forEach((r) => {
-      if (r.working.nodes.some((n) => nextDeps.has(n.id))) touched.add(r.id);
-    });
-    touched.forEach((recipeId) => {
-      updateRecipeWorking(recipeId, (w) => {
-        if (ownRecipe?.id === recipeId) {
-          const index = w.nodes.findIndex((n) => n.id === nodeId);
-          if (index !== -1) w.nodes[index] = stripRecipeTag(draftNode);
-        }
-        w.nodes.forEach((n, i) => {
-          if (nextDeps.has(n.id)) w.nodes[i] = { ...n, depends_on: nextDeps.get(n.id) };
-        });
-      });
+    editNode(nodeId, () => untagged(draftNode));
+    if (!children) return;
+    const wanted = new Set(children);
+    [...recipes.flatMap((r) => r.working.nodes), ...sharedSteps.map((s) => s.working)].forEach((n) => {
+      if (n.id === nodeId) return;
+      const waits = (n.depends_on || []).includes(nodeId);
+      if (waits === wanted.has(n.id)) return;
+      updateDeps(n.id, (deps) => (waits ? deps.filter((d) => d !== nodeId) : [...deps, nodeId]));
     });
   };
 
-  // Registers a material that doesn't exist yet so it's available to
-  // every step, not just the one being edited. It lands on the dish
-  // whose step is open, so it travels with that dish; a shared step
-  // belongs to no single dish, so it falls back to the first recipe.
+  /**
+   * Add a material the catalog doesn't know, so every step can use it. It
+   * travels with the dish whose step is being edited; a step being added
+   * names its dish outright, and a shared step falls back to the first.
+   *
+   * @returns {string|null} the material id
+   */
   const registerMaterial = (draft, materialsInfo, forNodeId, forRecipeId) => {
     const label = draft.label.trim();
     if (!label) return null;
     const id = slugifyMaterialId(label);
-    if (!materialsInfo[id]) {
-      // A step being created has no id yet, so the add form names its
-      // dish outright; an open step's own dish is found from its id.
-      const recipe =
-        (forNodeId && findRecipeForNode(forNodeId)) ||
-        (forRecipeId && recipes.find((r) => r.id === forRecipeId)) ||
-        recipes[0];
-      if (!recipe) return null;
-      const nextCustom = {
-        ...(recipe.custom_materials || {}),
-        [id]: {
-          label,
-          category: draft.category || "other",
-          amount: Number(draft.amount) || 1,
-          unit: draft.unit.trim() || "unit",
-          // Distinguishes this from an LLM-generated material that also
-          // has no catalog entry — see inventory.js's isCustom.
-          addedByUser: true,
-        },
-      };
-      dispatch({ type: "session/recipes/updateOne", payload: { recipeId: recipe.id, patch: { custom_materials: nextCustom } } });
-    }
+    if (materialsInfo[id]) return id;
+    const recipe =
+      (forNodeId && findRecipeForNode(forNodeId)) || (forRecipeId && recipes.find((r) => r.id === forRecipeId)) || recipes[0];
+    if (!recipe) return null;
+    const material = {
+      label,
+      category: draft.category || "other",
+      amount: Number(draft.amount) || 1,
+      unit: draft.unit.trim() || "unit",
+      // Tells it apart from a generated material the catalog also lacks
+      // (see inventory.js's isCustom).
+      addedByUser: true,
+    };
+    editRecipe(recipe.id, (r) => ({ ...r, custom_materials: { ...(r.custom_materials || {}), [id]: material } }));
     return id;
   };
 
-  /**
-   * Draw or cut one arrow. The board does this directly rather than
-   * through saveNode, because a link is the only thing changing —
-   * routing it through a whole-node patch would make dragging an arrow
-   * look, to the sync layer, like an edit of the step itself.
-   */
-  const linkNodes = (parentId, childId) => {
-    const found = findAnyNode(childId);
-    if (!found?.node) return;
-    setNodeDeps(childId, [...(found.node.depends_on || []), parentId]);
-  };
-  const unlinkNodes = (parentId, childId) => {
-    const found = findAnyNode(childId);
-    if (!found?.node) return;
-    setNodeDeps(childId, (found.node.depends_on || []).filter((d) => d !== parentId));
-  };
+  /** Draw or cut one arrow on the board. */
+  const linkNodes = (parentId, childId) => updateDeps(childId, (deps) => [...deps, parentId]);
+  const unlinkNodes = (parentId, childId) => updateDeps(childId, (deps) => deps.filter((d) => d !== parentId));
 
-  return {
-    addNode,
-    deleteNode,
-    deleteNodes,
-    saveNode,
-    linkNodes,
-    unlinkNodes,
-    registerMaterial,
-    findRecipeForNode,
-    findSharedStep,
-    updateRecipeWorking,
-  };
+  return { addNode, deleteNode, deleteNodes, saveNode, linkNodes, unlinkNodes, registerMaterial };
 }
