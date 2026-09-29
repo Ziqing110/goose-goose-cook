@@ -69,6 +69,13 @@ const GLYPHS = {
       <path d="M8 6H5.5a1 1 0 0 0-1 1v.5a3 3 0 0 0 3 3M16 6h2.5a1 1 0 0 1 1 1v.5a3 3 0 0 1-3 3M12 13v4M8.5 20h7M10 17h4v3h-4z" />
     </>
   ),
+  // A push pin, for the example runs pinned to Home's run log.
+  pin: (
+    <>
+      <path d="M9 3.5h6M10 3.5l-.6 6L6.5 13h11l-2.9-3.5-.6-6" />
+      <path d="M12 13v7.5" />
+    </>
+  ),
 };
 
 export default function KpIcon({ glyph, size = 24, className = "", ...rest }) {

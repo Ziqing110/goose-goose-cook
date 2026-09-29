@@ -302,6 +302,21 @@ body:has(.home-v4) { background: var(--kp-bg); }
 .hp-loadout { display: flex; flex-wrap: wrap; gap: 8px; }
 .hp-rank { width: 24px; flex: 0 0 auto; font-size: 14px; color: var(--kp-text-tertiary); }
 .hp-trophy { color: var(--kp-accent); }
+/* The examples pinned above a visitor's own runs: a pin where the rank
+   would be, and a small mono tag after the title. */
+.hp-rank-pin { display: inline-flex; align-items: center; color: var(--kp-accent); }
+.hp-example-tag {
+  font-family: var(--kp-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  padding: 4px 7px;
+  border: 1px solid var(--kp-divider);
+  border-radius: 999px;
+  color: var(--kp-text-secondary);
+  background: var(--kp-bg);
+}
 .hp-duration { font-size: 16px; font-weight: 500; flex: 0 0 auto; }
 .hp-duration.is-muted { color: var(--kp-text-secondary); }
 

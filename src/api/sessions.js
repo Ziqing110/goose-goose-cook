@@ -2,6 +2,7 @@
 // Sessions own an ordered list of recipe instances server-side — see
 // AppStateContext.jsx for how the client mirrors that shape.
 import { apiRequest } from "./client.js";
+import { isExampleRun, loadExampleRun } from "../data/exampleRuns.js";
 
 const BASE = "/api/sessions";
 const request = (path, options) => apiRequest(BASE, path, options);
@@ -10,7 +11,10 @@ export function createSession(session) {
   return request("", { method: "POST", body: JSON.stringify(session) });
 }
 
+// The examples pinned to Home live in the bundle, not the database, and
+// never change: reads come from there, and writes to them are dropped.
 export function getSession(id) {
+  if (isExampleRun(id)) return loadExampleRun(id);
   return request(`/${id}`, { method: "GET" });
 }
 
@@ -28,6 +32,7 @@ export function listSessionSummaries(statuses) {
 }
 
 export function deleteSession(id) {
+  if (isExampleRun(id)) return Promise.resolve(null);
   return request(`/${id}`, { method: "DELETE" });
 }
 
@@ -35,6 +40,7 @@ export function deleteSession(id) {
 // pending sync on unload); browsers cap keepalive bodies at ~64KB, so
 // it's only for the small top-level session patch.
 export function updateSession(id, patch, { keepalive = false } = {}) {
+  if (isExampleRun(id)) return Promise.resolve(null);
   return request(`/${id}`, { method: "PATCH", body: JSON.stringify(patch), keepalive });
 }
 

@@ -1,0 +1,3114 @@
+[
+  {
+    "id": "example-coop-chicken-noodle-soup",
+    "example": true,
+    "kitchenProfileId": null,
+    "kitchenProfileName": "2 burners, 2 boards, 2 pots",
+    "kitchenProfile": {
+      "id": "example-kitchen",
+      "name": "2 burners, 2 boards, 2 pots",
+      "burners": 2,
+      "cuttingBoards": 2,
+      "pots": 2,
+      "hasWok": true,
+      "hasOven": true
+    },
+    "status": "completed",
+    "startedAt": "2026-09-27T10:05:00.000Z",
+    "endedAt": "2026-09-27T11:01:56.000Z",
+    "conversation": {
+      "complete": true,
+      "transcript": [
+        {
+          "speaker": "agent",
+          "text": "What are we cooking tonight? One dish or a few."
+        },
+        {
+          "speaker": "cook",
+          "text": "Chicken noodle soup"
+        },
+        {
+          "speaker": "agent",
+          "text": "How many people are we cooking for?"
+        },
+        {
+          "speaker": "cook",
+          "text": "Just the two of us"
+        },
+        {
+          "speaker": "agent",
+          "text": "Any dietary constraints I should design around?"
+        },
+        {
+          "speaker": "cook",
+          "text": "No restrictions"
+        },
+        {
+          "speaker": "agent",
+          "text": "How much should I explain each step? You can cook anything either way."
+        },
+        {
+          "speaker": "cook",
+          "text": "Normal detail, please"
+        },
+        {
+          "speaker": "agent",
+          "text": "What's the target finish time, start to plated?"
+        },
+        {
+          "speaker": "cook",
+          "text": "An hour"
+        },
+        {
+          "speaker": "agent",
+          "text": "Got it — drafting your recipe graph now."
+        }
+      ],
+      "answers": {
+        "dishIdea": [
+          "chicken noodle soup"
+        ],
+        "servings": "2",
+        "diet": "none",
+        "skill": "regular",
+        "targetTime": "60"
+      },
+      "understanding": {
+        "dishIdea": {
+          "value": [
+            "chicken noodle soup"
+          ],
+          "display": "Chicken noodle soup",
+          "status": "confirmed"
+        },
+        "servings": {
+          "value": "2",
+          "display": "2 servings",
+          "status": "confirmed"
+        },
+        "diet": {
+          "value": "none",
+          "display": "No restrictions",
+          "status": "confirmed"
+        },
+        "skill": {
+          "value": "regular",
+          "display": "Normal detail",
+          "status": "confirmed"
+        },
+        "targetTime": {
+          "value": "60",
+          "display": "1 hour",
+          "status": "confirmed"
+        }
+      },
+      "questionIndex": 5
+    },
+    "selectedNodeId": null,
+    "cooks": [
+      {
+        "id": "f503faba-de82-40df-944d-46bfb349fe4c",
+        "name": "Mia",
+        "bound": true,
+        "avatar": "spoon"
+      },
+      {
+        "id": "08851049-b1ab-49de-b524-d8c89b0501f0",
+        "name": "Leo",
+        "bound": true,
+        "avatar": "whisk"
+      }
+    ],
+    "mode": "cooperation",
+    "run": {
+      "startedAt": "2026-09-27T10:30:00.000Z",
+      "endedAt": "2026-09-27T11:01:56.000Z",
+      "mode": "cooperation",
+      "steps": {
+        "606cc204-9dfc-4912-83f2-6f2ffa8e3120::chicken_trim": {
+          "status": "done",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "startedAt": "2026-09-27T10:30:00.000Z",
+          "endedAt": "2026-09-27T10:31:56.000Z",
+          "source": "voice",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "606cc204-9dfc-4912-83f2-6f2ffa8e3120::veg_chop": {
+          "status": "done",
+          "cookId": "08851049-b1ab-49de-b524-d8c89b0501f0",
+          "startedAt": "2026-09-27T10:30:00.000Z",
+          "endedAt": "2026-09-27T10:33:33.000Z",
+          "source": "voice",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "606cc204-9dfc-4912-83f2-6f2ffa8e3120::mince_garlic": {
+          "status": "done",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "startedAt": "2026-09-27T10:32:05.000Z",
+          "endedAt": "2026-09-27T10:32:55.000Z",
+          "source": "tap",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "606cc204-9dfc-4912-83f2-6f2ffa8e3120::stock_measure": {
+          "status": "done",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "startedAt": "2026-09-27T10:33:05.000Z",
+          "endedAt": "2026-09-27T10:33:49.000Z",
+          "source": "voice",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "606cc204-9dfc-4912-83f2-6f2ffa8e3120::saute_veg": {
+          "status": "done",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "startedAt": "2026-09-27T10:34:00.000Z",
+          "endedAt": "2026-09-27T10:38:29.000Z",
+          "source": "voice",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "606cc204-9dfc-4912-83f2-6f2ffa8e3120::simmer_chicken": {
+          "status": "done",
+          "cookId": "08851049-b1ab-49de-b524-d8c89b0501f0",
+          "startedAt": "2026-09-27T10:38:30.000Z",
+          "endedAt": "2026-09-27T10:50:04.000Z",
+          "source": "tap",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "606cc204-9dfc-4912-83f2-6f2ffa8e3120::shred_chicken": {
+          "status": "done",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "startedAt": "2026-09-27T10:50:05.000Z",
+          "endedAt": "2026-09-27T10:52:39.000Z",
+          "source": "tap",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "606cc204-9dfc-4912-83f2-6f2ffa8e3120::cook_noodles": {
+          "status": "done",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "startedAt": "2026-09-27T10:52:55.000Z",
+          "endedAt": "2026-09-27T10:59:12.000Z",
+          "source": "tap",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "606cc204-9dfc-4912-83f2-6f2ffa8e3120::finish_garnish": {
+          "status": "done",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "startedAt": "2026-09-27T10:59:20.000Z",
+          "endedAt": "2026-09-27T11:01:08.000Z",
+          "source": "voice",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "606cc204-9dfc-4912-83f2-6f2ffa8e3120::plate_serve": {
+          "status": "done",
+          "cookId": "08851049-b1ab-49de-b524-d8c89b0501f0",
+          "startedAt": "2026-09-27T11:01:10.000Z",
+          "endedAt": "2026-09-27T11:01:56.000Z",
+          "source": "voice",
+          "skipReason": null,
+          "pausedSec": 0
+        }
+      },
+      "pausedSec": 0,
+      "pausedAt": null,
+      "events": [
+        {
+          "id": "9a58cbc2-4b7f-4ab9-b41b-6c9ad77b07dd",
+          "at": "2026-09-27T10:30:00.000Z",
+          "type": "run_start",
+          "cookId": null,
+          "stepId": null
+        },
+        {
+          "id": "bf73958a-2a54-487c-a633-9492fed64242",
+          "at": "2026-09-27T10:30:00.000Z",
+          "type": "start",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::chicken_trim",
+          "source": "voice"
+        },
+        {
+          "id": "8e2368ab-2435-49e8-ac19-17b0468ea49f",
+          "at": "2026-09-27T10:30:00.000Z",
+          "type": "start",
+          "cookId": "08851049-b1ab-49de-b524-d8c89b0501f0",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::veg_chop",
+          "source": "voice"
+        },
+        {
+          "id": "f3d4245a-1b95-4a0a-bd7d-1a9183b53ee3",
+          "at": "2026-09-27T10:31:56.000Z",
+          "type": "done",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "reportedBy": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::chicken_trim",
+          "source": "voice"
+        },
+        {
+          "id": "b5671cf9-6a34-41e1-ab74-595bbc9b4e49",
+          "at": "2026-09-27T10:32:05.000Z",
+          "type": "start",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::mince_garlic",
+          "source": "tap"
+        },
+        {
+          "id": "80e4dd63-2f16-4715-bf63-60e5fe4120cd",
+          "at": "2026-09-27T10:32:55.000Z",
+          "type": "done",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "reportedBy": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::mince_garlic",
+          "source": "tap"
+        },
+        {
+          "id": "9c9b7cdd-0acb-493c-ab35-8ce572092a1b",
+          "at": "2026-09-27T10:33:05.000Z",
+          "type": "start",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::stock_measure",
+          "source": "voice"
+        },
+        {
+          "id": "db512379-f0e1-4d6a-90fa-8532ccf07c9c",
+          "at": "2026-09-27T10:33:33.000Z",
+          "type": "done",
+          "cookId": "08851049-b1ab-49de-b524-d8c89b0501f0",
+          "reportedBy": "08851049-b1ab-49de-b524-d8c89b0501f0",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::veg_chop",
+          "source": "tap"
+        },
+        {
+          "id": "eafd11a3-9231-4bcb-b9fe-5ba33276e99f",
+          "at": "2026-09-27T10:33:49.000Z",
+          "type": "done",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "reportedBy": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::stock_measure",
+          "source": "voice"
+        },
+        {
+          "id": "407af9b5-2a68-4966-8c2a-cff6171508ad",
+          "at": "2026-09-27T10:34:00.000Z",
+          "type": "start",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::saute_veg",
+          "source": "voice"
+        },
+        {
+          "id": "aba3fd3e-cca5-4547-baa3-29816d9660ee",
+          "at": "2026-09-27T10:38:29.000Z",
+          "type": "done",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "reportedBy": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::saute_veg",
+          "source": "tap"
+        },
+        {
+          "id": "6fc3b9bb-9fae-4e4e-a534-c24bcfbc81dc",
+          "at": "2026-09-27T10:38:30.000Z",
+          "type": "start",
+          "cookId": "08851049-b1ab-49de-b524-d8c89b0501f0",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::simmer_chicken",
+          "source": "tap"
+        },
+        {
+          "id": "36003b20-92ec-46f8-9a46-e6c21ae8660a",
+          "at": "2026-09-27T10:50:04.000Z",
+          "type": "done",
+          "cookId": "08851049-b1ab-49de-b524-d8c89b0501f0",
+          "reportedBy": "08851049-b1ab-49de-b524-d8c89b0501f0",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::simmer_chicken",
+          "source": "tap"
+        },
+        {
+          "id": "630ef145-7ef1-4066-a04b-b645b7c671e2",
+          "at": "2026-09-27T10:50:05.000Z",
+          "type": "start",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::shred_chicken",
+          "source": "tap"
+        },
+        {
+          "id": "0c0332bf-9a9d-4f58-88cf-481e212e1cee",
+          "at": "2026-09-27T10:52:39.000Z",
+          "type": "done",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "reportedBy": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::shred_chicken",
+          "source": "voice"
+        },
+        {
+          "id": "d7e78915-6901-40e3-9f0c-69bf87ec6e3d",
+          "at": "2026-09-27T10:52:55.000Z",
+          "type": "start",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::cook_noodles",
+          "source": "tap"
+        },
+        {
+          "id": "df6af066-1487-413f-95da-156f5dad835d",
+          "at": "2026-09-27T10:59:12.000Z",
+          "type": "done",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "reportedBy": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::cook_noodles",
+          "source": "tap"
+        },
+        {
+          "id": "02ec7596-954c-4d67-bfa7-776ba42a5c08",
+          "at": "2026-09-27T10:59:20.000Z",
+          "type": "start",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::finish_garnish",
+          "source": "voice"
+        },
+        {
+          "id": "05e2cb85-d895-4341-bc6c-255c132321a0",
+          "at": "2026-09-27T11:01:08.000Z",
+          "type": "done",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "reportedBy": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::finish_garnish",
+          "source": "voice"
+        },
+        {
+          "id": "97031a13-b17f-401c-8673-9326c719e64b",
+          "at": "2026-09-27T11:01:10.000Z",
+          "type": "start",
+          "cookId": "08851049-b1ab-49de-b524-d8c89b0501f0",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::plate_serve",
+          "source": "voice"
+        },
+        {
+          "id": "7dd00a13-bc43-435c-8829-401e32f85ef6",
+          "at": "2026-09-27T11:01:56.000Z",
+          "type": "done",
+          "cookId": "08851049-b1ab-49de-b524-d8c89b0501f0",
+          "reportedBy": "08851049-b1ab-49de-b524-d8c89b0501f0",
+          "stepId": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::plate_serve",
+          "source": "voice"
+        },
+        {
+          "id": "4eef668f-1a49-4ad7-b6cf-76a18baf70b3",
+          "at": "2026-09-27T11:01:56.000Z",
+          "type": "run_end",
+          "cookId": null,
+          "stepId": null
+        }
+      ],
+      "plan": {
+        "computedAt": "2026-09-27T10:30:00.000Z",
+        "makespanSec": 2220,
+        "order": {
+          "f503faba-de82-40df-944d-46bfb349fe4c": [
+            "606cc204-9dfc-4912-83f2-6f2ffa8e3120::chicken_trim",
+            "606cc204-9dfc-4912-83f2-6f2ffa8e3120::mince_garlic",
+            "606cc204-9dfc-4912-83f2-6f2ffa8e3120::stock_measure",
+            "606cc204-9dfc-4912-83f2-6f2ffa8e3120::saute_veg",
+            "606cc204-9dfc-4912-83f2-6f2ffa8e3120::shred_chicken",
+            "606cc204-9dfc-4912-83f2-6f2ffa8e3120::cook_noodles",
+            "606cc204-9dfc-4912-83f2-6f2ffa8e3120::finish_garnish"
+          ],
+          "08851049-b1ab-49de-b524-d8c89b0501f0": [
+            "606cc204-9dfc-4912-83f2-6f2ffa8e3120::veg_chop",
+            "606cc204-9dfc-4912-83f2-6f2ffa8e3120::simmer_chicken",
+            "606cc204-9dfc-4912-83f2-6f2ffa8e3120::plate_serve"
+          ]
+        },
+        "startSecById": {
+          "606cc204-9dfc-4912-83f2-6f2ffa8e3120::chicken_trim": 0,
+          "606cc204-9dfc-4912-83f2-6f2ffa8e3120::veg_chop": 0,
+          "606cc204-9dfc-4912-83f2-6f2ffa8e3120::mince_garlic": 120,
+          "606cc204-9dfc-4912-83f2-6f2ffa8e3120::stock_measure": 180,
+          "606cc204-9dfc-4912-83f2-6f2ffa8e3120::saute_veg": 240,
+          "606cc204-9dfc-4912-83f2-6f2ffa8e3120::simmer_chicken": 540,
+          "606cc204-9dfc-4912-83f2-6f2ffa8e3120::shred_chicken": 1440,
+          "606cc204-9dfc-4912-83f2-6f2ffa8e3120::cook_noodles": 1620,
+          "606cc204-9dfc-4912-83f2-6f2ffa8e3120::finish_garnish": 2040,
+          "606cc204-9dfc-4912-83f2-6f2ffa8e3120::plate_serve": 2160
+        }
+      },
+      "openingSuggestions": null,
+      "transcript": [
+        {
+          "id": "71ed8560-189b-440c-ad98-74fc555aba42",
+          "at": "2026-09-27T10:30:00.000Z",
+          "speaker": "agent",
+          "text": "Let's cook. Say \"done\" when you finish a step, or tap the button."
+        },
+        {
+          "id": "f31e44d8-5be8-4ffd-afbb-93c1180c3804",
+          "at": "2026-09-27T10:30:00.000Z",
+          "speaker": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "text": "Goose, I'm on the chicken",
+          "via": "voice"
+        },
+        {
+          "id": "51be9c57-8403-4c31-aa93-239496a92472",
+          "at": "2026-09-27T10:30:00.000Z",
+          "speaker": "08851049-b1ab-49de-b524-d8c89b0501f0",
+          "text": "Goose, I'll do the onion, carrot and celery",
+          "via": "voice"
+        },
+        {
+          "id": "9892c716-861b-4fbf-bb56-25d5ac7595c8",
+          "at": "2026-09-27T10:33:45.000Z",
+          "speaker": "08851049-b1ab-49de-b524-d8c89b0501f0",
+          "text": "Two boards, zero fights over the knife. Best teamwork ever!",
+          "via": "voice"
+        },
+        {
+          "id": "d83fc6fd-d265-4032-9b2d-4859d2c951d1",
+          "at": "2026-09-27T10:52:39.000Z",
+          "speaker": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "text": "Goose, done with the shredding",
+          "via": "voice"
+        },
+        {
+          "id": "38263847-7533-4273-816e-d167a7aaa8d9",
+          "at": "2026-09-27T10:54:30.000Z",
+          "speaker": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "text": "The whole kitchen smells like a sick day, in the best possible way!",
+          "via": "voice"
+        },
+        {
+          "id": "f1585770-3000-4e6f-ab6c-7281e960be58",
+          "at": "2026-09-27T11:01:56.000Z",
+          "speaker": "08851049-b1ab-49de-b524-d8c89b0501f0",
+          "text": "Goose, soup's in the bowls",
+          "via": "voice"
+        }
+      ]
+    },
+    "outMaterialIds": [],
+    "nodePositions": {},
+    "summary": {
+      "createdAt": "2026-09-27T11:01:56.000Z",
+      "dish": "Chicken Noodle Soup",
+      "mode": "cooperation",
+      "totalSec": 1916,
+      "estimatedSec": 2220,
+      "winnerCookIds": [
+        "f503faba-de82-40df-944d-46bfb349fe4c"
+      ],
+      "doneCount": 10,
+      "skippedCount": 0,
+      "headline": "Finished 5 min inside the plan.",
+      "cooks": [
+        {
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "name": "Mia",
+          "colorKey": "mia",
+          "points": 90,
+          "rank": 1,
+          "isWinner": true,
+          "doneCount": 7,
+          "skippedCount": 0,
+          "quote": "The whole kitchen smells like a sick day, in the best possible way!",
+          "quips": [],
+          "steps": [
+            {
+              "label": "Trim & season chicken",
+              "status": "done",
+              "estSec": 120,
+              "actualSec": 116,
+              "deltaSec": -4,
+              "points": 10
+            },
+            {
+              "label": "Mince garlic",
+              "status": "done",
+              "estSec": 60,
+              "actualSec": 50,
+              "deltaSec": -10,
+              "points": 10
+            },
+            {
+              "label": "Measure stock, bay leaf & thyme",
+              "status": "done",
+              "estSec": 60,
+              "actualSec": 44,
+              "deltaSec": -16,
+              "points": 10
+            },
+            {
+              "label": "Sauté onion, carrot & celery",
+              "status": "done",
+              "estSec": 300,
+              "actualSec": 269,
+              "deltaSec": -31,
+              "points": 20
+            },
+            {
+              "label": "Shred the cooked chicken",
+              "status": "done",
+              "estSec": 180,
+              "actualSec": 154,
+              "deltaSec": -26,
+              "points": 10
+            },
+            {
+              "label": "Cook egg noodles in the broth",
+              "status": "done",
+              "estSec": 420,
+              "actualSec": 377,
+              "deltaSec": -43,
+              "points": 20
+            },
+            {
+              "label": "Return chicken & garnish with parsley",
+              "status": "done",
+              "estSec": 120,
+              "actualSec": 108,
+              "deltaSec": -12,
+              "points": 10
+            }
+          ],
+          "_order": 0
+        },
+        {
+          "cookId": "08851049-b1ab-49de-b524-d8c89b0501f0",
+          "name": "Leo",
+          "colorKey": "leo",
+          "points": 40,
+          "rank": 2,
+          "isWinner": false,
+          "doneCount": 3,
+          "skippedCount": 0,
+          "quote": "Two boards, zero fights over the knife. Best teamwork ever!",
+          "quips": [],
+          "steps": [
+            {
+              "label": "Dice onion, carrot & celery",
+              "status": "done",
+              "estSec": 240,
+              "actualSec": 213,
+              "deltaSec": -27,
+              "points": 10
+            },
+            {
+              "label": "Add chicken & stock, simmer",
+              "status": "done",
+              "estSec": 900,
+              "actualSec": 694,
+              "deltaSec": -206,
+              "points": 20
+            },
+            {
+              "label": "Ladle & serve hot",
+              "status": "done",
+              "estSec": 60,
+              "actualSec": 46,
+              "deltaSec": -14,
+              "points": 10
+            }
+          ],
+          "_order": 1
+        }
+      ],
+      "perStep": [
+        {
+          "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::chicken_trim",
+          "label": "Trim & season chicken",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "status": "done",
+          "estSec": 120,
+          "actualSec": 116,
+          "points": 10,
+          "dish": "Chicken Noodle Soup"
+        },
+        {
+          "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::veg_chop",
+          "label": "Dice onion, carrot & celery",
+          "cookId": "08851049-b1ab-49de-b524-d8c89b0501f0",
+          "status": "done",
+          "estSec": 240,
+          "actualSec": 213,
+          "points": 10,
+          "dish": "Chicken Noodle Soup"
+        },
+        {
+          "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::mince_garlic",
+          "label": "Mince garlic",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "status": "done",
+          "estSec": 60,
+          "actualSec": 50,
+          "points": 10,
+          "dish": "Chicken Noodle Soup"
+        },
+        {
+          "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::stock_measure",
+          "label": "Measure stock, bay leaf & thyme",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "status": "done",
+          "estSec": 60,
+          "actualSec": 44,
+          "points": 10,
+          "dish": "Chicken Noodle Soup"
+        },
+        {
+          "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::saute_veg",
+          "label": "Sauté onion, carrot & celery",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "status": "done",
+          "estSec": 300,
+          "actualSec": 269,
+          "points": 20,
+          "dish": "Chicken Noodle Soup"
+        },
+        {
+          "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::simmer_chicken",
+          "label": "Add chicken & stock, simmer",
+          "cookId": "08851049-b1ab-49de-b524-d8c89b0501f0",
+          "status": "done",
+          "estSec": 900,
+          "actualSec": 694,
+          "points": 20,
+          "dish": "Chicken Noodle Soup"
+        },
+        {
+          "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::shred_chicken",
+          "label": "Shred the cooked chicken",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "status": "done",
+          "estSec": 180,
+          "actualSec": 154,
+          "points": 10,
+          "dish": "Chicken Noodle Soup"
+        },
+        {
+          "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::cook_noodles",
+          "label": "Cook egg noodles in the broth",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "status": "done",
+          "estSec": 420,
+          "actualSec": 377,
+          "points": 20,
+          "dish": "Chicken Noodle Soup"
+        },
+        {
+          "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::finish_garnish",
+          "label": "Return chicken & garnish with parsley",
+          "cookId": "f503faba-de82-40df-944d-46bfb349fe4c",
+          "status": "done",
+          "estSec": 120,
+          "actualSec": 108,
+          "points": 10,
+          "dish": "Chicken Noodle Soup"
+        },
+        {
+          "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::plate_serve",
+          "label": "Ladle & serve hot",
+          "cookId": "08851049-b1ab-49de-b524-d8c89b0501f0",
+          "status": "done",
+          "estSec": 60,
+          "actualSec": 46,
+          "points": 10,
+          "dish": "Chicken Noodle Soup"
+        }
+      ],
+      "photo": null,
+      "styledPhoto": null,
+      "photoSource": null,
+      "story": ""
+    },
+    "recipes": [
+      {
+        "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120",
+        "templateId": "chicken-noodle-soup-none",
+        "draft": {
+          "recipe_id": "recipe_606cc204-9dfc-4912-83f2-6f2ffa8e3120",
+          "title": "Chicken Noodle Soup",
+          "dish_idea_raw": "chicken noodle soup",
+          "servings": 2,
+          "created_at": "2026-09-27T10:05:00.000Z",
+          "nodes": [
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::chicken_trim",
+              "label": "Trim & season chicken",
+              "description": "Trim excess fat off the chicken thighs and season with salt & pepper.",
+              "estimated_duration_sec": 120,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "chicken"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::veg_chop",
+              "label": "Dice onion, carrot & celery",
+              "description": "Dice the mirepoix — onion, carrot, and celery — into small even pieces.",
+              "estimated_duration_sec": 240,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "onion",
+                "carrot",
+                "celery"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::mince_garlic",
+              "label": "Mince garlic",
+              "description": "Mince the garlic cloves.",
+              "estimated_duration_sec": 60,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "garlic"
+              ],
+              "material_usage": {
+                "garlic": {
+                  "amount": 2,
+                  "unit": "cloves"
+                }
+              },
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep",
+              "is_shareable": true,
+              "share_key": "mince_garlic"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::stock_measure",
+              "label": "Measure stock, bay leaf & thyme",
+              "description": "Measure out the stock and set aside the bay leaf and thyme.",
+              "estimated_duration_sec": 60,
+              "difficulty": "low",
+              "required_equipment": [],
+              "required_materials": [
+                "stock",
+                "bay_leaf",
+                "thyme"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::saute_veg",
+              "label": "Sauté onion, carrot & celery",
+              "description": "Sweat the mirepoix and garlic in the pot until softened.",
+              "estimated_duration_sec": 300,
+              "difficulty": "medium",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [],
+              "depends_on": [
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::veg_chop",
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::mince_garlic"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::simmer_chicken",
+              "label": "Add chicken & stock, simmer",
+              "description": "Add the chicken, stock, bay leaf and thyme; simmer until the chicken is cooked through.",
+              "estimated_duration_sec": 900,
+              "difficulty": "medium",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [],
+              "depends_on": [
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::saute_veg",
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::chicken_trim",
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::stock_measure"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::shred_chicken",
+              "label": "Shred the cooked chicken",
+              "description": "Pull the chicken out, shred with two forks, discard the bay leaf.",
+              "estimated_duration_sec": 180,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [],
+              "depends_on": [
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::simmer_chicken"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::cook_noodles",
+              "label": "Cook egg noodles in the broth",
+              "description": "Bring the broth back to a simmer and cook the egg noodles directly in it.",
+              "estimated_duration_sec": 420,
+              "difficulty": "medium",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [
+                "egg_noodles"
+              ],
+              "depends_on": [
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::shred_chicken"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::finish_garnish",
+              "label": "Return chicken & garnish with parsley",
+              "description": "Stir the shredded chicken back in, adjust seasoning, and finish with chopped parsley.",
+              "estimated_duration_sec": 120,
+              "difficulty": "low",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [
+                "parsley"
+              ],
+              "depends_on": [
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::cook_noodles"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::plate_serve",
+              "label": "Ladle & serve hot",
+              "description": "Ladle into bowls and serve immediately while hot.",
+              "estimated_duration_sec": 60,
+              "difficulty": "low",
+              "required_equipment": [],
+              "required_materials": [],
+              "depends_on": [
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::finish_garnish"
+              ],
+              "status": "pending",
+              "phase": "plate",
+              "is_end_step": true
+            }
+          ],
+          "custom_materials": {}
+        },
+        "working": {
+          "recipe_id": "recipe_606cc204-9dfc-4912-83f2-6f2ffa8e3120",
+          "title": "Chicken Noodle Soup",
+          "dish_idea_raw": "chicken noodle soup",
+          "servings": 2,
+          "created_at": "2026-09-27T10:05:00.000Z",
+          "nodes": [
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::chicken_trim",
+              "label": "Trim & season chicken",
+              "description": "Trim excess fat off the chicken thighs and season with salt & pepper.",
+              "estimated_duration_sec": 120,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "chicken"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::veg_chop",
+              "label": "Dice onion, carrot & celery",
+              "description": "Dice the mirepoix — onion, carrot, and celery — into small even pieces.",
+              "estimated_duration_sec": 240,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "onion",
+                "carrot",
+                "celery"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::mince_garlic",
+              "label": "Mince garlic",
+              "description": "Mince the garlic cloves.",
+              "estimated_duration_sec": 60,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "garlic"
+              ],
+              "material_usage": {
+                "garlic": {
+                  "amount": 2,
+                  "unit": "cloves"
+                }
+              },
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep",
+              "is_shareable": true,
+              "share_key": "mince_garlic"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::stock_measure",
+              "label": "Measure stock, bay leaf & thyme",
+              "description": "Measure out the stock and set aside the bay leaf and thyme.",
+              "estimated_duration_sec": 60,
+              "difficulty": "low",
+              "required_equipment": [],
+              "required_materials": [
+                "stock",
+                "bay_leaf",
+                "thyme"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::saute_veg",
+              "label": "Sauté onion, carrot & celery",
+              "description": "Sweat the mirepoix and garlic in the pot until softened.",
+              "estimated_duration_sec": 300,
+              "difficulty": "medium",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [],
+              "depends_on": [
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::veg_chop",
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::mince_garlic"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::simmer_chicken",
+              "label": "Add chicken & stock, simmer",
+              "description": "Add the chicken, stock, bay leaf and thyme; simmer until the chicken is cooked through.",
+              "estimated_duration_sec": 900,
+              "difficulty": "medium",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [],
+              "depends_on": [
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::saute_veg",
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::chicken_trim",
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::stock_measure"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::shred_chicken",
+              "label": "Shred the cooked chicken",
+              "description": "Pull the chicken out, shred with two forks, discard the bay leaf.",
+              "estimated_duration_sec": 180,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [],
+              "depends_on": [
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::simmer_chicken"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::cook_noodles",
+              "label": "Cook egg noodles in the broth",
+              "description": "Bring the broth back to a simmer and cook the egg noodles directly in it.",
+              "estimated_duration_sec": 420,
+              "difficulty": "medium",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [
+                "egg_noodles"
+              ],
+              "depends_on": [
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::shred_chicken"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::finish_garnish",
+              "label": "Return chicken & garnish with parsley",
+              "description": "Stir the shredded chicken back in, adjust seasoning, and finish with chopped parsley.",
+              "estimated_duration_sec": 120,
+              "difficulty": "low",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [
+                "parsley"
+              ],
+              "depends_on": [
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::cook_noodles"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::plate_serve",
+              "label": "Ladle & serve hot",
+              "description": "Ladle into bowls and serve immediately while hot.",
+              "estimated_duration_sec": 60,
+              "difficulty": "low",
+              "required_equipment": [],
+              "required_materials": [],
+              "depends_on": [
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::finish_garnish"
+              ],
+              "status": "pending",
+              "phase": "plate",
+              "is_end_step": true
+            }
+          ],
+          "custom_materials": {}
+        },
+        "approved": {
+          "recipe_id": "recipe_606cc204-9dfc-4912-83f2-6f2ffa8e3120",
+          "title": "Chicken Noodle Soup",
+          "dish_idea_raw": "chicken noodle soup",
+          "servings": 2,
+          "created_at": "2026-09-27T10:05:00.000Z",
+          "nodes": [
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::chicken_trim",
+              "label": "Trim & season chicken",
+              "description": "Trim excess fat off the chicken thighs and season with salt & pepper.",
+              "estimated_duration_sec": 120,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "chicken"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::veg_chop",
+              "label": "Dice onion, carrot & celery",
+              "description": "Dice the mirepoix — onion, carrot, and celery — into small even pieces.",
+              "estimated_duration_sec": 240,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "onion",
+                "carrot",
+                "celery"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::mince_garlic",
+              "label": "Mince garlic",
+              "description": "Mince the garlic cloves.",
+              "estimated_duration_sec": 60,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "garlic"
+              ],
+              "material_usage": {
+                "garlic": {
+                  "amount": 2,
+                  "unit": "cloves"
+                }
+              },
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep",
+              "is_shareable": true,
+              "share_key": "mince_garlic"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::stock_measure",
+              "label": "Measure stock, bay leaf & thyme",
+              "description": "Measure out the stock and set aside the bay leaf and thyme.",
+              "estimated_duration_sec": 60,
+              "difficulty": "low",
+              "required_equipment": [],
+              "required_materials": [
+                "stock",
+                "bay_leaf",
+                "thyme"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::saute_veg",
+              "label": "Sauté onion, carrot & celery",
+              "description": "Sweat the mirepoix and garlic in the pot until softened.",
+              "estimated_duration_sec": 300,
+              "difficulty": "medium",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [],
+              "depends_on": [
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::veg_chop",
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::mince_garlic"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::simmer_chicken",
+              "label": "Add chicken & stock, simmer",
+              "description": "Add the chicken, stock, bay leaf and thyme; simmer until the chicken is cooked through.",
+              "estimated_duration_sec": 900,
+              "difficulty": "medium",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [],
+              "depends_on": [
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::saute_veg",
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::chicken_trim",
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::stock_measure"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::shred_chicken",
+              "label": "Shred the cooked chicken",
+              "description": "Pull the chicken out, shred with two forks, discard the bay leaf.",
+              "estimated_duration_sec": 180,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [],
+              "depends_on": [
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::simmer_chicken"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::cook_noodles",
+              "label": "Cook egg noodles in the broth",
+              "description": "Bring the broth back to a simmer and cook the egg noodles directly in it.",
+              "estimated_duration_sec": 420,
+              "difficulty": "medium",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [
+                "egg_noodles"
+              ],
+              "depends_on": [
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::shred_chicken"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::finish_garnish",
+              "label": "Return chicken & garnish with parsley",
+              "description": "Stir the shredded chicken back in, adjust seasoning, and finish with chopped parsley.",
+              "estimated_duration_sec": 120,
+              "difficulty": "low",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [
+                "parsley"
+              ],
+              "depends_on": [
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::cook_noodles"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "606cc204-9dfc-4912-83f2-6f2ffa8e3120::plate_serve",
+              "label": "Ladle & serve hot",
+              "description": "Ladle into bowls and serve immediately while hot.",
+              "estimated_duration_sec": 60,
+              "difficulty": "low",
+              "required_equipment": [],
+              "required_materials": [],
+              "depends_on": [
+                "606cc204-9dfc-4912-83f2-6f2ffa8e3120::finish_garnish"
+              ],
+              "status": "pending",
+              "phase": "plate",
+              "is_end_step": true
+            }
+          ],
+          "custom_materials": {}
+        },
+        "custom_materials": {}
+      }
+    ],
+    "sharedSteps": []
+  },
+  {
+    "id": "example-versus-mapo-tofu-rice",
+    "example": true,
+    "kitchenProfileId": null,
+    "kitchenProfileName": "2 burners, 2 boards, 2 pots",
+    "kitchenProfile": {
+      "id": "example-kitchen",
+      "name": "2 burners, 2 boards, 2 pots",
+      "burners": 2,
+      "cuttingBoards": 2,
+      "pots": 2,
+      "hasWok": true,
+      "hasOven": true
+    },
+    "status": "completed",
+    "startedAt": "2026-09-26T10:35:00.000Z",
+    "endedAt": "2026-09-26T11:22:57.000Z",
+    "conversation": {
+      "complete": true,
+      "transcript": [
+        {
+          "speaker": "agent",
+          "text": "What are we cooking tonight? One dish or a few."
+        },
+        {
+          "speaker": "cook",
+          "text": "Mapo tofu and rice"
+        },
+        {
+          "speaker": "agent",
+          "text": "How many people are we cooking for?"
+        },
+        {
+          "speaker": "cook",
+          "text": "Two"
+        },
+        {
+          "speaker": "agent",
+          "text": "Any dietary constraints I should design around?"
+        },
+        {
+          "speaker": "cook",
+          "text": "No restrictions"
+        },
+        {
+          "speaker": "agent",
+          "text": "How much should I explain each step? You can cook anything either way."
+        },
+        {
+          "speaker": "cook",
+          "text": "Just the essentials"
+        },
+        {
+          "speaker": "agent",
+          "text": "What's the target finish time, start to plated?"
+        },
+        {
+          "speaker": "cook",
+          "text": "An hour"
+        },
+        {
+          "speaker": "agent",
+          "text": "Got it — drafting your recipe graph now."
+        }
+      ],
+      "answers": {
+        "dishIdea": [
+          "mapo tofu",
+          "rice"
+        ],
+        "servings": "2",
+        "diet": "none",
+        "skill": "confident",
+        "targetTime": "60"
+      },
+      "understanding": {
+        "dishIdea": {
+          "value": [
+            "mapo tofu",
+            "rice"
+          ],
+          "display": "Mapo tofu + Rice",
+          "status": "confirmed"
+        },
+        "servings": {
+          "value": "2",
+          "display": "2 servings",
+          "status": "confirmed"
+        },
+        "diet": {
+          "value": "none",
+          "display": "No restrictions",
+          "status": "confirmed"
+        },
+        "skill": {
+          "value": "confident",
+          "display": "Just the essentials",
+          "status": "confirmed"
+        },
+        "targetTime": {
+          "value": "60",
+          "display": "1 hour",
+          "status": "confirmed"
+        }
+      },
+      "questionIndex": 5
+    },
+    "selectedNodeId": null,
+    "cooks": [
+      {
+        "id": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+        "name": "Avery",
+        "bound": true,
+        "avatar": "tomato"
+      },
+      {
+        "id": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+        "name": "Kai",
+        "bound": true,
+        "avatar": "flip"
+      }
+    ],
+    "mode": "competition",
+    "run": {
+      "startedAt": "2026-09-26T11:00:00.000Z",
+      "endedAt": "2026-09-26T11:22:57.000Z",
+      "mode": "competition",
+      "steps": {
+        "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_cut": {
+          "status": "done",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "startedAt": "2026-09-26T11:00:45.000Z",
+          "endedAt": "2026-09-26T11:03:54.000Z",
+          "source": "tap",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "37a33ac5-3b49-4c75-97f3-e39dfd362463::mince_garlic": {
+          "status": "done",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "startedAt": "2026-09-26T11:00:00.000Z",
+          "endedAt": "2026-09-26T11:01:13.000Z",
+          "source": "voice",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "37a33ac5-3b49-4c75-97f3-e39dfd362463::pork_prep": {
+          "status": "done",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "startedAt": "2026-09-26T11:04:20.000Z",
+          "endedAt": "2026-09-26T11:05:39.000Z",
+          "source": "tap",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_mince_other": {
+          "status": "done",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "startedAt": "2026-09-26T11:05:55.000Z",
+          "endedAt": "2026-09-26T11:07:27.000Z",
+          "source": "voice",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "37a33ac5-3b49-4c75-97f3-e39dfd362463::sauce_mix": {
+          "status": "done",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "startedAt": "2026-09-26T11:01:30.000Z",
+          "endedAt": "2026-09-26T11:03:14.000Z",
+          "source": "tap",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "37a33ac5-3b49-4c75-97f3-e39dfd362463::boil_water": {
+          "status": "done",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "startedAt": "2026-09-26T11:00:00.000Z",
+          "endedAt": "2026-09-26T11:05:08.000Z",
+          "source": "voice",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_blanch": {
+          "status": "done",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "startedAt": "2026-09-26T11:06:45.000Z",
+          "endedAt": "2026-09-26T11:08:45.000Z",
+          "source": "tap",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_saute": {
+          "status": "done",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "startedAt": "2026-09-26T11:08:45.000Z",
+          "endedAt": "2026-09-26T11:12:39.000Z",
+          "source": "voice",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "37a33ac5-3b49-4c75-97f3-e39dfd362463::simmer_combine": {
+          "status": "done",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "startedAt": "2026-09-26T11:12:40.000Z",
+          "endedAt": "2026-09-26T11:16:36.000Z",
+          "source": "tap",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "37a33ac5-3b49-4c75-97f3-e39dfd362463::thicken_garnish": {
+          "status": "done",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "startedAt": "2026-09-26T11:16:40.000Z",
+          "endedAt": "2026-09-26T11:17:38.000Z",
+          "source": "tap",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "37a33ac5-3b49-4c75-97f3-e39dfd362463::plate_serve": {
+          "status": "done",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "startedAt": "2026-09-26T11:17:40.000Z",
+          "endedAt": "2026-09-26T11:18:42.000Z",
+          "source": "tap",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_rinse": {
+          "status": "done",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "startedAt": "2026-09-26T11:03:30.000Z",
+          "endedAt": "2026-09-26T11:05:27.000Z",
+          "source": "voice",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_cook": {
+          "status": "done",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "startedAt": "2026-09-26T11:05:45.000Z",
+          "endedAt": "2026-09-26T11:21:45.000Z",
+          "source": "voice",
+          "skipReason": null,
+          "pausedSec": 0
+        },
+        "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_fluff": {
+          "status": "done",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "startedAt": "2026-09-26T11:21:45.000Z",
+          "endedAt": "2026-09-26T11:22:57.000Z",
+          "source": "voice",
+          "skipReason": null,
+          "pausedSec": 0
+        }
+      },
+      "pausedSec": 0,
+      "pausedAt": null,
+      "events": [
+        {
+          "id": "20112802-b0be-4097-a343-f575f443d256",
+          "at": "2026-09-26T11:00:00.000Z",
+          "type": "run_start",
+          "cookId": null,
+          "stepId": null
+        },
+        {
+          "id": "fd273dbb-c1c5-4dee-8046-88f418f8344d",
+          "at": "2026-09-26T11:00:00.000Z",
+          "type": "start",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::boil_water",
+          "source": "voice"
+        },
+        {
+          "id": "705524ef-292c-4e76-8b2d-2c65ea78de3f",
+          "at": "2026-09-26T11:00:00.000Z",
+          "type": "start",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::mince_garlic",
+          "source": "voice"
+        },
+        {
+          "id": "078815bb-bb5f-410b-a6bc-3bb745556b7b",
+          "at": "2026-09-26T11:00:45.000Z",
+          "type": "start",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_cut",
+          "source": "tap"
+        },
+        {
+          "id": "fc1cf086-4f79-4ed5-95f6-7eee75425786",
+          "at": "2026-09-26T11:01:13.000Z",
+          "type": "done",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "reportedBy": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::mince_garlic",
+          "source": "voice"
+        },
+        {
+          "id": "6afd9702-015e-4828-b0ba-fb8beb3ce0be",
+          "at": "2026-09-26T11:01:30.000Z",
+          "type": "start",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::sauce_mix",
+          "source": "tap"
+        },
+        {
+          "id": "b21bb474-2779-41dd-8122-c2e01c3db078",
+          "at": "2026-09-26T11:03:14.000Z",
+          "type": "done",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "reportedBy": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::sauce_mix",
+          "source": "voice"
+        },
+        {
+          "id": "4ce825d5-5acd-4878-9892-f8e6dacccad0",
+          "at": "2026-09-26T11:03:30.000Z",
+          "type": "start",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "stepId": "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_rinse",
+          "source": "voice"
+        },
+        {
+          "id": "da03dafd-9a49-4ecc-839d-6698abb1511e",
+          "at": "2026-09-26T11:03:54.000Z",
+          "type": "done",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "reportedBy": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_cut",
+          "source": "voice"
+        },
+        {
+          "id": "66b91f27-d314-4468-a1b1-3c99c91b9335",
+          "at": "2026-09-26T11:04:20.000Z",
+          "type": "start",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::pork_prep",
+          "source": "tap"
+        },
+        {
+          "id": "ea974c44-0274-44e9-ad5e-ef1476140324",
+          "at": "2026-09-26T11:05:08.000Z",
+          "type": "done",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "reportedBy": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::boil_water",
+          "source": "tap"
+        },
+        {
+          "id": "05223f87-c8d9-4b4d-b776-f1e0609338ae",
+          "at": "2026-09-26T11:05:27.000Z",
+          "type": "done",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "reportedBy": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "stepId": "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_rinse",
+          "source": "tap"
+        },
+        {
+          "id": "1af7cad8-0dac-40e2-aadf-e7cd44b95633",
+          "at": "2026-09-26T11:05:39.000Z",
+          "type": "done",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "reportedBy": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::pork_prep",
+          "source": "voice"
+        },
+        {
+          "id": "edf59304-d024-4961-8524-bb21082a41e7",
+          "at": "2026-09-26T11:05:45.000Z",
+          "type": "start",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "stepId": "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_cook",
+          "source": "voice"
+        },
+        {
+          "id": "5f828423-82e7-4909-883b-d49ae84e061b",
+          "at": "2026-09-26T11:05:55.000Z",
+          "type": "start",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_mince_other",
+          "source": "voice"
+        },
+        {
+          "id": "a2ec7959-84e8-4af7-b38a-0d6b41df0c5a",
+          "at": "2026-09-26T11:06:45.000Z",
+          "type": "start",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_blanch",
+          "source": "tap"
+        },
+        {
+          "id": "62c0b203-e15b-4b78-8421-5a383543c6b8",
+          "at": "2026-09-26T11:07:27.000Z",
+          "type": "done",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "reportedBy": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_mince_other",
+          "source": "tap"
+        },
+        {
+          "id": "d03a686b-cd7e-455c-a272-452ad94ecd8a",
+          "at": "2026-09-26T11:08:45.000Z",
+          "type": "done",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "reportedBy": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_blanch",
+          "source": "voice"
+        },
+        {
+          "id": "42d66837-4b39-456b-8250-0b4b92b4f4cd",
+          "at": "2026-09-26T11:08:45.000Z",
+          "type": "start",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_saute",
+          "source": "voice"
+        },
+        {
+          "id": "d93dd858-1195-4b96-984b-dc8ca8940093",
+          "at": "2026-09-26T11:12:39.000Z",
+          "type": "done",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "reportedBy": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_saute",
+          "source": "voice"
+        },
+        {
+          "id": "6004f3cd-6dae-47f0-b7ac-ec2ab19e01de",
+          "at": "2026-09-26T11:12:40.000Z",
+          "type": "start",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::simmer_combine",
+          "source": "tap"
+        },
+        {
+          "id": "f91aa3a7-a691-4451-b69c-87d83c3bd880",
+          "at": "2026-09-26T11:16:36.000Z",
+          "type": "done",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "reportedBy": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::simmer_combine",
+          "source": "voice"
+        },
+        {
+          "id": "61a08b44-e2fa-443c-bd63-cda6f9081688",
+          "at": "2026-09-26T11:16:40.000Z",
+          "type": "start",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::thicken_garnish",
+          "source": "tap"
+        },
+        {
+          "id": "d8788fe4-162d-4ea7-ae59-e6bdc4a3af71",
+          "at": "2026-09-26T11:17:38.000Z",
+          "type": "done",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "reportedBy": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::thicken_garnish",
+          "source": "voice"
+        },
+        {
+          "id": "6359602f-6b2a-48c4-b307-369bae5e4ba0",
+          "at": "2026-09-26T11:17:40.000Z",
+          "type": "start",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::plate_serve",
+          "source": "tap"
+        },
+        {
+          "id": "bfb0ad19-4593-4cb3-957c-c5f1ac7133c2",
+          "at": "2026-09-26T11:18:42.000Z",
+          "type": "done",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "reportedBy": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "stepId": "37a33ac5-3b49-4c75-97f3-e39dfd362463::plate_serve",
+          "source": "voice"
+        },
+        {
+          "id": "06accc38-540b-40b8-a330-f7de826ec797",
+          "at": "2026-09-26T11:21:45.000Z",
+          "type": "done",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "reportedBy": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "stepId": "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_cook",
+          "source": "auto"
+        },
+        {
+          "id": "3b60421e-5ce8-44c2-b4c1-ba1493149f5f",
+          "at": "2026-09-26T11:21:45.000Z",
+          "type": "start",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "stepId": "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_fluff",
+          "source": "voice"
+        },
+        {
+          "id": "3a94ad64-7a38-49aa-bc80-fd580e2163f4",
+          "at": "2026-09-26T11:22:57.000Z",
+          "type": "done",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "reportedBy": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "stepId": "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_fluff",
+          "source": "voice"
+        },
+        {
+          "id": "7f31fc0e-1fb8-427d-96ac-b7ad30ca03d9",
+          "at": "2026-09-26T11:22:57.000Z",
+          "type": "run_end",
+          "cookId": null,
+          "stepId": null
+        }
+      ],
+      "plan": null,
+      "openingSuggestions": {
+        "571758b8-7bbb-421c-8a62-ae65a3fe9ed1": [
+          "37a33ac5-3b49-4c75-97f3-e39dfd362463::boil_water",
+          "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_cut"
+        ],
+        "71fd609b-488c-4d64-b58c-8dab56dd7154": [
+          "37a33ac5-3b49-4c75-97f3-e39dfd362463::sauce_mix",
+          "37a33ac5-3b49-4c75-97f3-e39dfd362463::mince_garlic"
+        ]
+      },
+      "transcript": [
+        {
+          "id": "906a15e5-a514-4960-afa2-bec29bb223da",
+          "at": "2026-09-26T11:00:00.000Z",
+          "speaker": "agent",
+          "text": "Pool's open. Claim what you want — say \"take\" and the task name, or tap it."
+        },
+        {
+          "id": "9af7a13a-fa28-4298-b746-3e982eb807b4",
+          "at": "2026-09-26T11:00:00.000Z",
+          "speaker": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "text": "Goose, mine, the garlic",
+          "via": "voice"
+        },
+        {
+          "id": "72a692ad-e368-472f-9fa3-6d531a095ca0",
+          "at": "2026-09-26T11:00:00.000Z",
+          "speaker": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "text": "Goose, I'll get the water going",
+          "via": "voice"
+        },
+        {
+          "id": "eb3022ad-b85e-4d6d-a967-3ad4336163a9",
+          "at": "2026-09-26T11:03:30.000Z",
+          "speaker": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "text": "Take the rice",
+          "via": "voice"
+        },
+        {
+          "id": "d67fe222-bb41-4fb9-9877-cc08fe3d7ea0",
+          "at": "2026-09-26T11:08:51.000Z",
+          "speaker": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "text": "Rice is on, tofu's blanched, no way I'm losing this!",
+          "via": "voice"
+        },
+        {
+          "id": "eeebe78d-e803-46b4-b086-0fe1cd697a78",
+          "at": "2026-09-26T11:09:55.000Z",
+          "speaker": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "text": "The doubanjiang is popping everywhere and I'm not even scared!",
+          "via": "voice"
+        },
+        {
+          "id": "f1c7b75e-2c57-4a9e-839c-ccc14c25629b",
+          "at": "2026-09-26T11:17:38.000Z",
+          "speaker": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "text": "Goose, done, look at that gloss",
+          "via": "voice"
+        },
+        {
+          "id": "0c94fd60-5294-43a7-a592-2d260aa8d4c6",
+          "at": "2026-09-26T11:22:57.000Z",
+          "speaker": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "text": "Goose, rice is in the bowls",
+          "via": "voice"
+        }
+      ]
+    },
+    "outMaterialIds": [],
+    "nodePositions": {},
+    "summary": {
+      "createdAt": "2026-09-26T11:22:57.000Z",
+      "dish": "Mapo Tofu + Steamed Rice",
+      "mode": "competition",
+      "totalSec": 1377,
+      "estimatedSec": null,
+      "winnerCookIds": [
+        "71fd609b-488c-4d64-b58c-8dab56dd7154"
+      ],
+      "doneCount": 14,
+      "skippedCount": 0,
+      "headline": "Kai ran away with it by 39 points.",
+      "cooks": [
+        {
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "name": "Kai",
+          "colorKey": "leo",
+          "points": 126,
+          "rank": 1,
+          "isWinner": true,
+          "doneCount": 8,
+          "skippedCount": 0,
+          "quote": "Rice is on, tofu's blanched, no way I'm losing this!",
+          "quips": [],
+          "steps": [
+            {
+              "label": "Mince garlic",
+              "status": "done",
+              "estSec": 60,
+              "actualSec": 73,
+              "deltaSec": 13,
+              "points": 10
+            },
+            {
+              "label": "Mix sauce & slurry",
+              "status": "done",
+              "estSec": 120,
+              "actualSec": 104,
+              "deltaSec": -16,
+              "points": 20
+            },
+            {
+              "label": "Rinse the rice",
+              "status": "done",
+              "estSec": 120,
+              "actualSec": 117,
+              "deltaSec": -3,
+              "points": 10
+            },
+            {
+              "label": "Cook the rice in a lidded pot",
+              "status": "done",
+              "estSec": 960,
+              "actualSec": 960,
+              "deltaSec": 0,
+              "points": 0
+            },
+            {
+              "label": "Blanch tofu",
+              "status": "done",
+              "estSec": 120,
+              "actualSec": 120,
+              "deltaSec": 0,
+              "points": 9
+            },
+            {
+              "label": "Combine & simmer",
+              "status": "done",
+              "estSec": 240,
+              "actualSec": 236,
+              "deltaSec": -4,
+              "points": 35
+            },
+            {
+              "label": "Plate & serve",
+              "status": "done",
+              "estSec": 60,
+              "actualSec": 62,
+              "deltaSec": 2,
+              "points": 10
+            },
+            {
+              "label": "Fluff the rice & serve",
+              "status": "done",
+              "estSec": 60,
+              "actualSec": 72,
+              "deltaSec": 12,
+              "points": 10
+            }
+          ],
+          "_order": 0
+        },
+        {
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "name": "Avery",
+          "colorKey": "mia",
+          "points": 87,
+          "rank": 2,
+          "isWinner": false,
+          "doneCount": 6,
+          "skippedCount": 0,
+          "quote": "The doubanjiang is popping everywhere and I'm not even scared!",
+          "quips": [],
+          "steps": [
+            {
+              "label": "Boil salted water in pot",
+              "status": "done",
+              "estSec": 300,
+              "actualSec": 308,
+              "deltaSec": 8,
+              "points": 9
+            },
+            {
+              "label": "Cut tofu into cubes",
+              "status": "done",
+              "estSec": 180,
+              "actualSec": 189,
+              "deltaSec": 9,
+              "points": 10
+            },
+            {
+              "label": "Portion & season ground pork",
+              "status": "done",
+              "estSec": 90,
+              "actualSec": 79,
+              "deltaSec": -11,
+              "points": 10
+            },
+            {
+              "label": "Mince ginger & scallion",
+              "status": "done",
+              "estSec": 90,
+              "actualSec": 92,
+              "deltaSec": 2,
+              "points": 10
+            },
+            {
+              "label": "Brown pork, then fry doubanjiang & aromatics",
+              "status": "done",
+              "estSec": 240,
+              "actualSec": 234,
+              "deltaSec": -6,
+              "points": 20
+            },
+            {
+              "label": "Thicken & garnish",
+              "status": "done",
+              "estSec": 60,
+              "actualSec": 58,
+              "deltaSec": -2,
+              "points": 20
+            }
+          ],
+          "_order": 1
+        }
+      ],
+      "perStep": [
+        {
+          "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::mince_garlic",
+          "label": "Mince garlic",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "status": "done",
+          "estSec": 60,
+          "actualSec": 73,
+          "points": 10,
+          "dish": "Mapo Tofu"
+        },
+        {
+          "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::boil_water",
+          "label": "Boil salted water in pot",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "status": "done",
+          "estSec": 300,
+          "actualSec": 308,
+          "points": 9,
+          "dish": "Mapo Tofu"
+        },
+        {
+          "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_cut",
+          "label": "Cut tofu into cubes",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "status": "done",
+          "estSec": 180,
+          "actualSec": 189,
+          "points": 10,
+          "dish": "Mapo Tofu"
+        },
+        {
+          "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::sauce_mix",
+          "label": "Mix sauce & slurry",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "status": "done",
+          "estSec": 120,
+          "actualSec": 104,
+          "points": 20,
+          "dish": "Mapo Tofu"
+        },
+        {
+          "id": "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_rinse",
+          "label": "Rinse the rice",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "status": "done",
+          "estSec": 120,
+          "actualSec": 117,
+          "points": 10,
+          "dish": "Steamed Rice"
+        },
+        {
+          "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::pork_prep",
+          "label": "Portion & season ground pork",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "status": "done",
+          "estSec": 90,
+          "actualSec": 79,
+          "points": 10,
+          "dish": "Mapo Tofu"
+        },
+        {
+          "id": "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_cook",
+          "label": "Cook the rice in a lidded pot",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "status": "done",
+          "estSec": 960,
+          "actualSec": 960,
+          "points": 0,
+          "dish": "Steamed Rice"
+        },
+        {
+          "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_mince_other",
+          "label": "Mince ginger & scallion",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "status": "done",
+          "estSec": 90,
+          "actualSec": 92,
+          "points": 10,
+          "dish": "Mapo Tofu"
+        },
+        {
+          "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_blanch",
+          "label": "Blanch tofu",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "status": "done",
+          "estSec": 120,
+          "actualSec": 120,
+          "points": 9,
+          "dish": "Mapo Tofu"
+        },
+        {
+          "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_saute",
+          "label": "Brown pork, then fry doubanjiang & aromatics",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "status": "done",
+          "estSec": 240,
+          "actualSec": 234,
+          "points": 20,
+          "dish": "Mapo Tofu"
+        },
+        {
+          "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::simmer_combine",
+          "label": "Combine & simmer",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "status": "done",
+          "estSec": 240,
+          "actualSec": 236,
+          "points": 35,
+          "dish": "Mapo Tofu"
+        },
+        {
+          "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::thicken_garnish",
+          "label": "Thicken & garnish",
+          "cookId": "571758b8-7bbb-421c-8a62-ae65a3fe9ed1",
+          "status": "done",
+          "estSec": 60,
+          "actualSec": 58,
+          "points": 20,
+          "dish": "Mapo Tofu"
+        },
+        {
+          "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::plate_serve",
+          "label": "Plate & serve",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "status": "done",
+          "estSec": 60,
+          "actualSec": 62,
+          "points": 10,
+          "dish": "Mapo Tofu"
+        },
+        {
+          "id": "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_fluff",
+          "label": "Fluff the rice & serve",
+          "cookId": "71fd609b-488c-4d64-b58c-8dab56dd7154",
+          "status": "done",
+          "estSec": 60,
+          "actualSec": 72,
+          "points": 10,
+          "dish": "Steamed Rice"
+        }
+      ],
+      "photo": null,
+      "styledPhoto": null,
+      "photoSource": null,
+      "story": ""
+    },
+    "recipes": [
+      {
+        "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463",
+        "templateId": "mapo-tofu-none",
+        "draft": {
+          "recipe_id": "recipe_37a33ac5-3b49-4c75-97f3-e39dfd362463",
+          "title": "Mapo Tofu",
+          "dish_idea_raw": "mapo tofu",
+          "servings": 2,
+          "created_at": "2026-09-26T10:35:00.000Z",
+          "nodes": [
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_cut",
+              "label": "Cut tofu into cubes",
+              "description": "Drain the block, cut into ~2cm cubes.",
+              "estimated_duration_sec": 180,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "tofu"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::mince_garlic",
+              "label": "Mince garlic",
+              "description": "Mince the garlic cloves.",
+              "estimated_duration_sec": 60,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "garlic"
+              ],
+              "material_usage": {
+                "garlic": {
+                  "amount": 3,
+                  "unit": "cloves"
+                }
+              },
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep",
+              "is_shareable": true,
+              "share_key": "mince_garlic"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::pork_prep",
+              "label": "Portion & season ground pork",
+              "description": "Portion the ground pork, season lightly with shaoxing wine.",
+              "estimated_duration_sec": 90,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "ground_pork"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_mince_other",
+              "label": "Mince ginger & scallion",
+              "description": "Fine-mince ginger; separate scallion whites from greens.",
+              "estimated_duration_sec": 90,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "ginger",
+                "scallion"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::sauce_mix",
+              "label": "Mix sauce & slurry",
+              "description": "Stock, soy sauce, sugar, and a cornstarch slurry, whisked together.",
+              "estimated_duration_sec": 120,
+              "difficulty": "medium",
+              "required_equipment": [],
+              "required_materials": [
+                "stock",
+                "soy_sauce",
+                "cornstarch"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::boil_water",
+              "label": "Boil salted water in pot",
+              "description": "Bring salted water to a boil in a pot.",
+              "estimated_duration_sec": 300,
+              "difficulty": "low",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep",
+              "tending": "timed",
+              "unattended": {
+                "initial": {
+                  "duration_sec": 45,
+                  "difficulty": "low"
+                },
+                "checkpoints": null,
+                "ending": {
+                  "duration_sec": 15,
+                  "difficulty": "low"
+                }
+              }
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_blanch",
+              "label": "Blanch tofu",
+              "description": "Blanch cubes in salted water 1-2 min to firm up and remove bean flavor.",
+              "estimated_duration_sec": 120,
+              "difficulty": "low",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [],
+              "depends_on": [
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_cut",
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::boil_water"
+              ],
+              "status": "pending",
+              "phase": "cook",
+              "tending": "timed",
+              "unattended": {
+                "initial": {
+                  "duration_sec": 20,
+                  "difficulty": "low"
+                },
+                "checkpoints": null,
+                "ending": {
+                  "duration_sec": 30,
+                  "difficulty": "low"
+                }
+              }
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_saute",
+              "label": "Brown pork, then fry doubanjiang & aromatics",
+              "description": "Brown the ground pork until crisp, then fry doubanjiang and fermented black beans until fragrant.",
+              "estimated_duration_sec": 240,
+              "difficulty": "medium",
+              "required_equipment": [
+                "stove_burner",
+                "wok"
+              ],
+              "required_materials": [
+                "doubanjiang",
+                "fermented_black_beans"
+              ],
+              "depends_on": [
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::mince_garlic",
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_mince_other",
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::pork_prep"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::simmer_combine",
+              "label": "Combine & simmer",
+              "description": "Add blanched tofu and sauce to the wok, simmer to let the tofu take on flavor.",
+              "estimated_duration_sec": 240,
+              "difficulty": "high",
+              "required_equipment": [
+                "stove_burner",
+                "wok"
+              ],
+              "required_materials": [],
+              "depends_on": [
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_blanch",
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_saute",
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::sauce_mix"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::thicken_garnish",
+              "label": "Thicken & garnish",
+              "description": "Reduce until glossy, fold in scallion greens and a drizzle of chili oil.",
+              "estimated_duration_sec": 60,
+              "difficulty": "medium",
+              "required_equipment": [
+                "stove_burner",
+                "wok"
+              ],
+              "required_materials": [
+                "chili_oil"
+              ],
+              "depends_on": [
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::simmer_combine"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::plate_serve",
+              "label": "Plate & serve",
+              "description": "Transfer to a serving dish while still bubbling; serve immediately over rice.",
+              "estimated_duration_sec": 60,
+              "difficulty": "low",
+              "required_equipment": [],
+              "required_materials": [
+                "rice"
+              ],
+              "depends_on": [
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::thicken_garnish"
+              ],
+              "status": "pending",
+              "phase": "plate",
+              "is_end_step": true
+            }
+          ],
+          "custom_materials": {}
+        },
+        "working": {
+          "recipe_id": "recipe_37a33ac5-3b49-4c75-97f3-e39dfd362463",
+          "title": "Mapo Tofu",
+          "dish_idea_raw": "mapo tofu",
+          "servings": 2,
+          "created_at": "2026-09-26T10:35:00.000Z",
+          "nodes": [
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_cut",
+              "label": "Cut tofu into cubes",
+              "description": "Drain the block, cut into ~2cm cubes.",
+              "estimated_duration_sec": 180,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "tofu"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::mince_garlic",
+              "label": "Mince garlic",
+              "description": "Mince the garlic cloves.",
+              "estimated_duration_sec": 60,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "garlic"
+              ],
+              "material_usage": {
+                "garlic": {
+                  "amount": 3,
+                  "unit": "cloves"
+                }
+              },
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep",
+              "is_shareable": true,
+              "share_key": "mince_garlic"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::pork_prep",
+              "label": "Portion & season ground pork",
+              "description": "Portion the ground pork, season lightly with shaoxing wine.",
+              "estimated_duration_sec": 90,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "ground_pork"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_mince_other",
+              "label": "Mince ginger & scallion",
+              "description": "Fine-mince ginger; separate scallion whites from greens.",
+              "estimated_duration_sec": 90,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "ginger",
+                "scallion"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::sauce_mix",
+              "label": "Mix sauce & slurry",
+              "description": "Stock, soy sauce, sugar, and a cornstarch slurry, whisked together.",
+              "estimated_duration_sec": 120,
+              "difficulty": "medium",
+              "required_equipment": [],
+              "required_materials": [
+                "stock",
+                "soy_sauce",
+                "cornstarch"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::boil_water",
+              "label": "Boil salted water in pot",
+              "description": "Bring salted water to a boil in a pot.",
+              "estimated_duration_sec": 300,
+              "difficulty": "low",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep",
+              "tending": "timed",
+              "unattended": {
+                "initial": {
+                  "duration_sec": 45,
+                  "difficulty": "low"
+                },
+                "checkpoints": null,
+                "ending": {
+                  "duration_sec": 15,
+                  "difficulty": "low"
+                }
+              }
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_blanch",
+              "label": "Blanch tofu",
+              "description": "Blanch cubes in salted water 1-2 min to firm up and remove bean flavor.",
+              "estimated_duration_sec": 120,
+              "difficulty": "low",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [],
+              "depends_on": [
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_cut",
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::boil_water"
+              ],
+              "status": "pending",
+              "phase": "cook",
+              "tending": "timed",
+              "unattended": {
+                "initial": {
+                  "duration_sec": 20,
+                  "difficulty": "low"
+                },
+                "checkpoints": null,
+                "ending": {
+                  "duration_sec": 30,
+                  "difficulty": "low"
+                }
+              }
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_saute",
+              "label": "Brown pork, then fry doubanjiang & aromatics",
+              "description": "Brown the ground pork until crisp, then fry doubanjiang and fermented black beans until fragrant.",
+              "estimated_duration_sec": 240,
+              "difficulty": "medium",
+              "required_equipment": [
+                "stove_burner",
+                "wok"
+              ],
+              "required_materials": [
+                "doubanjiang",
+                "fermented_black_beans"
+              ],
+              "depends_on": [
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::mince_garlic",
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_mince_other",
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::pork_prep"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::simmer_combine",
+              "label": "Combine & simmer",
+              "description": "Add blanched tofu and sauce to the wok, simmer to let the tofu take on flavor.",
+              "estimated_duration_sec": 240,
+              "difficulty": "high",
+              "required_equipment": [
+                "stove_burner",
+                "wok"
+              ],
+              "required_materials": [],
+              "depends_on": [
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_blanch",
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_saute",
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::sauce_mix"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::thicken_garnish",
+              "label": "Thicken & garnish",
+              "description": "Reduce until glossy, fold in scallion greens and a drizzle of chili oil.",
+              "estimated_duration_sec": 60,
+              "difficulty": "medium",
+              "required_equipment": [
+                "stove_burner",
+                "wok"
+              ],
+              "required_materials": [
+                "chili_oil"
+              ],
+              "depends_on": [
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::simmer_combine"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::plate_serve",
+              "label": "Plate & serve",
+              "description": "Transfer to a serving dish while still bubbling; serve immediately over rice.",
+              "estimated_duration_sec": 60,
+              "difficulty": "low",
+              "required_equipment": [],
+              "required_materials": [
+                "rice"
+              ],
+              "depends_on": [
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::thicken_garnish"
+              ],
+              "status": "pending",
+              "phase": "plate",
+              "is_end_step": true
+            }
+          ],
+          "custom_materials": {}
+        },
+        "approved": {
+          "recipe_id": "recipe_37a33ac5-3b49-4c75-97f3-e39dfd362463",
+          "title": "Mapo Tofu",
+          "dish_idea_raw": "mapo tofu",
+          "servings": 2,
+          "created_at": "2026-09-26T10:35:00.000Z",
+          "nodes": [
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_cut",
+              "label": "Cut tofu into cubes",
+              "description": "Drain the block, cut into ~2cm cubes.",
+              "estimated_duration_sec": 180,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "tofu"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::mince_garlic",
+              "label": "Mince garlic",
+              "description": "Mince the garlic cloves.",
+              "estimated_duration_sec": 60,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "garlic"
+              ],
+              "material_usage": {
+                "garlic": {
+                  "amount": 3,
+                  "unit": "cloves"
+                }
+              },
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep",
+              "is_shareable": true,
+              "share_key": "mince_garlic"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::pork_prep",
+              "label": "Portion & season ground pork",
+              "description": "Portion the ground pork, season lightly with shaoxing wine.",
+              "estimated_duration_sec": 90,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "ground_pork"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_mince_other",
+              "label": "Mince ginger & scallion",
+              "description": "Fine-mince ginger; separate scallion whites from greens.",
+              "estimated_duration_sec": 90,
+              "difficulty": "low",
+              "required_equipment": [
+                "cutting_board"
+              ],
+              "required_materials": [
+                "ginger",
+                "scallion"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::sauce_mix",
+              "label": "Mix sauce & slurry",
+              "description": "Stock, soy sauce, sugar, and a cornstarch slurry, whisked together.",
+              "estimated_duration_sec": 120,
+              "difficulty": "medium",
+              "required_equipment": [],
+              "required_materials": [
+                "stock",
+                "soy_sauce",
+                "cornstarch"
+              ],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::boil_water",
+              "label": "Boil salted water in pot",
+              "description": "Bring salted water to a boil in a pot.",
+              "estimated_duration_sec": 300,
+              "difficulty": "low",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [],
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep",
+              "tending": "timed",
+              "unattended": {
+                "initial": {
+                  "duration_sec": 45,
+                  "difficulty": "low"
+                },
+                "checkpoints": null,
+                "ending": {
+                  "duration_sec": 15,
+                  "difficulty": "low"
+                }
+              }
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_blanch",
+              "label": "Blanch tofu",
+              "description": "Blanch cubes in salted water 1-2 min to firm up and remove bean flavor.",
+              "estimated_duration_sec": 120,
+              "difficulty": "low",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [],
+              "depends_on": [
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_cut",
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::boil_water"
+              ],
+              "status": "pending",
+              "phase": "cook",
+              "tending": "timed",
+              "unattended": {
+                "initial": {
+                  "duration_sec": 20,
+                  "difficulty": "low"
+                },
+                "checkpoints": null,
+                "ending": {
+                  "duration_sec": 30,
+                  "difficulty": "low"
+                }
+              }
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_saute",
+              "label": "Brown pork, then fry doubanjiang & aromatics",
+              "description": "Brown the ground pork until crisp, then fry doubanjiang and fermented black beans until fragrant.",
+              "estimated_duration_sec": 240,
+              "difficulty": "medium",
+              "required_equipment": [
+                "stove_burner",
+                "wok"
+              ],
+              "required_materials": [
+                "doubanjiang",
+                "fermented_black_beans"
+              ],
+              "depends_on": [
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::mince_garlic",
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_mince_other",
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::pork_prep"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::simmer_combine",
+              "label": "Combine & simmer",
+              "description": "Add blanched tofu and sauce to the wok, simmer to let the tofu take on flavor.",
+              "estimated_duration_sec": 240,
+              "difficulty": "high",
+              "required_equipment": [
+                "stove_burner",
+                "wok"
+              ],
+              "required_materials": [],
+              "depends_on": [
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::tofu_blanch",
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::aromatics_saute",
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::sauce_mix"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::thicken_garnish",
+              "label": "Thicken & garnish",
+              "description": "Reduce until glossy, fold in scallion greens and a drizzle of chili oil.",
+              "estimated_duration_sec": 60,
+              "difficulty": "medium",
+              "required_equipment": [
+                "stove_burner",
+                "wok"
+              ],
+              "required_materials": [
+                "chili_oil"
+              ],
+              "depends_on": [
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::simmer_combine"
+              ],
+              "status": "pending",
+              "phase": "cook"
+            },
+            {
+              "id": "37a33ac5-3b49-4c75-97f3-e39dfd362463::plate_serve",
+              "label": "Plate & serve",
+              "description": "Transfer to a serving dish while still bubbling; serve immediately over rice.",
+              "estimated_duration_sec": 60,
+              "difficulty": "low",
+              "required_equipment": [],
+              "required_materials": [
+                "rice"
+              ],
+              "depends_on": [
+                "37a33ac5-3b49-4c75-97f3-e39dfd362463::thicken_garnish"
+              ],
+              "status": "pending",
+              "phase": "plate",
+              "is_end_step": true
+            }
+          ],
+          "custom_materials": {}
+        },
+        "custom_materials": {}
+      },
+      {
+        "id": "acff615d-fc92-4f20-ae7a-28d066095e6e",
+        "templateId": "steamed-rice-none",
+        "draft": {
+          "recipe_id": "recipe_acff615d-fc92-4f20-ae7a-28d066095e6e",
+          "title": "Steamed Rice",
+          "dish_idea_raw": "rice",
+          "servings": 2,
+          "created_at": "2026-09-26T10:35:00.000Z",
+          "nodes": [
+            {
+              "id": "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_rinse",
+              "label": "Rinse the rice",
+              "description": "Rinse 1 cup of jasmine rice in a bowl until the water runs almost clear, then drain.",
+              "estimated_duration_sec": 120,
+              "difficulty": "low",
+              "required_equipment": [],
+              "required_materials": [
+                "rice"
+              ],
+              "material_usage": {
+                "rice": {
+                  "amount": 1,
+                  "unit": "cups"
+                }
+              },
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_cook",
+              "label": "Cook the rice in a lidded pot",
+              "description": "Rice and 1¼ cups water in a pot. Boil, then lid on, lowest heat for 15 minutes. Leave it alone.",
+              "estimated_duration_sec": 960,
+              "difficulty": "low",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [],
+              "depends_on": [
+                "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_rinse"
+              ],
+              "status": "pending",
+              "phase": "cook",
+              "tending": "set_and_forget",
+              "unattended": {
+                "initial": {
+                  "duration_sec": 60,
+                  "difficulty": "low"
+                },
+                "checkpoints": null,
+                "ending": null
+              }
+            },
+            {
+              "id": "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_fluff",
+              "label": "Fluff the rice & serve",
+              "description": "Fluff with a fork and spoon into two bowls.",
+              "estimated_duration_sec": 60,
+              "difficulty": "low",
+              "required_equipment": [],
+              "required_materials": [],
+              "depends_on": [
+                "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_cook"
+              ],
+              "status": "pending",
+              "phase": "plate",
+              "is_end_step": true
+            }
+          ],
+          "custom_materials": {}
+        },
+        "working": {
+          "recipe_id": "recipe_acff615d-fc92-4f20-ae7a-28d066095e6e",
+          "title": "Steamed Rice",
+          "dish_idea_raw": "rice",
+          "servings": 2,
+          "created_at": "2026-09-26T10:35:00.000Z",
+          "nodes": [
+            {
+              "id": "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_rinse",
+              "label": "Rinse the rice",
+              "description": "Rinse 1 cup of jasmine rice in a bowl until the water runs almost clear, then drain.",
+              "estimated_duration_sec": 120,
+              "difficulty": "low",
+              "required_equipment": [],
+              "required_materials": [
+                "rice"
+              ],
+              "material_usage": {
+                "rice": {
+                  "amount": 1,
+                  "unit": "cups"
+                }
+              },
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_cook",
+              "label": "Cook the rice in a lidded pot",
+              "description": "Rice and 1¼ cups water in a pot. Boil, then lid on, lowest heat for 15 minutes. Leave it alone.",
+              "estimated_duration_sec": 960,
+              "difficulty": "low",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [],
+              "depends_on": [
+                "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_rinse"
+              ],
+              "status": "pending",
+              "phase": "cook",
+              "tending": "set_and_forget",
+              "unattended": {
+                "initial": {
+                  "duration_sec": 60,
+                  "difficulty": "low"
+                },
+                "checkpoints": null,
+                "ending": null
+              }
+            },
+            {
+              "id": "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_fluff",
+              "label": "Fluff the rice & serve",
+              "description": "Fluff with a fork and spoon into two bowls.",
+              "estimated_duration_sec": 60,
+              "difficulty": "low",
+              "required_equipment": [],
+              "required_materials": [],
+              "depends_on": [
+                "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_cook"
+              ],
+              "status": "pending",
+              "phase": "plate",
+              "is_end_step": true
+            }
+          ],
+          "custom_materials": {}
+        },
+        "approved": {
+          "recipe_id": "recipe_acff615d-fc92-4f20-ae7a-28d066095e6e",
+          "title": "Steamed Rice",
+          "dish_idea_raw": "rice",
+          "servings": 2,
+          "created_at": "2026-09-26T10:35:00.000Z",
+          "nodes": [
+            {
+              "id": "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_rinse",
+              "label": "Rinse the rice",
+              "description": "Rinse 1 cup of jasmine rice in a bowl until the water runs almost clear, then drain.",
+              "estimated_duration_sec": 120,
+              "difficulty": "low",
+              "required_equipment": [],
+              "required_materials": [
+                "rice"
+              ],
+              "material_usage": {
+                "rice": {
+                  "amount": 1,
+                  "unit": "cups"
+                }
+              },
+              "depends_on": [],
+              "status": "pending",
+              "phase": "prep"
+            },
+            {
+              "id": "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_cook",
+              "label": "Cook the rice in a lidded pot",
+              "description": "Rice and 1¼ cups water in a pot. Boil, then lid on, lowest heat for 15 minutes. Leave it alone.",
+              "estimated_duration_sec": 960,
+              "difficulty": "low",
+              "required_equipment": [
+                "stove_burner",
+                "pot"
+              ],
+              "required_materials": [],
+              "depends_on": [
+                "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_rinse"
+              ],
+              "status": "pending",
+              "phase": "cook",
+              "tending": "set_and_forget",
+              "unattended": {
+                "initial": {
+                  "duration_sec": 60,
+                  "difficulty": "low"
+                },
+                "checkpoints": null,
+                "ending": null
+              }
+            },
+            {
+              "id": "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_fluff",
+              "label": "Fluff the rice & serve",
+              "description": "Fluff with a fork and spoon into two bowls.",
+              "estimated_duration_sec": 60,
+              "difficulty": "low",
+              "required_equipment": [],
+              "required_materials": [],
+              "depends_on": [
+                "acff615d-fc92-4f20-ae7a-28d066095e6e::rice_cook"
+              ],
+              "status": "pending",
+              "phase": "plate",
+              "is_end_step": true
+            }
+          ],
+          "custom_materials": {}
+        },
+        "custom_materials": {}
+      }
+    ],
+    "sharedSteps": []
+  }
+]

@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900">
+  <defs>
+    <clipPath id="soupSurface"><ellipse cx="835" cy="468" rx="198" ry="47"/></clipPath>
+  </defs>
+  <g stroke="#1a1a1a" stroke-linecap="round" stroke-linejoin="round">
+  <rect width="1200" height="900" fill="#f2ead8" stroke="none"/>
+  <path d="M0 556 C 250 544 540 552 800 548 C 960 545 1090 552 1200 558 L1200 900 L0 900 Z" fill="#fffdf7" stroke="none"/>
+  <path d="M0 556 C 250 544 540 552 800 548 C 960 545 1090 552 1200 558" fill="none" stroke-width="5"/>
+  <g fill="none" stroke-width="4" opacity="0.55">
+      <path d="M40 706 C 300 698 620 706 1160 700" stroke="#9dc0d9"/>
+      <path d="M40 766 C 300 758 620 766 1160 760" stroke="#e3b7a4"/>
+      <path d="M40 826 C 300 818 620 826 1160 820" stroke="#9dc0d9"/>
+  </g>
+  <g transform="translate(305 300) scale(1.0)" fill="none" stroke-width="6" opacity="0.8">
+    <path d="M-40 0 C -58 -30 -22 -48 -40 -78 C -52 -100 -34 -118 -42 -134"/>
+    <path d="M10 -8 C -4 -40 30 -58 14 -90"/>
+    <path d="M58 2 C 42 -26 76 -42 62 -70 C 52 -90 66 -106 62 -120"/>
+  </g>
+  <g transform="translate(885 306) scale(0.95)" fill="none" stroke-width="6" opacity="0.8">
+    <path d="M-40 0 C -58 -30 -22 -48 -40 -78 C -52 -100 -34 -118 -42 -134"/>
+    <path d="M10 -8 C -4 -40 30 -58 14 -90"/>
+    <path d="M58 2 C 42 -26 76 -42 62 -70 C 52 -90 66 -106 62 -120"/>
+  </g>
+  <g transform="translate(320 420) scale(1.0 1.0)"><g transform="translate(-835 -454)">
+    <!-- ===== Chicken noodle soup bowl ===== -->
+    <ellipse cx="835" cy="672" rx="178" ry="17" fill="#e6dcc6" stroke="none"/>
+    <path d="M762 636 L770 664 L900 664 L908 636" fill="#fffdf7" stroke-width="6"/>
+    <path d="M615 454 C 620 566 702 640 835 642 C 968 640 1050 566 1055 454" fill="#fffdf7" stroke-width="7"/>
+    <path d="M640 520 C 675 568 732 604 800 616" fill="none" stroke-width="4" opacity="0.35"/>
+    <ellipse cx="835" cy="454" rx="222" ry="60" fill="#fffdf7" stroke-width="7"/>
+    <ellipse cx="835" cy="468" rx="198" ry="47" fill="#f6e3b8" stroke-width="5"/>
+    <g clip-path="url(#soupSurface)">
+      <!-- noodles: ink under white, so each strand keeps its outline -->
+      <g fill="none">
+        <path d="M660 470 C 700 430 760 500 800 460 C 840 424 880 494 930 458 C 960 438 990 470 1010 456" stroke="#1a1a1a" stroke-width="17"/>
+        <path d="M660 470 C 700 430 760 500 800 460 C 840 424 880 494 930 458 C 960 438 990 470 1010 456" stroke="#fffdf7" stroke-width="9"/>
+        <path d="M690 500 C 740 470 790 520 850 490 C 900 466 950 508 990 486" stroke="#1a1a1a" stroke-width="17"/>
+        <path d="M690 500 C 740 470 790 520 850 490 C 900 466 950 508 990 486" stroke="#fffdf7" stroke-width="9"/>
+      </g>
+      <!-- chicken, carrot, dill -->
+      <g stroke-width="5">
+        <path d="M720 440 C 736 426 766 430 770 448 C 774 464 744 472 728 464 C 714 458 710 448 720 440 Z" fill="#eab98b"/>
+        <path d="M930 488 C 944 474 972 478 976 494 C 980 508 952 516 938 510 C 926 504 922 496 930 488 Z" fill="#eab98b"/>
+        <circle cx="868" cy="436" r="17" fill="#ef8f3a"/>
+        <circle cx="782" cy="494" r="15" fill="#ef8f3a"/>
+      </g>
+      <g fill="none" stroke-width="3">
+        <circle cx="868" cy="436" r="7"/><circle cx="782" cy="494" r="6"/>
+      </g>
+      <g fill="#7cb85a" stroke-width="3.5">
+        <path d="M980 440 C 990 428 1004 430 1006 440 C 1000 448 988 450 980 440 Z"/>
+        <path d="M700 480 C 708 468 722 470 724 480 C 718 488 706 490 700 480 Z"/>
+      </g>
+    </g>
+    <!-- the strand that always escapes over the rim -->
+    <path d="M1010 452 C 1034 470 1040 500 1030 532" fill="none" stroke="#1a1a1a" stroke-width="17"/>
+    <path d="M1010 452 C 1034 470 1040 500 1030 532" fill="none" stroke="#fffdf7" stroke-width="9"/>
+
+  </g></g>
+  <g transform="translate(880 426) scale(-1.0 1.0)"><g transform="translate(-835 -454)">
+    <!-- ===== Chicken noodle soup bowl ===== -->
+    <ellipse cx="835" cy="672" rx="178" ry="17" fill="#e6dcc6" stroke="none"/>
+    <path d="M762 636 L770 664 L900 664 L908 636" fill="#fffdf7" stroke-width="6"/>
+    <path d="M615 454 C 620 566 702 640 835 642 C 968 640 1050 566 1055 454" fill="#fffdf7" stroke-width="7"/>
+    <path d="M640 520 C 675 568 732 604 800 616" fill="none" stroke-width="4" opacity="0.35"/>
+    <ellipse cx="835" cy="454" rx="222" ry="60" fill="#fffdf7" stroke-width="7"/>
+    <ellipse cx="835" cy="468" rx="198" ry="47" fill="#f6e3b8" stroke-width="5"/>
+    <g clip-path="url(#soupSurface)">
+      <!-- noodles: ink under white, so each strand keeps its outline -->
+      <g fill="none">
+        <path d="M660 470 C 700 430 760 500 800 460 C 840 424 880 494 930 458 C 960 438 990 470 1010 456" stroke="#1a1a1a" stroke-width="17"/>
+        <path d="M660 470 C 700 430 760 500 800 460 C 840 424 880 494 930 458 C 960 438 990 470 1010 456" stroke="#fffdf7" stroke-width="9"/>
+        <path d="M690 500 C 740 470 790 520 850 490 C 900 466 950 508 990 486" stroke="#1a1a1a" stroke-width="17"/>
+        <path d="M690 500 C 740 470 790 520 850 490 C 900 466 950 508 990 486" stroke="#fffdf7" stroke-width="9"/>
+      </g>
+      <!-- chicken, carrot, dill -->
+      <g stroke-width="5">
+        <path d="M720 440 C 736 426 766 430 770 448 C 774 464 744 472 728 464 C 714 458 710 448 720 440 Z" fill="#eab98b"/>
+        <path d="M930 488 C 944 474 972 478 976 494 C 980 508 952 516 938 510 C 926 504 922 496 930 488 Z" fill="#eab98b"/>
+        <circle cx="868" cy="436" r="17" fill="#ef8f3a"/>
+        <circle cx="782" cy="494" r="15" fill="#ef8f3a"/>
+      </g>
+      <g fill="none" stroke-width="3">
+        <circle cx="868" cy="436" r="7"/><circle cx="782" cy="494" r="6"/>
+      </g>
+      <g fill="#7cb85a" stroke-width="3.5">
+        <path d="M980 440 C 990 428 1004 430 1006 440 C 1000 448 988 450 980 440 Z"/>
+        <path d="M700 480 C 708 468 722 470 724 480 C 718 488 706 490 700 480 Z"/>
+      </g>
+    </g>
+    <!-- the strand that always escapes over the rim -->
+    <path d="M1010 452 C 1034 470 1040 500 1030 532" fill="none" stroke="#1a1a1a" stroke-width="17"/>
+    <path d="M1010 452 C 1034 470 1040 500 1030 532" fill="none" stroke="#fffdf7" stroke-width="9"/>
+
+  </g></g>
+  <g transform="translate(290 760) rotate(-8)" stroke-width="6">
+    <path d="M-150 -9 L 20 -7 C 30 -7 34 7 20 7 L -150 9 C -160 9 -160 -9 -150 -9 Z" fill="#dfe6ea"/>
+    <path d="M18 -26 C 70 -30 104 -14 104 0 C 104 14 70 30 18 26 C -4 24 -4 -24 18 -26 Z" fill="#dfe6ea"/>
+    <path d="M30 -12 C 60 -14 80 -6 82 0" fill="none" stroke-width="4" opacity="0.4"/>
+  </g>
+  <g transform="translate(900 772) rotate(188)" stroke-width="6">
+    <path d="M-150 -9 L 20 -7 C 30 -7 34 7 20 7 L -150 9 C -160 9 -160 -9 -150 -9 Z" fill="#dfe6ea"/>
+    <path d="M18 -26 C 70 -30 104 -14 104 0 C 104 14 70 30 18 26 C -4 24 -4 -24 18 -26 Z" fill="#dfe6ea"/>
+    <path d="M30 -12 C 60 -14 80 -6 82 0" fill="none" stroke-width="4" opacity="0.4"/>
+  </g>
+  <g transform="translate(600 700) rotate(-14)" stroke-width="4">
+    <path d="M0 40 C 2 10 -4 -20 -2 -44" fill="none" stroke-width="5"/>
+    <path d="M-2 -44 C -26 -52 -40 -34 -28 -22 C -40 -14 -30 4 -12 -4 C -10 8 8 10 10 -4 C 28 2 38 -16 24 -24 C 36 -36 22 -54 -2 -44 Z" fill="#7cb85a"/>
+    <path d="M-2 4 C -22 0 -32 16 -18 24 C -10 32 4 26 2 16" fill="#7cb85a"/>
+  </g>
+  <g stroke-width="2.2" stroke-linejoin="round">
+    <path d="M13 3.2c1.6 0 2.2 1.6 2.4 3.4l.5 4.6c.1 1.2 1 1.6 2 1.1l3.6-1.8c1.6-.8 2.8.6 1.7 2L14.9 25c-1 1.3-2.6 1.3-3.5 0L2.9 12.6c-1-1.4.2-2.8 1.8-2l3.5 1.8c1 .5 1.9.1 2-1.1l.5-4.6C10.9 4.8 11.4 3.2 13 3.2Z" transform="translate(70 800) rotate(-70 13 14) scale(2.4)" fill="#f6cfa6" stroke="#b08a63"/>
+    <path d="M13 3.2c1.6 0 2.2 1.6 2.4 3.4l.5 4.6c.1 1.2 1 1.6 2 1.1l3.6-1.8c1.6-.8 2.8.6 1.7 2L14.9 25c-1 1.3-2.6 1.3-3.5 0L2.9 12.6c-1-1.4.2-2.8 1.8-2l3.5 1.8c1 .5 1.9.1 2-1.1l.5-4.6C10.9 4.8 11.4 3.2 13 3.2Z" transform="translate(150 852) rotate(-58 13 14) scale(2.0)" fill="#faddbe" stroke="#c2a081"/>
+  </g>
+  </g>
+</svg>

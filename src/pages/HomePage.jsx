@@ -7,6 +7,7 @@ import { useAppState } from "../state/AppStateContext.jsx";
 import KitchenProfileFormModal from "../components/KitchenProfileFormModal.jsx";
 import KpIcon from "../components/KpIcon.jsx";
 import welcomeBand from "../assets/home-welcome-band-trim.webp";
+import { EXAMPLE_RUN_ROWS } from "../data/exampleRuns.js";
 import {
   formatShortDate,
   relativeTime,
@@ -237,6 +238,17 @@ export default function HomePage() {
     const rows = state.sessionHistory.map((item) => summarizeRun(item, profiles));
     return { rows, ...runLogRecord(rows) };
   }, [state.sessionHistory, profiles]);
+  // The two examples sit pinned above the visitor's own runs. They are
+  // never ranked, never the best, never counted in the record line, and
+  // cannot be deleted — they are the same for everyone (see
+  // data/exampleRuns.js).
+  const runRows = useMemo(
+    () => [
+      ...EXAMPLE_RUN_ROWS.map((item) => ({ ...summarizeRun(item, []), example: true })),
+      ...runLog.rows.map((r, i) => ({ ...r, rank: i + 1 })),
+    ],
+    [runLog.rows],
+  );
 
   // VoiceBar as the announcer: one line + one AI line per hero state.
   useEffect(() => {
@@ -740,90 +752,92 @@ export default function HomePage() {
           </span>
           {runLog.rows.length > 0 && <span className="mono hp-record">{runLog.line}</span>}
         </div>
-        {runLog.rows.length === 0 ? (
-          <div className="hp-row hp-row-empty hp-row-empty-stack">
-            <KpIcon glyph="trophy" size={32} className="hp-empty-glyph" />
-            <span className="hp-meta">Your first run shows up here.</span>
-          </div>
-        ) : (
-          <ol className="hp-list">
-            {runLog.rows.map((r, i) => {
-              const isBest = r.status === "completed" && runLog.bestSec != null && r.durationSec === runLog.bestSec;
-              const metaBits = [
-                r.kitchenName,
-                r.servings != null ? (
-                  <>
-                    <span className="mono">{r.servings}</span> servings
-                  </>
-                ) : null,
-                r.endedAt ? <span className="mono">{formatShortDate(r.endedAt)}</span> : null,
-              ].filter(Boolean);
-              const isAbandoned = r.status !== "completed";
-              return (
-                <li
-                  className={`hp-row hp-row-run hp-reveal${r.hasCard ? "" : " has-no-card"}${isBest ? " is-best" : ""}${isAbandoned ? " is-abandoned" : ""}`}
-                  style={{ animationDelay: `${300 + i * 60}ms` }}
-                  key={r.id}
-                >
-                  {/* Overlay rather than wrapping the row, so the layout
-                      above stays exactly as designed. Only runs that
-                      finished have a card to open — an abandoned one
-                      would land on a dead end, so it isn't clickable. */}
-                  {r.hasCard && (
-                    <button
-                      type="button"
-                      className="hp-row-open"
-                      onClick={() => navigate(`/cook/${r.id}`)}
-                      aria-label={`Open the cook journal for ${r.title}`}
-                    />
-                  )}
-                  <span className="mono hp-rank">{String(i + 1).padStart(2, "0")}</span>
-                  <span className="hp-row-main">
-                    <span className="hp-row-title-line">
-                      <span className="hp-row-title">{r.title}</span>
-                      {isBest && <KpIcon glyph="trophy" size={20} className="hp-trophy" aria-label="Fastest run" />}
-                      {isBest && (
-                        // A single feather beside the trophy — a small
-                        // mark, in the goose's own hand.
-                        <svg
-                          className="hp-feather"
-                          viewBox="0 0 46 76"
-                          width="16"
-                          height="26"
-                          fill="none"
-                          aria-hidden="true"
-                        >
-                          <path d="M33 5c6 16 3 33-6 44-4 5-9 9-13 11 1-13 4-24 8-33" fill="var(--kp-feather-fill, #f7f2e6)" stroke="var(--kp-feather-ink, #8a7a58)" strokeWidth="2.4" strokeLinejoin="round" />
-                          <path d="M33 5c-7 12-13 24-16 35-2 8-3 15-3 20" fill="var(--kp-feather-vane, #fffdf7)" stroke="var(--kp-feather-ink, #8a7a58)" strokeWidth="2.4" strokeLinejoin="round" />
-                          <path d="M33 5 14 60v12" stroke="var(--kp-feather-ink, #8a7a58)" strokeWidth="2.4" strokeLinecap="round" />
-                        </svg>
-                      )}
-                    </span>
-                    <span className="hp-meta">
-                      {metaBits.map((bit, j) => (
-                        <span key={j}>
-                          {j > 0 && " · "}
-                          {bit}
-                        </span>
-                      ))}
-                    </span>
+        <ol className="hp-list">
+          {runRows.map((r, i) => {
+            const isBest = !r.example && r.status === "completed" && runLog.bestSec != null && r.durationSec === runLog.bestSec;
+            const metaBits = [
+              r.kitchenName,
+              r.servings != null ? (
+                <>
+                  <span className="mono">{r.servings}</span> servings
+                </>
+              ) : null,
+              r.endedAt ? <span className="mono">{formatShortDate(r.endedAt)}</span> : null,
+            ].filter(Boolean);
+            const isAbandoned = r.status !== "completed";
+            return (
+              <li
+                className={`hp-row hp-row-run hp-reveal${r.hasCard ? "" : " has-no-card"}${isBest ? " is-best" : ""}${isAbandoned ? " is-abandoned" : ""}${r.example ? " is-example" : ""}`}
+                style={{ animationDelay: `${300 + i * 60}ms` }}
+                key={r.id}
+              >
+                {/* Overlay rather than wrapping the row, so the layout
+                    above stays exactly as designed. Only runs that
+                    finished have a card to open — an abandoned one
+                    would land on a dead end, so it isn't clickable. */}
+                {r.hasCard && (
+                  <button
+                    type="button"
+                    className="hp-row-open"
+                    onClick={() => navigate(`/cook/${r.id}`)}
+                    aria-label={`Open the ${r.example ? "example " : ""}cook journal for ${r.title}`}
+                  />
+                )}
+                {r.example ? (
+                  <span className="hp-rank hp-rank-pin">
+                    <KpIcon glyph="pin" size={18} />
                   </span>
-                  {isAbandoned && <Footprints seed={r.id} />}
-                  {r.durationSec != null && (
-                    <span className={`mono hp-duration ${r.status === "completed" ? "" : "is-muted"}`}>{timer(r.durationSec)}</span>
-                  )}
-                  {r.status === "completed" ? (
-                    <Chip className="hp-chip-status hp-chip-done hp-pop" style={{ animationDelay: `${360 + i * 60}ms` }}>
-                      <KpIcon glyph="checkmark-burst" size={16} />
-                      <span className="hp-chip-text">Done</span>
-                    </Chip>
-                  ) : (
-                    <Chip className="hp-chip-status hp-chip-waiting">
-                      <span className="hp-dot" />
-                      <span className="hp-chip-text">Abandoned</span>
-                    </Chip>
-                  )}
-                  {/* Sits above the row-open overlay so it stays clickable. */}
+                ) : (
+                  <span className="mono hp-rank">{String(r.rank).padStart(2, "0")}</span>
+                )}
+                <span className="hp-row-main">
+                  <span className="hp-row-title-line">
+                    <span className="hp-row-title">{r.title}</span>
+                    {r.example && <span className="hp-example-tag">Example</span>}
+                    {isBest && <KpIcon glyph="trophy" size={20} className="hp-trophy" aria-label="Fastest run" />}
+                    {isBest && (
+                      // A single feather beside the trophy — a small
+                      // mark, in the goose's own hand.
+                      <svg
+                        className="hp-feather"
+                        viewBox="0 0 46 76"
+                        width="16"
+                        height="26"
+                        fill="none"
+                        aria-hidden="true"
+                      >
+                        <path d="M33 5c6 16 3 33-6 44-4 5-9 9-13 11 1-13 4-24 8-33" fill="var(--kp-feather-fill, #f7f2e6)" stroke="var(--kp-feather-ink, #8a7a58)" strokeWidth="2.4" strokeLinejoin="round" />
+                        <path d="M33 5c-7 12-13 24-16 35-2 8-3 15-3 20" fill="var(--kp-feather-vane, #fffdf7)" stroke="var(--kp-feather-ink, #8a7a58)" strokeWidth="2.4" strokeLinejoin="round" />
+                        <path d="M33 5 14 60v12" stroke="var(--kp-feather-ink, #8a7a58)" strokeWidth="2.4" strokeLinecap="round" />
+                      </svg>
+                    )}
+                  </span>
+                  <span className="hp-meta">
+                    {metaBits.map((bit, j) => (
+                      <span key={j}>
+                        {j > 0 && " · "}
+                        {bit}
+                      </span>
+                    ))}
+                  </span>
+                </span>
+                {isAbandoned && <Footprints seed={r.id} />}
+                {r.durationSec != null && (
+                  <span className={`mono hp-duration ${r.status === "completed" ? "" : "is-muted"}`}>{timer(r.durationSec)}</span>
+                )}
+                {r.status === "completed" ? (
+                  <Chip className="hp-chip-status hp-chip-done hp-pop" style={{ animationDelay: `${360 + i * 60}ms` }}>
+                    <KpIcon glyph="checkmark-burst" size={16} />
+                    <span className="hp-chip-text">Done</span>
+                  </Chip>
+                ) : (
+                  <Chip className="hp-chip-status hp-chip-waiting">
+                    <span className="hp-dot" />
+                    <span className="hp-chip-text">Abandoned</span>
+                  </Chip>
+                )}
+                {/* Sits above the row-open overlay so it stays clickable. */}
+                {!r.example && (
                   <button
                     type="button"
                     className="hp-row-delete"
@@ -833,10 +847,16 @@ export default function HomePage() {
                   >
                     &times;
                   </button>
-                </li>
-              );
-            })}
-          </ol>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+        {runLog.rows.length === 0 && (
+          <div className="hp-row hp-row-empty">
+            <KpIcon glyph="trophy" size={20} className="hp-empty-glyph" />
+            <span className="hp-meta">Your own runs show up here, under the examples.</span>
+          </div>
         )}
       </section>
 

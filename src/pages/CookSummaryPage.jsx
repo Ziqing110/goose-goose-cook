@@ -330,6 +330,9 @@ export default function CookSummaryPage() {
   // The photo as taken. A styledPhoto saved by an older card (pixel art,
   // a sticker cutout) is ignored rather than shown.
   const hero = pendingPhoto || summary.photo;
+  // One of the examples pinned to Home: the same card for every visitor,
+  // so there is no photo of theirs to put on it.
+  const example = Boolean(session.example);
   const versus = summary.mode === "competition";
   const date = formatDate(summary.createdAt);
   const { show: showDelta, deltaSec } = planDelta(outcome);
@@ -338,7 +341,7 @@ export default function CookSummaryPage() {
   return (
     <section className={`page cook-card-page ${versus ? "is-versus" : "is-coop"}${location.state?.fromLiveCook ? " should-reveal" : ""}`}>
       <header className="cc-title-row">
-        <span className="ds-run-eyebrow">Cook journal · {date}</span>
+        <span className="ds-run-eyebrow">{example ? "Example cook journal" : "Cook journal"} · {date}</span>
         <span className="ds-title-mark">
           <h1>{summary.dish}</h1>
           {/* The mark runs the width of its box, so a title that wraps
@@ -382,7 +385,7 @@ export default function CookSummaryPage() {
             date={date}
             styled={summary.photoSource === "model" && !pendingPhoto}
             styling={styling}
-            canChange={Boolean(hero) && !styling}
+            canChange={Boolean(hero) && !styling && !example}
             onPick={() => fileInputRef.current?.click()}
           >
             <input ref={fileInputRef} type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} />
