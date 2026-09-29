@@ -12,8 +12,9 @@ import BoardPanel, { ChoiceChip, LinkPicker, LinkRow, MaterialsField, PanelField
 import { DIFFICULTY_SEGMENTS } from "./NodeEditorPanel.jsx";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 import { useVoicePageState } from "../hooks/useVoicePageState.js";
-import { spokenNumber, NUMBER_TOKEN } from "../utils/understanding.js";
-import { matchStepName } from "../utils/stepNameMatch.js";
+import { useVoiceConfirm } from "../hooks/useVoiceConfirm.js";
+import { spokenNumber, spokenMinutes, NUMBER_TOKEN } from "../utils/understanding.js";
+import { matchStepName, guessIfNone, stepByNumber, stepRetryRef, STEP_RETRY_PATTERNS } from "../utils/stepNameMatch.js";
 import { ADD_STEP_VOICE } from "../utils/pageVoiceGrammar.js";
 import "./AddStepPanel.css";
 
@@ -66,6 +67,21 @@ export default function AddStepPanel({
     setRunsBefore((cur) => toggleIn(cur, id));
     setDependsOn((cur) => cur.filter((x) => x !== id));
   };
+  const pickMaterial = (id) => setMaterials((cur) => (cur.includes(id) ? cur : [...cur, id]));
+
+  // "Runs after boil the noodles" and "add material soy sauce" both
+  // resolve a spoken name against a list of candidates that can read a
+  // lot alike, same as the live cook claiming a step by voice. A close
+  // but not exact guess asks rather than either firing on a guess or
+  // flatly giving up on anything short of the step's full name read
+  // back verbatim.
+  const askConfirm = useVoiceConfirm();
+  // Which field ("after" or "before") a step reference just failed to
+  // resolve for, so the very next turn can answer with just the number
+  // ("the second step") instead of the whole sentence again. Cleared the
+  // moment anything resolves it (or fails to a second time) -- one
+  // retry, not a standing memory of the last question asked.
+  const lastFailedFieldRef = useRef(null);
 
   const submit = (e) => {
     e?.preventDefault();
@@ -90,12 +106,12 @@ export default function AddStepPanel({
   // still dead-ends at a mouse click. The values read through a ref so
   // the commands don't have to re-register on every keystroke.
   const stateRef = useRef();
-  stateRef.current = { label, recipeId, phase, minutes, difficulty, equipment, materials, materialUsage, dependsOn, runsBefore };
+  stateRef.current = { label, recipeId, phase, minutes, difficulty, equipment, materials, materialUsage, dependsOn, runsBefore, materialsInfo };
   // Registered once per `nodes` change, so the command closures below must
   // not read `label`/`onAdd`/`onClose` directly — those go stale the
   // moment the effect doesn't re-run. Everything reads through these.
   const actionsRef = useRef();
-  actionsRef.current = { onAdd, onClose };
+  actionsRef.current = { onAdd, onClose, onRegisterMaterial };
 
   useEffect(() => {
     const stepIds = nodes.map((n) => n.id);
@@ -117,10 +133,12 @@ export default function AddStepPanel({
       {
         phrases: ADD_STEP_VOICE.duration(NUMBER_TOKEN),
         run: (m) => {
-          const n = spokenNumber(m[1]);
-          if (n === null) return null;
-          setMinutes(n);
-          return `${n} minute${n === 1 ? "" : "s"}.`;
+          const mins = spokenMinutes(m[1], m[2]);
+          if (mins === null) return null;
+          setMinutes(mins);
+          const said = spokenNumber(m[1]);
+          const isSeconds = /^s/i.test(m[2] || "");
+          return isSeconds ? `${said} second${said === 1 ? "" : "s"}.` : `${said} minute${said === 1 ? "" : "s"}.`;
         },
       },
       {
@@ -141,26 +159,104 @@ export default function AddStepPanel({
         const word = equipmentLabel(eq).toLowerCase();
         const a = EQUIPMENT_ARTICLE[eq];
         return [
-          { phrases: ADD_STEP_VOICE.equipment(word, a).off, label: `${equipmentLabel(eq)} — not needed.`, run: () => setEquipment((cur) => cur.filter((x) => x !== eq)) },
-          { phrases: ADD_STEP_VOICE.equipment(word, a).on, label: `${equipmentLabel(eq)} needed.`, run: () => setEquipment((cur) => (cur.includes(eq) ? cur : [...cur, eq])) },
+          {
+            phrases: ADD_STEP_VOICE.equipment(word, a).off,
+            allowSubject: true, // "I don't need a wok" always names the equipment
+            label: `${equipmentLabel(eq)} — not needed.`,
+            run: () => setEquipment((cur) => cur.filter((x) => x !== eq)),
+          },
+          {
+            phrases: ADD_STEP_VOICE.equipment(word, a).on,
+            allowSubject: true, // "I need a wok" always names the equipment
+            label: `${equipmentLabel(eq)} needed.`,
+            run: () => setEquipment((cur) => (cur.includes(eq) ? cur : [...cur, eq])),
+          },
         ];
       }),
       {
         phrases: ADD_STEP_VOICE.after,
         run: (m) => {
-          const match = matchStepName(m[1], stepIds, labelOf);
-          if (match.confidence !== "exact") return "I couldn't tell which step you meant.";
-          pickDependsOn(match.stepId);
-          return `Runs after “${match.label}.”`;
+          const said = m[1];
+          const match = stepByNumber(said, stepIds, labelOf, numberOf) ?? guessIfNone(matchStepName(said, stepIds, labelOf), labelOf);
+          if (match.confidence === "none") {
+            lastFailedFieldRef.current = "after";
+            return "I couldn't tell which step you meant.";
+          }
+          lastFailedFieldRef.current = null;
+          if (match.confidence === "exact") {
+            pickDependsOn(match.stepId);
+            return `Runs after “${match.label}.”`;
+          }
+          askConfirm(() => pickDependsOn(match.stepId));
+          return `Runs after “${match.label}”? Say yes or no.`;
         },
       },
       {
         phrases: ADD_STEP_VOICE.before,
         run: (m) => {
-          const match = matchStepName(m[1], stepIds, labelOf);
-          if (match.confidence !== "exact") return "I couldn't tell which step you meant.";
+          const said = m[1];
+          const match = stepByNumber(said, stepIds, labelOf, numberOf) ?? guessIfNone(matchStepName(said, stepIds, labelOf), labelOf);
+          if (match.confidence === "none") {
+            lastFailedFieldRef.current = "before";
+            return "I couldn't tell which step you meant.";
+          }
+          lastFailedFieldRef.current = null;
+          if (match.confidence === "exact") {
+            pickRunsBefore(match.stepId);
+            return `Unlocks “${match.label}” next.`;
+          }
+          askConfirm(() => pickRunsBefore(match.stepId));
+          return `Unlock “${match.label}” next? Say yes or no.`;
+        },
+      },
+      {
+        // Answers a step reference that just failed to resolve, with
+        // nothing but the number: "the second step" fails once above,
+        // and the very next turn -- even just "2" or "second" alone --
+        // finishes it, instead of making someone repeat the whole
+        // sentence. Silent (no match at all) unless that just happened,
+        // so a bare "second" heard out of nowhere means nothing.
+        phrases: STEP_RETRY_PATTERNS,
+        run: (m) => {
+          const field = lastFailedFieldRef.current;
+          if (!field) return null;
+          lastFailedFieldRef.current = null;
+          const match = stepRetryRef(m[0], stepIds, labelOf, numberOf);
+          if (!match || match.confidence !== "exact") return "I still couldn't tell which step you meant.";
+          if (field === "after") {
+            pickDependsOn(match.stepId);
+            return `Runs after “${match.label}.”`;
+          }
           pickRunsBefore(match.stepId);
-          return `Runs before “${match.label}.”`;
+          return `Unlocks “${match.label}” next.`;
+        },
+      },
+      {
+        phrases: ADD_STEP_VOICE.material,
+        run: (m) => {
+          const said = m[1].trim();
+          const info = stateRef.current.materialsInfo;
+          const materialIds = Object.keys(info || {});
+          const materialLabelOf = (id) => info?.[id]?.label;
+          const match = matchStepName(said, materialIds, materialLabelOf);
+          if (match.confidence === "exact") {
+            pickMaterial(match.stepId);
+            return `Added “${match.label}.”`;
+          }
+          // Unlike a step name, a material has no confirm-and-guess tier:
+          // real catalogs are full of short names sharing one generic
+          // word ("soy sauce" / "fish sauce", "green onion" / "red
+          // onion"), so a partial match is as likely to be a different
+          // ingredient as the one meant, and a "yes" said without really
+          // checking would put the wrong one on the step. Anything short
+          // of the full name registers as new instead — harmless even if
+          // it was really a near-miss on an existing one, since
+          // onRegisterMaterial dedupes by the same slug either way.
+          if (!actionsRef.current.onRegisterMaterial) return "I couldn't tell which material you meant.";
+          const id = actionsRef.current.onRegisterMaterial({ label: said, unit: "" }, stateRef.current.recipeId);
+          if (!id) return "I couldn't tell which material you meant.";
+          pickMaterial(id);
+          return `Added “${said}” as a new material.`;
         },
       },
       {
@@ -201,7 +297,7 @@ export default function AddStepPanel({
       type: "voice/setHint",
       payload: {
         hint: {
-          line: "Say “call it toast the sesame seeds”, “two minutes”, “add a wok”.",
+          line: "Say “call it toast the sesame seeds”, “two minutes”, “add a wok”, “runs after mince garlic”, “unlock plate the bowls next”, “add material soy sauce”.",
           sub: "Then “add it to the board”, or “cancel”.",
         },
       },

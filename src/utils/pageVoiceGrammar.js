@@ -204,23 +204,63 @@ export const KITCHEN_PROFILE_VOICE = {
   cancel: [/\bcancel\b/, /\bclose (?:this|the) form\b/, /\bnever ?mind\b/, /\bdiscard this\b/],
 };
 
+// "I need X" / "we need X" always names the equipment, the same as
+// every ingredient phrase does (see InventoryPage's own allowSubject
+// note) -- said with a subject, but not ambiguous for it, so the
+// command that registers these opts in with allowSubject: true.
 const equipmentToggle = (thing, article) => describedToggle(thing, article, {
-  on: [new RegExp(`\\b(?:add|with) (?:${article} |the )?${thing}\\b`), new RegExp(`\\b${thing} on\\b`)],
-  off: [new RegExp(`\\b(?:remove|drop|without) (?:${article} |the )?${thing}\\b`), new RegExp(`\\b${thing} off\\b`)],
+  on: [
+    new RegExp(`\\b(?:add|with) (?:${article} |the )?${thing}\\b`),
+    new RegExp(`\\b${thing} on\\b`),
+    new RegExp(`\\b(?:i|we) need (?:${article} |the )?${thing}\\b`),
+    new RegExp(`\\bneeds? (?:${article} |the )?${thing}\\b`),
+  ],
+  off: [
+    new RegExp(`\\b(?:remove|drop|without) (?:${article} |the )?${thing}\\b`),
+    new RegExp(`\\b${thing} off\\b`),
+    new RegExp(`\\b(?:i|we) don'?t need (?:${article} |the )?${thing}\\b`),
+    new RegExp(`\\bdoesn'?t need (?:${article} |the )?${thing}\\b`),
+  ],
 });
 
 export const ADD_STEP_VOICE = {
   name: [/\b(?:call it|name it|for) (.+)$/],
+  // The form only has one field for this (minutes, fractional), so
+  // "seconds" is a unit to convert at the seam, not a value it stores
+  // as-is -- group 2 carries which one was said. Plain "30 seconds"
+  // works the same as plain "5 minutes" already did.
   duration: (numberToken) => [
-    new RegExp(`\\bset (?:the )?(?:duration|time) to (${numberToken}) minutes?\\b`),
-    new RegExp(`\\bmake it (${numberToken}) minutes?\\b`),
-    new RegExp(`\\b(${numberToken}) minutes?\\b`),
+    new RegExp(`\\bset (?:the )?(?:duration|time) to (${numberToken}) (minutes?|seconds?)\\b`),
+    new RegExp(`\\bmake it (${numberToken}) (minutes?|seconds?)\\b`),
+    new RegExp(`\\b(${numberToken}) (minutes?|seconds?)\\b`),
   ],
   difficulty: [/\b(?:set )?difficulty (?:to )?(low|medium|high)\b/, /\bmake it (low|medium|high)(?: difficulty)?\b/],
-  phase: [/\b(?:set )?phase (?:to )?(prep|cook|plate)\b/, /\bmark it (?:as )?(prep|cook|plate)\b/],
+  // "make it X" is the same verb duration and difficulty already answer
+  // to ("make it 5 minutes", "make it low") -- said the same way here by
+  // anyone who already learned it on either of those, not just "mark it
+  // X". "X phase" is the reverse order, read the way the segmented
+  // control's own buttons are labelled (Prep / Cook / Plate).
+  phase: [
+    /\b(?:set )?phase (?:to )?(prep|cook|plate)\b/,
+    /\b(?:make|mark) it (?:as )?(prep|cook|plate)\b/,
+    /\b(prep|cook|plate) phase\b/,
+    // The recogniser hears "mark it" as "market" often enough that this
+    // is worth its own line, not a footnote: confirmed live -- "mark it
+    // cook" transcribed as "market cook", which matched nothing at all.
+    /\bmarket (?:it )?(?:as )?(prep|cook|plate)\b/,
+  ],
   equipment: equipmentToggle,
-  after: [/\bruns? after (.+)$/, /\bwait(?:s|ing)? on (.+)$/],
-  before: [/\bruns? before (.+)$/],
+  // "step/task that comes before X" is the picker button's own label
+  // under "Runs after" ("+ Add a step that comes before") -- said from
+  // reading that, rather than the field's own name.
+  after: [/\bruns? after (.+)$/, /\bwait(?:s|ing)? on (.+)$/, /\b(?:step|task) that comes before (.+)$/],
+  // "before" is the field's own old name; "unlock(s) ... (next)?" matches
+  // what the form actually says now ("Unlocks next"); "step/task that
+  // comes after X" is the picker button's own label under "Unlocks next"
+  // ("+ Add a step that comes after") -- three different things on
+  // screen to read from, so three different wordings that work.
+  before: [/\bruns? before (.+)$/, /\bunlocks? (.+?)(?: next)?$/, /\b(?:step|task) that comes after (.+)$/],
+  material: [/\badd (?:a |another )?material(?:s)?\s+(.+)$/, /\badd (.+) as a material\b/],
   submit: [/\badd (?:it |this |the task )?to the board\b/, /\badd (?:the )?task\b/, /\bcreate (?:the )?step\b/, /\bthat's? it\b/],
   cancel: [/\bcancel\b/, /\bclose (?:this|the) form\b/, /\bnever ?mind\b/],
 };
@@ -233,6 +273,8 @@ export const EDIT_STEP_VOICE = {
   equipment: equipmentToggle,
   stopWaiting: [/\bstop waiting on (.+)$/, /\bremove (.+) from runs after\b/, /\bdon'?t wait on (.+)$/],
   after: ADD_STEP_VOICE.after,
+  before: ADD_STEP_VOICE.before,
+  material: ADD_STEP_VOICE.material,
   delete: [/\bdelete (?:this )?step\b/, /\bdelete it\b/, /\bremove (?:this )?step\b/],
   save: [/\bsave (?:the )?step\b/, /\bsave it\b/, /\bthat's? it\b/],
   cancel: [/\bcancel\b/, /\bclose (?:this|the) (?:step|editor)\b/, /\bnever ?mind\b/],
@@ -312,8 +354,8 @@ export const NOTES_VOICE = {
 // --- help for everything above ------------------------------------------
 
 function describedToggle(thing, article, toggle) {
-  help(toggle.on, `This step needs ${article} ${thing}`, [`add ${article} ${thing}`, `with the ${thing}`]);
-  help(toggle.off, `This step does not need ${article} ${thing}`, [`remove the ${thing}`, `without the ${thing}`]);
+  help(toggle.on, `This step needs ${article} ${thing}`, [`add ${article} ${thing}`, `I need ${article} ${thing}`]);
+  help(toggle.off, `This step does not need ${article} ${thing}`, [`remove the ${thing}`, `I don't need the ${thing}`]);
   return toggle;
 }
 
@@ -361,12 +403,13 @@ help(KITCHEN_PROFILE_VOICE.name, "Name or rename the kitchen", ["call it flat 3 
 help(KITCHEN_PROFILE_VOICE.save, "Save the kitchen", ["save the kitchen"]);
 help(KITCHEN_PROFILE_VOICE.cancel, "Close the form without saving", ["cancel"]);
 
-ADD_STEP_VOICE.duration = described(ADD_STEP_VOICE.duration, () => ["Set how long the step takes, in minutes", ["make it 5 minutes"]]);
+ADD_STEP_VOICE.duration = described(ADD_STEP_VOICE.duration, () => ["Set how long the step takes, in minutes or seconds", ["make it 5 minutes", "30 seconds"]]);
 help(ADD_STEP_VOICE.name, "Name the new task", ["call it rinse the rice"]);
 help(ADD_STEP_VOICE.difficulty, "Set the task's difficulty", ["difficulty medium"]);
-help(ADD_STEP_VOICE.phase, "Set the task's phase", ["phase prep"]);
-help(ADD_STEP_VOICE.after, "The task runs after another step, by name", ["runs after boil the noodles"]);
-help(ADD_STEP_VOICE.before, "The task runs before another step, by name", ["runs before plate the bowls"]);
+help(ADD_STEP_VOICE.phase, "Set the task's phase", ["phase prep", "make it cook", "plate phase"]);
+help(ADD_STEP_VOICE.after, "The task runs after another step, by name or step number", ["runs after boil the noodles", "runs after step 3", "add a step that comes before boil the noodles"]);
+help(ADD_STEP_VOICE.before, "The task unlocks another step next, by name or step number", ["unlock plate the bowls next", "unlock step 5 next", "add a step that comes after plate the bowls"]);
+help(ADD_STEP_VOICE.material, "Add a material the task uses, by name -- a new name registers it", ["add material soy sauce"]);
 help(ADD_STEP_VOICE.submit, "Add the task to the board", ["add it to the board"]);
 help(ADD_STEP_VOICE.cancel, "Close the form without adding", ["cancel"]);
 

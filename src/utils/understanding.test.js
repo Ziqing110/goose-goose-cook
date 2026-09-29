@@ -2,7 +2,25 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ELICITATION_QUESTIONS } from "../data/dishes.js";
-import { interpretAnswer, isNonAnswer, isRedoRequest } from "./understanding.js";
+import { interpretAnswer, isNonAnswer, isRedoRequest, spokenMinutes } from "./understanding.js";
+
+test("spokenMinutes: seconds convert down to the one field a duration has", () => {
+  assert.equal(spokenMinutes("30", "seconds"), 0.5);
+  assert.equal(spokenMinutes("30", "second"), 0.5);
+  assert.equal(spokenMinutes("60", "seconds"), 1);
+  assert.equal(spokenMinutes("four", "seconds"), 4 / 60);
+});
+
+test("spokenMinutes: minutes pass through unchanged, and it's the default unit", () => {
+  assert.equal(spokenMinutes("5", "minutes"), 5);
+  assert.equal(spokenMinutes("5", "minute"), 5);
+  assert.equal(spokenMinutes("5"), 5); // no unit captured -> minutes, same as before seconds existed
+});
+
+test("spokenMinutes: an amount that doesn't parse is null, whatever the unit", () => {
+  assert.equal(spokenMinutes("a bit", "minutes"), null);
+  assert.equal(spokenMinutes(null, "seconds"), null);
+});
 
 const q = Object.fromEntries(ELICITATION_QUESTIONS.map((question) => [question.id, question]));
 const read = (id, text, context) => interpretAnswer(q[id], text, context);

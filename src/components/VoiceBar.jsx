@@ -69,6 +69,10 @@ const CONFIRM_WINDOW_MS = 10_000;
 // since expiring means nothing happens.
 const PHRASE_WINDOW_MS = 25_000;
 
+// Stripped from a plain yes/no confirm before it's spoken -- see
+// askToConfirm and routeVoiceTurn's matching comment for why.
+const SPOKEN_CONFIRM_TRAILER = /\s*say yes or no\.?\s*$/i;
+
 // How long "nobody said anything" runs before the mic mutes itself.
 //
 // Mid-cook, silence is normal: you can watch a pan or chop for minutes
@@ -283,7 +287,16 @@ export default function VoiceBar() {
     // being asked nothing and then answering.
     spokeRef.current = true;
     voiceLog.spoke(question);
-    speak(question);
+    // Not a plain yes/no question (a passphrase readback) says the
+    // instruction anyway -- there is no shorter safe version of "say
+    // this exact sentence back". For a plain one, the trailing "Say yes
+    // or no" is left out of what's actually spoken (kept in the pending
+    // line and the log): saying it out loud would put the very words
+    // that answer the question into the agent's own audio, and
+    // routeVoiceTurn trusts a "yes"/"no" heard through an echo of THIS
+    // question specifically (see its own comment) on the assumption
+    // that the agent never actually says either word.
+    speak(phrase ? question : question.replace(SPOKEN_CONFIRM_TRAILER, ""));
     armPendingTimer();
   }, [armPendingTimer]);
 

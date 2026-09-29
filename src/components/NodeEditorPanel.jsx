@@ -6,8 +6,9 @@ import { childrenOf, eligibleParents, eligibleChildren } from "../utils/boardLin
 import { stepMaterialAmount } from "../utils/materialAmounts.js";
 import { registerVoiceCommands } from "../utils/voicePageCommands.js";
 import { useVoicePageState } from "../hooks/useVoicePageState.js";
-import { spokenNumber, NUMBER_TOKEN } from "../utils/understanding.js";
-import { matchStepName } from "../utils/stepNameMatch.js";
+import { useVoiceConfirm } from "../hooks/useVoiceConfirm.js";
+import { spokenNumber, spokenMinutes, NUMBER_TOKEN } from "../utils/understanding.js";
+import { matchStepName, guessIfNone, stepByNumber, stepRetryRef, STEP_RETRY_PATTERNS } from "../utils/stepNameMatch.js";
 import { EDIT_STEP_VOICE } from "../utils/pageVoiceGrammar.js";
 import "./NodeEditorPanel.css";
 
@@ -112,7 +113,26 @@ export default function NodeEditorPanel({
   const beforeRef = useRef(before);
   beforeRef.current = before;
   const actionsRef = useRef();
-  actionsRef.current = { onSave, onDelete, onClose };
+  actionsRef.current = { onSave, onDelete, onClose, onRegisterMaterial };
+  const materialsInfoRef = useRef(materialsInfo);
+  materialsInfoRef.current = materialsInfo;
+
+  const pickBefore = (id) => setBefore((b) => (b.includes(id) ? b : [...b, id]));
+  const pickMaterial = (id) => patch((n) => (n.required_materials = [...new Set([...n.required_materials, id])]));
+
+  // "Runs after boil the noodles" and "add material soy sauce" both
+  // resolve a spoken name against a list of candidates that can read a
+  // lot alike, same as the live cook claiming a step by voice. A close
+  // but not exact guess asks rather than either firing on a guess or
+  // flatly giving up on anything short of the step's full name read
+  // back verbatim.
+  const askConfirm = useVoiceConfirm();
+  // Which field ("after" or "before") a step reference just failed to
+  // resolve for, so the very next turn can answer with just the number
+  // ("the second step") instead of the whole sentence again. Cleared the
+  // moment anything resolves it (or fails to a second time) -- one
+  // retry, not a standing memory of the last question asked.
+  const lastFailedFieldRef = useRef(null);
 
   useEffect(() => {
     const otherIds = others.map((o) => o.id);
@@ -134,10 +154,12 @@ export default function NodeEditorPanel({
       {
         phrases: EDIT_STEP_VOICE.duration(NUMBER_TOKEN),
         run: (m) => {
-          const mins = spokenNumber(m[1]);
+          const mins = spokenMinutes(m[1], m[2]);
           if (mins === null) return null;
           patch((n) => (n.estimated_duration_sec = Math.round(Math.max(0.25, mins) * 60)));
-          return `${mins} minute${mins === 1 ? "" : "s"}.`;
+          const said = spokenNumber(m[1]);
+          const isSeconds = /^s/i.test(m[2] || "");
+          return isSeconds ? `${said} second${said === 1 ? "" : "s"}.` : `${said} minute${said === 1 ? "" : "s"}.`;
         },
       },
       {
@@ -160,11 +182,13 @@ export default function NodeEditorPanel({
         return [
           {
             phrases: EDIT_STEP_VOICE.equipment(word, a).off,
+            allowSubject: true, // "I don't need a wok" always names the equipment
             label: `${equipmentLabel(eq)} — not needed.`,
             run: () => patch((n) => (n.required_equipment = n.required_equipment.filter((x) => x !== eq))),
           },
           {
             phrases: EDIT_STEP_VOICE.equipment(word, a).on,
+            allowSubject: true, // "I need a wok" always names the equipment
             label: `${equipmentLabel(eq)} needed.`,
             run: () => patch((n) => (n.required_equipment = n.required_equipment.includes(eq) ? n.required_equipment : [...n.required_equipment, eq])),
           },
@@ -173,20 +197,112 @@ export default function NodeEditorPanel({
       {
         phrases: EDIT_STEP_VOICE.stopWaiting,
         run: (m) => {
-          const match = matchStepName(m[1], otherIds, labelOf);
-          if (match.confidence !== "exact") return "I couldn't tell which step you meant.";
-          patch((n) => (n.depends_on = n.depends_on.filter((x) => x !== match.stepId)));
-          return `No longer waits on “${match.label}.”`;
+          const said = m[1];
+          const match = stepByNumber(said, otherIds, labelOf, numberOf) ?? guessIfNone(matchStepName(said, otherIds, labelOf), labelOf);
+          if (match.confidence === "none") {
+            lastFailedFieldRef.current = "stopWaiting";
+            return "I couldn't tell which step you meant.";
+          }
+          lastFailedFieldRef.current = null;
+          const undo = () => patch((n) => (n.depends_on = n.depends_on.filter((x) => x !== match.stepId)));
+          if (match.confidence === "exact") {
+            undo();
+            return `No longer waits on “${match.label}.”`;
+          }
+          askConfirm(undo);
+          return `No longer wait on “${match.label}”? Say yes or no.`;
         },
       },
       {
         phrases: EDIT_STEP_VOICE.after,
         run: (m) => {
-          const match = matchStepName(m[1], otherIds, labelOf);
-          if (match.confidence !== "exact") return "I couldn't tell which step you meant.";
+          const said = m[1];
+          const match = stepByNumber(said, otherIds, labelOf, numberOf) ?? guessIfNone(matchStepName(said, otherIds, labelOf), labelOf);
+          if (match.confidence === "none") {
+            lastFailedFieldRef.current = "after";
+            return "I couldn't tell which step you meant.";
+          }
+          lastFailedFieldRef.current = null;
           if (blockedDependencyIds?.has(match.stepId)) return `That would create a loop — “${match.label}” already comes after this step.`;
-          patch((n) => (n.depends_on = n.depends_on.includes(match.stepId) ? n.depends_on : [...n.depends_on, match.stepId]));
-          return `Runs after “${match.label}.”`;
+          const add = () => patch((n) => (n.depends_on = n.depends_on.includes(match.stepId) ? n.depends_on : [...n.depends_on, match.stepId]));
+          if (match.confidence === "exact") {
+            add();
+            return `Runs after “${match.label}.”`;
+          }
+          askConfirm(add);
+          return `Runs after “${match.label}”? Say yes or no.`;
+        },
+      },
+      {
+        phrases: EDIT_STEP_VOICE.before,
+        run: (m) => {
+          const said = m[1];
+          const match = stepByNumber(said, otherIds, labelOf, numberOf) ?? guessIfNone(matchStepName(said, otherIds, labelOf), labelOf);
+          if (match.confidence === "none") {
+            lastFailedFieldRef.current = "before";
+            return "I couldn't tell which step you meant.";
+          }
+          lastFailedFieldRef.current = null;
+          if (match.confidence === "exact") {
+            pickBefore(match.stepId);
+            return `Unlocks “${match.label}” next.`;
+          }
+          askConfirm(() => pickBefore(match.stepId));
+          return `Unlock “${match.label}” next? Say yes or no.`;
+        },
+      },
+      {
+        // Same follow-up shortcut as AddStepPanel: a bare "2" / "second"
+        // answers whichever of the three step-reference fields above
+        // just failed. blockedDependencyIds is only relevant to "after",
+        // so it's re-checked here too rather than trusting the earlier
+        // failed attempt's state.
+        phrases: STEP_RETRY_PATTERNS,
+        run: (m) => {
+          const field = lastFailedFieldRef.current;
+          if (!field) return null;
+          lastFailedFieldRef.current = null;
+          const match = stepRetryRef(m[0], otherIds, labelOf, numberOf);
+          if (!match || match.confidence !== "exact") return "I still couldn't tell which step you meant.";
+          if (field === "stopWaiting") {
+            patch((n) => (n.depends_on = n.depends_on.filter((x) => x !== match.stepId)));
+            return `No longer waits on “${match.label}.”`;
+          }
+          if (field === "after") {
+            if (blockedDependencyIds?.has(match.stepId)) return `That would create a loop — “${match.label}” already comes after this step.`;
+            patch((n) => (n.depends_on = n.depends_on.includes(match.stepId) ? n.depends_on : [...n.depends_on, match.stepId]));
+            return `Runs after “${match.label}.”`;
+          }
+          pickBefore(match.stepId);
+          return `Unlocks “${match.label}” next.`;
+        },
+      },
+      {
+        phrases: EDIT_STEP_VOICE.material,
+        run: (m) => {
+          const said = m[1].trim();
+          const info = materialsInfoRef.current;
+          const materialIds = Object.keys(info || {});
+          const materialLabelOf = (id) => info?.[id]?.label;
+          const match = matchStepName(said, materialIds, materialLabelOf);
+          if (match.confidence === "exact") {
+            pickMaterial(match.stepId);
+            return `Added “${match.label}.”`;
+          }
+          // Unlike a step name, a material has no confirm-and-guess tier:
+          // real catalogs are full of short names sharing one generic
+          // word ("soy sauce" / "fish sauce", "green onion" / "red
+          // onion"), so a partial match is as likely to be a different
+          // ingredient as the one meant, and a "yes" said without really
+          // checking would put the wrong one on the step. Anything short
+          // of the full name registers as new instead — harmless even if
+          // it was really a near-miss on an existing one, since
+          // onRegisterMaterial dedupes by the same slug either way.
+          if (!actionsRef.current.onRegisterMaterial) return "I couldn't tell which material you meant.";
+          const id = actionsRef.current.onRegisterMaterial({ label: said, unit: "" });
+          if (!id) return "I couldn't tell which material you meant.";
+          pickMaterial(id);
+          return `Added “${said}” as a new material.`;
         },
       },
       {
@@ -222,7 +338,7 @@ export default function NodeEditorPanel({
       type: "voice/setHint",
       payload: {
         hint: {
-          line: "Say “call it sear the tofu”, “five minutes”, “add a wok”, “runs after mince garlic”.",
+          line: "Say “call it sear the tofu”, “five minutes”, “add a wok”, “runs after mince garlic”, “unlock plate the bowls next”, “add material soy sauce”.",
           sub: "Then “save the step”, “delete it”, or “cancel”.",
         },
       },

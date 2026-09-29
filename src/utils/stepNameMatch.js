@@ -9,6 +9,7 @@
 // "Cut the red onion", "Whisk the eggs" / "Whisk the egg whites" — so
 // the metric has to notice when a word was dropped or swapped, not just
 // count overlap.
+import { spokenNumber, NUMBER_TOKEN } from "./understanding.js";
 
 const STOP_WORDS = new Set([
   "the", "a", "an", "my", "on", "to", "that", "one", "it", "i", "im", "ill", "ive",
@@ -109,6 +110,107 @@ export function matchStepName(said, candidateIds, labelOf) {
   // Runner-ups travel with the guess so a "no" has somewhere to go
   // straight to "which one" instead of starting the search over.
   return { stepId: best.id, label: labelOf(best.id), candidates: scored.slice(1, 4).map((s) => s.id), confidence: "confirm" };
+}
+
+/**
+ * Upgrades a "none" match into a "confirm" guess using its own
+ * best-scoring runner-up, for a caller where a wrong pick costs nothing
+ * more than picking again — a form field being filled in, not the live
+ * cook crediting a task somebody actually did. matchStepName's own floor
+ * exists to protect the latter, so this never changes matchStepName
+ * itself; it only gives a form a friendlier fallback than flatly giving
+ * up on anything short of the full name read back.
+ */
+export function guessIfNone(match, labelOf) {
+  if (match.confidence !== "none" || match.candidates.length === 0) return match;
+  const [best, ...rest] = match.candidates;
+  return { stepId: best, label: labelOf(best), candidates: rest, confidence: "confirm" };
+}
+
+const STEP_NUMBER_REF = /^(?:step\s+(?:number\s+)?|number\s+)(.+)$/i;
+
+// "The second step", not "step two" -- the ordinal comes before "step"
+// instead of a cardinal coming after it, and it needed its own word
+// list: cookVoice.js's ORDINAL only goes to two, for two cooks, and a
+// recipe can run past twenty steps.
+const ORDINAL_WORDS = {
+  first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10,
+  eleventh: 11, twelfth: 12, thirteenth: 13, fourteenth: 14, fifteenth: 15, sixteenth: 16, seventeenth: 17,
+  eighteenth: 18, nineteenth: 19, twentieth: 20,
+};
+const ORDINAL_PATTERN = `${Object.keys(ORDINAL_WORDS).join("|")}|\\d+(?:st|nd|rd|th)`;
+const STEP_ORDINAL_REF = new RegExp(`^(?:the\\s+)?(${ORDINAL_PATTERN})\\s+step$`, "i");
+
+function ordinalToNumber(word) {
+  const key = (word || "").toLowerCase();
+  if (Object.hasOwn(ORDINAL_WORDS, key)) return ORDINAL_WORDS[key];
+  const m = /^(\d+)(?:st|nd|rd|th)$/.exec(key);
+  return m ? Number(m[1]) : null;
+}
+
+function stepFromNumber(n, candidateIds, labelOf, numberOf) {
+  if (n === null) return null;
+  const id = candidateIds.find((cid) => Number(numberOf(cid)) === n);
+  return id
+    ? { stepId: id, label: labelOf(id), candidates: [], confidence: "exact" }
+    : { stepId: null, label: null, candidates: [], confidence: "none" };
+}
+
+/**
+ * A candidate named by its on-screen number: "step 3" / "step number 3"
+ * / "number 3" (cardinal, after "step"), or "the third step" / "3rd
+ * step" (ordinal, before "step") -- the same number its own picker
+ * already shows next to the label ("03  Mince garlic"). Null if `said`
+ * isn't a number reference at all, so the caller falls back to
+ * matchStepName; a number that doesn't exist among the candidates is
+ * "none", not passed through to the name matcher as if "3" were a word
+ * in somebody's step name.
+ *
+ * @param {(id: string) => string} numberOf  the field's own numbering
+ */
+export function stepByNumber(said, candidateIds, labelOf, numberOf) {
+  if (!numberOf) return null;
+  const trimmed = (said || "").trim();
+  const cardinal = STEP_NUMBER_REF.exec(trimmed);
+  const ordinal = cardinal ? null : STEP_ORDINAL_REF.exec(trimmed);
+  if (!cardinal && !ordinal) return null;
+  const n = cardinal ? spokenNumber(cardinal[1].trim()) : ordinalToNumber(ordinal[1]);
+  return stepFromNumber(n, candidateIds, labelOf, numberOf);
+}
+
+// A bare number/ordinal, no "step"/"number" framing at all -- "2",
+// "second", "the second". Never registered on its own: a bare "second"
+// heard out of nowhere means nothing. It exists for exactly one thing,
+// paired with BARE_STEP_REF_PATTERNS below -- answering a step-reference
+// question that already failed once, the way a person would just repeat
+// the number rather than the whole sentence again.
+const BARE_CARDINAL_REF = new RegExp(`^(${NUMBER_TOKEN})$`, "i");
+const BARE_ORDINAL_REF = new RegExp(`^(?:the\\s+)?(${ORDINAL_PATTERN})$`, "i");
+
+/** Patterns for a bare step reference, to register only while a prior
+ * "which step?" is still open -- see AddStepPanel.jsx / NodeEditorPanel.jsx. */
+export const BARE_STEP_REF_PATTERNS = [BARE_CARDINAL_REF, BARE_ORDINAL_REF];
+
+/** Same as stepByNumber, but for a bare "2" / "second" with no framing. */
+export function bareStepRef(said, candidateIds, labelOf, numberOf) {
+  if (!numberOf) return null;
+  const trimmed = (said || "").trim();
+  const cardinal = BARE_CARDINAL_REF.exec(trimmed);
+  const ordinal = cardinal ? null : BARE_ORDINAL_REF.exec(trimmed);
+  if (!cardinal && !ordinal) return null;
+  const n = cardinal ? spokenNumber(cardinal[1]) : ordinalToNumber(ordinal[1]);
+  return stepFromNumber(n, candidateIds, labelOf, numberOf);
+}
+
+// Everything stepByNumber and bareStepRef each recognise on their own,
+// combined: a step-reference answer on its own, with or without "step"/
+// "number" framing -- "step 2" and "2" are both fine as a follow-up to
+// a failed "which step?", the way a person might repeat either.
+export const STEP_RETRY_PATTERNS = [STEP_NUMBER_REF, STEP_ORDINAL_REF, BARE_CARDINAL_REF, BARE_ORDINAL_REF];
+
+/** stepByNumber, falling back to bareStepRef -- see STEP_RETRY_PATTERNS. */
+export function stepRetryRef(said, candidateIds, labelOf, numberOf) {
+  return stepByNumber(said, candidateIds, labelOf, numberOf) ?? bareStepRef(said, candidateIds, labelOf, numberOf);
 }
 
 // Like `normalize`, but it keeps every letter rather than only a-z.
