@@ -26,14 +26,9 @@ voiceRouter.get("/stt-token", async (req, res) => {
     // session times out. At the 3h ceiling that abandoned tab is $1.35 of
     // universal-3-5-pro; 90 min halves it.
     //
-    // Not lower, even though it would be cheaper: hitting this cap is a
-    // BAD failure. There is no reconnect — ws.onclose just tears down the
-    // audio and goes idle, so the mic dies mid-cook and the only way back
-    // is toggling mute off and on, with nothing on screen saying why.
-    // 90 min is the long cook this project designs for.
-    //
-    // In practice there is slack: the socket only lives while unmuted
-    // (VoiceBar's toggle), so this budget is unmuted time, not cook time.
+    // Not lower: hitting the cap drops the socket mid-cook and the mic
+    // has to reconnect. The socket only lives while unmuted (VoiceBar's
+    // toggle), so this budget is unmuted time, not cook time.
     max_session_duration_seconds: clamp(
       req.query.max_session_duration_seconds,
       60,
