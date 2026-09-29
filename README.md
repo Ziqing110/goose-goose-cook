@@ -38,8 +38,9 @@ app you have to tap is one you stop using the moment the wok gets hot. So
 voice here is the main interface, not an add-on:
 
 - **Every action works by voice.** Start, finish, claim, skip, undo, pause
-  and "what's next" all have a spoken form. Buttons exist too, and both
-  run the same code.
+  and "what's next" all have a spoken form, and so does the end of the
+  night: "who won", "take the cook card", "read it out", "save the page".
+  Buttons exist too, and both run the same code.
 - **Just talk.** "I'm done with the onion" moves the plan on. Saying
   "Goose" first is optional, and chatter between cooks is left alone.
 - **Built to be read from across the room.** The live screen is meant to be
@@ -93,7 +94,7 @@ flowchart LR
 | Cooks | Each cook reads a line aloud. Optionally, a local service stores a voiceprint so Goose knows who spoke | `VoiceBindingPage.jsx`, `speaker-sidecar/` |
 | Schedule | The scheduler builds a two-lane timeline with the critical path, or the Versus opening hand | `SchedulePage.jsx`, `src/utils/scheduleLayout.js` |
 | Live cook | Cooks start, finish and hand off steps by voice or tap. Goose re-plans on every change | `LiveCookPage.jsx`, `src/pages/liveCook/`, `src/utils/liveCook.js`, `server/agent/` |
-| Cook card | A frozen record of the run, downloadable as a PNG | `CookSummaryPage.jsx`, `src/utils/summaryCard.js` |
+| Cook card | A frozen record of the run, downloadable as a PNG. Goose reads it out, says who won, saves it or copies its link on request | `CookSummaryPage.jsx`, `src/utils/summaryCard.js` |
 
 ### One live-cook turn
 

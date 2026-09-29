@@ -178,11 +178,25 @@ Step names are resolved against steps the current cook can act on.
 | Ask a cooking question. If web search is configured, Goose can look up a technique, substitution, rescue, or measurement. | `server/agent/turn.test.js` tests tool handling, not generated answers or spoken question variants. |
 | Mandarin intent phrases: resume `继续`, `接着`; pause `暂停`, `等一下`; finish `都好了`, `都做完了`, `可以上菜`, `全部完成`; status `还要多久`, `还有多久`, `到哪了`, `接下来`; claim `我来`, `我做`, `给我`; done `好了`, `做好`, `完成`, `弄好`; start `开始`, `我上`. | `src/utils/stepNameMatch.test.js` includes selected Mandarin and code-switched examples. The newer command matcher tests focus on English. |
 
-## Cook Summary
+## Service done (Live Cook after the run ends)
+
+Once the run ends, the live cook stops taking every turn, so these page
+commands and ordinary navigation work without Goose's name.
 
 | Voice command | Test |
 |---|---|
-| No voice commands. The VoiceBar is hidden on this page. | No voice command test applies. |
+| Hear the result: `who won`, `who's the winner`, `how did we/it/everyone do/go`, `read/say/tell me the results/score`, `what's the (final) score`. Versus names the winner and the score; co-op says the time against the plan. | `src/utils/pageVoiceGrammar.test.js` checks the phrases; `src/utils/serviceResults.test.js` checks the spoken line; `scripts/voice-commands-e2e.mjs` asks `who won` on a finished Versus run. |
+| Open the cook card: `take/see/open/show/get/save [me] [the/my/our] [cook] card`, `tear it off`. Saves the cook first, like the button. | `src/utils/pageVoiceGrammar.test.js` checks the phrases; `scripts/voice-commands-e2e.mjs` says `take the cook card` and lands on the card. |
+
+## Cook Card
+
+| Voice command | Test |
+|---|---|
+| Read it aloud: `read it/this/the page/the story/the card [out/back/aloud/to me]`, `read it out`. Reads Goose's story, or the headline and result when there is none. | `src/utils/pageVoiceGrammar.test.js`; `scripts/voice-commands-e2e.mjs` says `read it out`. |
+| Hear the result: the same phrases as Service done. | `src/utils/pageVoiceGrammar.test.js`; `scripts/voice-commands-e2e.mjs` asks `who won`. |
+| Download the image: `save/download/export [the/this] page/card/image/picture/png`. Goose says whether it worked. | `src/utils/pageVoiceGrammar.test.js` checks the phrases. |
+| Copy the link: `copy/share [the/this] link`. Goose says whether it worked. | `src/utils/pageVoiceGrammar.test.js`; `scripts/voice-commands-e2e.mjs` checks the clipboard. |
+| Add a photo: `add/change/upload/take/put [a/the/our] photo/picture/pic`. Goose explains it needs a tap, because browsers only open the photo picker from one. | `src/utils/pageVoiceGrammar.test.js`; `scripts/voice-commands-e2e.mjs` says `add a photo`. |
 
 ## Test coverage notes
 
@@ -192,10 +206,12 @@ Step names are resolved against steps the current cook can act on.
   `src/utils/stepNameMatch.test.js`, and `src/utils/cookVoice.test.js` are unit
   tests. Page grammar tests register the production phrase definitions with
   the shared matcher; they do not mount every page or verify all UI effects.
-- `scripts/voice-commands-e2e.mjs` exercises a browser sequence: unmute, zoom in,
-  zoom out, navigate to Inventory, then dictate and submit a Conversation answer.
-  It uses fake microphone audio and deterministic mocked transcripts; it does
-  not measure real speech-recognition accuracy or audible text-to-speech.
+- `scripts/voice-commands-e2e.mjs` drives every page in a browser, from Home
+  through Live Cook, Service done and the cook card. It uses fake microphone
+  audio and deterministic mocked transcripts; it does not measure real
+  speech-recognition accuracy or audible text-to-speech. Two of its checks
+  (the Inventory equipment notice and the Versus pool `claim`) currently fail,
+  on `main` as well.
 - `scripts/livecook-e2e.mjs` exercises typed Live Cook input, not microphone
   voice. `server/agent/turn.test.js` tests tool validation, not generated LLM
   wording.
