@@ -27,20 +27,49 @@ other is juggling four pans.
 
 Goose! Goose! Cook! treats a recipe as a **graph of steps** and your kitchen
 as a set of **limited resources**. It works out the fastest plan for the
-cooks and equipment you actually have, then runs that plan live, by voice,
-so nobody has to touch a screen with wet hands.
+cooks and equipment you actually have, then runs that plan live, by voice.
+And because cooking together should be fun, it can also turn dinner into a
+match.
 
-- **Talk, don't type.** Streaming speech-to-text runs through the whole app.
-  Say "Goose, I'm done with the onion" and the plan moves on.
+### Hands-free is the point, not a bonus
+
+In a kitchen your hands are busy, wet, or covered in raw chicken. A recipe
+app you have to tap is one you stop using the moment the wok gets hot. So
+voice here is the main interface, not an add-on:
+
+- **Every action works by voice.** Start, finish, claim, skip, undo, pause
+  and "what's next" all have a spoken form. Buttons exist too, and both
+  run the same code.
+- **Just talk.** "I'm done with the onion" moves the plan on. Saying
+  "Goose" first is optional, and chatter between cooks is left alone.
+- **Built to be read from across the room.** The live screen is meant to be
+  propped on the counter: big type, big targets, nothing that needs hover.
+- **Goose talks back.** Replies are spoken, so nobody has to look up from
+  the cutting board to hear what's next.
+
+### Versus: dinner as a game
+
+Pick *Co-op* and Goose hands each cook a balanced plan. Pick *Versus* and
+the kitchen becomes a race:
+
+- **A referee goose counts you in.** Three, two, one, go.
+- **Steps are up for grabs.** Each cook starts with an opening hand, then
+  claims steps from a shared pool by voice. If both call the same step,
+  Goose rules on who spoke first. A dead heat goes to whoever is behind.
+- **Points reward real cooking.** Harder steps score more. Starting the
+  pot that everything else waits on earns a bonus, and so does finishing a
+  step right on time. Chasing quick easy steps doesn't pay.
+- **A keepsake at the end.** A cook card with your photo, the scoreboard,
+  and a few deadpan lines from Goose about how it went.
+
+### Under the hood
+
 - **Real scheduling.** A branch-and-bound scheduler finds the shortest
-  finish time against burners, woks, pots and people, then balances the work
-  so one cook isn't doing three times as much.
-- **Two ways to play.** *Co-op* follows the plan together. *Versus* opens a
-  pool of steps that cooks claim and score on.
+  finish time against burners, woks, pots and people, then balances the
+  work so one cook isn't doing three times as much. It re-plans live on
+  every change.
 - **An agent that can't go rogue.** The model only proposes actions. The
   server checks every one against the live run before the page applies it.
-- **A keepsake at the end.** Each cook ends with a summary card: photo,
-  stats, and a few lines from Goose about how it went.
 
 ## How it works
 
@@ -82,7 +111,7 @@ sequenceDiagram
     API-->>Browser: short-lived token
     Browser->>STT: open wss://streaming.assemblyai.com/v3/ws
 
-    Cook->>Browser: "Goose, done with the garlic"
+    Cook->>Browser: "done with the garlic"
     Browser->>STT: raw PCM frames (universal-3-5-pro)
     STT-->>Browser: formatted turn + speaker label
     Browser->>Browser: who spoke? (speaker label, voiceprint if on)
@@ -100,6 +129,43 @@ If the agent is slow or unreachable, a local keyword grammar
 (`src/utils/voiceCommands.js`) handles the command offline. If a question
 needs a lookup ("can I use a shallot?"), the answer is fetched in the
 background so the cook isn't blocked.
+
+### How the LLMs are used
+
+Nine different LLM jobs, each with its own model, prompt and guard rails.
+All of them go through the AssemblyAI LLM Gateway with one server-side key.
+The rule everywhere: **the model suggests, code decides.**
+
+**No model was assigned by reputation.** Before a model got a job, we
+tested candidates against that job's real cases: whether it supports the
+output format the job needs (JSON schema or tool calls), whether it gets
+the cooking right, and whether it's fast enough for someone standing at
+the stove.
+
+| Job | What we tested | Result |
+|---|---|---|
+| Recipe graph | Six models on the same three-dish dinner, including a cold-served poached chicken that must chill before it's sauced | Claude Sonnet 4.6 and Haiku 4.5 served the chicken hot. Gemini 3.8 Flash got it right and was the fastest model that did (39s) |
+| Plan review | A plan with four planted mistakes | Claude Sonnet 4.6 found all four. Both Gemini models found only one |
+| Live-cook agent | 31 things a cook might say, 3 runs each (`npm run agent:calibrate`) | GPT-4.1 took the right action 67/69 times at 608 ms. Gemini 2.5 Flash Lite managed 53/69 at 1031 ms |
+| Reading setup answers | Ten answers with known readings | Four models scored 9 or 10 out of 10. Claude Sonnet 4.6 was picked because it copes better with messy real speech, which ten cases can't show |
+| Format support | Every candidate against the live gateway | Claude Sonnet 5 and Opus 5 don't support JSON schema output there, so they were ruled out for structured jobs |
+
+Each model can be swapped with an env variable. See
+[.env.example](.env.example) for the full notes.
+
+Where each model ended up, and what it does:
+
+| Job | Model | What makes it more than one prompt |
+|---|---|---|
+| Read setup answers | Claude Sonnet 4.6 | Every spoken turn is read against *all* the setup questions at once, so "actually, make it chicken" updates the dish even after Goose has moved on. JSON schema output, checked again in code |
+| Draft the recipe graph | Gemini 3.8 Flash | Three passes: (1) the steps and their dependencies, (2) duration, difficulty, equipment and how much attention each step needs, (3) splitting simmers and chills into the start, the check-ins and the finish. Code proves the graph after each pass: no cycles, no missing steps, no unknown ingredients |
+| Fallback recipe drafting | Qwen 3.5 4B | A free-tier account may only have a small model, which can't handle several dishes at once. So the server asks for one dish at a time and merges them |
+| Review the plan | Claude Sonnet 4.6 | A *different* model reads the plan back like a cook would and returns small fixes, not a new plan. It catches what code can't, like serving a cold dish hot or leaving a congee unstirred |
+| Live-cook agent | GPT-4.1 with tools | Tools are rebuilt every turn from the live run: `step_id` is an enum of only the steps that are valid right now, so the model can't start a step that isn't ready. The server validates every call again before the page applies it |
+| Mid-cook lookups | GPT-4.1 + Tavily | "Can I use a shallot?" answers straight away with "let me check", the search runs in the background, and cooking carries on while Goose reads |
+| Understand stray commands | GPT-4.1 | When a page's own voice commands don't match, the model rewrites what was said into one of *that page's* commands. It can't invent an action, and Goose still asks before acting |
+| Asides and banter | Gemini 2.5 Flash Lite | The browser decides *whether* Goose may speak up (who is busy, how long the room has been quiet, when Goose last spoke). The model only writes the line, and any failure is just silence |
+| Cook card story | Claude Sonnet 4.6 | Runs once after the cook, when nobody is waiting, so it gets the slower, better model. The card works without it |
 
 ## Tech stack
 
@@ -226,8 +292,3 @@ Pure logic lives in `src/utils/` with no DOM or React imports, so the
 scheduler and run state machine are tested without mounting a page. The
 browser owns the live run. Each agent request carries a snapshot of it, so
 the server stays stateless.
-
-## Further reading
-
-- [docs/API_FLOW.md](docs/API_FLOW.md): every external call and what triggers it
-- [docs/VOICE_COMMANDS.md](docs/VOICE_COMMANDS.md): what you can say on each page
