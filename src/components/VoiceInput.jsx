@@ -42,6 +42,18 @@ import "./VoiceInput.css";
 // next question appears, so the felt delay is longer than these numbers.
 const THINKING_PAUSE = { min_turn_silence: 1000, max_turn_silence: 6000 };
 
+// How long a finished turn is held before it is sent, in case there is
+// more. The turn check is semantic, so a reply of several sentences ends
+// at the first full stop: "I need more discussion on the dishes." [pause]
+// "We're not ready for servings yet." went as two answers, and the goose
+// replied to the first half while the cook was still talking. Anything
+// said inside this window joins the held words and restarts the wait.
+// Raising min_turn_silence instead would have held every pause mid-
+// sentence too; this only waits once a sentence has ended.
+const HOLD_AFTER_TURN_MS = 1800;
+
+const joinSpeech = (a, b) => [a, b].map((t) => (t || "").trim()).filter(Boolean).join(" ");
+
 // `onBack`, when given, reopens the previous question. Null on the first
 // question, and once recipes are drafted from these answers.
 export default function VoiceInput({ question, onAnswer, busy = false, onBack = null }) {
@@ -54,6 +66,10 @@ export default function VoiceInput({ question, onAnswer, busy = false, onBack = 
   // rebuilt every time busy flips — that would re-register dictation.
   const busyRef = useRef(busy);
   busyRef.current = busy;
+  // Finished turns waiting out HOLD_AFTER_TURN_MS, and the timer that
+  // sends them. Refs, so holding does not re-register dictation.
+  const heldRef = useRef("");
+  const holdTimerRef = useRef(null);
 
   // Clear the draft when moving on to a new question.
   useEffect(() => setText(""), [question.id]);
@@ -98,22 +114,47 @@ export default function VoiceInput({ question, onAnswer, busy = false, onBack = 
 
   // While the mic is on, this bar takes dictation instead of typing.
   //
-  // There is no Enter to press: end_of_turn IS the "I've finished
-  // speaking" signal, and asking someone to confirm it with a keystroke
-  // would defeat the point of talking. Partials fill the field as you
-  // speak so you can see it being heard, then the final turn submits and
-  // the agent asks the next question.
+  // There is no Enter to press: the end of your turn IS the "I've
+  // finished speaking" signal, and asking someone to confirm it with a
+  // keystroke would defeat the point of talking. Partials fill the field
+  // as you speak so you can see it being heard; a finished turn is held
+  // briefly in case you carry on (HOLD_AFTER_TURN_MS), then sent.
   useEffect(() => {
     if (muted) return undefined;
-    return registerVoiceDictation({
+    const stopHolding = () => {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    };
+    const unregister = registerVoiceDictation({
       // Tagged with the page it belongs to. A registration that somehow
       // outlives this component is then inert rather than stealing the
       // microphone from whatever page you moved to.
       route: pathname,
-      onPartial: (partial) => setText(partial || ""),
-      onFinal: (final) => send(final),
+      onPartial: (partial) => {
+        // Speaking again inside the hold: it is the same answer.
+        if (partial && partial.trim()) stopHolding();
+        setText(joinSpeech(heldRef.current, partial));
+      },
+      onFinal: (final) => {
+        stopHolding();
+        heldRef.current = joinSpeech(heldRef.current, final);
+        setText(heldRef.current);
+        holdTimerRef.current = setTimeout(() => {
+          const said = heldRef.current;
+          heldRef.current = "";
+          holdTimerRef.current = null;
+          send(said);
+        }, HOLD_AFTER_TURN_MS);
+      },
       turnDetection: THINKING_PAUSE,
     });
+    return () => {
+      // Muting mid-hold (clicking in to type) keeps the words in the
+      // field to edit and send by hand, rather than sending them anyway.
+      stopHolding();
+      heldRef.current = "";
+      unregister();
+    };
   }, [muted, send, pathname]);
 
   return (

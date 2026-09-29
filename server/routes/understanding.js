@@ -441,7 +441,8 @@ focus     the slot id the conversation is on after this turn. The slots
 done      true only when every slot has an answer (counting this turn's
           updates) and the cook is not still discussing any of them.
 reply     what the goose says next, read aloud in a kitchen: one or two
-          short sentences, warm and a little cheeky. Acknowledge a change
+          short sentences, warm and a little cheeky. Plain text only — no
+          markdown, bullets or asterisks; it is spoken. Acknowledge a change
           in a few words. When done, say you are drafting the recipe graph.
           Otherwise end with ONE question about the focus slot:
           - on a slot the cook shifted to or is still working out, a

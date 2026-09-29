@@ -202,3 +202,12 @@ test("taking back the last answer is spotted, and a plain no is not", () => {
     assert.equal(isRedoRequest(said), false, said);
   }
 });
+
+test("dishes: asking for ideas is not taken as the dish", () => {
+  for (const said of ["Give me some samples of Chinese chicken stir-fry dishes.", "any ideas?", "what should we make", "suggest something with chicken"]) {
+    const r = read("dishIdea", said);
+    assert.equal(r.status, "needs-followup", said);
+    assert.equal(r.value, null);
+  }
+  assert.deepEqual(read("dishIdea", "kung pao chicken").value, ["kung pao chicken"]);
+});

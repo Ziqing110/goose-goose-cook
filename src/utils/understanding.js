@@ -205,6 +205,12 @@ function readDishes(raw, { alreadyAsked } = {}) {
   if (isNonAnswer(text) || /^(?:i'?m|i am|my name|this is|it'?s me)\b|^(?:我是|我叫)/i.test(text)) {
     return askAgain(raw, alreadyAsked ? "I still need a dish — name one or a few, like mapo tofu." : "Which dish? Name one or a few — like mapo tofu.");
   }
+  // Asking for ideas, not naming a dish. Only the model can suggest, and
+  // this reader runs when it can't be reached — so it says so rather than
+  // storing "give me some samples of stir-fry dishes" as the dish.
+  if (/\b(?:give me|suggest\w*|recommend\w*|ideas?|examples?|samples?|options?|what (?:should|could|can) (?:i|we))\b/i.test(text)) {
+    return askAgain(raw, "I can't pull up ideas right now — name a dish you fancy, like kung pao chicken, and we'll go from there.");
+  }
   const vague = /\?|\b(maybe|or|something|not sure|idk|either|whatever|anything)\b/i.test(text);
   const splitOnAnd = /\band\b/i.test(text) && !/[,+&]/.test(text);
   const dishes = text
