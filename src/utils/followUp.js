@@ -30,7 +30,7 @@
 // idea as READ_ONLY in server/agent/turn.js, kept separate because that
 // one is a security boundary and this is a conversational hint -- they
 // should be free to diverge.
-const ANSWERING = new Set(["explain", "status", "score", "help"]);
+const ANSWERING = new Set(["explain", "status", "available", "checkup", "score", "help"]);
 
 /**
  * @param {object} turn

@@ -18,7 +18,7 @@ import { joinSpelledLetters, nearestCook } from "../../src/utils/cookVoice.js";
 /** Tool names are the intent names parseCommand already produces. */
 export const INTENTS = [
   "claim", "start", "done", "skip", "drop", "undo",
-  "pause", "resume", "finish_run", "status", "score", "help", "explain",
+  "pause", "resume", "finish_run", "status", "available", "checkup", "score", "help", "explain",
 ];
 
 // explain needs one too, but unlike the others it may name a step
@@ -75,7 +75,9 @@ export function buildTools(snapshot, { search = false } = {}) {
     pause: "Pause every clock.",
     resume: "Resume after a pause.",
     finish_run: "End the whole cook. Only when they say the whole meal is finished, never one step.",
-    status: "Read out who is doing what and how far along the cook is.",
+    status: "Read out where everyone is: what each cook is on, what they have cooking on its own, and how far along the cook is.",
+    available: "Read out the steps anyone can take right now, or what the next ones are waiting on.",
+    checkup: "Read out whether anything cooking on its own (rice, a simmer, a marinade) needs a check or finishing now, and when the next one does.",
     score: "Read out the scoreboard.",
     help: "List what the agent can do.",
     explain: "The speaker asked what a step means, how to do it, or how long it takes. The app reads the recipe's own wording back, so call this rather than describing the step yourself.",
@@ -121,7 +123,7 @@ Rules:
 - Use only the step ids you are given. Match by meaning, not exact words: "the onion thing" is the step about onions.
 - If it is unclear which step they mean, call no tool and ask one short question.
 - Act on the steps they name or clearly describe, and no others: "the chopping one" is one step, not every step that involves a knife.
-- Questions about progress, what is next, who is doing what, or the score: call status or score. Never answer these from memory; the app reads out the real state.
+- Questions about the state of the kitchen: call a tool, never answer from memory -- the app reads out the real state, and the cooks may not be able to see the screen. Where everyone is, who is doing what, progress: status. What steps are available, what is left, what they can take next: available. Whether anything unattended or cooking on its own needs checking, stirring or taking off: checkup. The score: score.
 - If they are clearly talking to someone else in the room, call no tool and reply with an empty string.
 - Your reply is spoken aloud: at most 15 words, plain speech, no lists, markdown or emoji. Be warm and a little funny, never at the cost of being clear. After a plain action, a two-word acknowledgement or an empty reply is right.
 - Work can be taken on somebody else's behalf: "Zoe will take the garlic", "give the onion to Nora", "can you put the garlic task to Zoe". Pass their name as cook_name on claim or start. Without it the step goes to whoever is speaking, which is wrong when they named someone else. This is a plain statement, not a request for you to double check -- "Zoe will take the garlic" already tells you what to do; call the tool, don't ask them to confirm it back to you. Phrasing it as a question ("can/could you give it to Zoe") does not make it a check-first request either.

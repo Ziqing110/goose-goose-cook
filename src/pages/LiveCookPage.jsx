@@ -63,6 +63,7 @@ import { recentRoomTalk, shouldBanter } from "../utils/banter.js";
 const ASIDE_CHECK_MS = 5000;
 import { AGENT_NAME, speak, takeInterrupted } from "../voice/agentVoice.js";
 import { explainStep } from "../utils/stepExplain.js";
+import { availableLine, checkupLine, kitchenAnswer, matchKitchenQuestion, newlyOpenLine, whereLine } from "../utils/kitchenReport.js";
 import { audioTap } from "../voice/audioTap.js";
 import { identifySpeaker, learnVoice, SPEAKER_SERVICE } from "../api/speaker.js";
 import { decideSpeaker, hasHandover, shouldLearn } from "../utils/speakerMatch.js";
@@ -480,25 +481,28 @@ export default function LiveCookPage() {
     ready.forEach((stepId) => {
       next = applyDone({ run: next, stepId, cookId: run.steps[stepId]?.cookId ?? null, at: new Date().toISOString(), source: "auto" });
     });
-    // Said once, plainly. It is not an achievement and should not read
-    // like one, but the board changing on its own needs explaining.
-    next = appendTranscript(next, {
-      at: new Date().toISOString(),
-      speaker: "agent",
-      text: `${ready.map((id) => byId[id]?.label).join(" and ")} — ready whenever you need it.`,
+    // Said once, plainly, and out loud. It is not an achievement and
+    // should not read like one, but the board changing on its own needs
+    // explaining -- to a room that is not looking at the board.
+    const lines = [`${ready.map((id) => byId[id]?.label).join(" and ")} — ready whenever you need it.`];
+    // In versus, what that just opened is worth racing for.
+    const opened = run.mode === "competition" ? newlyOpenLine(nodes, run, next) : "";
+    if (opened) lines.push(opened);
+    if (isRunComplete(next, nodes)) lines.push("That's everything. Dinner's up.");
+    lines.forEach((text) => {
+      next = appendTranscript(next, { at: new Date().toISOString(), speaker: "agent", text });
     });
-    if (isRunComplete(next, nodes)) {
-      next = appendTranscript(next, { at: new Date().toISOString(), speaker: "agent", text: "That's everything. Dinner's up." });
-    }
     saveRunNow(next);
+    speak(lines.join(" "));
     // `now` ticks every second; the guard above is what stops this
     // firing more than once per step.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now, paused, finished]);
 
   // A moment coming due is the alarm. The row and the card already show
-  // it; this adds the agent's line to the transcript and is the hook
-  // point for voice output later (§4: "spoken later, not wired yet").
+  // it; this adds the agent's line to the transcript and SAYS it. With
+  // the cooks' backs to the screen, a check-in only on the card is a
+  // check-in nobody sees -- this cue is how the rice gets stirred.
   // Phase transitions are detected here, not stored — the run has no
   // moment state, same as everything else derived from the clock.
   const phasesRef = useRef(null);
@@ -517,6 +521,7 @@ export default function LiveCookPage() {
     if (!prev) return;
     let next = run;
     let fired = false;
+    const cues = [];
     Object.entries(current).forEach(([stepId, key]) => {
       if (prev[stepId] === key) return;
       const [phase, index] = key.split(":");
@@ -528,9 +533,13 @@ export default function LiveCookPage() {
       const text = phase === "checkpoint" ? `${who} — check on “${node.label}”. ${Number(index) + 1} of ${count}.` : `${who} — finish “${node.label}” now.`;
       onMomentDue(stepId, phase, Number(index));
       next = appendTranscript(next, { at: new Date().toISOString(), speaker: "agent", text });
+      cues.push(text);
       fired = true;
     });
-    if (fired) saveRunNow(next);
+    if (fired) {
+      saveRunNow(next);
+      speak(cues.join(" "));
+    }
     // `now` ticks every second; the phase diff above is the guard.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now, paused, finished]);
@@ -668,6 +677,10 @@ export default function LiveCookPage() {
           ? `${byId[stepId].label} done, ${name(cookId)}.` // never timed, so no time to read out
           : `${byId[stepId].label} done in ${clock(v.actualSec)}${overNote}.`
     );
+    // Versus deals nobody a ticket, so a cook who is not watching the
+    // board only learns there is a new step to race for by hearing it.
+    const opened = isVersus && !isRunComplete(next, nodes) ? newlyOpenLine(nodes, base, next) : "";
+    if (opened) next = say(next, opened);
     if (isRunComplete(next, nodes)) next = say(next, "That's everything. Dinner's up.");
     commit(next);
     // One press, four things: the points fly, the counter rolls, the bar
@@ -700,6 +713,8 @@ export default function LiveCookPage() {
     let next = applySkip({ run: base, stepId, cookId, at, source });
     if (!isVersus) next = replan({ nodes, run: next, cooks, kitchenProfile });
     next = say(next, `Skipped ${byId[stepId].label}. No points for that one.`);
+    const opened = isVersus ? newlyOpenLine(nodes, base, next) : "";
+    if (opened) next = say(next, opened);
     setConfirm(null);
     commit(next);
   };
@@ -876,14 +891,12 @@ export default function LiveCookPage() {
     isVersus
       ? board.map((b) => `${b.name} ${b.points}`).join(", ") + `. ${progress.pending} left.`
       : `No score in co-op. ${progress.done} of ${progress.total} done, ${progress.pending} left.`;
-  const statusLine = (base) => {
-    const lines = cooks.map((c) => {
-      const active = activeStepFor(c.id, base, nodes, now);
-      if (active) return `${c.name}: ${byId[active].label}, ${clock(stepVariance(byId[active], base.steps[active], now).actualSec)} in`;
-      return `${c.name}: free`;
-    });
-    return `${lines.join(". ")}. ${progress.done} of ${progress.total} done.`;
-  };
+  // Spoken answers to "where is everyone", "what's available" and "does
+  // anything need checking" (utils/kitchenReport.js). The status line
+  // used to call a cook with rice on "free" and stop there; it now says
+  // what they have cooking too, since that is half of where they are.
+  const reportCtx = (base) => ({ nodes, run: base, cooks, now: isPaused(base) ? Date.parse(base.pausedAt) : Date.now() });
+  const statusLine = (base) => whereLine(reportCtx(base));
 
   // --- voice, through the agent: the model reads the words, this applies them ---
   //
@@ -893,7 +906,10 @@ export default function LiveCookPage() {
   // Three actions in one breath is already an unusual turn; reading back
   // more than that stops being a confirmation and becomes a recital.
   const MAX_SPOKEN_LINES = 3;
-  const PAUSED_OK = new Set(["resume", "status", "score", "help", "explain"]);
+  // Lines the board says for itself that must be heard, whoever else
+  // is talking: see the end of applyAgentTurn.
+  const isCue = (line) => /^Now up for grabs:|^That's everything\. Dinner's up\./.test(line);
+  const PAUSED_OK = new Set(["resume", "status", "available", "checkup", "score", "help", "explain"]);
   const applyAgentTurn = (turn, text, cookId, via = null) => {
     const at = () => new Date().toISOString();
     // Captured before this turn's own line goes on -- otherwise it would
@@ -992,6 +1008,16 @@ export default function LiveCookPage() {
           spoken.push(line);
           return commit(say(cur, line));
         }
+        case "available": {
+          const line = availableLine(reportCtx(cur));
+          spoken.push(line);
+          return commit(say(cur, line));
+        }
+        case "checkup": {
+          const line = checkupLine(reportCtx(cur));
+          spoken.push(line);
+          return commit(say(cur, line));
+        }
         case "explain": {
           // The recipe's own words, not the model's recollection of them:
           // the snapshot only carries the first 120 characters of a
@@ -1077,14 +1103,17 @@ export default function LiveCookPage() {
     //
     // Only when the model said nothing itself -- two accounts of one
     // action is worse than none.
-    if (!spoken.length) {
-      const added = (latestRunRef.current.transcript || [])
-        .slice(logBefore)
-        .filter((entry) => entry.speaker === "agent" && entry.text)
-        .map((entry) => entry.text)
-        .slice(0, MAX_SPOKEN_LINES);
-      spoken.push(...added);
-    }
+    const added = (latestRunRef.current.transcript || [])
+      .slice(logBefore)
+      .filter((entry) => entry.speaker === "agent" && entry.text)
+      .map((entry) => entry.text);
+    if (!spoken.length) spoken.push(...added.slice(0, MAX_SPOKEN_LINES));
+    // Cues are the exception to "only when the model said nothing":
+    // what just opened up and "Dinner's up" are the board telling a room
+    // that is not watching it, and a model's "Nice one!" is no stand-in.
+    added.filter(isCue).forEach((line) => {
+      if (!spoken.includes(line)) spoken.push(line);
+    });
 
     if (spoken.length) {
       lastVoiceAtRef.current = Date.now();
@@ -1196,7 +1225,17 @@ export default function LiveCookPage() {
         // Slow, down or unreachable: the keyword grammar still works.
         console.warn("Agent unavailable, using the keyword grammar:", err.message);
         voiceLog.setThinking(null);
+        const logBefore = (latestRunRef.current.transcript || []).length;
         submitKeywordUtterance(text, saidBy);
+        // And it answers out loud, like the agent would. It used to only
+        // write to the notes, so with the model down the goose went
+        // silent -- exactly when the room most needs to hear it.
+        const replies = (latestRunRef.current.transcript || [])
+          .slice(logBefore)
+          .filter((entry) => entry.speaker === "agent" && entry.text)
+          .map((entry) => entry.text)
+          .slice(0, MAX_SPOKEN_LINES);
+        if (replies.length) speak(replies.join(" "));
         return;
       }
       if (!turn.addressed) {
@@ -1455,6 +1494,19 @@ export default function LiveCookPage() {
     }
   };
 
+  // One of the three eyes-off questions (see voiceHandlerRef below):
+  // logged as the cook's line, answered from the newest run, said aloud,
+  // and the door held open so "and after that?" needs no name.
+  const answerKitchenQuestion = (kind, text, cookId, { logged = false } = {}) => {
+    const cur = latestRunRef.current;
+    const heard = logged ? cur : appendTranscript(cur, { at: new Date().toISOString(), speaker: cookId, text });
+    const line = kitchenAnswer(kind, reportCtx(cur));
+    commit(say(heard, line));
+    lastVoiceAtRef.current = Date.now();
+    speak(line);
+    engagedUntilRef.current = Date.now() + ENGAGED_MS;
+  };
+
   voiceHandlerRef.current = (text, turn) => {
     // Somebody spoke. Whatever comes of it, the room is not quiet.
     lastVoiceAtRef.current = Date.now();
@@ -1475,6 +1527,20 @@ export default function LiveCookPage() {
     if (isNameOnlyTurn(routed.said, AGENT_NAME)) {
       engagedUntilRef.current = Date.now() + NAME_CARRY_MS;
       console.info("[voice] name only, waiting for the rest:", routed.said);
+      return;
+    }
+    // "What's available?", "where is everyone?", "does anything need
+    // checking?" -- answered here, from the board, every time. These are
+    // what a cook with their back to the screen lives on, and the model
+    // could drop them: reply empty, get rate limited, or decide an
+    // unnamed question was the cooks talking to each other. None of
+    // that is acceptable for these three, so they never reach it. No
+    // name needed either: whoever asked, the answer is the same.
+    const asked = matchKitchenQuestion(routed.said);
+    if (asked) {
+      // An introduction ("I'm Zeina, what's left?") was already logged
+      // whole by preRoute.
+      answerKitchenQuestion(asked, text, routed.saidBy ?? speaker, { logged: Boolean(routed.saidBy) });
       return;
     }
     // This turn's audio, cut out by its word timestamps with a little

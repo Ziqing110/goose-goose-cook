@@ -215,7 +215,7 @@ Nothing is live while the plan is still loading. Most commands need a plan on sc
 | Say | Does |
 |---|---|
 | "co-op", "cooperation" · "versus", "competition" | Picks the mode (refused once a run exists: the cards lock) |
-| "go live", "start the cook" | *Asks*, then goes live. Without a mode, or with a dependency loop, says why instead |
+| "go live", "start the cook" | Goes live (no question). Without a mode, or with a dependency loop, says why instead |
 | "go live", "back to the cook", "see the result" | With a run: back to Live cook, no question |
 | "abandon / abort / discard the cook" | With a run in progress: *asks you to read back* "I want to abandon this cook" |
 | "back to the recipe graph", "fix the loop" | Inventory |

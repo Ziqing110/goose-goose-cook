@@ -73,15 +73,23 @@ sequenceDiagram
     participant Cook
     participant Browser
     participant API as Express API
-    participant AAI as AssemblyAI
+    participant STT as AssemblyAI<br/>Streaming STT
+    participant GW as AssemblyAI<br/>LLM Gateway
+
+    Note over Browser,STT: once per unmute, not per turn
+    Browser->>API: GET /api/voice/stt-token
+    API->>STT: mint token (server-side key)
+    API-->>Browser: short-lived token
+    Browser->>STT: open wss://streaming.assemblyai.com/v3/ws
 
     Cook->>Browser: "Goose, done with the garlic"
-    Browser->>AAI: raw PCM over WebSocket (Streaming STT)
-    AAI-->>Browser: final transcript
-    Browser->>Browser: addressed to Goose? who spoke?
+    Browser->>STT: raw PCM frames (universal-3-5-pro)
+    STT-->>Browser: formatted turn + speaker label
+    Browser->>Browser: who spoke? (speaker label, voiceprint if on)
     Browser->>API: POST /api/agent/turn (text + run snapshot)
-    API->>AAI: LLM Gateway, tools limited to valid step ids
-    AAI-->>API: tool calls + reply
+    API->>API: addressed to Goose? (name, or a cry for help)
+    API->>GW: GPT-4.1, tools limited to valid step ids
+    GW-->>API: tool calls + reply
     API->>API: validate calls against the snapshot
     API-->>Browser: vetted calls + reply
     Browser->>Browser: apply through the same handlers as a tap
@@ -99,8 +107,8 @@ background so the cook isn't blocked.
 |---|---|
 | Frontend | React 18, Vite 5, React Router 6, plain CSS with design tokens |
 | Backend | Node 24, Express 5, SQLite via `better-sqlite3` |
-| Speech in | AssemblyAI Streaming STT (`universal-3-5-pro`), browser connects directly with a short-lived token |
-| LLMs | AssemblyAI LLM Gateway: Claude Sonnet 4.6 (reading answers, reviewing plans, cook summary), Gemini 3.8 Flash (recipe graphs), GPT-4.1 (live agent with tools), Gemini 2.5 Flash Lite (small talk) |
+| Speech in | AssemblyAI Streaming STT v3 (`universal-3-5-pro`): English + Mandarin, Voice Focus (far-field), speaker labels for two cooks, per-page keyterms. The browser streams straight to AssemblyAI with a short-lived token from our API |
+| LLMs | AssemblyAI LLM Gateway, one key for every model: Claude Sonnet 4.6 (reading answers, reviewing plans, cook-card story), Gemini 3.8 Flash (recipe graphs, Qwen 3.5 4B as fallback), GPT-4.1 (live agent with tools, and reading commands the local grammar missed), Gemini 2.5 Flash Lite (asides and banter) |
 | Speech out | Kokoro-82M on WebGPU through `kokoro-js`, runs in the browser. Falls back to Web Speech |
 | Web lookup | Tavily (optional) |
 | Speaker ID | NVIDIA NeMo TitaNet in a local Python sidecar (optional, never deployed) |
@@ -148,7 +156,12 @@ Only `ASSEMBLYAI_API_KEY` is required. The rest have working defaults.
 | `ASSEMBLYAI_API_KEY` | none | Streaming STT and every LLM call |
 | `AAI_AGENT_MODEL` | `gpt-4.1` | Live-cook agent. Must support tools |
 | `AAI_RECIPE_MODEL` | `gemini-3.8-flash` | Recipe graph generation |
+| `AAI_RECIPE_FALLBACK_MODEL` | `qwen3.5-4b-32k-fast` | Recipe graphs when the primary is unreachable (one dish at a time) |
 | `AAI_RECIPE_REVIEW_MODEL` | `claude-sonnet-4-6` | Second-pass plan review (`AAI_RECIPE_REVIEW=off` skips it) |
+| `AAI_LLM_GATEWAY_MODEL` | `claude-sonnet-4-6` | Reading spoken answers in the setup conversation |
+| `AAI_NARRATE_MODEL` | `claude-sonnet-4-6` | Goose's lines on the cook card |
+| `AAI_ASIDE_MODEL` | `gemini-2.5-flash-lite` | Asides and banter during a cook |
+| `AAI_MAX_SESSION_SECONDS` | `5400` | Cap on one STT socket, since streaming bills on open time |
 | `TAVILY_API_KEY` | empty | Enables mid-cook web lookups |
 | `ALLOWED_ORIGINS` | empty (allow all) | CORS for the deployed API |
 
@@ -164,8 +177,6 @@ see a "no access" error, pick another model listed in `.env.example`.
 | `npm run dev` / `npm run server` | Frontend or API alone |
 | `npm test` | Unit tests |
 | `npm run test:e2e` | Playwright run through a live cook |
-| `npm run agent:calibrate` | Score the agent against a table of utterances (`-- --models a,b` to compare) |
-| `npm run tts-lab` | Voice bench at <http://localhost:3101> |
 | `npm run build` | Production build into `dist/` |
 
 ### Speaker identification (optional)

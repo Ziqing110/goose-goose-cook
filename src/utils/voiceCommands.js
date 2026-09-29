@@ -149,4 +149,4 @@ export function parseCommand(text, ctx) {
   return { ...base, ...resolved };
 }
 
-export const HELP_TEXT = 'Say "done", "start", "take" and the step\'s name, "skip", "status", or "score". Every one of those is also a button.';
+export const HELP_TEXT = `Say "take", "start" or "done" and the step's name, or "skip". Ask "what's available?", "where are we?", "anything need checking?" or "what's the score?"`;

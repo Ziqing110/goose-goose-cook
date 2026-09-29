@@ -413,7 +413,9 @@ async function waitForObjectValue(object, key, expected, timeoutMs = 3_000) {
   assert.equal(object[key], expected, key + " did not become " + expected);
 }
 
-async function waitForPageCondition(page, fn, timeoutMs = 1_500) {
+// Room for the conversation page's hold: a finished spoken answer waits
+// 1.8s for more before it is sent (VoiceInput's HOLD_AFTER_TURN_MS).
+async function waitForPageCondition(page, fn, timeoutMs = 4_000) {
   await page.waitForFunction(fn, undefined, { timeout: timeoutMs });
 }
 
@@ -1451,10 +1453,8 @@ try {
   liveFixture.run = null;
   const live = await openVoicePage(context, "/session/schedule", { sessionState: liveFixture });
   diagnosticPage = live.page;
-  await checkVoiceBehavior("Schedule: ‘go live’ asks for confirmation and ‘yes’ opens Live Cook", async () => {
+  await checkVoiceBehavior("Schedule: ‘go live’ opens Live Cook without asking", async () => {
     await live.stream.say("go live");
-    await waitForPageCondition(live.page, () => document.querySelector(".goose-bubble-tab")?.textContent === "Confirm");
-    await live.stream.say("yes");
     await live.page.waitForURL("**/session/live-cook", { timeout: 5_000 });
     await live.page.locator(".live-cook-page").waitFor({ state: "visible" });
   });

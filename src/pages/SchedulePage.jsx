@@ -504,8 +504,9 @@ export default function SchedulePage() {
       }
     } else if (canStart) {
       commands.push({
+        // No yes/no: "go live" is unambiguous, and the button it
+        // stands for doesn't ask either.
         phrases: SCHEDULE_VOICE.live,
-        confirm: "Go live? Say yes or no.",
         label: "Going live.",
         run: goLive,
       });
