@@ -297,3 +297,7 @@ Pure logic lives in `src/utils/` with no DOM or React imports, so the
 scheduler and run state machine are tested without mounting a page. The
 browser owns the live run. Each agent request carries a snapshot of it, so
 the server stays stateless.
+
+## License
+
+[MIT](LICENSE)
