@@ -84,16 +84,19 @@ const COOK_QUIPS = [
 const HEADLINES = [
   {
     key: "tie",
+    versusOnly: true,
     when: (r) => r.winnerCookIds.length > 1,
     lines: [(r) => `Dead heat at ${r.topPoints} points. Nobody's doing the washing up.`],
   },
   {
     key: "runaway",
+    versusOnly: true,
     when: (r) => r.winnerCookIds.length === 1 && r.margin >= 30,
     lines: [(r) => `${r.winnerName} ran away with it by ${r.margin} points.`],
   },
   {
     key: "close",
+    versusOnly: true,
     when: (r) => r.winnerCookIds.length === 1 && r.margin > 0 && r.margin <= 20,
     lines: [(r) => `${r.winnerName} took it by ${r.margin}. Closer than the scoreline suggests.`],
   },
@@ -140,14 +143,19 @@ export function pickQuips(stats, runContext, limit = 2) {
 }
 
 export function headlineFor(runContext) {
-  const earned = HEADLINES.filter((h) => h.when(runContext));
+  // Points and a winner are only a story in Versus. A co-op run still has
+  // a scoreboard underneath (runOutcome scores every run), and without
+  // this a team of two finishing together read "Leo ran away with it by
+  // 93 points."
+  const coop = runContext.mode === "cooperation";
+  const earned = HEADLINES.filter((h) => !(coop && h.versusOnly) && h.when(runContext));
   if (earned.length === 0) return "Dinner happened. That's the main thing.";
   const pick = earned[seededIndex(runContext.seed || "run", earned.length)];
   return pick.lines[0](runContext);
 }
 
 /** Shared context both the per-cook and headline pickers read. */
-export function buildRunContext(outcome, seed = "run") {
+export function buildRunContext(outcome, seed = "run", mode = null) {
   const board = outcome.scoreboard;
   const counts = board.map((b) => b.doneCount);
   const topPoints = board[0]?.points ?? 0;
@@ -158,6 +166,7 @@ export function buildRunContext(outcome, seed = "run") {
   const under = board.map((b) => ({ id: b.cookId, sec: Math.min(0, ...byCook(b.cookId).map((s) => s.deltaSec), 0) }));
   return {
     seed,
+    mode,
     cookCount: board.length,
     mostSteps: Math.max(0, ...counts),
     mostStepsCookId: board.find((b) => b.doneCount === Math.max(0, ...counts))?.cookId ?? null,

@@ -11,7 +11,7 @@ const MAX_PHOTO_PX = 1200;
  * evening, so it shouldn't change later when scoring rules or quip copy do.
  */
 export function buildSummary({ outcome, cooks, dish, mode, dishOfStep = () => null, photo = null, styledPhoto = null, photoSource = null, transcript = [] }) {
-  const context = buildRunContext(outcome, outcome.scoreboard.map((b) => b.cookId).join("-"));
+  const context = buildRunContext(outcome, outcome.scoreboard.map((b) => b.cookId).join("-"), mode);
   const topPoints = outcome.scoreboard[0]?.points ?? 0;
 
   return {
